@@ -1,0 +1,20 @@
+- One file, one responsibility. One class, one responsibility. Prefer explicit and readable code over clever abstractions.
+- no type "Any" without justification. Prefer: interfaces, types, DTOs, generics, unknown without validation.
+- Follow NestJS Module architecture. The application is organized by business domains. Each domain shall contain : a controller, a DTO, a service, a repository, entities, tests.
+- Controllers are only responsible for: receiving HTTP requests, validating inputs, calling app services, returning responses.
+- Controllers must NOT contain : business logic, database queries, calculations, pdf generation logic.
+- Business logic belongs in services : they shall not be duplicated in controllers, repositories, frontend, pdf templates.
+- Database (Prisma access to PostGreSQL) must be isolated. Business services should not directly use Prisma. Use repositories as abstraction layers. Controller > Service > Repositories > Prisma > PostGreSQL.
+- Database migrations are mandatory. It shall never be modified manually. Every scheme change must generate a Prisma migration. Migration files must always be committed to git.
+- Never store calculated data that can become inconsistent. Derived values should be calculated unless there is a strong reason to persist them. Prefer: "invoice lines + calculation service = calculation total". Avoid storing totals everywhere without sync.
+- Be as strict as possible with typing. Avoid: "function process (data)[{}"; do "function process (data: Data){}"
+- Every external input must be validated. Use : class-validator, class-transformer. Do never trust: HTTP requests, frontend data, external APIs.
+- Financial Data Rules : Never use floating point numbers for monetary calculations. Use Integer or Decimal library.
+- API Rules: the backend is the single source of truth. business calculations must happen on the backend. frontend displays data but does not reproduce business logic.
+- Testing rules: every business rule requires unit tests. Priority: calculations, financial logic(Be careful on the types and the rounding) permissions, data transformations.
+- Tests should explain behaviours. A test name should describe the business expectation.
+- PDF generation must be isolated from business logic. Invoice Service > Invoice Data Object > PDF Generator > PDF File.
+- Never commit secrets.
+- Validate uploaded/external data. Never trust user files, URLs, external content. Security must be the rule.
+- FactureLeBat is designed for real-world artisans: the priority order is: Reliability > Simplicity  > Maintainability > Scalability > Performance > New features.
+

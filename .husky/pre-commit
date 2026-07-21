@@ -1,0 +1,5 @@
+npx lint-staged
+
+cd backend 
+npm run lint
+npm test
