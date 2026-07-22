@@ -329,6 +329,41 @@ visibility modes increase the invoice's displayed total by exactly
 
 **Response** `201 Created` — see the shared invoice shape below.
 
+#### Manual invoice mode (Phase 9.5)
+
+The body above is for the default `entryMode: "GUIDED"`. Setting `entryMode: "MANUAL"` swaps `lines`/`serviceLines` for a `manualTable` instead — the two are mutually exclusive, enforced at the DTO boundary:
+
+```json
+{
+  "customerName": "M. Dupont",
+  "entryMode": "MANUAL",
+  "manualTable": {
+    "columns": [
+      { "role": "DESCRIPTION", "label": "Désignation" },
+      { "role": "QUANTITY", "label": "Quantité" },
+      { "role": "UNIT_PRICE", "label": "Prix unitaire" },
+      { "role": "CUSTOM", "label": "Chantier" }
+    ],
+    "rows": [
+      { "cells": ["Parquet chêne massif", "10", "45.00", "Réf. C-102"] }
+    ]
+  }
+}
+```
+
+| Field                            | Type                        | Notes                                                             |
+| ----------------------------------- | ----------------------------- | --------------------------------------------------------------------- |
+| `entryMode`                       | `"GUIDED"` \| `"MANUAL"`, optional (default `"GUIDED"`) | `GUIDED` requires `lines` (≥1) and forbids `manualTable`; `MANUAL` requires `manualTable` and forbids `lines`/`serviceLines` |
+| `manualTable.columns`             | array, 3-12 items              | exactly one `DESCRIPTION`, one `QUANTITY`, and one `UNIT_PRICE` column required; any number of `CUSTOM` columns allowed |
+| `manualTable.columns[].role`      | `"DESCRIPTION"` \| `"QUANTITY"` \| `"UNIT_PRICE"` \| `"CUSTOM"` |                                                    |
+| `manualTable.columns[].label`     | string, 1-100 chars            |                                                                     |
+| `manualTable.columns[].widthPx`   | integer, 40-800, optional      | persisted column width from the canvas's drag-resize handle           |
+| `manualTable.rows`                | array, 1-200 items              |                                                                     |
+| `manualTable.rows[].heightPx`     | integer, 24-400, optional       | persisted row height from the canvas's drag-resize handle             |
+| `manualTable.rows[].cells`        | string[], ≤2000 chars each      | **Positional**, aligned with `manualTable.columns` (`cells[i]` targets `columns[i]`) — same convention as `serviceLines[].weights`. The `DESCRIPTION` cell must be non-empty; the `QUANTITY`/`UNIT_PRICE` cells must parse as a non-negative decimal (comma or dot separator accepted) |
+
+A manual row is priced exactly like a `GUIDED` line whose `unit` is `"UNIT"` — plain `quantity × unitPriceCents`, no waste surcharge, no packaging (neither concept exists on the manual canvas). A `CUSTOM` column's cells are informational text only, never summed into any total.
+
 ### `GET /invoices`
 
 Returns up to the 200 most recently dated invoices (see [database.md](database.md) — real pagination is a future improvement, not yet needed at this scale), newest first.
@@ -351,6 +386,7 @@ Returns a single invoice. `404` if the id doesn't exist.
   "customerId": null,
   "vatApplicable": false,
   "vatRateBasisPoints": 2000,
+  "entryMode": "GUIDED",
   "lines": [
     {
       "id": "04f3f798-0ea8-47f1-bf79-d0e778200c83",
@@ -390,6 +426,38 @@ matching `lines[].lineTotalExclVatCents` for a `REDISTRIBUTED` line —
 artisan/frontend can see where a hidden amount actually went), it is not
 an additional amount to add anywhere. `distribution` is only present for
 `REDISTRIBUTED` service lines; a `VISIBLE` one has no such field.
+
+**Phase 9.5**: for a `MANUAL` invoice, `entryMode` is `"MANUAL"`, `lines`/`serviceLines` are always empty arrays, and a `manualTable` field is present instead:
+
+```json
+{
+  "entryMode": "MANUAL",
+  "lines": [],
+  "serviceLines": [],
+  "manualTable": {
+    "columns": [
+      { "id": "…", "position": 0, "role": "DESCRIPTION", "label": "Désignation", "widthPx": 280 },
+      { "id": "…", "position": 1, "role": "QUANTITY", "label": "Quantité", "widthPx": 100 },
+      { "id": "…", "position": 2, "role": "UNIT_PRICE", "label": "Prix unitaire", "widthPx": 140 }
+    ],
+    "rows": [
+      {
+        "id": "…",
+        "position": 0,
+        "heightPx": 44,
+        "cells": [
+          { "columnId": "…", "value": "Parquet chêne massif" },
+          { "columnId": "…", "value": "10" },
+          { "columnId": "…", "value": "45.00" }
+        ],
+        "lineTotalExclVatCents": 45000
+      }
+    ]
+  }
+}
+```
+
+`manualTable.rows[].lineTotalExclVatCents` is never persisted — recomputed on every read from the `QUANTITY`/`UNIT_PRICE` cells, same "derived data is never persisted" rule as every other total in this API.
 
 ### `GET /invoices/:id/pdf`
 
