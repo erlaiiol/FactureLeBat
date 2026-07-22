@@ -43,10 +43,10 @@ There is no multi-tenant auth yet (Phase 1 scope): exactly one row exists, alway
 
 | Field            | Notes                                                                                                    |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
-| `mode`           | `AREA` (m², with an optional waste surcharge) or `UNIT` (simple quantity × price)                          |
+| `unit`           | `Unit` enum (Phase 7) — `SQUARE_METER`, `LINEAR_METER`, `UNIT`, `LUMP_SUM`, `HOUR`, `DAY`, `KILOGRAM`, `LITER`, `CUBIC_METER`. No free text. The old AREA/UNIT calculation `mode` column is gone: it's derived on every read from the unit (`isAreaUnit()` in `backend/src/common/unit.util.ts`, true only for `SQUARE_METER`), same "derived data is never persisted" rule as invoice totals. |
 | `quantity`       | `Decimal(10,3)` — **not** `Float`. Area math (quantity × waste %) must not touch IEEE-754 floats before it feeds into money math. |
 | `unitPriceCents` | Always an integer. The backend never accepts a raw float-euros amount over the wire.                        |
-| `wasteSurcharge` | `NONE` \| `TEN` \| `TWENTY` (+0/10/20% billed quantity). Only meaningful when `mode = AREA`; a DTO-level custom validator (`WasteSurchargeOnlyForArea`) rejects a non-`NONE` value on `UNIT` lines — this is a business rule, not a schema constraint, so it lives in `dto/waste-surcharge-only-for-area.validator.ts`, not in `schema.prisma`. |
+| `wasteSurcharge` | `NONE` \| `TEN` \| `TWENTY` (+0/10/20% billed quantity). Only meaningful for a `SQUARE_METER` line; a DTO-level custom validator (`WasteSurchargeOnlyForArea`) rejects a non-`NONE` value on any other unit — this is a business rule, not a schema constraint, so it lives in `dto/waste-surcharge-only-for-area.validator.ts`, not in `schema.prisma`. |
 
 ### `Customer` (Phase 2)
 
@@ -62,8 +62,8 @@ paginated" trade-off as `GET /invoices`'s 200-row cap (see
 
 ### `Product` (Phase 3, `description` added in Phase 4)
 
-The artisan's material catalog — `name`, `unit` (display label, e.g.
-`"m2"`), `priceCents` (integer cents, same convention as
+The artisan's material catalog — `name`, `unit` (the same fixed `Unit` enum
+as `InvoiceLine.unit`, Phase 7 — no longer free text), `priceCents` (integer cents, same convention as
 `InvoiceLine.unitPriceCents`), optional `description`, and optional
 `supplierName`/`supplierUrl`. Not yet linked to `InvoiceLine` — Phase 3
 only covers building the catalog itself (create/search); prefilling an

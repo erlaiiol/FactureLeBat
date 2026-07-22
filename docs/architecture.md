@@ -20,7 +20,8 @@ NestJS, layered strictly as **Controller → Service → Repository → Prisma**
 
 ```
 src/
-  common/          health check — no business logic
+  common/          health check; unit.util.ts — the fixed Unit vocabulary (Phase 7)
+                   shared by product/ and invoice/, so it isn't owned by either domain
   config/          env var validation (fails fast at boot on misconfiguration)
   database/        PrismaService (global, injectable everywhere)
   company/         singleton artisan profile
@@ -60,6 +61,10 @@ A `Service` (`service-catalog/`) is a catalog entry mirroring `Product`, minus t
 - **`REDISTRIBUTED`**: never appears on its own. Instead, an `InvoiceServiceLineWeight` row per targeted `InvoiceLine` stores an artisan-set weight (an `EQUAL` split is simply a weight of `1` on every line, expanded at creation time — see `InvoiceService.create`). `InvoiceMapper.toInvoiceWithTotals()` calls `InvoiceCalculationService.computeWeightedSplit()` on every read to turn those weights into cents, folding each share directly into that line's displayed `lineTotalExclVatCents`. Nothing about the split itself is persisted — same "derived data is never persisted" rule as invoice totals (see [conventions.md](conventions.md)).
 
 Both modes share the same invariant: the invoice's displayed total increases by exactly the service's `amountCents`, whichever mode is used.
+
+### Units and calculation mode (Phase 7)
+
+`InvoiceLine.unit` and `Product.unit` are both the same fixed `Unit` enum (`SQUARE_METER`, `LINEAR_METER`, `UNIT`, `LUMP_SUM`, `HOUR`, `DAY`, `KILOGRAM`, `LITER`, `CUBIC_METER`) instead of free text — the artisan picks one from a dropdown, never types it. The old AREA/UNIT `mode` field is gone entirely: `common/unit.util.ts`'s `isAreaUnit(unit)` (true only for `SQUARE_METER`) is the single source of truth `InvoiceCalculationService.computeLineTotal()`, the `WasteSurchargeOnlyForArea` DTO validator, and `InvoiceMapper` all derive the old mode distinction from, computed fresh every time rather than accepted as separate client input or persisted as its own column — the same "derived data is never persisted" rule as invoice totals. `UNIT_LABELS` in the same file maps each enum value to its French display string (`SQUARE_METER` → `"m²"`); `InvoiceMapper` applies it only when building PDF data, so `PdfService` stays ignorant of the enum, and JSON API responses keep returning the raw enum value like every other enum field.
 
 ### Request flow: creating an invoice
 
@@ -124,8 +129,9 @@ src/app/
                       minus the import step, plus a default-visibility selector
     company-settings/ singleton artisan profile editor
   shared/
-    components/  small reusable presentational components (e.g. app-big-button)
-    pipes/       e.g. centsToEuros
+    components/  small reusable presentational components (e.g. app-big-button,
+                 app-field-hint — the Phase 7 persistent under-field tooltip)
+    pipes/       e.g. centsToEuros, unitLabel (Unit enum -> French display string)
 ```
 
 Each `features/*` folder is a routed, lazily-loaded page (`loadComponent` in `app.routes.ts`). Pages that call the API always guard their subscriptions with `takeUntilDestroyed()` so a slow response arriving after navigation away never touches a destroyed component's state.

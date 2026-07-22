@@ -144,7 +144,7 @@ Returns a single product. `404` if the id doesn't exist.
 {
   "name": "Parquet chêne massif",
   "description": "Parquet en chêne massif, pose collée, 14mm.",
-  "unit": "m2",
+  "unit": "SQUARE_METER",
   "priceCents": 4500,
   "supplierName": "Point P",
   "supplierUrl": "https://supplier.example.com/parquet-chene"
@@ -155,7 +155,7 @@ Returns a single product. `404` if the id doesn't exist.
 | -------------- | ---------------------------- | ----------------------------------- |
 | `name`         | string, 1-200 chars           |                                    |
 | `description`  | string, ≤2000 chars, optional  |                                    |
-| `unit`         | string, 1-20 chars            | e.g. `"m2"`, `"unité"`             |
+| `unit`         | `Unit` enum                    | Phase 7 — `"SQUARE_METER"` \| `"LINEAR_METER"` \| `"UNIT"` \| `"LUMP_SUM"` \| `"HOUR"` \| `"DAY"` \| `"KILOGRAM"` \| `"LITER"` \| `"CUBIC_METER"`, no free text |
 | `priceCents`   | integer ≥ 0                   | **integer cents**, same convention as invoice lines |
 | `supplierName` | string, ≤200 chars, optional   |                                    |
 | `supplierUrl`  | string, valid URL, optional    |                                    |
@@ -190,7 +190,7 @@ as the Phase 2 customer picker).
 {
   "name": "Parquet chêne massif",
   "description": "Parquet en chêne massif, pose collée, 14mm.",
-  "unit": "m²",
+  "unit": "SQUARE_METER",
   "priceCents": 4500,
   "supplierName": "Point P",
   "supplierUrl": "https://supplier.example.com/product/parquet-oak"
@@ -272,16 +272,14 @@ Creates an invoice: computes totals server-side, assigns the next sequential num
   "lines": [
     {
       "description": "Parquet chêne massif posé",
-      "unit": "m2",
-      "mode": "AREA",
+      "unit": "SQUARE_METER",
       "quantity": 25.5,
       "unitPriceCents": 4500,
       "wasteSurcharge": "TEN"
     },
     {
       "description": "Plinthes",
-      "unit": "unité",
-      "mode": "UNIT",
+      "unit": "UNIT",
       "quantity": 12,
       "unitPriceCents": 800
     }
@@ -310,11 +308,10 @@ Creates an invoice: computes totals server-side, assigns the next sequential num
 | `customerId`                      | string (UUID), optional       | soft reference to a saved `Customer` — confirmed to exist (`404` if not) but never overrides `customerName`/`Address`/`Email`/`Phone` above |
 | `lines`                           | array, 1-200 items            |                                                                     |
 | `lines[].description`             | string, 1-300 chars           |                                                                     |
-| `lines[].unit`                    | string, 1-20 chars            | display label only, e.g. `"m2"`, `"unité"`                        |
-| `lines[].mode`                    | `"AREA"` \| `"UNIT"`          | `AREA`: quantity × unit price × (1 + waste %). `UNIT`: quantity × unit price, waste ignored |
+| `lines[].unit`                    | `Unit` enum                    | Phase 7 — `"SQUARE_METER"` \| `"LINEAR_METER"` \| `"UNIT"` \| `"LUMP_SUM"` \| `"HOUR"` \| `"DAY"` \| `"KILOGRAM"` \| `"LITER"` \| `"CUBIC_METER"`. Determines the calculation mode: only `"SQUARE_METER"` bills as quantity × unit price × (1 + waste %); every other unit bills as plain quantity × unit price, waste ignored. There is no separate `mode` field — the unit *is* the mode. |
 | `lines[].quantity`                | number ≥ 0, ≤3 decimal places |                                                                     |
 | `lines[].unitPriceCents`          | integer ≥ 0                   | **integer cents** — the client converts euros to cents once, before sending |
-| `lines[].wasteSurcharge`          | `"NONE"` \| `"TEN"` \| `"TWENTY"`, optional (default `"NONE"`) | must be `"NONE"` when `mode` is `"UNIT"` (rejected otherwise) |
+| `lines[].wasteSurcharge`          | `"NONE"` \| `"TEN"` \| `"TWENTY"`, optional (default `"NONE"`) | must be `"NONE"` unless `unit` is `"SQUARE_METER"` (rejected otherwise) |
 | `serviceLines`                    | array, ≤50 items, optional (default none) | Phase 5 — services added to the invoice                |
 | `serviceLines[].serviceId`        | string (UUID), optional       | soft reference to a saved `Service` — confirmed to exist (`404` if not), same "autofill, never overridden" rule as `customerId` |
 | `serviceLines[].name`             | string, 1-200 chars           |                                                                     |
@@ -359,8 +356,7 @@ Returns a single invoice. `404` if the id doesn't exist.
       "id": "04f3f798-0ea8-47f1-bf79-d0e778200c83",
       "position": 0,
       "description": "Parquet chêne massif posé",
-      "unit": "m2",
-      "mode": "AREA",
+      "unit": "SQUARE_METER",
       "quantity": "25.5",
       "unitPriceCents": 4500,
       "wasteSurcharge": "TEN",
