@@ -1,13 +1,135 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum LegalStatus {
+  MICRO_ENTREPRENEUR
+  COMPANY
+}
+
+enum LineMode {
+  AREA
+  UNIT
+}
+
+enum WasteSurcharge {
+  NONE
+  TEN
+  TWENTY
+}
+
+model Company {
+  id                  String      @id @default(uuid())
+
+  name                String
+  siret               String
+  addressLine1        String
+  addressLine2        String?
+  postalCode          String
+  city                String
+  email               String?
+  phone               String?
+
+  legalStatus         LegalStatus
+  vatRateBasisPoints  Int         @default(2000)
+
+  invoiceNumberPrefix String      @default("F")
+  nextInvoiceNumber   Int         @default(1)
+
+  invoices            Invoice[]
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+}
+
+model Invoice {
+  id                 String        @id @default(uuid())
+
+  number             String        @unique
+  date               DateTime      @default(now())
+
+  customerName       String
+  customerAddress    String?
+  customerEmail      String?
+  customerPhone      String?
+
+  // Soft reference to the saved Customer this invoice was based on, if any.
+  // The fields above remain the source of truth for this invoice (typed or
+  // autofilled-then-edited by the artisan); onDelete: SetNull so deleting a
+  // Customer record can never delete or corrupt an already-issued invoice.
+  customerId         String?
+  customer           Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  companyId          String
+  company            Company       @relation(fields: [companyId], references: [id])
+
+  // Snapshotted from Company at creation time so a later change to the
+  // artisan's legal status never retroactively changes an issued invoice's
+  // tax treatment.
+  vatApplicable      Boolean
+  vatRateBasisPoints Int
+
+  lines              InvoiceLine[]
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([companyId])
+  @@index([customerId])
+}
+
+model Customer {
+  id          String    @id @default(uuid())
+
+  name        String
+  companyName String?
+  address     String?
+  email       String?
+  phone       String?
+  siret       String?
+
+  invoices    Invoice[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id           String   @id @default(uuid())
+
+  name         String
+  description  String?
+  unit         String
+  priceCents   Int
+  supplierName String?
+  supplierUrl  String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model InvoiceLine {
+  id             String         @id @default(uuid())
+
+  invoiceId      String
+  invoice        Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position       Int
+
+  description    String
+  unit           String
+
+  mode           LineMode
+  quantity       Decimal        @db.Decimal(10, 3)
+  unitPriceCents Int
+  wasteSurcharge WasteSurcharge @default(NONE)
+
+  createdAt      DateTime       @default(now())
+
+  @@index([invoiceId])
 }

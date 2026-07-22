@@ -1,0 +1,38 @@
+<div class="min-h-screen bg-slate-50">
+  <nav class="flex gap-2 border-b border-slate-200 bg-white px-4 py-3">
+    <a
+      routerLink="/factures/nouvelle"
+      routerLinkActive="bg-blue-600 text-white"
+      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+      >Nouvelle facture</a
+    >
+    <a
+      routerLink="/factures"
+      routerLinkActive="bg-blue-600 text-white"
+      [routerLinkActiveOptions]="{ exact: true }"
+      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+      >Mes factures</a
+    >
+    <a
+      routerLink="/clients"
+      routerLinkActive="bg-blue-600 text-white"
+      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+      >Mes clients</a
+    >
+    <a
+      routerLink="/produits"
+      routerLinkActive="bg-blue-600 text-white"
+      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+      >Mes produits</a
+    >
+    <a
+      routerLink="/entreprise"
+      routerLinkActive="bg-blue-600 text-white"
+      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+      >Mon entreprise</a
+    >
+  </nav>
+  <main class="mx-auto max-w-3xl p-4">
+    <router-outlet />
+  </main>
+</div>

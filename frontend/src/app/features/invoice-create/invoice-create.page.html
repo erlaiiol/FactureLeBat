@@ -1,0 +1,104 @@
+@if (createdInvoice(); as invoice) {
+  <div class="flex flex-col items-center gap-4 rounded-xl bg-green-50 p-8 text-center">
+    <h1 class="text-2xl font-bold text-green-900">Facture {{ invoice.number }} créée !</h1>
+    <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
+      <app-big-button>Télécharger le PDF</app-big-button>
+    </a>
+    <div class="w-full max-w-sm">
+      <app-big-button variant="secondary" (click)="startNewInvoice()">
+        Nouvelle facture
+      </app-big-button>
+    </div>
+  </div>
+} @else {
+  <h1 class="mb-6 text-2xl font-bold text-slate-900">Nouvelle facture</h1>
+
+  <form [formGroup]="customerForm" (ngSubmit)="submit()" class="flex flex-col gap-6">
+    <section class="flex flex-col gap-4">
+      <h2 class="text-lg font-semibold text-slate-800">Client</h2>
+
+      @if (customers().length > 0) {
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-slate-700">Client enregistré</span>
+          <select
+            (change)="onCustomerSelected($any($event.target).value)"
+            class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+          >
+            <option value="">— Sélectionner —</option>
+            @for (customer of customers(); track customer.id) {
+              <option [value]="customer.id">{{ customer.name }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-slate-700">Nom du client</span>
+        <input
+          formControlName="customerName"
+          type="text"
+          class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-slate-700">Adresse</span>
+        <input
+          formControlName="customerAddress"
+          type="text"
+          class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        />
+      </label>
+
+      <div class="flex gap-3">
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm font-medium text-slate-700">Email</span>
+          <input
+            formControlName="customerEmail"
+            type="email"
+            class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+          />
+        </label>
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm font-medium text-slate-700">Téléphone</span>
+          <input
+            formControlName="customerPhone"
+            type="tel"
+            class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+          />
+        </label>
+      </div>
+
+      @if (!selectedCustomerId()) {
+        <label class="flex items-center gap-2">
+          <input formControlName="saveAsNewCustomer" type="checkbox" class="h-5 w-5" />
+          <span class="text-sm font-medium text-slate-700">
+            Enregistrer ce client pour la prochaine fois
+          </span>
+        </label>
+      }
+    </section>
+
+    <section class="flex flex-col gap-4">
+      <h2 class="text-lg font-semibold text-slate-800">Lignes de facture</h2>
+
+      @for (line of lines.controls; track line; let i = $index) {
+        <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)" />
+      }
+
+      <app-big-button variant="secondary" type="button" (click)="addLine()">
+        + Ajouter une ligne
+      </app-big-button>
+    </section>
+
+    <app-invoice-totals-summary [totals]="totalsPreview()" [vatApplicable]="vatApplicable()" />
+
+    @if (errorMessage(); as message) {
+      <p class="text-center font-medium text-red-700">{{ message }}</p>
+    }
+
+    <app-big-button type="submit" [disabled]="creating()">
+      {{ creating() ? 'Création…' : 'Créer la facture' }}
+    </app-big-button>
+  </form>
+}

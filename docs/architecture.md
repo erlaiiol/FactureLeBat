@@ -1,1 +1,104 @@
-** to fulfill **
+# Architecture
+
+## System overview
+
+```
+┌─────────────────┐        /api/*  (JSON)        ┌──────────────────┐        ┌────────────┐
+│  Angular SPA     │ ───────────────────────────▶ │  NestJS API       │ ─────▶ │ PostgreSQL │
+│  (frontend/)      │ ◀─────────────────────────── │  (backend/)        │ ◀───── │            │
+└─────────────────┘                              └──────────────────┘        └────────────┘
+```
+
+- **Dev**: the Angular dev server (`ng serve`, port 4200) calls the Nest API directly on `localhost:3000` — CORS is enabled backend-side for that origin.
+- **Prod**: Nginx serves the compiled Angular bundle and reverse-proxies `/api/*` to the backend container on the same origin — no CORS needed. See `infra/nginx.conf`.
+
+The backend is the single source of truth for all business logic (calculations, validation, numbering). The frontend never re-implements pricing rules except for a clearly-marked, non-authoritative live preview (see [conventions.md](conventions.md#no-business-logic-duplication)).
+
+## Backend (`backend/`)
+
+NestJS, layered strictly as **Controller → Service → Repository → Prisma**. Each domain is a self-contained module under `src/`:
+
+```
+src/
+  common/          health check — no business logic
+  config/          env var validation (fails fast at boot on misconfiguration)
+  database/        PrismaService (global, injectable everywhere)
+  company/         singleton artisan profile
+  customer/        saved customers (CRUD + search), same shape as company/
+  product/         material catalog (CRUD + search), same shape as company/
+    import/        supplier-URL import (Phase 4) — network I/O isolated from HTML parsing
+      ip-guard.ts                 pure fn: is this IP loopback/private/link-local/metadata? (unit-tested directly)
+      safe-fetcher.service.ts     SSRF-safe fetch: DNS-validated at connect time, bounded size/time/redirects
+      product-extraction.service.ts  pure: HTML string -> best-effort draft (JSON-LD / Open Graph / <title>)
+      product-import.service.ts   orchestration only, mirrors invoice.service.ts's role
+  invoice/         the core domain
+    calculation/   pure, dependency-free pricing math (InvoiceCalculationService)
+    dto/           class-validator input contracts
+    entities/      API response shapes (decoupled from Prisma's generated types)
+    pdf/           PDF rendering (pdfmake), isolated from persistence/business logic
+    invoice.mapper.ts     Prisma row -> API response / PDF data (response shaping only)
+    invoice.service.ts    orchestration only
+    invoice.repository.ts Prisma calls only
+```
+
+**Why this split matters in practice**: `InvoiceService` never touches Prisma directly and never computes a total — it asks `InvoiceRepository` to persist, `InvoiceMapper` to shape the response, and (transitively, via the mapper) `InvoiceCalculationService` to do the math. Each of those can be unit-tested — or replaced — without touching the others. `InvoiceCalculationService` in particular has no NestJS or Prisma dependency at all; it's plain TypeScript, which is why it has the most thorough test suite in the codebase (see `invoice-calculation.service.spec.ts`).
+
+### Request flow: creating an invoice
+
+1. `POST /api/invoices` hits `InvoiceController`, which only deserializes/validates the body (`CreateInvoiceDto`, enforced globally by `ValidationPipe`) and calls `InvoiceService.create()`.
+2. `InvoiceService` loads the (singleton) company profile via `CompanyService`, derives whether VAT applies (`isVatApplicable(legalStatus)`), confirms `customerId` exists via `CustomerService` if one was submitted (without ever overwriting the request's own customer fields — see [conventions.md](conventions.md)), and asks `InvoiceRepository.createWithSequentialNumber()` to persist.
+3. The repository runs one Prisma **interactive transaction**: it increments `Company.nextInvoiceNumber` (the `UPDATE` takes a row lock, serializing concurrent creates — see [database.md](database.md#invoice-numbering)) and creates the `Invoice` + `InvoiceLine` rows in the same transaction.
+4. `InvoiceService` hands the persisted row to `InvoiceMapper.toInvoiceWithTotals()`, which calls `InvoiceCalculationService` once per line and returns the full response — **no total is ever stored**; it's recomputed on every read.
+5. `GET /api/invoices/:id/pdf` follows the same path up to `InvoiceMapper.toPdfData()`, then hands a plain data object to `PdfService` (isolated: it knows nothing about Prisma or business rules, only how to lay out a document — see `pdf.service.ts`).
+
+### Request flow: importing a product from a supplier URL (Phase 4)
+
+`POST /api/products/import` never touches Prisma — it's the one endpoint in the backend whose entire job is to make an outbound network call on the artisan's behalf, so its risk profile is different from everything else here and it's isolated accordingly:
+
+1. `ProductController.importFromUrl()` validates the body (`ImportProductDto` — must be a well-formed `http(s)` URL) and delegates to `ProductImportService`, the only orchestrator involved.
+2. `SafeFetcherService.fetchHtml()` does the risky part: it resolves DNS itself via a custom lookup function and rejects the request if any resolved address is loopback/private/link-local/cloud-metadata — critically, this validated address is the *same* one handed to the actual TCP connector (via undici's `Agent.connect.lookup`), which is what closes the DNS-rebinding gap a naive "check then fetch" would leave open (see `ip-guard.ts`/`safe-fetcher.service.ts` and [api.md](api.md#post-productsimport-phase-4)). Redirects are bounded and re-validated the same way; response size, timeout, and content-type are all capped.
+3. `ProductExtractionService.extract()` — pure, no I/O — parses the fetched HTML with `cheerio`, preferring `schema.org/Product` JSON-LD, falling back to Open Graph tags, then `<title>`, sanitizing and length-clamping every field.
+4. The result is a `ImportedProductDraft`, never written to `Product` — the frontend prefills the (still fully editable) product form with it, and only a subsequent, separate `POST /api/products` call — same one used for manual entry — actually persists anything.
+
+### Cross-cutting concerns (`main.ts` / `app.module.ts`)
+
+- **Env validation**: `ConfigModule.forRoot({ validate: validateEnv })` — the app refuses to boot if `DATABASE_URL` is missing/malformed, `PORT` isn't a valid port, etc. See `src/config/env.validation.ts`.
+- **Security headers**: `helmet()` middleware.
+- **Rate limiting**: `@nestjs/throttler`, global guard, 100 req/min/IP by default; `POST /products/import` overrides this to a tighter 10 req/min/IP via `@Throttle()` since it triggers a real outbound HTTP request per call.
+- **Input validation**: global `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })` — every DTO field is validated and coerced; unknown fields are rejected outright.
+- **API prefix**: everything is served under `/api` (`app.setGlobalPrefix('api')`) — this is what lets Nginx route `/api/*` to the backend and everything else to the static frontend in prod.
+- **Graceful shutdown**: `app.enableShutdownHooks()` — without it, Nest never listens for `SIGTERM`/`SIGINT`, so `OnModuleDestroy` hooks (`PrismaService` disconnecting, `SafeFetcherService` closing its pooled `undici.Agent`) would only ever run when a test calls `app.close()` directly, never on a real `docker stop`/redeploy.
+
+## Frontend (`frontend/`)
+
+Angular (standalone components, no NgModules), signals for local state, `OnPush` everywhere, Tailwind CSS for styling.
+
+```
+src/app/
+  core/
+    models/      TypeScript types mirroring backend DTOs/response shapes
+    services/    thin HttpClient wrappers (one per backend domain)
+  features/
+    invoice-create/   the main screen: customer + line items + live total preview
+    invoice-list/     list + PDF download
+    customer-list/    saved customers, search
+    customer-form/    create/edit a customer (one page, keyed off a route id param)
+    product-list/     material catalog, search
+    product-form/     create/edit a product (one page, keyed off a route id param);
+                      create mode also offers "import from supplier URL" (Phase 4)
+    company-settings/ singleton artisan profile editor
+  shared/
+    components/  small reusable presentational components (e.g. app-big-button)
+    pipes/       e.g. centsToEuros
+```
+
+Each `features/*` folder is a routed, lazily-loaded page (`loadComponent` in `app.routes.ts`). Pages that call the API always guard their subscriptions with `takeUntilDestroyed()` so a slow response arriving after navigation away never touches a destroyed component's state.
+
+## Docker (`infra/`)
+
+Two independent, non-overlapping Compose projects (`name: facturelebat-dev` / `facturelebat-prod` in each file) so dev and prod never share containers, networks, or the Postgres volume even if run from the same machine:
+
+- `infra/docker-compose.yml` (dev, default): `postgres` + `backend` (target `dev`, `nest start --watch`, bind-mounted source) + `frontend` (target `dev`, `ng serve`, bind-mounted source).
+- `infra/docker-compose.prod.yml`: `postgres` + `backend` (target `prod`, compiled `dist/`, runs `prisma migrate deploy` on container start) + `frontend` (target `prod`, static build served by Nginx, proxies `/api`).
+
+`backend/Dockerfile` and `frontend/Dockerfile` are both multi-stage (`base → dev` / `base → build → prod`) so the same file serves both compose targets. See the root `Makefile` for the day-to-day commands.

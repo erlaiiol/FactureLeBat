@@ -1,0 +1,12 @@
+# Used as the build context for the frontend image (it needs infra/nginx.conf
+# alongside the frontend/ source) — keeps that context small and clean.
+**/node_modules
+**/dist
+backend/generated
+backend/coverage
+frontend/.angular
+.git
+*.log
+**/.env
+**/.env.*
+!**/.env.example

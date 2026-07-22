@@ -1,0 +1,35 @@
+<h1 class="mb-6 text-2xl font-bold text-slate-900">Mes factures</h1>
+
+@if (loading()) {
+  <p class="text-slate-500">Chargement…</p>
+} @else if (errorMessage(); as message) {
+  <p class="font-medium text-red-700">{{ message }}</p>
+} @else if (invoices().length === 0) {
+  <p class="text-slate-500">Aucune facture pour le moment.</p>
+} @else {
+  <ul class="flex flex-col gap-3">
+    @for (invoice of invoices(); track invoice.id) {
+      <li
+        class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4"
+      >
+        <div>
+          <p class="font-semibold text-slate-900">{{ invoice.number }}</p>
+          <p class="text-sm text-slate-600">{{ invoice.customerName }}</p>
+          <p class="text-sm text-slate-500">{{ invoice.date | date: 'dd/MM/yyyy' }}</p>
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="text-lg font-semibold text-slate-900">
+            {{ invoice.totalInclVatCents | centsToEuros }}
+          </span>
+          <a
+            [href]="pdfUrl(invoice.id)"
+            target="_blank"
+            class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
+          >
+            Télécharger
+          </a>
+        </div>
+      </li>
+    }
+  </ul>
+}

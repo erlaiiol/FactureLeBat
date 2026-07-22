@@ -7,7 +7,7 @@
 - Database (Prisma access to PostGreSQL) must be isolated. Business services should not directly use Prisma. Use repositories as abstraction layers. Controller > Service > Repositories > Prisma > PostGreSQL.
 - Database migrations are mandatory. It shall never be modified manually. Every scheme change must generate a Prisma migration. Migration files must always be committed to git.
 - Never store calculated data that can become inconsistent. Derived values should be calculated unless there is a strong reason to persist them. Prefer: "invoice lines + calculation service = calculation total". Avoid storing totals everywhere without sync.
-- Be as strict as possible with typing. Avoid: "function process (data)[{}"; do "function process (data: Data){}"
+- Be as strict as possible with typing. Avoid: "function process (data){}"; do "function process (data: Data){}"
 - Every external input must be validated. Use : class-validator, class-transformer. Do never trust: HTTP requests, frontend data, external APIs.
 - Financial Data Rules : Never use floating point numbers for monetary calculations. Use Integer or Decimal library.
 - API Rules: the backend is the single source of truth. business calculations must happen on the backend. frontend displays data but does not reproduce business logic.

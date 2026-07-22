@@ -13,6 +13,7 @@ coverage/
 
 # Prisma
 prisma/*.db
+backend/generated/
 
 # IDE
 .vscode/

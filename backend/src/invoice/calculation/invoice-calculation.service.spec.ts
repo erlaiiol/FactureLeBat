@@ -1,0 +1,110 @@
+import { InvoiceCalculationService, LineCalculationInput } from './invoice-calculation.service';
+
+function areaLine(overrides: Partial<LineCalculationInput> = {}): LineCalculationInput {
+  return {
+    mode: 'AREA',
+    quantity: 10,
+    unitPriceCents: 4500,
+    wasteSurcharge: 'NONE',
+    ...overrides,
+  };
+}
+
+function unitLine(overrides: Partial<LineCalculationInput> = {}): LineCalculationInput {
+  return {
+    mode: 'UNIT',
+    quantity: 3,
+    unitPriceCents: 1200,
+    wasteSurcharge: 'NONE',
+    ...overrides,
+  };
+}
+
+describe('InvoiceCalculationService', () => {
+  let service: InvoiceCalculationService;
+
+  beforeEach(() => {
+    service = new InvoiceCalculationService();
+  });
+
+  describe('computeLineTotal', () => {
+    it('computes an area line total as quantity times unit price when there is no waste surcharge', () => {
+      const result = service.computeLineTotal(areaLine({ quantity: 10, unitPriceCents: 4500 }));
+      expect(result.lineTotalExclVatCents).toBe(45000);
+    });
+
+    it('applies a 10% waste surcharge to the billed quantity for area mode lines', () => {
+      const result = service.computeLineTotal(
+        areaLine({ quantity: 10, unitPriceCents: 4500, wasteSurcharge: 'TEN' }),
+      );
+      expect(result.billedQuantity.toNumber()).toBe(11);
+      expect(result.lineTotalExclVatCents).toBe(49500);
+    });
+
+    it('applies a 20% waste surcharge to the billed quantity for area mode lines', () => {
+      const result = service.computeLineTotal(
+        areaLine({ quantity: 10, unitPriceCents: 4500, wasteSurcharge: 'TWENTY' }),
+      );
+      expect(result.billedQuantity.toNumber()).toBe(12);
+      expect(result.lineTotalExclVatCents).toBe(54000);
+    });
+
+    it('computes a unit mode line total as quantity times unit price, ignoring any waste surcharge', () => {
+      const result = service.computeLineTotal(
+        unitLine({ quantity: 3, unitPriceCents: 1200, wasteSurcharge: 'TWENTY' }),
+      );
+      expect(result.billedQuantity.toNumber()).toBe(3);
+      expect(result.lineTotalExclVatCents).toBe(3600);
+    });
+
+    it('rounds a line total to the nearest cent', () => {
+      const result = service.computeLineTotal(areaLine({ quantity: '3.333', unitPriceCents: 100 }));
+      // 3.333 * 100 = 333.3 cents -> rounds to 333
+      expect(result.lineTotalExclVatCents).toBe(333);
+    });
+  });
+
+  describe('computeInvoiceTotals', () => {
+    it('sums multiple line totals into an exact subtotal without floating point drift', () => {
+      const lines = [
+        areaLine({ quantity: 10, unitPriceCents: 4599 }),
+        unitLine({ quantity: 7, unitPriceCents: 199 }),
+      ];
+      const totals = service.computeInvoiceTotals(lines, false, 2000);
+      expect(totals.subtotalExclVatCents).toBe(10 * 4599 + 7 * 199);
+    });
+
+    it('applies VAT at the invoice stored rate when the invoice is VAT-applicable', () => {
+      const lines = [areaLine({ quantity: 10, unitPriceCents: 10000 })];
+      const totals = service.computeInvoiceTotals(lines, true, 2000);
+      expect(totals.subtotalExclVatCents).toBe(100000);
+      expect(totals.vatAmountCents).toBe(20000);
+    });
+
+    it('charges zero VAT when the invoice is not VAT-applicable', () => {
+      const lines = [areaLine({ quantity: 10, unitPriceCents: 10000 })];
+      const totals = service.computeInvoiceTotals(lines, false, 2000);
+      expect(totals.vatAmountCents).toBe(0);
+    });
+
+    it('computes the total including VAT as the subtotal plus the VAT amount', () => {
+      const lines = [areaLine({ quantity: 10, unitPriceCents: 10000 })];
+      const totals = service.computeInvoiceTotals(lines, true, 2000);
+      expect(totals.totalInclVatCents).toBe(totals.subtotalExclVatCents + totals.vatAmountCents);
+    });
+  });
+
+  describe('computeVatAmountCents', () => {
+    it('matches computeInvoiceTotals when given the same pre-computed subtotal', () => {
+      const lines = [areaLine({ quantity: 10, unitPriceCents: 4599 })];
+      const totals = service.computeInvoiceTotals(lines, true, 2000);
+      expect(service.computeVatAmountCents(totals.subtotalExclVatCents, true, 2000)).toBe(
+        totals.vatAmountCents,
+      );
+    });
+
+    it('returns zero when VAT is not applicable regardless of subtotal', () => {
+      expect(service.computeVatAmountCents(100000, false, 2000)).toBe(0);
+    });
+  });
+});

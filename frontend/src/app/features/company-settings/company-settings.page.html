@@ -1,0 +1,119 @@
+<h1 class="mb-6 text-2xl font-bold text-slate-900">Mon entreprise</h1>
+
+@if (loading()) {
+  <p class="text-slate-500">Chargement…</p>
+}
+
+<form
+  [formGroup]="form"
+  (ngSubmit)="submit()"
+  class="flex flex-col gap-4"
+  [class.hidden]="loading()"
+>
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Nom de l'entreprise</span>
+    <input
+      formControlName="name"
+      type="text"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">SIRET (14 chiffres)</span>
+    <input
+      formControlName="siret"
+      type="text"
+      inputmode="numeric"
+      maxlength="14"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Adresse</span>
+    <input
+      formControlName="addressLine1"
+      type="text"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Complément d'adresse</span>
+    <input
+      formControlName="addressLine2"
+      type="text"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <div class="flex gap-4">
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Code postal</span>
+      <input
+        formControlName="postalCode"
+        type="text"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+    </label>
+    <label class="flex flex-[2] flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Ville</span>
+      <input
+        formControlName="city"
+        type="text"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+    </label>
+  </div>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Email</span>
+    <input
+      formControlName="email"
+      type="email"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Téléphone</span>
+    <input
+      formControlName="phone"
+      type="tel"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Statut</span>
+    <select
+      formControlName="legalStatus"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    >
+      <option value="MICRO_ENTREPRENEUR">Micro-entrepreneur (sans TVA)</option>
+      <option value="COMPANY">Entreprise (avec TVA)</option>
+    </select>
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Taux de TVA (%)</span>
+    <input
+      formControlName="vatRatePercent"
+      type="number"
+      step="0.1"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <app-big-button type="submit" [disabled]="saving()">
+    {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+  </app-big-button>
+
+  @if (saved()) {
+    <p class="text-center font-medium text-green-700">Enregistré !</p>
+  }
+  @if (errorMessage(); as message) {
+    <p class="text-center font-medium text-red-700">{{ message }}</p>
+  }
+</form>

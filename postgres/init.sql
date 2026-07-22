@@ -1,1 +1,4 @@
-** to fulfill **
+-- This database's schema is owned exclusively by Prisma migrations
+-- (backend/prisma/migrations/). Never hand-edit the schema here or
+-- via any manual SQL — every change must go through a Prisma migration
+-- so it stays committed and reproducible.

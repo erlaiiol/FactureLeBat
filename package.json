@@ -5,8 +5,10 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "eslint": "^10.7.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.1.0"
+    "lint-staged": "^17.1.0",
+    "prettier": "^3.9.6"
   },
   "lint-staged": {
     "backend/**/*.ts": [

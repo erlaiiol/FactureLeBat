@@ -1,0 +1,112 @@
+<h1 class="mb-6 text-2xl font-bold text-slate-900">
+  {{ isEditing ? 'Modifier le produit' : 'Nouveau produit' }}
+</h1>
+
+@if (loading()) {
+  <p class="text-slate-500">Chargement…</p>
+}
+
+@if (!isEditing && !loading()) {
+  <div class="mb-6 flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <span class="text-sm font-medium text-slate-700">
+      Importer depuis le site du fournisseur (optionnel)
+    </span>
+    <div class="flex gap-2">
+      <input
+        [formControl]="importUrl"
+        type="url"
+        placeholder="https://fournisseur.example.com/produit/parquet-oak"
+        class="flex-1 rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+      <button
+        type="button"
+        [disabled]="importing()"
+        (click)="importFromUrl()"
+        class="shrink-0 rounded-lg bg-slate-700 px-4 py-3 font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {{ importing() ? 'Import…' : 'Importer' }}
+      </button>
+    </div>
+    <p class="text-xs text-slate-500">
+      Les champs ci-dessous seront pré-remplis mais resteront modifiables.
+    </p>
+    @if (importErrorMessage(); as message) {
+      <p class="text-sm font-medium text-red-700">{{ message }}</p>
+    }
+  </div>
+}
+
+<form
+  [formGroup]="form"
+  (ngSubmit)="submit()"
+  class="flex flex-col gap-4"
+  [class.hidden]="loading()"
+>
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Nom du produit</span>
+    <input
+      formControlName="name"
+      type="text"
+      placeholder="Parquet chêne massif"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Description</span>
+    <textarea
+      formControlName="description"
+      rows="3"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    ></textarea>
+  </label>
+
+  <div class="flex gap-3">
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Prix (€)</span>
+      <input
+        formControlName="priceEuros"
+        type="number"
+        step="0.01"
+        min="0"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+    </label>
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Unité</span>
+      <input
+        formControlName="unit"
+        type="text"
+        placeholder="m2"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+    </label>
+  </div>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Fournisseur</span>
+    <input
+      formControlName="supplierName"
+      type="text"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Site du fournisseur</span>
+    <input
+      formControlName="supplierUrl"
+      type="url"
+      placeholder="https://…"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  @if (errorMessage(); as message) {
+    <p class="text-center font-medium text-red-700">{{ message }}</p>
+  }
+
+  <app-big-button type="submit" [disabled]="saving()">
+    {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+  </app-big-button>
+</form>
