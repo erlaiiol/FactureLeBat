@@ -1,4 +1,4 @@
-.PHONY: dev prod down migrate logs
+.PHONY: dev prod down migrate logs deploy backup
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build
@@ -15,3 +15,11 @@ migrate:
 
 logs:
 	docker compose -f infra/docker-compose.yml logs -f
+
+# Real-server commands (see docs/deployment.md) — run these against a repo
+# checkout already running `make prod`, e.g. on the OVH VPS.
+deploy:
+	sh infra/deploy.sh
+
+backup:
+	sh infra/backup.sh

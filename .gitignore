@@ -24,3 +24,6 @@ backend/generated/
 
 # Logs
 *.log
+
+# Local Postgres dumps produced by infra/backup.sh — never commit real data
+infra/backups/

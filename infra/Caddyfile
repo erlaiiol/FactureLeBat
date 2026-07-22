@@ -1,0 +1,21 @@
+# Public edge for infra/docker-compose.prod.yml. Terminates TLS and proxies
+# everything to the frontend Nginx container, which keeps doing exactly what
+# it does today (serve the Angular build, proxy /api/* to the backend) — see
+# infra/nginx.conf. Caddy owns exactly one job: public exposure + certs.
+#
+# {$DOMAIN} (infra/.env) drives the behavior:
+#   - a real domain (e.g. facturelebat.example.com) -> automatic HTTPS via
+#     Let's Encrypt, HTTP->HTTPS redirect, cert renewal, all built in.
+#   - `:80` (the local/`make prod` smoke-test default) -> plain HTTP on port
+#     80, no ACME attempt (Caddy never requests a cert for a bare port).
+{$DOMAIN}
+
+encode gzip
+
+header {
+	Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	X-Content-Type-Options "nosniff"
+	Referrer-Policy "strict-origin-when-cross-origin"
+}
+
+reverse_proxy frontend:80

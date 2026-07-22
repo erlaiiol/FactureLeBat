@@ -1,4 +1,4 @@
-import { plainToInstance } from 'class-transformer';
+import { plainToInstance, Type } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
@@ -25,6 +25,15 @@ class EnvironmentVariables {
   @IsOptional()
   NODE_ENV: NodeEnv = NodeEnv.Development;
 
+  // @Type is required, not just enableImplicitConversion below: this class is
+  // validated at AppModule's module-evaluation time (ConfigModule.forRoot's
+  // argument), before main.ts's own imports necessarily finish resolving —
+  // relying on reflected design:type metadata for the string->number
+  // conversion is timing-fragile, and silently leaves PORT as the raw env
+  // string, which then fails @IsInt(). An explicit @Type always converts
+  // regardless of import order — this is what broke `docker compose up` on
+  // the prod image, which sets PORT via a real env var (docker-compose.prod.yml).
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(65535)
@@ -50,6 +59,7 @@ class EnvironmentVariables {
   // supplier search and complementary suggestions — bounds cost on an
   // account with no per-user billing yet (pre-Phase-13/14). Cache hits never
   // count against it (see SourcingRepository).
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @IsOptional()

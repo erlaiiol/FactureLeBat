@@ -41,8 +41,28 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    # No published port: only `caddy` is reachable from outside the compose
+    # network, so there's a single place that owns public exposure/TLS.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    environment:
+      DOMAIN: ${DOMAIN}
     ports:
-      - '${FRONTEND_PORT}:80'
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   postgres_data:
+  # Persists the Let's Encrypt cert/account so it survives `docker compose
+  # down`/redeploys — never wipe this with `-v`, or every redeploy re-issues
+  # a cert and risks Let's Encrypt's rate limits.
+  caddy_data:
+  caddy_config:

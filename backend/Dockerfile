@@ -11,8 +11,9 @@ FROM base AS dev
 RUN npm ci
 COPY . .
 RUN npx prisma generate
+RUN chmod +x entrypoint.dev.sh wait-for-db.sh
 EXPOSE 3000
-CMD ["npm", "run", "start:dev"]
+CMD ["./entrypoint.dev.sh"]
 
 # --- build: compile to dist/ with a real Postgres-free Prisma client ---
 FROM base AS build
@@ -31,9 +32,11 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/generated ./generated
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build /app/entrypoint.sh /app/wait-for-db.sh ./
+RUN chmod +x entrypoint.sh wait-for-db.sh
 
 RUN chown -R node:node /app
 USER node
 
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+CMD ["./entrypoint.sh"]

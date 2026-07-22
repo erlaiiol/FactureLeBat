@@ -71,18 +71,20 @@ npx ng serve        # http://localhost:4200
 make prod
 ```
 
-Builds optimized images (compiled Nest `dist/`, static Angular build served by Nginx with `/api/*` proxied to the backend, same origin — no CORS needed), runs pending migrations automatically on backend container start, and starts everything detached. The backend shuts down gracefully on `docker stop` (`app.enableShutdownHooks()` — Postgres connections and pooled HTTP connections are closed cleanly, not killed mid-request). See [docs/architecture.md](docs/architecture.md#docker-infra) for the dev/prod topology.
+Builds optimized images (compiled Nest `dist/`, static Angular build served by Nginx with `/api/*` proxied to the backend, same origin — no CORS needed) and starts everything detached, behind a Caddy container that terminates TLS. Pending migrations are applied automatically on backend container start (`backend/entrypoint.sh`). The backend shuts down gracefully on `docker stop` (`app.enableShutdownHooks()` — Postgres connections and pooled HTTP connections are closed cleanly, not killed mid-request). See [docs/architecture.md](docs/architecture.md#docker-infra) for the dev/prod topology.
 
-> Don't run `make dev` and `make prod` at the same time from the default `.env` — they map to the same host ports. Override `BACKEND_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT` in `infra/.env` if you need both simultaneously.
+With the default `infra/.env` (`DOMAIN=:80`), this is a local smoke test: open **http://localhost**. Deploying for real (a domain, a real TLS cert, an OVH VPS) is [docs/deployment.md](docs/deployment.md) — `DOMAIN` is the one setting that turns this from "local prod smoke test" into "real internet-facing deployment."
+
+> `make dev` publishes `BACKEND_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT` to the host; `make prod` only publishes `80`/`443` (via Caddy) — `postgres`/`backend`/`frontend` aren't reachable from the host at all in prod. The two stacks don't share ports, so running both at once is fine; they're still fully separate Compose projects (`facturelebat-dev`/`facturelebat-prod`) with their own containers and Postgres volume either way.
 
 ## Project structure
 
 ```
 backend/    NestJS API — see docs/architecture.md and docs/conventions.md
 frontend/   Angular SPA
-infra/      Docker Compose files, Nginx config, shared .env
+infra/      Docker Compose files, Nginx/Caddy config, shared .env, deploy.sh/backup.sh
 postgres/   init.sql (intentionally a no-op — schema is Prisma-managed, see docs/database.md)
-docs/       architecture, conventions, database, API reference, roadmap
+docs/       architecture, conventions, database, API reference, deployment, roadmap
 ```
 
 ## Common commands
@@ -122,4 +124,5 @@ E2E tests run against the real local dev Postgres rather than a mocked/isolated 
 - [docs/database.md](docs/database.md) — schema, Prisma 7 specifics, invoice numbering, migrations
 - [docs/api.md](docs/api.md) — endpoint reference
 - [docs/development-rules.md](docs/development-rules.md) — the non-negotiable rules (layering, money-as-cents, testing priorities...)
+- [docs/deployment.md](docs/deployment.md) — deploying to a real OVH VPS: TLS, redeploys, backups, rollback
 - [docs/roadmap.md](docs/roadmap.md) — product vision and phased plan

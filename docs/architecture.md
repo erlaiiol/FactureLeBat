@@ -10,7 +10,7 @@
 ```
 
 - **Dev**: the Angular dev server (`ng serve`, port 4200) calls the Nest API directly on `localhost:3000` — CORS is enabled backend-side for that origin.
-- **Prod**: Nginx serves the compiled Angular bundle and reverse-proxies `/api/*` to the backend container on the same origin — no CORS needed. See `infra/nginx.conf`.
+- **Prod**: Nginx serves the compiled Angular bundle and reverse-proxies `/api/*` to the backend container on the same origin — no CORS needed. See `infra/nginx.conf`. In front of Nginx, a Caddy container is the app's only publicly-exposed service: it terminates TLS (automatic Let's Encrypt certs, HTTP→HTTPS redirect, renewal — all built into Caddy, no certbot dance needed) and reverse-proxies everything to Nginx. Nginx and the backend are not published to the host at all in prod — Caddy is the single entry point. See `infra/Caddyfile` and [deployment.md](deployment.md) for the target topology (a single OVH VPS running the whole stack via Docker Compose).
 
 The backend is the single source of truth for all business logic (calculations, validation, numbering). The frontend never re-implements pricing rules except for a clearly-marked, non-authoritative live preview (see [conventions.md](conventions.md#no-business-logic-duplication)).
 
@@ -184,7 +184,20 @@ Each `features/*` folder is a routed, lazily-loaded page (`loadComponent` in `ap
 
 Two independent, non-overlapping Compose projects (`name: facturelebat-dev` / `facturelebat-prod` in each file) so dev and prod never share containers, networks, or the Postgres volume even if run from the same machine:
 
-- `infra/docker-compose.yml` (dev, default): `postgres` + `backend` (target `dev`, `nest start --watch`, bind-mounted source) + `frontend` (target `dev`, `ng serve`, bind-mounted source).
-- `infra/docker-compose.prod.yml`: `postgres` + `backend` (target `prod`, compiled `dist/`, runs `prisma migrate deploy` on container start) + `frontend` (target `prod`, static build served by Nginx, proxies `/api`).
+- `infra/docker-compose.yml` (dev, default): `postgres` + `backend` (target `dev`, bind-mounted source) + `frontend` (target `dev`, `ng serve`, bind-mounted source). `backend`, `frontend`, and `postgres` all publish their ports directly to the host (`BACKEND_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT`).
+- `infra/docker-compose.prod.yml`: `postgres` (not published) + `backend` (target `prod`, compiled `dist/`, not published) + `frontend` (target `prod`, static build served by Nginx, proxies `/api`, not published) + `caddy` (the only service publishing `80`/`443` — see above). This is the file the OVH server actually runs; see [deployment.md](deployment.md).
 
 `backend/Dockerfile` and `frontend/Dockerfile` are both multi-stage (`base → dev` / `base → build → prod`) so the same file serves both compose targets. See the root `Makefile` for the day-to-day commands.
+
+### Entrypoint scripts (`backend/`)
+
+Both the `dev` and `prod` Dockerfile targets run a small entrypoint script instead of the app command directly, so container startup can do more than just "run the app":
+
+- `backend/wait-for-db.sh`: blocks (up to 60s) until the host:port parsed out of `DATABASE_URL` accepts a TCP connection, shared by both entrypoints below. `depends_on: condition: service_healthy` in the Compose files only gates the *first* `docker compose up` — it isn't re-evaluated when a single container restarts on its own (a crash, or `restart: unless-stopped` after the VPS reboots), so this is what stops the backend from failing on a bare connection-refused in that case.
+- `backend/entrypoint.dev.sh`: waits for the DB, applies any already-committed migrations with `prisma migrate deploy` (safe to automate — unlike `migrate dev`, it never prompts or generates a migration), then starts `nest start --watch`. Creating a *new* migration from a schema change stays the deliberate, manual `make migrate` step (`prisma migrate dev`).
+- `backend/entrypoint.sh`: same wait-and-migrate, then `exec node dist/src/main.js`. This replaces what used to be an inline `CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]`.
+
+### Deployment/ops scripts (`infra/`)
+
+- `infra/deploy.sh` (`make deploy`): run on the server to ship a new version — `git pull`, rebuild images, recreate containers. No separate migration step: `backend/entrypoint.sh` applies pending migrations itself before the new backend container starts serving traffic.
+- `infra/backup.sh` (`make backup`): `pg_dump`s the prod database to a timestamped, gzipped file under `infra/backups/` (gitignored) and prunes anything older than 14 days. Meant to be run from cron on the server. See [deployment.md](deployment.md#backups).
