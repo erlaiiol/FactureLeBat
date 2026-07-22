@@ -31,6 +31,13 @@
        here would silently fall back to the browser's default full-page
        GET-and-reload submit. -->
   <div class="flex flex-col gap-6">
+    <app-catalog-picker
+      [products]="draftStore.products()"
+      [services]="draftStore.services()"
+      (pickProduct)="addProductFromCatalog($event)"
+      (pickService)="addServiceFromCatalog($event)"
+    />
+
     <section class="flex flex-col gap-4">
       <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
         Lignes de facture

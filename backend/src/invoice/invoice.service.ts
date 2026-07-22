@@ -63,8 +63,15 @@ export class InvoiceService {
       customerEmail: dto.customerEmail,
       customerPhone: dto.customerPhone,
       customerId: dto.customerId,
+      customerFields: (dto.customerFields ?? []).map((field) => ({
+        label: field.label,
+        value: field.value,
+      })),
       vatApplicable: isVatApplicable(company.legalStatus),
       vatRateBasisPoints: company.vatRateBasisPoints,
+      subtotalOverrideCents: dto.subtotalOverrideCents,
+      vatOverrideCents: dto.vatOverrideCents,
+      totalOverrideCents: dto.totalOverrideCents,
       entryMode,
       // ManualModeFieldsConsistency guarantees `lines` is a non-empty array
       // whenever entryMode is GUIDED (the only branch that reads it below).

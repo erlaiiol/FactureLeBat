@@ -1,0 +1,73 @@
+@if (products().length > 0 || services().length > 0) {
+  <section class="flex flex-col gap-3 rounded-xl border border-line p-4">
+    <span class="font-heading uppercase tracking-wide text-sm font-semibold text-ink">
+      Ajouter depuis mon catalogue
+    </span>
+    <input
+      type="text"
+      placeholder="Rechercher un produit ou une prestation (nom ou code)…"
+      (input)="onSearch($any($event.target).value)"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+
+    @if (filteredProducts().length === 0 && filteredServices().length === 0) {
+      <p class="text-sm text-ink-soft">Aucun résultat.</p>
+    }
+
+    @if (filteredProducts().length > 0) {
+      <ul class="flex flex-col gap-2">
+        @for (product of filteredProducts(); track product.id) {
+          <li
+            class="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-3"
+          >
+            <div>
+              <p class="flex items-center gap-2 font-medium text-ink">
+                {{ product.name }}
+                @if (product.code) {
+                  <app-badge variant="info" tone="subtle">{{ product.code }}</app-badge>
+                }
+              </p>
+              <p class="text-sm text-ink-soft">
+                {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
+              </p>
+            </div>
+            <button
+              type="button"
+              (click)="pickProduct.emit(product)"
+              class="shrink-0 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-fg hover:brightness-90"
+            >
+              + Ajouter
+            </button>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (filteredServices().length > 0) {
+      <ul class="flex flex-col gap-2">
+        @for (service of filteredServices(); track service.id) {
+          <li
+            class="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-3"
+          >
+            <div>
+              <p class="flex items-center gap-2 font-medium text-ink">
+                {{ service.name }}
+                @if (service.code) {
+                  <app-badge variant="info" tone="subtle">{{ service.code }}</app-badge>
+                }
+              </p>
+              <p class="text-sm text-ink-soft">{{ service.priceCents | centsToEuros }}</p>
+            </div>
+            <button
+              type="button"
+              (click)="pickService.emit(service)"
+              class="shrink-0 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-fg hover:brightness-90"
+            >
+              + Ajouter
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+}

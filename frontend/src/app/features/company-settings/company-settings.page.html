@@ -173,3 +173,91 @@
     </p>
   }
 </section>
+
+<section class="mt-8 flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+  <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
+    Envoi de factures par email
+  </h2>
+  <p class="text-sm text-ink-soft">
+    Renseignez votre compte email pour envoyer vos factures directement depuis l'application, avec
+    votre propre adresse comme expéditeur.
+  </p>
+
+  @if (mailConfigured() && !mailSaved()) {
+    <p class="font-medium text-success">
+      Configuré — vos factures peuvent être envoyées par email.
+    </p>
+  }
+
+  @if (mailLoading()) {
+    <p class="text-ink-soft">Chargement…</p>
+  }
+
+  <form
+    [formGroup]="mailForm"
+    (ngSubmit)="submitMail()"
+    class="flex flex-col gap-4"
+    [class.hidden]="mailLoading()"
+  >
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink-soft">Serveur SMTP</span>
+      <input
+        formControlName="host"
+        type="text"
+        placeholder="smtp.exemple.fr"
+        class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+      />
+      <app-field-hint text="L'adresse du serveur d'envoi de votre fournisseur email." />
+    </label>
+
+    <div class="flex gap-4">
+      <label class="flex flex-1 flex-col gap-1">
+        <span class="text-sm font-medium text-ink-soft">Port</span>
+        <input
+          formControlName="port"
+          type="number"
+          class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+        />
+        <app-field-hint text="Généralement 587 ou 465." />
+      </label>
+      <label class="flex flex-1 items-center gap-2 pt-6">
+        <input formControlName="secure" type="checkbox" class="h-5 w-5" />
+        <span class="text-sm font-medium text-ink">Connexion sécurisée (TLS)</span>
+      </label>
+    </div>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink-soft">Adresse email</span>
+      <input
+        formControlName="user"
+        type="email"
+        class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+      />
+      <app-field-hint text="L'adresse depuis laquelle vos factures seront envoyées." />
+    </label>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink-soft">Mot de passe</span>
+      <input
+        formControlName="password"
+        type="password"
+        autocomplete="new-password"
+        class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+      />
+      <app-field-hint
+        text="Le mot de passe d'application de votre messagerie (jamais réaffiché — à ressaisir à chaque modification)."
+      />
+    </label>
+
+    <app-big-button type="submit" [disabled]="mailSaving()" variant="secondary">
+      {{ mailSaving() ? 'Vérification…' : 'Tester et enregistrer' }}
+    </app-big-button>
+
+    @if (mailSaved()) {
+      <p class="text-center font-medium text-success">Connexion vérifiée et enregistrée !</p>
+    }
+    @if (mailErrorMessage(); as message) {
+      <p class="text-center font-medium text-danger">{{ message }}</p>
+    }
+  </form>
+</section>

@@ -9,10 +9,12 @@ export type RedistributionStrategy = 'EQUAL' | 'WEIGHTED';
 // canvas — see the manual-* types further down.
 export type InvoiceEntryMode = 'GUIDED' | 'MANUAL';
 
-// A manual invoice's column role — DESCRIPTION/QUANTITY/UNIT_PRICE feed the
-// same pricing math a GUIDED line does (as a plain quantity x unit price
-// line, no waste surcharge/packaging); CUSTOM is free text, never priced.
-export type ManualColumnRole = 'DESCRIPTION' | 'QUANTITY' | 'UNIT_PRICE' | 'CUSTOM';
+// A manual invoice's column role. LINE_TOTAL is the artisan's own freehand
+// row price — never derived from QUANTITY x UNIT_PRICE, which stay purely
+// informational free text on the canvas (manual mode's whole principle:
+// totals stay fully editable, never computed behind the artisan's back).
+// CUSTOM is free text, never priced.
+export type ManualColumnRole = 'DESCRIPTION' | 'QUANTITY' | 'UNIT_PRICE' | 'LINE_TOTAL' | 'CUSTOM';
 
 export interface CreateManualColumnRequest {
   role: ManualColumnRole;
@@ -64,12 +66,20 @@ export interface CreateInvoiceServiceLineRequest {
   weights?: number[];
 }
 
+// A freehand extra client field (e.g. label "SIRET", value "123 456 789
+// 00012") — no fixed vocabulary, the artisan names the field themselves.
+export interface CreateInvoiceCustomerFieldRequest {
+  label: string;
+  value: string;
+}
+
 export interface CreateInvoiceRequest {
   customerName: string;
   customerAddress?: string;
   customerEmail?: string;
   customerPhone?: string;
   customerId?: string;
+  customerFields?: CreateInvoiceCustomerFieldRequest[];
   // Phase 9.5: defaults to GUIDED backend-side when omitted, same as before
   // this field existed.
   entryMode?: InvoiceEntryMode;
@@ -79,6 +89,13 @@ export interface CreateInvoiceRequest {
   serviceLines?: CreateInvoiceServiceLineRequest[];
   // Required for entryMode MANUAL, forbidden for GUIDED.
   manualTable?: CreateManualTableRequest;
+  // Phase 9.5 bis: manual mode's freely overridable aggregate figures — same
+  // "nothing computed behind the artisan's back" principle as a row's
+  // LINE_TOTAL cell. Forbidden for entryMode GUIDED (mirrors the backend's
+  // ManualModeFieldsConsistency rule).
+  subtotalOverrideCents?: number;
+  vatOverrideCents?: number;
+  totalOverrideCents?: number;
 }
 
 export interface InvoiceLineWithTotal {
@@ -134,6 +151,12 @@ export interface ManualInvoiceTableWithTotals {
   rows: ManualInvoiceRowWithTotal[];
 }
 
+export interface InvoiceCustomerFieldWithId {
+  id: string;
+  label: string;
+  value: string;
+}
+
 export interface InvoiceWithTotals {
   id: string;
   number: string;
@@ -143,6 +166,7 @@ export interface InvoiceWithTotals {
   customerEmail: string | null;
   customerPhone: string | null;
   customerId: string | null;
+  customerFields: InvoiceCustomerFieldWithId[];
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   // Phase 9.5: GUIDED populates lines/serviceLines (manualTable absent).
@@ -155,4 +179,22 @@ export interface InvoiceWithTotals {
   subtotalExclVatCents: number;
   vatAmountCents: number;
   totalInclVatCents: number;
+  // Phase 12: last successful email send only, null if never sent.
+  sentAt: string | null;
+  sentToEmail: string | null;
+}
+
+// All optional: `to` defaults server-side to the invoice's own
+// customerEmail, `subject`/`message` default to the backend's template.
+export interface SendInvoiceEmailRequest {
+  to?: string;
+  subject?: string;
+  message?: string;
+}
+
+// The exact subject/text send() would use if the artisan sends without
+// touching them — see InvoiceService.getMailTemplate.
+export interface InvoiceMailTemplate {
+  subject: string;
+  text: string;
 }

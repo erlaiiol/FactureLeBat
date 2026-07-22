@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -34,6 +35,7 @@ export class ServiceFormPage {
     // same boundary-conversion convention as the product/invoice line forms.
     priceEuros: [0, [Validators.required, Validators.min(0)]],
     defaultVisibility: this.fb.nonNullable.control<ServiceVisibility>('VISIBLE'),
+    code: [''],
   });
 
   constructor() {
@@ -49,6 +51,7 @@ export class ServiceFormPage {
               description: service.description ?? '',
               priceEuros: service.priceCents / 100,
               defaultVisibility: service.defaultVisibility,
+              code: service.code ?? '',
             });
           },
           error: () => {
@@ -74,6 +77,7 @@ export class ServiceFormPage {
       description: value.description || undefined,
       priceCents: Math.round(value.priceEuros * 100),
       defaultVisibility: value.defaultVisibility,
+      code: value.code || undefined,
     };
 
     this.saving.set(true);
@@ -88,9 +92,13 @@ export class ServiceFormPage {
         this.saving.set(false);
         void this.router.navigate(['/prestations']);
       },
-      error: () => {
+      error: (error: HttpErrorResponse) => {
         this.saving.set(false);
-        this.errorMessage.set('Erreur lors de l’enregistrement. Veuillez réessayer.');
+        this.errorMessage.set(
+          error.status === 409
+            ? 'Ce code de prestation est déjà utilisé par une autre prestation.'
+            : 'Erreur lors de l’enregistrement. Veuillez réessayer.',
+        );
       },
     });
   }

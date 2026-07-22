@@ -43,3 +43,19 @@ export function formatManualPrice(raw: string): string {
 export function formatManualText(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ');
 }
+
+// A quantity cell on the manual canvas is free text (e.g. "2 boites",
+// "10,5 m2") — never fed into the row's total (see LINE_TOTAL). This is only
+// used by the "?" autofill helper to suggest a total from the first number
+// it finds in that text, so the artisan doesn't have to retype it as a
+// clean decimal just to get a starting point.
+const LEADING_NUMBER_PATTERN = /-?\d+(?:[.,]\d+)?/;
+
+export function parseManualQuantityMagnitude(raw: string): number | null {
+  const match = LEADING_NUMBER_PATTERN.exec(raw);
+  if (!match) {
+    return null;
+  }
+  const value = Number(match[0].replace(',', '.'));
+  return Number.isFinite(value) ? value : null;
+}

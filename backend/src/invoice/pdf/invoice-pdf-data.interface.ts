@@ -62,6 +62,9 @@ export interface InvoicePdfData {
   customerAddress: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  // Freehand, artisan-named extra client fields (e.g. "SIRET") — rendered
+  // after the fixed fields above, same order they were entered in.
+  customerFields: { label: string; value: string }[];
 
   // Phase 9.5: GUIDED populates lines/serviceLines (manualTable absent).
   // MANUAL populates manualTable instead (lines/serviceLines stay empty

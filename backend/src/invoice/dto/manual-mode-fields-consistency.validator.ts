@@ -15,7 +15,7 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'entryMode GUIDED requires at least one line and no manualTable; entryMode MANUAL requires a manualTable and no lines/serviceLines',
+          'entryMode GUIDED requires at least one line, no manualTable, and no totals override; entryMode MANUAL requires a manualTable and no lines/serviceLines',
         ...options,
       },
       validator: {
@@ -24,7 +24,13 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
           const entryMode = (value as InvoiceEntryMode | undefined) ?? InvoiceEntryMode.GUIDED;
 
           if (entryMode === InvoiceEntryMode.GUIDED) {
-            return (dto.lines?.length ?? 0) > 0 && !dto.manualTable;
+            return (
+              (dto.lines?.length ?? 0) > 0 &&
+              !dto.manualTable &&
+              dto.subtotalOverrideCents === undefined &&
+              dto.vatOverrideCents === undefined &&
+              dto.totalOverrideCents === undefined
+            );
           }
 
           return (

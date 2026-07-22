@@ -104,6 +104,15 @@ export class InvoiceLineFormComponent {
   // two-price flow above is the common case.
   protected readonly manualPackaging = signal(false);
 
+  // UX follow-up: most lines (labor, a lump-sum service, anything sold
+  // "au détail") never touch packaging at all — showing the two-price
+  // deduction and the round-up checkbox unconditionally cluttered every
+  // single line with a cluster only some of them need. Collapsed behind
+  // this toggle instead: hidden by default, revealed on request, and
+  // auto-revealed (see the effect below) whenever the line already has a
+  // packagingQuantity so existing data is never hidden behind a click.
+  protected readonly packagingEnabled = signal(false);
+
   constructor() {
     // Seed the package-price field from whatever packagingQuantity this line
     // already has (e.g. hydrated from a saved draft) so the two price
@@ -117,8 +126,24 @@ export class InvoiceLineFormComponent {
       const unitPrice = this.group().controls.unitPriceEuros.value;
       if (packagingQuantity && packagingQuantity > 0 && Number.isFinite(unitPrice)) {
         this.packagePriceEuros.set(Math.round(unitPrice * packagingQuantity * 100) / 100);
+        this.packagingEnabled.set(true);
       }
     });
+  }
+
+  protected enablePackaging(): void {
+    this.packagingEnabled.set(true);
+  }
+
+  // Reverting to a simple unit price clears packagingQuantity rather than
+  // just hiding the section — an inert-but-still-set packagingQuantity
+  // would silently keep rounding the billed quantity even though the
+  // artisan can no longer see (or edit) that it's happening.
+  protected disablePackaging(): void {
+    this.packagingEnabled.set(false);
+    this.manualPackaging.set(false);
+    this.packagePriceEuros.set(null);
+    this.group().controls.packagingQuantity.setValue(null);
   }
 
   protected enableManualPackaging(): void {

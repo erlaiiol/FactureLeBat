@@ -16,11 +16,21 @@ import {
   parseManualNumber,
 } from './manual-cell-format.util';
 
+// A freehand extra client field (e.g. label "SIRET", value "123 456 789
+// 00012") — no fixed vocabulary, the artisan names the field themselves.
+// Same "+ add one, generic placeholder" principle as a CUSTOM table column.
+export interface ManualCustomerFieldDraft {
+  id: string;
+  label: string;
+  value: string;
+}
+
 export interface ManualCustomerDraft {
   customerName: string;
   customerAddress: string;
   customerEmail: string;
   customerPhone: string;
+  customFields: ManualCustomerFieldDraft[];
 }
 
 export interface ManualColumnDraft {
@@ -49,12 +59,14 @@ const MAX_ROW_HEIGHT_PX = 400;
 const DESCRIPTION_COLUMN_ID = 'col-description';
 const QUANTITY_COLUMN_ID = 'col-quantity';
 const UNIT_PRICE_COLUMN_ID = 'col-unit-price';
+const LINE_TOTAL_COLUMN_ID = 'col-line-total';
 
 function defaultColumns(): ManualColumnDraft[] {
   return [
     { id: DESCRIPTION_COLUMN_ID, role: 'DESCRIPTION', label: 'Désignation', widthPx: 280 },
     { id: QUANTITY_COLUMN_ID, role: 'QUANTITY', label: 'Quantité', widthPx: 100 },
     { id: UNIT_PRICE_COLUMN_ID, role: 'UNIT_PRICE', label: 'Prix unitaire', widthPx: 140 },
+    { id: LINE_TOTAL_COLUMN_ID, role: 'LINE_TOTAL', label: 'Total', widthPx: 120 },
   ];
 }
 
@@ -71,6 +83,7 @@ const EMPTY_CUSTOMER: ManualCustomerDraft = {
   customerAddress: '',
   customerEmail: '',
   customerPhone: '',
+  customFields: [],
 };
 
 const DRAFT_STORAGE_KEY = 'facturelebat.manualInvoiceDraft.v1';
@@ -79,6 +92,9 @@ interface PersistedManualDraft {
   customer: ManualCustomerDraft;
   columns: ManualColumnDraft[];
   rows: ManualRowDraft[];
+  subtotalOverrideText: string;
+  vatOverrideText: string;
+  totalOverrideText: string;
 }
 
 // Phase 9.5 mode manuel: the free-form canvas's shared, in-progress draft
@@ -100,19 +116,79 @@ export class ManualInvoiceDraftStore {
   readonly columns = signal<ManualColumnDraft[]>(defaultColumns());
   readonly rows = signal<ManualRowDraft[]>([emptyRow(defaultColumns())]);
 
+  // Phase 9.5 bis: the invoice's own aggregate figures, freely overridable —
+  // same "nothing computed behind the artisan's back" principle as a row's
+  // LINE_TOTAL cell, extended up to Sous-total HT / TVA / Total TTC. Raw
+  // text (not cents) so a half-typed value never gets silently rounded or
+  // rejected mid-keystroke; blank means "no override", falling back to the
+  // computed figure below. See totalsPreview for the override precedence.
+  readonly subtotalOverrideText = signal('');
+  readonly vatOverrideText = signal('');
+  readonly totalOverrideText = signal('');
+
   readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
 
+  // Each row's total is the artisan's own freehand LINE_TOTAL cell — never
+  // derived from quantity x unit price (those stay purely informational
+  // free text on the manual canvas, see manual-cell-format.util.ts). A
+  // blank/unparseable cell contributes zero rather than blocking the
+  // running total, mirroring the backend's computeManualRowTotalCents.
+  //
+  // The column is looked up by role, not by the LINE_TOTAL_COLUMN_ID
+  // constant: a draft hydrated from localStorage before this column existed
+  // gets one appended with a freshly generated id (see hydrateFromStorage's
+  // migration below), which never matches that constant. Hardcoding it here
+  // meant totalsPreview silently read an always-empty cell for any such
+  // draft — the running total looked permanently stuck at 0,00, even though
+  // every other place (autofillTotal, the cell inputs themselves) already
+  // resolved the id dynamically.
+  //
+  // On top of that row-level sum, each of Sous-total HT / TVA / Total TTC
+  // can itself be overridden independently (mirrors the backend's
+  // InvoiceMapper.toManualInvoiceWithTotals): overriding the subtotal still
+  // feeds a freshly computed VAT off the *effective* subtotal (so the VAT
+  // rate stays meaningful) unless VAT is also overridden directly;
+  // overriding the total skips the subtotal + VAT sum entirely.
   readonly totalsPreview = computed<TotalsPreview>(() => {
     const company = this.company();
+    const lineTotalColumnId = this.columns().find((column) => column.role === 'LINE_TOTAL')?.id;
     const lineInputs = this.rows().map((row) => ({
       unit: 'UNIT' as const,
-      quantity: parseManualNumber(row.cells[QUANTITY_COLUMN_ID] ?? '') ?? 0,
+      quantity: 1,
       unitPriceCents: Math.round(
-        (parseManualNumber(row.cells[UNIT_PRICE_COLUMN_ID] ?? '') ?? 0) * 100,
+        (parseManualNumber(row.cells[lineTotalColumnId ?? ''] ?? '') ?? 0) * 100,
       ),
       wasteSurcharge: 'NONE' as const,
     }));
-    return computeTotalsPreview(lineInputs, this.vatApplicable(), company?.vatRateBasisPoints ?? 0);
+    const computed = computeTotalsPreview(
+      lineInputs,
+      this.vatApplicable(),
+      company?.vatRateBasisPoints ?? 0,
+    );
+
+    const subtotalOverride = parseManualNumber(this.subtotalOverrideText());
+    const subtotalExclVatCents =
+      subtotalOverride !== null
+        ? Math.round(subtotalOverride * 100)
+        : computed.subtotalExclVatCents;
+
+    const recomputedVatAmountCents =
+      subtotalOverride !== null
+        ? this.vatApplicable()
+          ? Math.round((subtotalExclVatCents * (company?.vatRateBasisPoints ?? 0)) / 10000)
+          : 0
+        : computed.vatAmountCents;
+    const vatOverride = parseManualNumber(this.vatOverrideText());
+    const vatAmountCents =
+      vatOverride !== null ? Math.round(vatOverride * 100) : recomputedVatAmountCents;
+
+    const totalOverride = parseManualNumber(this.totalOverrideText());
+    const totalInclVatCents =
+      totalOverride !== null
+        ? Math.round(totalOverride * 100)
+        : subtotalExclVatCents + vatAmountCents;
+
+    return { subtotalExclVatCents, vatAmountCents, totalInclVatCents };
   });
 
   // Same soft UX gate as InvoiceDraftStore.canPreview — closely mirrors the
@@ -138,6 +214,9 @@ export class ManualInvoiceDraftStore {
         customer: this.customer(),
         columns: this.columns(),
         rows: this.rows(),
+        subtotalOverrideText: this.subtotalOverrideText(),
+        vatOverrideText: this.vatOverrideText(),
+        totalOverrideText: this.totalOverrideText(),
       };
       this.writeToStorage(snapshot);
     });
@@ -145,6 +224,54 @@ export class ManualInvoiceDraftStore {
 
   setCustomer(customer: ManualCustomerDraft): void {
     this.customer.set(customer);
+  }
+
+  // "+ add a field" on the Facturé à block — same generic-placeholder
+  // principle as addCustomColumn: no fixed vocabulary, the artisan names
+  // the field themselves (e.g. "SIRET").
+  addCustomerField(): void {
+    const field: ManualCustomerFieldDraft = { id: crypto.randomUUID(), label: '', value: '' };
+    this.customer.update((customer) => ({
+      ...customer,
+      customFields: [...customer.customFields, field],
+    }));
+  }
+
+  removeCustomerField(fieldId: string): void {
+    this.customer.update((customer) => ({
+      ...customer,
+      customFields: customer.customFields.filter((field) => field.id !== fieldId),
+    }));
+  }
+
+  setCustomerFieldLabel(fieldId: string, label: string): void {
+    this.customer.update((customer) => ({
+      ...customer,
+      customFields: customer.customFields.map((field) =>
+        field.id === fieldId ? { ...field, label } : field,
+      ),
+    }));
+  }
+
+  setCustomerFieldValue(fieldId: string, value: string): void {
+    this.customer.update((customer) => ({
+      ...customer,
+      customFields: customer.customFields.map((field) =>
+        field.id === fieldId ? { ...field, value } : field,
+      ),
+    }));
+  }
+
+  setSubtotalOverrideText(text: string): void {
+    this.subtotalOverrideText.set(text);
+  }
+
+  setVatOverrideText(text: string): void {
+    this.vatOverrideText.set(text);
+  }
+
+  setTotalOverrideText(text: string): void {
+    this.totalOverrideText.set(text);
   }
 
   setCellValue(rowId: string, columnId: string, value: string): void {
@@ -236,7 +363,7 @@ export class ManualInvoiceDraftStore {
             if (column.role === 'QUANTITY') {
               return [column.id, formatManualQuantity(raw)];
             }
-            if (column.role === 'UNIT_PRICE') {
+            if (column.role === 'UNIT_PRICE' || column.role === 'LINE_TOTAL') {
               return [column.id, formatManualPrice(raw)];
             }
             return [column.id, formatManualText(raw)];
@@ -250,6 +377,9 @@ export class ManualInvoiceDraftStore {
     this.customer.set(EMPTY_CUSTOMER);
     this.columns.set(defaultColumns());
     this.rows.set([emptyRow(defaultColumns())]);
+    this.subtotalOverrideText.set('');
+    this.vatOverrideText.set('');
+    this.totalOverrideText.set('');
     this.clearStorage();
   }
 
@@ -270,13 +400,32 @@ export class ManualInvoiceDraftStore {
       cells: columns.map((column) => row.cells[column.id] ?? ''),
     }));
 
+    // Only fields the artisan actually filled in both sides of are sent —
+    // the backend requires a non-empty label and value, and a half-filled
+    // field the artisan hasn't gotten to yet shouldn't block submission.
+    const customerFields = customer.customFields
+      .filter((field) => field.label.trim().length > 0 && field.value.trim().length > 0)
+      .map((field) => ({ label: field.label.trim(), value: field.value.trim() }));
+
+    // Only sent when parseable — an override left blank (or mid-typo) is
+    // simply omitted, falling back to the backend's own computed figure,
+    // same "half-filled never blocks submission" rule as customerFields.
+    const subtotalOverride = parseManualNumber(this.subtotalOverrideText());
+    const vatOverride = parseManualNumber(this.vatOverrideText());
+    const totalOverride = parseManualNumber(this.totalOverrideText());
+
     return {
       customerName: customer.customerName,
       customerAddress: customer.customerAddress || undefined,
       customerEmail: customer.customerEmail || undefined,
       customerPhone: customer.customerPhone || undefined,
+      customerFields: customerFields.length > 0 ? customerFields : undefined,
       entryMode: 'MANUAL',
       manualTable: { columns: requestColumns, rows: requestRows },
+      subtotalOverrideCents:
+        subtotalOverride !== null ? Math.round(subtotalOverride * 100) : undefined,
+      vatOverrideCents: vatOverride !== null ? Math.round(vatOverride * 100) : undefined,
+      totalOverrideCents: totalOverride !== null ? Math.round(totalOverride * 100) : undefined,
     };
   }
 
@@ -290,11 +439,32 @@ export class ManualInvoiceDraftStore {
       if (parsed.customer) {
         this.customer.set({ ...EMPTY_CUSTOMER, ...parsed.customer });
       }
+      let columns = defaultColumns();
       if (Array.isArray(parsed.columns) && parsed.columns.length > 0) {
-        this.columns.set(parsed.columns);
+        columns = parsed.columns;
       }
+      let rows = [emptyRow(columns)];
       if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
-        this.rows.set(parsed.rows);
+        rows = parsed.rows;
+      }
+      // Migration: a draft saved before LINE_TOTAL existed has no such
+      // column — add one so the total stays editable rather than silently
+      // missing from an old in-progress draft.
+      if (!columns.some((column) => column.role === 'LINE_TOTAL')) {
+        const id = crypto.randomUUID();
+        columns = [...columns, { id, role: 'LINE_TOTAL', label: 'Total', widthPx: 120 }];
+        rows = rows.map((row) => ({ ...row, cells: { ...row.cells, [id]: '' } }));
+      }
+      this.columns.set(columns);
+      this.rows.set(rows);
+      if (typeof parsed.subtotalOverrideText === 'string') {
+        this.subtotalOverrideText.set(parsed.subtotalOverrideText);
+      }
+      if (typeof parsed.vatOverrideText === 'string') {
+        this.vatOverrideText.set(parsed.vatOverrideText);
+      }
+      if (typeof parsed.totalOverrideText === 'string') {
+        this.totalOverrideText.set(parsed.totalOverrideText);
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

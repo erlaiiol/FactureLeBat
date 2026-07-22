@@ -142,6 +142,7 @@ export class PdfService {
       data.customerAddress ?? '',
       data.customerEmail ?? '',
       data.customerPhone ?? '',
+      ...data.customerFields.map((field) => `${field.label} : ${field.value}`),
     ].filter(Boolean);
 
     return {

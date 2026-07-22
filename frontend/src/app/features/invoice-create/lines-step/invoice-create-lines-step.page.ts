@@ -16,12 +16,15 @@ import {
   ServiceLineVisibility,
   WasteSurcharge,
 } from '../../../core/models/invoice.model';
+import { ProductProfile } from '../../../core/models/product.model';
+import { ServiceProfile } from '../../../core/models/service.model';
 import { Unit } from '../../../core/models/unit.model';
 import { CustomerService } from '../../../core/services/customer.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { ProductService } from '../../../core/services/product.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { CatalogPickerComponent } from '../components/catalog-picker.component';
 import {
   InvoiceLineFormComponent,
   InvoiceLineFormGroup,
@@ -43,6 +46,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
   imports: [
     ReactiveFormsModule,
     BigButtonComponent,
+    CatalogPickerComponent,
     InvoiceLineFormComponent,
     InvoiceServiceLineFormComponent,
     TourAnchorDirective,
@@ -134,6 +138,29 @@ export class InvoiceCreateLinesStepPage {
     this.syncAllServiceLineWeights();
   }
 
+  // Phase 11: catalog-driven invoicing. Picking a catalog Product prefills
+  // everything the invoice line needs except quantity (the one field the
+  // artisan still normally types) — same "autofill, not a lock" rule as
+  // every other soft catalog reference in this app: the pushed line stays
+  // fully editable afterwards. `quantity` is left at 0 (invalid) rather than
+  // defaulted to 1, so an artisan can never submit a catalog line without
+  // having actually looked at the quantity field.
+  protected addProductFromCatalog(product: ProductProfile): void {
+    this.lines.push(
+      this.createLineGroup({
+        description: product.name,
+        unit: product.unit,
+        quantity: 0,
+        unitPriceEuros: product.priceCents / 100,
+        wasteSurcharge: 'NONE',
+        packagingQuantity: product.packagingQuantity ? Number(product.packagingQuantity) : null,
+        roundUpToPackaging: true,
+        productCode: product.code,
+      }),
+    );
+    this.syncAllServiceLineWeights();
+  }
+
   protected removeLine(index: number): void {
     if (this.lines.length > 1) {
       this.lines.removeAt(index);
@@ -195,6 +222,23 @@ export class InvoiceCreateLinesStepPage {
 
   protected addServiceLine(): void {
     this.serviceLines.push(this.createServiceLineGroup());
+  }
+
+  // Phase 11: same catalog prefill as addProductFromCatalog above, for a
+  // Service — amount/visibility come straight from the catalog entry, still
+  // fully editable afterwards.
+  protected addServiceFromCatalog(service: ServiceProfile): void {
+    this.serviceLines.push(
+      this.createServiceLineGroup({
+        serviceId: service.id,
+        name: service.name,
+        description: service.description ?? '',
+        amountEuros: service.priceCents / 100,
+        visibility: service.defaultVisibility,
+        redistributionStrategy: 'EQUAL',
+        weights: [],
+      }),
+    );
   }
 
   protected removeServiceLine(index: number): void {

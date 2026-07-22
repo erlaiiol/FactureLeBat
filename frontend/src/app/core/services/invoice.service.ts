@@ -2,7 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { CreateInvoiceRequest, InvoiceWithTotals } from '../models/invoice.model';
+import {
+  CreateInvoiceRequest,
+  InvoiceMailTemplate,
+  InvoiceWithTotals,
+  SendInvoiceEmailRequest,
+} from '../models/invoice.model';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
@@ -30,5 +35,16 @@ export class InvoiceService {
   // InvoiceService.previewPdf on the backend).
   previewPdf(request: CreateInvoiceRequest): Observable<Blob> {
     return this.http.post(`${this.baseUrl}/preview`, request, { responseType: 'blob' });
+  }
+
+  // Phase 12: sends the invoice PDF by email through the artisan's own
+  // configured SMTP account — returns the invoice with sentAt/sentToEmail
+  // updated on success.
+  sendEmail(id: string, request: SendInvoiceEmailRequest): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${id}/send-email`, request);
+  }
+
+  getMailTemplate(id: string): Observable<InvoiceMailTemplate> {
+    return this.http.get<InvoiceMailTemplate>(`${this.baseUrl}/${id}/mail-template`);
   }
 }

@@ -3,14 +3,18 @@ import { ManualColumnRole } from '../../../../generated/prisma/enums';
 import { CreateManualColumnDto } from './create-manual-column.dto';
 
 // A manual invoice's calculation (computeManualRowTotalCents) needs to find
-// exactly one QUANTITY and one UNIT_PRICE column to price each row against —
-// and exactly one DESCRIPTION column for the canvas/PDF to render a sensible
-// label. CUSTOM columns are unrestricted (zero or more, purely informational
-// text, see docs/roadmap.md Phase 9.5).
+// exactly one LINE_TOTAL column to price each row against — the artisan's own
+// freehand row price, never derived from QUANTITY x UNIT_PRICE (see
+// ManualColumnRole in schema.prisma). DESCRIPTION, QUANTITY, and UNIT_PRICE
+// are still required-singleton columns so the canvas/PDF always has a
+// sensible label and context, even though the latter two no longer feed the
+// calculation directly. CUSTOM columns are unrestricted (zero or more,
+// purely informational text, see docs/roadmap.md Phase 9.5).
 const REQUIRED_SINGLE_ROLES: ManualColumnRole[] = [
   ManualColumnRole.DESCRIPTION,
   ManualColumnRole.QUANTITY,
   ManualColumnRole.UNIT_PRICE,
+  ManualColumnRole.LINE_TOTAL,
 ];
 
 export function ManualColumnsCoverRequiredRoles(options?: ValidationOptions) {
@@ -21,7 +25,7 @@ export function ManualColumnsCoverRequiredRoles(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'manual table columns must contain exactly one DESCRIPTION, one QUANTITY, and one UNIT_PRICE column',
+          'manual table columns must contain exactly one DESCRIPTION, one QUANTITY, one UNIT_PRICE, and one LINE_TOTAL column',
         ...options,
       },
       validator: {

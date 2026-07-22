@@ -10,10 +10,12 @@ import {
   ServiceLineVisibility,
   WasteSurcharge,
 } from '../../core/models/invoice.model';
+import { ProductProfile } from '../../core/models/product.model';
 import { ServiceProfile } from '../../core/models/service.model';
 import { isAreaUnit, Unit } from '../../core/models/unit.model';
 import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
+import { ProductService } from '../../core/services/product.service';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import { computeTotalsPreview, TotalsPreview } from './calculation-preview';
 
@@ -92,11 +94,13 @@ interface PersistedDraft {
 export class InvoiceDraftStore {
   private readonly companyService = inject(CompanyService);
   private readonly customerService = inject(CustomerService);
+  private readonly productService = inject(ProductService);
   private readonly serviceCatalogService = inject(ServiceCatalogService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly company = signal<CompanyProfile | null>(null);
   readonly customers = signal<CustomerProfile[]>([]);
+  readonly products = signal<ProductProfile[]>([]);
   readonly services = signal<ServiceProfile[]>([]);
 
   readonly customer = signal<InvoiceCustomerDraft>(EMPTY_CUSTOMER);
@@ -156,6 +160,10 @@ export class InvoiceDraftStore {
       .getAll()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (customers) => this.customers.set(customers) });
+    this.productService
+      .getAll()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (products) => this.products.set(products) });
     this.serviceCatalogService
       .getAll()
       .pipe(takeUntilDestroyed(this.destroyRef))

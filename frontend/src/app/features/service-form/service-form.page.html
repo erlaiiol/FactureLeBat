@@ -24,6 +24,17 @@
   </label>
 
   <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Code prestation</span>
+    <input
+      formControlName="code"
+      type="text"
+      placeholder="Ex : MO-POSE"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+    <app-field-hint text="Facultatif — votre propre référence pour cette prestation." />
+  </label>
+
+  <label class="flex flex-col gap-1">
     <span class="text-sm font-medium text-ink">Description</span>
     <textarea
       formControlName="description"

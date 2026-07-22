@@ -19,7 +19,7 @@ export function ManualRowCellsValid(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'each manual row must supply exactly one cell per column, a non-empty description, and a valid non-negative quantity/unit price',
+          'each manual row must supply exactly one cell per column, a non-empty description, and a valid non-negative unit price/line total (or a blank line total)',
         ...options,
       },
       validator: {
@@ -44,9 +44,18 @@ function rowIsValid(row: CreateManualRowDto, columns: CreateManualColumnDto[]): 
     switch (column.role) {
       case ManualColumnRole.DESCRIPTION:
         return cell.trim().length > 0;
-      case ManualColumnRole.QUANTITY:
       case ManualColumnRole.UNIT_PRICE:
         return parseManualDecimalCell(cell) !== null;
+      // A blank line total contributes zero to the invoice rather than
+      // failing validation — manual mode's whole principle is that the
+      // artisan fills this in at their own pace (see
+      // computeManualRowTotalCents), never a computed/locked field.
+      case ManualColumnRole.LINE_TOTAL:
+        return cell.trim().length === 0 || parseManualDecimalCell(cell) !== null;
+      // Free text: quantity is informational only on the manual canvas
+      // (e.g. "2 boites") and never fed into the row's price — only
+      // LINE_TOTAL is. CUSTOM columns are unrestricted for the same reason.
+      case ManualColumnRole.QUANTITY:
       case ManualColumnRole.CUSTOM:
         return true;
       default:

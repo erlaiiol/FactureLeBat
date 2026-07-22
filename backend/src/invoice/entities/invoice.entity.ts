@@ -85,6 +85,14 @@ export interface ManualInvoiceTableWithTotals {
   rows: ManualInvoiceRowWithTotal[];
 }
 
+// A freehand extra client field (e.g. "SIRET") — see InvoiceCustomerField
+// (schema.prisma).
+export interface InvoiceCustomerFieldWithId {
+  id: string;
+  label: string;
+  value: string;
+}
+
 export interface InvoiceWithTotals {
   id: string;
   number: string;
@@ -94,6 +102,7 @@ export interface InvoiceWithTotals {
   customerEmail: string | null;
   customerPhone: string | null;
   customerId: string | null;
+  customerFields: InvoiceCustomerFieldWithId[];
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   // Phase 9.5: GUIDED populates lines/serviceLines below (manualTable is
@@ -107,4 +116,8 @@ export interface InvoiceWithTotals {
   subtotalExclVatCents: number;
   vatAmountCents: number;
   totalInclVatCents: number;
+  // Phase 12: last successful email send only, null if never sent — see
+  // schema.prisma's comment on Invoice.sentAt.
+  sentAt: Date | null;
+  sentToEmail: string | null;
 }

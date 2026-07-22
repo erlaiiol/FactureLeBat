@@ -351,10 +351,14 @@ describe('Invoice pipeline (e2e)', () => {
         { role: 'DESCRIPTION', label: 'Désignation' },
         { role: 'QUANTITY', label: 'Quantité' },
         { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+        { role: 'LINE_TOTAL', label: 'Total' },
       ],
       rows: [
-        { cells: ['Parquet chêne massif', '10', '45.00'] },
-        { cells: ['Plinthes', '5', '8.00'] },
+        // LINE_TOTAL is the artisan's own freehand cell, not derived from
+        // QUANTITY x UNIT_PRICE (see manual-table-calculation.util.ts) — set
+        // here to the same product so the assertions below still hold.
+        { cells: ['Parquet chêne massif', '10', '45.00', '450.00'] },
+        { cells: ['Plinthes', '5', '8.00', '40.00'] },
       ],
     };
 

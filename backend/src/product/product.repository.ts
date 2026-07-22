@@ -22,6 +22,7 @@ export class ProductRepository {
             OR: [
               { name: { contains: search, mode: 'insensitive' } },
               { supplierName: { contains: search, mode: 'insensitive' } },
+              { code: { contains: search, mode: 'insensitive' } },
             ],
           }
         : undefined,

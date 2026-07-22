@@ -33,4 +33,13 @@ export class CreateServiceDto {
 
   @IsEnum(ServiceVisibility)
   defaultVisibility: ServiceVisibility = ServiceVisibility.VISIBLE;
+
+  // Phase 11: short artisan-defined reference (e.g. "MO-POSE"), same shape
+  // as CreateProductDto.code — optional, freely editable, unique per row
+  // when set (the uniqueness violation is turned into a clean 409 by
+  // ServiceCatalogService).
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
 }

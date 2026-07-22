@@ -23,6 +23,11 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     nextInvoiceNumber: 2,
     tourEnabled: true,
     completedTours: [],
+    smtpHost: null,
+    smtpPort: null,
+    smtpSecure: true,
+    smtpUser: null,
+    smtpPasswordEncrypted: null,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     ...overrides,
@@ -58,6 +63,11 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     companyId: 'company-1',
     vatApplicable: true,
     vatRateBasisPoints: 2000,
+    subtotalOverrideCents: null,
+    vatOverrideCents: null,
+    totalOverrideCents: null,
+    sentAt: null,
+    sentToEmail: null,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     entryMode: 'GUIDED',
@@ -80,6 +90,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     serviceLines: [],
     manualColumns: [],
     manualRows: [],
+    customerFields: [],
     company: {
       id: 'company-1',
       name: 'Parquets Raillere',
@@ -96,6 +107,11 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
       nextInvoiceNumber: 2,
       tourEnabled: true,
       completedTours: [],
+      smtpHost: null,
+      smtpPort: null,
+      smtpSecure: true,
+      smtpUser: null,
+      smtpPasswordEncrypted: null,
       createdAt: new Date('2026-01-15'),
       updatedAt: new Date('2026-01-15'),
     },
@@ -421,6 +437,14 @@ describe('InvoiceMapper', () => {
             label: 'Prix unitaire',
             widthPx: null,
           },
+          {
+            id: 'col-total',
+            invoiceId: 'inv-1',
+            position: 3,
+            role: 'LINE_TOTAL',
+            label: 'Total',
+            widthPx: null,
+          },
         ],
         manualRows: [
           {
@@ -432,13 +456,14 @@ describe('InvoiceMapper', () => {
               { id: 'cell-1', rowId: 'row-1', columnId: 'col-desc', value: 'Parquet chêne massif' },
               { id: 'cell-2', rowId: 'row-1', columnId: 'col-qty', value: '10' },
               { id: 'cell-3', rowId: 'row-1', columnId: 'col-price', value: '45.00' },
+              { id: 'cell-4', rowId: 'row-1', columnId: 'col-total', value: '450.00' },
             ],
           },
         ],
       });
     }
 
-    it('toInvoiceWithTotals prices each manual row like a GUIDED UNIT-mode line and leaves lines/serviceLines empty', () => {
+    it('toInvoiceWithTotals reads the LINE_TOTAL cell directly and leaves lines/serviceLines empty', () => {
       const result = mapper.toInvoiceWithTotals(manualInvoiceFixture());
 
       expect(result.entryMode).toBe('MANUAL');
@@ -459,6 +484,7 @@ describe('InvoiceMapper', () => {
         'Parquet chêne massif',
         '10',
         '45.00',
+        '450.00',
       ]);
       expect(result.manualTable!.rows[0].lineTotalExclVatCents).toBe(45000);
     });
@@ -485,8 +511,9 @@ describe('InvoiceMapper', () => {
               { role: 'DESCRIPTION', label: 'Désignation' },
               { role: 'QUANTITY', label: 'Quantité' },
               { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+              { role: 'LINE_TOTAL', label: 'Total' },
             ],
-            rows: [{ cells: ['Parquet chêne massif', '10', '45.00'] }],
+            rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
           },
         }),
         companyFixture(),
@@ -498,6 +525,65 @@ describe('InvoiceMapper', () => {
         persisted.manualTable!.rows[0].totalCents,
       );
       expect(preview.totalInclVatCents).toBe(persisted.totalInclVatCents);
+    });
+
+    describe('Phase 9.5 bis: totals override', () => {
+      it('overriding the subtotal still recomputes VAT off the new (effective) subtotal', () => {
+        const invoice = manualInvoiceFixture();
+        invoice.subtotalOverrideCents = 100000; // rows alone sum to 45000
+
+        const result = mapper.toInvoiceWithTotals(invoice);
+
+        expect(result.subtotalExclVatCents).toBe(100000);
+        expect(result.vatAmountCents).toBe(20000); // 20% of 100000
+        expect(result.totalInclVatCents).toBe(120000);
+      });
+
+      it('overriding VAT directly leaves the subtotal computed from rows but replaces only the VAT amount', () => {
+        const invoice = manualInvoiceFixture();
+        invoice.vatOverrideCents = 500;
+
+        const result = mapper.toInvoiceWithTotals(invoice);
+
+        expect(result.subtotalExclVatCents).toBe(45000);
+        expect(result.vatAmountCents).toBe(500);
+        expect(result.totalInclVatCents).toBe(45500);
+      });
+
+      it('overriding the total skips the subtotal + VAT sum entirely', () => {
+        const invoice = manualInvoiceFixture();
+        invoice.totalOverrideCents = 999999;
+
+        const result = mapper.toInvoiceWithTotals(invoice);
+
+        expect(result.subtotalExclVatCents).toBe(45000);
+        expect(result.vatAmountCents).toBe(9000);
+        expect(result.totalInclVatCents).toBe(999999);
+      });
+
+      it('toManualPreviewPdfData applies the same override precedence off the DTO', () => {
+        const preview = mapper.toPreviewPdfData(
+          createInvoiceDtoFixture({
+            entryMode: 'MANUAL',
+            lines: undefined,
+            manualTable: {
+              columns: [
+                { role: 'DESCRIPTION', label: 'Désignation' },
+                { role: 'QUANTITY', label: 'Quantité' },
+                { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+                { role: 'LINE_TOTAL', label: 'Total' },
+              ],
+              rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+            },
+            totalOverrideCents: 111100,
+          }),
+          companyFixture(),
+        );
+
+        expect(preview.subtotalExclVatCents).toBe(45000);
+        expect(preview.vatAmountCents).toBe(9000);
+        expect(preview.totalInclVatCents).toBe(111100);
+      });
     });
   });
 });

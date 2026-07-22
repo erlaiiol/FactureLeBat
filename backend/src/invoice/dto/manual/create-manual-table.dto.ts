@@ -5,9 +5,9 @@ import { CreateManualRowDto } from './create-manual-row.dto';
 import { ManualColumnsCoverRequiredRoles } from './manual-columns-cover-required-roles.validator';
 import { ManualRowCellsValid } from './manual-row-cells-valid.validator';
 
-// At minimum DESCRIPTION + QUANTITY + UNIT_PRICE — see
+// At minimum DESCRIPTION + QUANTITY + UNIT_PRICE + LINE_TOTAL — see
 // ManualColumnsCoverRequiredRoles.
-const MIN_MANUAL_COLUMNS = 3;
+const MIN_MANUAL_COLUMNS = 4;
 export const MAX_MANUAL_COLUMNS = 12;
 export const MAX_MANUAL_ROWS = 200;
 

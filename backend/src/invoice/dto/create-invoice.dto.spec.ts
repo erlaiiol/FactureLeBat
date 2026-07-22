@@ -223,8 +223,9 @@ describe('CreateInvoiceDto — Phase 9.5 entryMode consistency', () => {
       { role: 'DESCRIPTION', label: 'Désignation' },
       { role: 'QUANTITY', label: 'Quantité' },
       { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+      { role: 'LINE_TOTAL', label: 'Total' },
     ],
-    rows: [{ cells: ['Parquet chêne massif', '10', '45.00'] }],
+    rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
   };
 
   it('defaults to GUIDED and accepts a plain lines-only payload with no entryMode at all', async () => {
@@ -273,6 +274,45 @@ describe('CreateInvoiceDto — Phase 9.5 entryMode consistency', () => {
       manualTable,
       serviceLines: [{ name: 'Savoir-faire', amountCents: 1000, visibility: 'VISIBLE' }],
     });
+    expect(errors).not.toHaveLength(0);
+  });
+});
+
+describe('CreateInvoiceDto — Phase 9.5 bis totals override', () => {
+  const manualTable = {
+    columns: [
+      { role: 'DESCRIPTION', label: 'Désignation' },
+      { role: 'QUANTITY', label: 'Quantité' },
+      { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+      { role: 'LINE_TOTAL', label: 'Total' },
+    ],
+    rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+  };
+
+  it('accepts entryMode MANUAL with all three totals overridden', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      subtotalOverrideCents: 100000,
+      vatOverrideCents: 5000,
+      totalOverrideCents: 105000,
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a negative override', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      totalOverrideCents: -100,
+    });
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects entryMode GUIDED that carries a totals override', async () => {
+    const errors = await validateDto(basePayload({ entryMode: 'GUIDED', totalOverrideCents: 100 }));
     expect(errors).not.toHaveLength(0);
   });
 });

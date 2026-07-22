@@ -64,6 +64,7 @@ describe('InvoiceDraftStore', () => {
     const store = TestBed.inject(InvoiceDraftStore);
     httpMock.expectOne(`${environment.apiBaseUrl}/company`).flush(companyFixture);
     httpMock.expectOne(`${environment.apiBaseUrl}/customers`).flush([]);
+    httpMock.expectOne(`${environment.apiBaseUrl}/products`).flush([]);
     httpMock.expectOne(`${environment.apiBaseUrl}/services`).flush([]);
     return store;
   }

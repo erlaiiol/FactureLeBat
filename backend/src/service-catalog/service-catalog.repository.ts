@@ -18,7 +18,14 @@ export class ServiceCatalogRepository {
 
   findAll(search?: string): Promise<Service[]> {
     return this.prisma.service.findMany({
-      where: search ? { name: { contains: search, mode: 'insensitive' } } : undefined,
+      where: search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { code: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : undefined,
       orderBy: { name: 'asc' },
       take: ServiceCatalogRepository.MAX_LISTED_SERVICES,
     });
@@ -43,6 +50,7 @@ export class ServiceCatalogRepository {
         description: data.description ?? null,
         priceCents: data.priceCents,
         defaultVisibility: data.defaultVisibility,
+        code: data.code ?? null,
       },
     });
   }

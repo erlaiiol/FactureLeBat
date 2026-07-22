@@ -27,7 +27,12 @@
           class="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 hover:bg-bg"
         >
           <div>
-            <p class="font-semibold text-ink">{{ service.name }}</p>
+            <p class="flex items-center gap-2 font-semibold text-ink">
+              {{ service.name }}
+              @if (service.code) {
+                <app-badge variant="info" tone="subtle">{{ service.code }}</app-badge>
+              }
+            </p>
             <p class="text-sm text-ink-soft">
               {{
                 service.defaultVisibility === 'VISIBLE'

@@ -54,16 +54,21 @@ enum InvoiceEntryMode {
 }
 
 // A column of a MANUAL invoice's free-form table. Exactly one DESCRIPTION,
-// one QUANTITY, and one UNIT_PRICE column exist per manual invoice (enforced
-// by CreateManualTableDto, not the DB) — those three feed
-// InvoiceCalculationService.computeLineTotal exactly like a GUIDED line
-// (as a plain UNIT-mode line: no waste surcharge, no packaging). Any further
-// CUSTOM column is free text, rendered on the canvas/PDF but never priced —
-// deliberately not a formula engine, see docs/roadmap.md Phase 9.5.
+// one QUANTITY, one UNIT_PRICE, and one LINE_TOTAL column exist per manual
+// invoice (enforced by CreateManualTableDto, not the DB). Unlike a GUIDED
+// line, the row's priced total is never derived from QUANTITY x UNIT_PRICE —
+// LINE_TOTAL is the artisan's own freehand price for that row (see
+// docs/roadmap.md Phase 9.5's manual-mode principle: totals stay fully
+// editable, never computed behind the artisan's back). QUANTITY/UNIT_PRICE
+// stay purely informational text on the canvas — free text is allowed (e.g.
+// "2 boites"), only used client-side to suggest a LINE_TOTAL value. Any
+// further CUSTOM column is free text, rendered on the canvas/PDF but never
+// priced.
 enum ManualColumnRole {
   DESCRIPTION
   QUANTITY
   UNIT_PRICE
+  LINE_TOTAL
   CUSTOM
 }
 
@@ -104,6 +109,18 @@ model Company {
   tourEnabled    Boolean  @default(true)
   completedTours String[] @default([])
 
+  // Phase 12 invoice mailing: the artisan's own SMTP account, used to send
+  // invoices literally from their address (no third-party "From" relay) —
+  // see mail-settings/. smtpPasswordEncrypted is ciphertext only (AES-256-GCM,
+  // see smtp-password-crypto.util.ts), never the plaintext app password.
+  // All nullable: mailing is opt-in, an artisan who never configures this
+  // keeps downloading/emailing PDFs manually with zero behavior change.
+  smtpHost               String?
+  smtpPort               Int?
+  smtpSecure             Boolean @default(true)
+  smtpUser               String?
+  smtpPasswordEncrypted  String?
+
   invoices         Invoice[]
   sourcingSearches SourcingSearch[]
 
@@ -129,6 +146,11 @@ model Invoice {
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
+  // Freehand, artisan-named extra client fields (e.g. "SIRET"), manual mode
+  // only — no fixed vocabulary, since the whole point is letting the artisan
+  // add whatever field the job needs. See InvoiceCustomerField below.
+  customerFields InvoiceCustomerField[]
+
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
@@ -137,6 +159,17 @@ model Invoice {
   // tax treatment.
   vatApplicable      Boolean
   vatRateBasisPoints Int
+
+  // Phase 9.5 bis: manual mode's own "nothing is computed behind the
+  // artisan's back" principle, extended from the per-row LINE_TOTAL cell up
+  // to the invoice's aggregate figures. When set, each overrides the
+  // corresponding computed value (row-total sum, rate x subtotal, subtotal +
+  // VAT) — see InvoiceMapper.toManualInvoiceWithTotals. Always null for
+  // entryMode GUIDED (enforced by ManualModeFieldsConsistency), where totals
+  // stay purely derived, never persisted.
+  subtotalOverrideCents Int?
+  vatOverrideCents      Int?
+  totalOverrideCents    Int?
 
   // Phase 9.5: see InvoiceEntryMode above. GUIDED invoices use lines/
   // serviceLines below; MANUAL invoices use manualColumns/manualRows instead
@@ -149,11 +182,36 @@ model Invoice {
   manualColumns ManualInvoiceColumn[]
   manualRows    ManualInvoiceRow[]
 
+  // Phase 12 invoice mailing: last successful send only — not a log table.
+  // sentAt null means never sent; a later send simply overwrites both, since
+  // "has this ever reached the client" is the only thing the UI needs (see
+  // docs/roadmap.md Phase 12).
+  sentAt      DateTime?
+  sentToEmail String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([customerId])
+}
+
+// A freehand extra client field on a manual-mode invoice (e.g. "SIRET" ->
+// "123 456 789 00012") — no fixed vocabulary, unlike customerName/Address/
+// Email/Phone above: the artisan names the field themselves. Same snapshot
+// spirit as the rest of Invoice's customer fields, never tied to a live
+// Customer row.
+model InvoiceCustomerField {
+  id String @id @default(uuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position  Int
+
+  label String
+  value String
+
+  @@index([invoiceId])
 }
 
 model Customer {
@@ -211,6 +269,11 @@ model Service {
   description       String?
   priceCents        Int
   defaultVisibility ServiceVisibility @default(VISIBLE)
+
+  // Phase 11: same short artisan-defined reference as Product.code — makes
+  // searching/scanning a large service catalog faster than by name alone.
+  // Optional and freely editable, unique when set.
+  code String? @unique
 
   invoiceServiceLines InvoiceServiceLine[]
 

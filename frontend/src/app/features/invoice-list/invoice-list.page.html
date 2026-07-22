@@ -16,11 +16,23 @@
           <p class="font-semibold text-ink">{{ invoice.number }}</p>
           <p class="text-sm text-ink-soft">{{ invoice.customerName }}</p>
           <p class="text-sm text-ink-soft">{{ invoice.date | date: 'dd/MM/yyyy' }}</p>
+          @if (invoice.sentAt) {
+            <p class="text-xs text-success">
+              Envoyée le {{ invoice.sentAt | date: 'dd/MM/yyyy' }} à {{ invoice.sentToEmail }}
+            </p>
+          }
         </div>
         <div class="flex items-center gap-4">
           <span class="text-lg font-semibold text-ink font-mono">
             {{ invoice.totalInclVatCents | centsToEuros }}
           </span>
+          <button
+            type="button"
+            (click)="openEmailModal(invoice)"
+            class="rounded-lg bg-secondary px-4 py-2 font-medium text-secondary-fg hover:brightness-90"
+          >
+            Envoyer par email
+          </button>
           <a
             [href]="pdfUrl(invoice.id)"
             target="_blank"
@@ -33,3 +45,9 @@
     }
   </ul>
 }
+
+<app-send-invoice-email-modal
+  [invoice]="emailModalInvoice()"
+  (closed)="closeEmailModal()"
+  (sent)="onEmailSent($event)"
+/>

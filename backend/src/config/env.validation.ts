@@ -54,6 +54,15 @@ class EnvironmentVariables {
   @Min(1)
   @IsOptional()
   SOURCING_DAILY_SEARCH_CAP = 20;
+
+  // Phase 12 invoice mailing: base64-encoded 32-byte key (AES-256-GCM),
+  // used to encrypt the artisan's SMTP app password at rest. Optional like
+  // GROQ_API_KEY above — the app boots fine without it, MailSettingsService
+  // just reports mail configuration as unavailable (503) until it's set.
+  // Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  @IsOptional()
+  @IsString()
+  APP_ENCRYPTION_KEY?: string;
 }
 
 // Wired into ConfigModule.forRoot({ validate }) in AppModule — runs once at

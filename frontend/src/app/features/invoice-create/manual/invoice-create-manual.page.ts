@@ -5,16 +5,18 @@ import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
-import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
-import { computeLineTotalPreviewCents } from '../calculation-preview';
 import { InvoiceTotalsSummaryComponent } from '../components/invoice-totals-summary.component';
 import {
   ManualColumnDraft,
   ManualInvoiceDraftStore,
   ManualRowDraft,
 } from './manual-invoice-draft.store';
-import { parseManualNumber } from './manual-cell-format.util';
+import {
+  formatManualPrice,
+  parseManualNumber,
+  parseManualQuantityMagnitude,
+} from './manual-cell-format.util';
 import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
 
 // Phase 9.5 mode manuel: the free-form, PDF-like invoice canvas. A single
@@ -28,7 +30,6 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
   imports: [
     BigButtonComponent,
     PdfPreviewModalComponent,
-    CentsToEurosPipe,
     TourAnchorDirective,
     InvoiceTotalsSummaryComponent,
     ManualResizeHandleDirective,
@@ -53,21 +54,27 @@ export class InvoiceCreateManualPage {
     this.destroyRef.onDestroy(() => this.revokeCurrentPreviewUrl());
   }
 
-  // Mirrors the backend's manual-row pricing (plain quantity x unit price,
-  // no waste surcharge/packaging — those concepts don't exist on the manual
-  // canvas) — same "preview only" exception as InvoiceDraftStore's totals,
-  // the real total always comes from the backend response after submit.
-  protected rowTotalCents(row: ManualRowDraft): number {
+  // "Compléter le prix total" (the "?" button): crosses the quantity and
+  // unit price columns to suggest a value for the row's own freehand
+  // LINE_TOTAL cell — never writes to it silently, only on this explicit
+  // click, and never locks it afterward (the artisan can still overwrite
+  // it). Quantity is free text on the manual canvas (e.g. "2 boites"), so
+  // only its leading numeric part is used; a quantity with no usable number
+  // at all falls back to 1 (i.e. the unit price alone).
+  protected autofillTotal(row: ManualRowDraft): void {
     const quantityColumnId = this.store.columns().find((c) => c.role === 'QUANTITY')?.id;
     const unitPriceColumnId = this.store.columns().find((c) => c.role === 'UNIT_PRICE')?.id;
-    return computeLineTotalPreviewCents({
-      unit: 'UNIT',
-      quantity: parseManualNumber(row.cells[quantityColumnId ?? ''] ?? '') ?? 0,
-      unitPriceCents: Math.round(
-        (parseManualNumber(row.cells[unitPriceColumnId ?? ''] ?? '') ?? 0) * 100,
-      ),
-      wasteSurcharge: 'NONE',
-    });
+    const lineTotalColumnId = this.store.columns().find((c) => c.role === 'LINE_TOTAL')?.id;
+    if (!lineTotalColumnId) {
+      return;
+    }
+    const magnitude = parseManualQuantityMagnitude(row.cells[quantityColumnId ?? ''] ?? '') ?? 1;
+    const unitPrice = parseManualNumber(row.cells[unitPriceColumnId ?? ''] ?? '') ?? 0;
+    this.store.setCellValue(
+      row.id,
+      lineTotalColumnId,
+      formatManualPrice(String(magnitude * unitPrice)),
+    );
   }
 
   protected onCellInput(rowId: string, columnId: string, event: Event): void {
@@ -80,8 +87,12 @@ export class InvoiceCreateManualPage {
     this.store.renameColumn(column.id, value);
   }
 
+  // Deliberately not gated on store.canPreview() — manual mode's whole
+  // principle is that nothing blocks the artisan from looking at their
+  // work-in-progress invoice at any point; an incomplete draft just surfaces
+  // the backend's validation error below instead of a disabled button.
   protected preview(): void {
-    if (this.previewing() || !this.store.canPreview()) {
+    if (this.previewing()) {
       return;
     }
     this.previewing.set(true);

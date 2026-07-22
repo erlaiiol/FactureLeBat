@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { InvoiceEntryMode } from '../../generated/prisma/enums';
+import { InvoiceEntryMode, ManualColumnRole } from '../../generated/prisma/enums';
 import { CompanyModel as Company } from '../../generated/prisma/models';
 import { isVatApplicable } from '../company/legal-status.util';
 import { UNIT_LABELS } from '../common/unit.util';
@@ -20,6 +20,23 @@ import {
   InvoicePdfServiceLine,
 } from './pdf/invoice-pdf-data.interface';
 import { expandServiceLineWeights } from './redistribution.util';
+
+// InvoiceRepository's INVOICE_INCLUDE already orders customerFields by
+// position — this just strips the row down to the API/PDF shape.
+function mapCustomerFields(invoice: InvoiceWithLines) {
+  return invoice.customerFields.map((field) => ({
+    id: field.id,
+    label: field.label,
+    value: field.value,
+  }));
+}
+
+// Same shape as mapCustomerFields, but for the not-yet-persisted preview
+// path — no id exists yet, so PdfService's rendering (label/value only)
+// doesn't need one.
+function mapDtoCustomerFields(dto: CreateInvoiceDto) {
+  return (dto.customerFields ?? []).map((field) => ({ label: field.label, value: field.value }));
+}
 
 // Sole responsibility: turn a persisted InvoiceWithLines (Prisma shape) into
 // the API response shape and the PDF data object. Kept out of InvoiceService
@@ -133,6 +150,7 @@ export class InvoiceMapper {
       customerEmail: invoice.customerEmail,
       customerPhone: invoice.customerPhone,
       customerId: invoice.customerId,
+      customerFields: mapCustomerFields(invoice),
       vatApplicable: invoice.vatApplicable,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
       entryMode: InvoiceEntryMode.GUIDED,
@@ -141,6 +159,8 @@ export class InvoiceMapper {
       subtotalExclVatCents,
       vatAmountCents,
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
+      sentAt: invoice.sentAt,
+      sentToEmail: invoice.sentToEmail,
     };
   }
 
@@ -161,20 +181,28 @@ export class InvoiceMapper {
           columnId: column.id,
           value: orderedValues[index],
         })),
-        lineTotalExclVatCents: computeManualRowTotalCents(
-          this.calculationService,
-          columns,
-          orderedValues,
-        ),
+        lineTotalExclVatCents: computeManualRowTotalCents(columns, orderedValues),
       };
     });
 
-    const subtotalExclVatCents = rows.reduce((sum, row) => sum + row.lineTotalExclVatCents, 0);
-    const vatAmountCents = this.calculationService.computeVatAmountCents(
+    // Phase 9.5 bis: each of the three aggregate figures below is overridden
+    // independently when the artisan set one — same "nothing computed
+    // behind the artisan's back" principle as a row's LINE_TOTAL cell.
+    // Overriding the subtotal still feeds a freshly computed VAT (so the
+    // rate stays meaningful) unless the artisan also overrode VAT directly;
+    // overriding the total skips the subtotal+VAT sum entirely.
+    const computedSubtotalExclVatCents = rows.reduce(
+      (sum, row) => sum + row.lineTotalExclVatCents,
+      0,
+    );
+    const subtotalExclVatCents = invoice.subtotalOverrideCents ?? computedSubtotalExclVatCents;
+    const computedVatAmountCents = this.calculationService.computeVatAmountCents(
       subtotalExclVatCents,
       invoice.vatApplicable,
       invoice.vatRateBasisPoints,
     );
+    const vatAmountCents = invoice.vatOverrideCents ?? computedVatAmountCents;
+    const totalInclVatCents = invoice.totalOverrideCents ?? subtotalExclVatCents + vatAmountCents;
 
     const manualTable: ManualInvoiceTableWithTotals = {
       columns: columns.map((column) => ({
@@ -196,6 +224,7 @@ export class InvoiceMapper {
       customerEmail: invoice.customerEmail,
       customerPhone: invoice.customerPhone,
       customerId: invoice.customerId,
+      customerFields: mapCustomerFields(invoice),
       vatApplicable: invoice.vatApplicable,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
       entryMode: InvoiceEntryMode.MANUAL,
@@ -204,7 +233,9 @@ export class InvoiceMapper {
       manualTable,
       subtotalExclVatCents,
       vatAmountCents,
-      totalInclVatCents: subtotalExclVatCents + vatAmountCents,
+      totalInclVatCents,
+      sentAt: invoice.sentAt,
+      sentToEmail: invoice.sentToEmail,
     };
   }
 
@@ -230,6 +261,7 @@ export class InvoiceMapper {
       customerAddress: withTotals.customerAddress,
       customerEmail: withTotals.customerEmail,
       customerPhone: withTotals.customerPhone,
+      customerFields: withTotals.customerFields,
       entryMode: InvoiceEntryMode.GUIDED,
       lines: withTotals.lines.map((line) => ({
         description: line.description,
@@ -268,8 +300,15 @@ export class InvoiceMapper {
     withTotals: InvoiceWithTotals,
   ): InvoicePdfData {
     const table = withTotals.manualTable!;
+    // LINE_TOTAL is excluded from the PDF's per-column cells — it's already
+    // rendered as the trailing computed "Total" column below, formatted
+    // consistently regardless of exactly how the artisan typed it (e.g.
+    // "150" vs "150,00"); showing it twice would just be visual noise.
+    const lineTotalIndex = table.columns.findIndex(
+      (column) => column.role === ManualColumnRole.LINE_TOTAL,
+    );
     const rows: InvoicePdfManualRow[] = table.rows.map((row) => ({
-      cells: row.cells.map((cell) => cell.value),
+      cells: row.cells.filter((_, index) => index !== lineTotalIndex).map((cell) => cell.value),
       totalCents: row.lineTotalExclVatCents,
     }));
 
@@ -288,11 +327,14 @@ export class InvoiceMapper {
       customerAddress: withTotals.customerAddress,
       customerEmail: withTotals.customerEmail,
       customerPhone: withTotals.customerPhone,
+      customerFields: withTotals.customerFields,
       entryMode: InvoiceEntryMode.MANUAL,
       lines: [],
       serviceLines: [],
       manualTable: {
-        columns: table.columns.map((column) => ({ label: column.label })),
+        columns: table.columns
+          .filter((_, index) => index !== lineTotalIndex)
+          .map((column) => ({ label: column.label })),
         rows,
       },
       vatApplicable: withTotals.vatApplicable,
@@ -390,6 +432,7 @@ export class InvoiceMapper {
       customerAddress: dto.customerAddress ?? null,
       customerEmail: dto.customerEmail ?? null,
       customerPhone: dto.customerPhone ?? null,
+      customerFields: mapDtoCustomerFields(dto),
       entryMode: InvoiceEntryMode.GUIDED,
       lines: pdfLines,
       serviceLines: pdfServiceLines,
@@ -410,17 +453,26 @@ export class InvoiceMapper {
     const vatApplicable = isVatApplicable(company.legalStatus);
     const vatRateBasisPoints = company.vatRateBasisPoints;
     const table = dto.manualTable!;
+    const lineTotalIndex = table.columns.findIndex(
+      (column) => column.role === ManualColumnRole.LINE_TOTAL,
+    );
 
     const rows: InvoicePdfManualRow[] = table.rows.map((row) => ({
-      cells: row.cells,
-      totalCents: computeManualRowTotalCents(this.calculationService, table.columns, row.cells),
+      cells: row.cells.filter((_, index) => index !== lineTotalIndex),
+      totalCents: computeManualRowTotalCents(table.columns, row.cells),
     }));
-    const subtotalExclVatCents = rows.reduce((sum, row) => sum + row.totalCents, 0);
-    const vatAmountCents = this.calculationService.computeVatAmountCents(
+    // Phase 9.5 bis: same override precedence as toManualInvoiceWithTotals,
+    // run directly off the not-yet-persisted DTO so a draft preview can
+    // never disagree with the real created invoice.
+    const computedSubtotalExclVatCents = rows.reduce((sum, row) => sum + row.totalCents, 0);
+    const subtotalExclVatCents = dto.subtotalOverrideCents ?? computedSubtotalExclVatCents;
+    const computedVatAmountCents = this.calculationService.computeVatAmountCents(
       subtotalExclVatCents,
       vatApplicable,
       vatRateBasisPoints,
     );
+    const vatAmountCents = dto.vatOverrideCents ?? computedVatAmountCents;
+    const totalInclVatCents = dto.totalOverrideCents ?? subtotalExclVatCents + vatAmountCents;
 
     return {
       number: 'BROUILLON',
@@ -437,18 +489,21 @@ export class InvoiceMapper {
       customerAddress: dto.customerAddress ?? null,
       customerEmail: dto.customerEmail ?? null,
       customerPhone: dto.customerPhone ?? null,
+      customerFields: mapDtoCustomerFields(dto),
       entryMode: InvoiceEntryMode.MANUAL,
       lines: [],
       serviceLines: [],
       manualTable: {
-        columns: table.columns.map((column) => ({ label: column.label })),
+        columns: table.columns
+          .filter((_, index) => index !== lineTotalIndex)
+          .map((column) => ({ label: column.label })),
         rows,
       },
       vatApplicable,
       vatRateBasisPoints,
       subtotalExclVatCents,
       vatAmountCents,
-      totalInclVatCents: subtotalExclVatCents + vatAmountCents,
+      totalInclVatCents,
     };
   }
 }

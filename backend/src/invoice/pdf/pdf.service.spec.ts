@@ -17,6 +17,7 @@ function samplePdfData(): InvoicePdfData {
     customerAddress: null,
     customerEmail: null,
     customerPhone: null,
+    customerFields: [],
     entryMode: 'GUIDED',
     lines: [
       {

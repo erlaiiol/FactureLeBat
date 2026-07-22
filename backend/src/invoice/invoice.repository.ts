@@ -8,6 +8,7 @@ import {
   ManualInvoiceColumnModel as ManualInvoiceColumn,
   ManualInvoiceRowModel as ManualInvoiceRow,
   ManualInvoiceCellModel as ManualInvoiceCell,
+  InvoiceCustomerFieldModel as InvoiceCustomerField,
   CompanyModel as Company,
 } from '../../generated/prisma/models';
 import {
@@ -23,6 +24,7 @@ export type InvoiceWithLines = Invoice & {
   serviceLines: (InvoiceServiceLine & { weights: InvoiceServiceLineWeight[] })[];
   manualColumns: ManualInvoiceColumn[];
   manualRows: (ManualInvoiceRow & { cells: ManualInvoiceCell[] })[];
+  customerFields: InvoiceCustomerField[];
   company: Company;
 };
 
@@ -65,6 +67,12 @@ export interface CreateManualRowData {
   cells: string[];
 }
 
+// A freehand extra client field (e.g. "SIRET") — see InvoiceCustomerField.
+export interface CreateInvoiceCustomerFieldData {
+  label: string;
+  value: string;
+}
+
 export interface CreateInvoiceData {
   companyId: string;
   customerName: string;
@@ -72,8 +80,15 @@ export interface CreateInvoiceData {
   customerEmail?: string;
   customerPhone?: string;
   customerId?: string;
+  customerFields: CreateInvoiceCustomerFieldData[];
   vatApplicable: boolean;
   vatRateBasisPoints: number;
+  // Phase 9.5 bis: manual mode's freely overridable aggregate figures — see
+  // schema.prisma's comment on Invoice.subtotalOverrideCents. Always
+  // undefined for entryMode GUIDED (enforced at the DTO boundary).
+  subtotalOverrideCents?: number;
+  vatOverrideCents?: number;
+  totalOverrideCents?: number;
   entryMode: InvoiceEntryMode;
   lines: CreateInvoiceLineData[];
   serviceLines: CreateInvoiceServiceLineData[];
@@ -89,6 +104,7 @@ const INVOICE_INCLUDE = {
   serviceLines: { orderBy: { position: 'asc' }, include: { weights: true } },
   manualColumns: { orderBy: { position: 'asc' } },
   manualRows: { orderBy: { position: 'asc' }, include: { cells: true } },
+  customerFields: { orderBy: { position: 'asc' } },
   company: true,
 } as const;
 
@@ -131,6 +147,9 @@ export class InvoiceRepository {
           customerId: data.customerId,
           vatApplicable: data.vatApplicable,
           vatRateBasisPoints: data.vatRateBasisPoints,
+          subtotalOverrideCents: data.subtotalOverrideCents,
+          vatOverrideCents: data.vatOverrideCents,
+          totalOverrideCents: data.totalOverrideCents,
           entryMode: data.entryMode,
           lines: {
             create: data.lines.map((line, index) => ({
@@ -151,6 +170,13 @@ export class InvoiceRepository {
               role: column.role,
               label: column.label,
               widthPx: column.widthPx,
+            })),
+          },
+          customerFields: {
+            create: data.customerFields.map((field, index) => ({
+              position: index,
+              label: field.label,
+              value: field.value,
             })),
           },
         },
@@ -220,6 +246,17 @@ export class InvoiceRepository {
       include: INVOICE_INCLUDE,
       orderBy: { date: 'desc' },
       take: InvoiceRepository.MAX_LISTED_INVOICES,
+    });
+  }
+
+  // Phase 12: overwrites the last-send info rather than appending to a log
+  // (see schema.prisma's comment on Invoice.sentAt) — a later successful
+  // send simply means "yes, and most recently to this address".
+  markSent(id: string, sentToEmail: string): Promise<InvoiceWithLines> {
+    return this.prisma.invoice.update({
+      where: { id },
+      data: { sentAt: new Date(), sentToEmail },
+      include: INVOICE_INCLUDE,
     });
   }
 }
