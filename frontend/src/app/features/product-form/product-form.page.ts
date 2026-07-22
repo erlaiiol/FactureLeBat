@@ -39,6 +39,70 @@ export class ProductFormPage {
   // picked (e.g. "Vendu par colis de ... m²").
   protected readonly unitLabels = UNIT_LABELS;
 
+  // Phase 8.5 UX follow-up: "prix à l'unité" is the field that's actually
+  // stored (priceEuros below), but an artisan buying glue in boxes knows
+  // the box's real price, not a derived per-m² figure. This toggle and the
+  // package-price input are UI-only convenience — never sent to the
+  // backend — that compute priceEuros for them instead of asking them to
+  // do the division themselves.
+  protected readonly priceEntryMode = signal<'PER_UNIT' | 'PER_PACKAGE'>('PER_UNIT');
+  protected readonly packagePriceEuros = signal<number | null>(null);
+
+  protected hasPackaging(): boolean {
+    const packagingQuantity = this.form.controls.packagingQuantity.value;
+    return packagingQuantity != null && packagingQuantity > 0;
+  }
+
+  protected setPriceEntryMode(mode: 'PER_UNIT' | 'PER_PACKAGE'): void {
+    if (mode === 'PER_PACKAGE') {
+      const packagingQuantity = this.form.controls.packagingQuantity.value;
+      if (packagingQuantity) {
+        // Seed the package-price field from the current per-unit price so
+        // switching modes doesn't reset to zero — the artisan can then
+        // overwrite it with the box's real price.
+        this.packagePriceEuros.set(
+          Math.round(this.form.controls.priceEuros.value * packagingQuantity * 100) / 100,
+        );
+      }
+    }
+    this.priceEntryMode.set(mode);
+  }
+
+  protected onPackagePriceInput(rawValue: string): void {
+    const packagePrice = Number(rawValue);
+    this.packagePriceEuros.set(Number.isFinite(packagePrice) ? packagePrice : null);
+
+    const packagingQuantity = this.form.controls.packagingQuantity.value;
+    if (Number.isFinite(packagePrice) && packagingQuantity && packagingQuantity > 0) {
+      this.form.controls.priceEuros.setValue(
+        Math.round((packagePrice / packagingQuantity) * 100) / 100,
+      );
+    }
+  }
+
+  // Whichever way the artisan chooses to enter the price, show the other
+  // one alongside it — so they can always check it against what their
+  // supplier actually shows, per-unit or per-box.
+  protected priceHint(): string {
+    const packagingQuantity = this.form.controls.packagingQuantity.value;
+    const unit = this.unitLabels[this.form.controls.unit.value];
+
+    if (this.priceEntryMode() === 'PER_PACKAGE') {
+      if (!packagingQuantity || this.packagePriceEuros() == null) {
+        return `Le prix à l'unité (${unit}) sera calculé automatiquement à partir du prix du conditionnement.`;
+      }
+      const perUnit = this.form.controls.priceEuros.value.toFixed(2);
+      return `${this.packagePriceEuros()} € pour ${packagingQuantity} ${unit} → ${perUnit} €/${unit}, calculé automatiquement.`;
+    }
+
+    const unitPrice = this.form.controls.priceEuros.value;
+    if (packagingQuantity && packagingQuantity > 0 && unitPrice > 0) {
+      const packagePrice = (unitPrice * packagingQuantity).toFixed(2);
+      return `Le prix pour une seule unité (${unit}), sera pré-rempli sur vos factures — soit ${packagePrice} € pour un conditionnement de ${packagingQuantity} ${unit}.`;
+    }
+    return `Le prix pour une seule unité (${unit}), sera pré-rempli sur vos factures.`;
+  }
+
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     description: [''],

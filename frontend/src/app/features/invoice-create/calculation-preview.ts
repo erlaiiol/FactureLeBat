@@ -6,16 +6,22 @@ import { isAreaUnit, Unit } from '../../core/models/unit.model';
 // PREVIEW ONLY — the backend response after submit is always the source of
 // truth for the persisted invoice's totals, never this client-side estimate.
 
-export interface LinePreviewInput {
+// The three quantity-shaping fields that separately confuse artisans: how
+// big the job site is ("quantity"), how much extra material waste buys
+// ("wasteSurcharge"), and how the material is actually sold in fixed lots
+// ("packagingQuantity"/"roundUpToPackaging"). Kept as its own type (rather
+// than folded into LinePreviewInput) so the line-form's recap can reuse the
+// exact same rounding logic without needing a price to compute it.
+export interface QuantityCalcInput {
   unit: Unit;
   quantity: number;
-  unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
-  // Phase 8.5: mirrors InvoiceCalculationService's packaging rounding step
-  // so the always-visible running total never diverges from what the
-  // backend will actually bill once a packaging quantity is set.
   packagingQuantity?: number | null;
   roundUpToPackaging?: boolean;
+}
+
+export interface LinePreviewInput extends QuantityCalcInput {
+  unitPriceCents: number;
 }
 
 const WASTE_SURCHARGE_BASIS_POINTS: Record<WasteSurcharge, number> = {
@@ -24,10 +30,15 @@ const WASTE_SURCHARGE_BASIS_POINTS: Record<WasteSurcharge, number> = {
   TWENTY: 2000,
 };
 
-export function computeLineTotalPreviewCents(line: LinePreviewInput): number {
-  if (!Number.isFinite(line.quantity) || !Number.isFinite(line.unitPriceCents)) {
-    return 0;
-  }
+// neededQuantity: what the job site actually requires, waste included.
+// billedQuantity: what ends up on the invoice once packaging rounding (if
+// any) is applied — the two diverge exactly when a packaging quantity with
+// roundUpToPackaging is set, which is the crux of the chantier/conditionnement
+// confusion this function exists to make explicit.
+export function computeBilledQuantity(line: QuantityCalcInput): {
+  neededQuantity: number;
+  billedQuantity: number;
+} {
   const wasteBasisPoints = isAreaUnit(line.unit)
     ? WASTE_SURCHARGE_BASIS_POINTS[line.wasteSurcharge]
     : 0;
@@ -37,6 +48,14 @@ export function computeLineTotalPreviewCents(line: LinePreviewInput): number {
     line.roundUpToPackaging && packagingQuantity && packagingQuantity > 0
       ? Math.ceil(neededQuantity / packagingQuantity) * packagingQuantity
       : neededQuantity;
+  return { neededQuantity, billedQuantity };
+}
+
+export function computeLineTotalPreviewCents(line: LinePreviewInput): number {
+  if (!Number.isFinite(line.quantity) || !Number.isFinite(line.unitPriceCents)) {
+    return 0;
+  }
+  const { billedQuantity } = computeBilledQuantity(line);
   return Math.round(billedQuantity * line.unitPriceCents);
 }
 

@@ -44,7 +44,8 @@
         @if (!tourService.isLastStep()) {
           <button
             type="button"
-            class="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+            [disabled]="tourService.advancing()"
+            class="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             (click)="tourService.skip()"
           >
             Passer
@@ -52,7 +53,8 @@
         }
         <button
           type="button"
-          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+          [disabled]="tourService.advancing()"
+          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           [class.animate-pulse]="tourService.isLastStep()"
           (click)="tourService.next()"
         >

@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { PdfPreviewModalComponent } from '../../shared/components/pdf-preview-modal.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summary.component';
 import { InvoiceDraftStore } from './invoice-draft.store';
@@ -20,6 +21,7 @@ import { InvoiceDraftStore } from './invoice-draft.store';
     RouterLinkActive,
     BigButtonComponent,
     InvoiceTotalsSummaryComponent,
+    PdfPreviewModalComponent,
     TourAnchorDirective,
   ],
   templateUrl: './invoice-create-shell.page.html',
@@ -31,6 +33,14 @@ export class InvoiceCreateShellPage {
 
   protected readonly previewing = signal(false);
   protected readonly previewError = signal<string | null>(null);
+  // Owns the object URL's lifecycle: set on a successful preview, revoked
+  // (and cleared) on close or component destroy — never left dangling like
+  // the old window.open + fixed 10s timeout did.
+  protected readonly previewPdfUrl = signal<string | null>(null);
+
+  constructor() {
+    this.destroyRef.onDestroy(() => this.revokeCurrentPreviewUrl());
+  }
 
   protected preview(): void {
     if (this.previewing() || !this.draftStore.canPreview()) {
@@ -49,17 +59,25 @@ export class InvoiceCreateShellPage {
       .subscribe({
         next: (blob) => {
           this.previewing.set(false);
-          const url = URL.createObjectURL(blob);
-          window.open(url, '_blank');
-          // The opened tab has loaded the blob into its own memory by the
-          // time it navigates; revoking shortly after frees it here without
-          // racing the tab's initial render.
-          setTimeout(() => URL.revokeObjectURL(url), 10_000);
+          this.revokeCurrentPreviewUrl();
+          this.previewPdfUrl.set(URL.createObjectURL(blob));
         },
         error: () => {
           this.previewing.set(false);
           this.previewError.set("Impossible de générer l'aperçu pour le moment.");
         },
       });
+  }
+
+  protected closePreview(): void {
+    this.revokeCurrentPreviewUrl();
+    this.previewPdfUrl.set(null);
+  }
+
+  private revokeCurrentPreviewUrl(): void {
+    const url = this.previewPdfUrl();
+    if (url) {
+      URL.revokeObjectURL(url);
+    }
   }
 }

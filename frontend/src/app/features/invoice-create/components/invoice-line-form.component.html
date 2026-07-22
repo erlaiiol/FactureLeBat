@@ -47,56 +47,49 @@
       <app-field-hint
         [text]="
           isAreaMode()
-            ? 'Ce dont le chantier a besoin, chutes non comprises — pas forcément ce qui sera facturé.'
-            : 'Ce dont le chantier a besoin — pas forcément ce qui sera facturé.'
+            ? 'Ce dont le chantier a réellement besoin, chutes non comprises — la quantité facturée peut être plus grande, voir le récapitulatif en bas de ligne.'
+            : 'Ce dont le chantier a besoin — la quantité facturée peut différer, voir le récapitulatif en bas de ligne.'
         "
       />
     </label>
   </div>
 
-  <div class="flex gap-3">
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Prix unitaire (€)</span>
-      <input
-        formControlName="unitPriceEuros"
-        type="number"
-        step="0.01"
+  @if (isAreaMode()) {
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Chutes (matière en plus)</span>
+      <select
+        formControlName="wasteSurcharge"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      >
+        <option value="NONE">Aucune</option>
+        <option value="TEN">+10 %</option>
+        <option value="TWENTY">+20 %</option>
+      </select>
+      <app-field-hint
+        text="Ajoute de la matière à couvrir pour compenser les découpes perdues, avant l'éventuel arrondi au conditionnement ci-dessous."
       />
-      <app-field-hint text="Le prix pour une seule unité, hors chutes éventuelles." />
     </label>
-
-    @if (isAreaMode()) {
-      <label class="flex flex-1 flex-col gap-1">
-        <span class="text-sm font-medium text-slate-700">Chutes (matière en plus)</span>
-        <select
-          formControlName="wasteSurcharge"
-          class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-        >
-          <option value="NONE">Aucune</option>
-          <option value="TEN">+10 %</option>
-          <option value="TWENTY">+20 %</option>
-        </select>
-        <app-field-hint
-          text="Ajoute automatiquement de la matière facturée pour compenser les découpes perdues."
-        />
-      </label>
-    }
-  </div>
+  }
 
   <div class="flex gap-3">
     <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Conditionnement</span>
+      <span class="text-sm font-medium text-slate-700">Contenu d'un conditionnement</span>
       <input
         formControlName="packagingQuantity"
         type="number"
         step="0.001"
         min="0"
-        [placeholder]="'Ex : 9 ' + unitLabels[group().controls.unit.value] + ' par boîte'"
+        [placeholder]="
+          'Ex : 9 (une boîte contient 9 ' + unitLabels[group().controls.unit.value] + ')'
+        "
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
       <app-field-hint
-        text="Facultatif — si ce produit se vend en colis fixe (boîte, sac, rouleau…), indiquez la quantité par colis pour que la quantité facturée soit arrondie automatiquement."
+        [text]="
+          'Facultatif — si ce matériau se vend par lot fixe (boîte, sac, rouleau…), indiquez combien de ' +
+          unitLabels[group().controls.unit.value] +
+          ' contient un seul conditionnement. Laissez vide si ce matériau se vend en continu, sans lot fixe.'
+        "
       />
     </label>
 
@@ -104,9 +97,71 @@
       <label class="flex flex-1 flex-row items-center gap-2 pt-6">
         <input formControlName="roundUpToPackaging" type="checkbox" class="h-5 w-5" />
         <span class="text-sm font-medium text-slate-700">
-          Arrondir au conditionnement (facturer des colis entiers)
+          Facturer des conditionnements entiers (arrondir au lot)
         </span>
       </label>
     }
+  </div>
+
+  @if (hasPackaging()) {
+    <div class="flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
+      <span class="text-sm font-medium text-slate-700">
+        Comment connaissez-vous le prix de ce matériau ?
+      </span>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          (click)="setPriceEntryMode('PER_UNIT')"
+          [class.bg-slate-700]="priceEntryMode() === 'PER_UNIT'"
+          [class.text-white]="priceEntryMode() === 'PER_UNIT'"
+          [class.text-slate-700]="priceEntryMode() !== 'PER_UNIT'"
+          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+        >
+          Prix à l'unité
+        </button>
+        <button
+          type="button"
+          (click)="setPriceEntryMode('PER_PACKAGE')"
+          [class.bg-slate-700]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.text-white]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.text-slate-700]="priceEntryMode() !== 'PER_PACKAGE'"
+          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+        >
+          Prix du conditionnement
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">
+        Ex : une boîte de colle à 35 € qui couvre 25 m² — choisissez « Prix du conditionnement » et
+        entrez 35 €, le prix au m² sera calculé pour vous.
+      </p>
+    </div>
+  }
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">
+      {{ priceEntryMode() === 'PER_PACKAGE' ? 'Prix du conditionnement (€)' : 'Prix unitaire (€)' }}
+    </span>
+    @if (priceEntryMode() === 'PER_PACKAGE') {
+      <input
+        type="number"
+        step="0.01"
+        min="0"
+        [value]="packagePriceEuros() ?? ''"
+        (input)="onPackagePriceInput($any($event.target).value)"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+    } @else {
+      <input
+        formControlName="unitPriceEuros"
+        type="number"
+        step="0.01"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+    }
+    <app-field-hint [text]="priceHint()" />
+  </label>
+
+  <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+    {{ quantitySummary() }}
   </div>
 </div>

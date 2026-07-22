@@ -31,6 +31,15 @@ export class TourService {
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly state = signal<OnboardingState | null>(null);
+  // Guards against overlapping advanceToStep() calls — without it, holding
+  // or double-tapping "Suivant" while a route navigation/anchor-wait is
+  // still in flight fires a second navigateByUrl before the first settles.
+  readonly advancing = signal(false);
+  // Set only around a navigateByUrl the tour itself triggers (step-to-step
+  // transitions), so the NavigationEnd listener below can tell that apart
+  // from the artisan navigating away some other way (sidebar link, back
+  // button) mid-tour.
+  private selfNavigating = false;
 
   readonly tourEnabled = computed(() => this.state()?.tourEnabled ?? true);
   readonly activeTourId = signal<TourId | null>(null);
@@ -60,7 +69,16 @@ export class TourService {
         filter((event): event is NavigationEnd => event instanceof NavigationEnd),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((event) => this.maybeAutoStart(event.urlAfterRedirects));
+      .subscribe((event) => {
+        // A navigation the tour didn't script itself (sidebar link, browser
+        // back/forward, a form redirect…) means the artisan left the flow
+        // the active step was anchored to — drop it rather than leave the
+        // overlay spotlighting an anchor that just unmounted.
+        if (this.activeTourId() && !this.selfNavigating) {
+          this.abandonActiveTour();
+        }
+        this.maybeAutoStart(event.urlAfterRedirects);
+      });
   }
 
   setTourEnabled(tourEnabled: boolean): void {
@@ -81,7 +99,7 @@ export class TourService {
   }
 
   next(): void {
-    if (!this.activeTourId()) {
+    if (!this.activeTourId() || this.advancing()) {
       return;
     }
     if (this.isLastStep()) {
@@ -92,6 +110,9 @@ export class TourService {
   }
 
   skip(): void {
+    if (this.advancing()) {
+      return;
+    }
     this.persistCompletion();
   }
 
@@ -111,23 +132,33 @@ export class TourService {
   // waits for its anchor to mount before revealing it — if the anchor never
   // shows up (timeout), the step is skipped rather than spotlighting nothing.
   private async advanceToStep(index: number): Promise<void> {
-    const steps = this.steps();
-    if (index >= steps.length) {
-      this.persistCompletion();
-      return;
-    }
-    const step = steps[index];
-    if (step.route && step.route !== this.router.url) {
-      await this.router.navigateByUrl(step.route);
-    }
-    if (step.anchorId) {
-      const found = await this.waitForAnchor(step.anchorId);
-      if (!found) {
-        await this.advanceToStep(index + 1);
+    this.advancing.set(true);
+    try {
+      const steps = this.steps();
+      if (index >= steps.length) {
+        this.persistCompletion();
         return;
       }
+      const step = steps[index];
+      if (step.route && step.route !== this.router.url) {
+        this.selfNavigating = true;
+        try {
+          await this.router.navigateByUrl(step.route);
+        } finally {
+          this.selfNavigating = false;
+        }
+      }
+      if (step.anchorId) {
+        const found = await this.waitForAnchor(step.anchorId);
+        if (!found) {
+          await this.advanceToStep(index + 1);
+          return;
+        }
+      }
+      this.stepIndex.set(index);
+    } finally {
+      this.advancing.set(false);
     }
-    this.stepIndex.set(index);
   }
 
   private waitForAnchor(anchorId: string): Promise<boolean> {
@@ -147,6 +178,14 @@ export class TourService {
         }
       }, ANCHOR_POLL_INTERVAL_MS);
     });
+  }
+
+  // Unlike persistCompletion, this never marks the tour done — leaving early
+  // through an unrelated navigation isn't a "seen it, don't show again"
+  // signal, so the tour is still offered next time the artisan comes back.
+  private abandonActiveTour(): void {
+    this.activeTourId.set(null);
+    this.stepIndex.set(0);
   }
 
   private persistCompletion(): void {

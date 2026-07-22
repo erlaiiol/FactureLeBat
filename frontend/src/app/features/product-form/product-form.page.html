@@ -63,9 +63,81 @@
     <app-field-hint text="Facultatif — des précisions internes (référence, teinte, épaisseur…)." />
   </label>
 
-  <div class="flex gap-3">
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Prix (€)</span>
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Unité</span>
+    <select formControlName="unit" class="rounded-lg border border-slate-300 px-4 py-3 text-lg">
+      @for (option of unitOptions; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
+    <app-field-hint text="La façon dont ce produit se vend (au m², à l’unité, au litre…)." />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Contenu d'un conditionnement</span>
+    <input
+      formControlName="packagingQuantity"
+      type="number"
+      step="0.001"
+      min="0"
+      [placeholder]="'Ex : 9 (une boîte contient 9 ' + unitLabels[form.controls.unit.value] + ')'"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+    <app-field-hint
+      [text]="
+        'Facultatif — si ce produit se vend par lot fixe (boîte, sac, rouleau…), indiquez combien de ' +
+        unitLabels[form.controls.unit.value] +
+        ' contient un seul conditionnement. Laissez vide si ce produit se vend en continu, sans lot fixe.'
+      "
+    />
+  </label>
+
+  @if (hasPackaging()) {
+    <div class="flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
+      <span class="text-sm font-medium text-slate-700">Comment connaissez-vous le prix ?</span>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          (click)="setPriceEntryMode('PER_UNIT')"
+          [class.bg-slate-700]="priceEntryMode() === 'PER_UNIT'"
+          [class.text-white]="priceEntryMode() === 'PER_UNIT'"
+          [class.text-slate-700]="priceEntryMode() !== 'PER_UNIT'"
+          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+        >
+          Prix à l'unité
+        </button>
+        <button
+          type="button"
+          (click)="setPriceEntryMode('PER_PACKAGE')"
+          [class.bg-slate-700]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.text-white]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.text-slate-700]="priceEntryMode() !== 'PER_PACKAGE'"
+          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+        >
+          Prix du conditionnement
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">
+        Ex : une boîte de colle à 35 € qui couvre 25 m² — choisissez « Prix du conditionnement » et
+        entrez 35 €, le prix au m² sera calculé pour vous.
+      </p>
+    </div>
+  }
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">
+      {{ priceEntryMode() === 'PER_PACKAGE' ? 'Prix du conditionnement (€)' : 'Prix unitaire (€)' }}
+    </span>
+    @if (priceEntryMode() === 'PER_PACKAGE') {
+      <input
+        type="number"
+        step="0.01"
+        min="0"
+        [value]="packagePriceEuros() ?? ''"
+        (input)="onPackagePriceInput($any($event.target).value)"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+    } @else {
       <input
         formControlName="priceEuros"
         type="number"
@@ -73,36 +145,8 @@
         min="0"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
-      <app-field-hint text="Le prix pour une seule unité, sera pré-rempli sur vos factures." />
-    </label>
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Unité</span>
-      <select formControlName="unit" class="rounded-lg border border-slate-300 px-4 py-3 text-lg">
-        @for (option of unitOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-        }
-      </select>
-      <app-field-hint text="La façon dont ce produit se vend (au m², à l’unité, au litre…)." />
-    </label>
-  </div>
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Conditionnement</span>
-    <input
-      formControlName="packagingQuantity"
-      type="number"
-      step="0.001"
-      min="0"
-      placeholder="Ex : 9"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-    />
-    <app-field-hint
-      [text]="
-        'Facultatif — si ce produit se vend en colis fixe (ex : boîte de 9 ' +
-        unitLabels[form.controls.unit.value] +
-        '), indiquez la quantité par colis. Laissez vide s’il se vend en continu.'
-      "
-    />
+    }
+    <app-field-hint [text]="priceHint()" />
   </label>
 
   <label class="flex flex-col gap-1">

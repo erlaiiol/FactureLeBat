@@ -115,4 +115,38 @@ describe('TourService', () => {
 
     expect(service.stepIndex()).toBe(2);
   });
+
+  it('ignores a second next() call made while the first is still resolving', async () => {
+    vi.useFakeTimers();
+    const service = createService();
+    await harness.navigateByUrl('/clients');
+
+    service.next(); // step 1 needs 'customers-search', not registered yet — polling starts
+    expect(service.advancing()).toBe(true);
+    service.next(); // should be a no-op: a step-1 advance is already in flight
+
+    registerAnchor('customers-search');
+    await vi.advanceTimersByTimeAsync(60); // one poll tick is enough to pick it up
+
+    expect(service.stepIndex()).toBe(1);
+    expect(service.advancing()).toBe(false);
+  });
+
+  it('abandons the active tour, without marking it completed, when the artisan navigates away some other way', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/clients');
+    expect(service.activeTourId()).toBe('customers');
+
+    // Not the tour's own navigation (e.g. a sidebar link, or the back
+    // button) — the customers tour should be dropped, not left pinned to
+    // an anchor that no longer exists, and the catalog tour (also unseen)
+    // is free to auto-start on this new route.
+    await harness.navigateByUrl('/produits');
+
+    expect(service.activeTourId()).toBe('catalog');
+    expect(service.stepIndex()).toBe(0);
+    // If the abandoned tour had wrongly been marked complete, that would
+    // have fired an uncompleted HTTP request here, and httpMock.verify()
+    // in afterEach would fail.
+  });
 });

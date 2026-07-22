@@ -406,7 +406,7 @@ This is a small, foundational phase inserted before Phase 9 to close that gap in
 
 ---
 
-# Phase 10 — Visual Identity & Motion
+# Phase 9 — Visual Identity & Motion
 
 ## Objective
 
@@ -417,7 +417,7 @@ Full decisions (palette, typography, the line-marking badge, motion timing) are 
 ## Features
 
 - [ ] Translate the "Chantier calibré" palette and type scale into Tailwind v4 `@theme` tokens (`frontend/src/styles.css`)
-- [ ] Dark-mode variant of "Chantier calibré" for the working application
+- [ ] Light and Dark-mode variant of "Chantier calibré" for the working application. Togglable with a button.
 - [ ] Apply "Atelier sobre" only at its three sanctioned locations (invoice PDF header, guided tour, "Mon activité" settings) — never on data-entry screens
 - [ ] Implement the line-marking badge (shape, color, rotation) as a shared component
 - [ ] Implement the motion primitives (`lineIn`, `totalPulse`, `badgeStamp`, tour step transitions, tour-completion reward) respecting `prefers-reduced-motion`
@@ -426,7 +426,46 @@ Full decisions (palette, typography, the line-marking badge, motion timing) are 
 
 ---
 
-# Phase 9 — Sourcing Assistant (AI Supplier Search)
+# Phase 9.5 — Invoice Creation Mode Choice: Quick vs. Manual
+
+## Objective
+
+When starting a new invoice, the artisan first picks between two entry modes on a small choice screen:
+
+- **Mode rapide** — today's flow (Phases 6/7/8.5/11): customer picker, catalog-driven lines, guided fields, click over typing.
+- **Mode manuel** — a free-form, paper-like invoice canvas for artisans who are uncomfortable with forms, dropdowns, and multi-step flows, and would rather fill in something that looks and behaves like the final document itself.
+
+Both modes end at the same place: a valid invoice, priced and PDF-able through the existing pipeline. Manual mode is an alternate *input surface*, not a second invoicing engine.
+
+## Manual Mode — Free-Form Invoice Canvas
+
+- The canvas looks like a PDF preview of an invoice: every string (client name, line description, quantity, price, totals, etc.) is directly clickable and editable in place, no separate form fields elsewhere on the page.
+- The classic invoice table can grow: "+" controls below the table add a row (horizontal), "+" controls to the right of the table add a column (vertical) — e.g. splitting one price into several sub-amounts, or adding a custom column the artisan needs.
+- Table rows/columns can be shrunk back down with a matching "−" control, and individually resized by dragging their edges (column width / row height), the way a spreadsheet or a table in a word processor behaves.
+- A single "Mettre en forme" (format) button cleans up spacing/alignment/number formatting across the whole table once the artisan is done typing, so nobody has to manually align columns or fix "1500" into "1 500,00 €" by hand.
+- Under the hood, this is still parsed into the same `Invoice`/`InvoiceLine`/`Service` shapes and priced by the existing `InvoiceCalculationService` — the canvas is a UI layer over the same data model, not a separate freehand document.
+
+## Features
+
+- [ ] "Nouvelle facture" now opens a mode-choice screen (mode rapide / mode manuel) before either flow starts
+- [ ] Mode rapide is exactly today's flow, unchanged
+- [ ] Mode manuel: PDF-like canvas where every field is click-to-edit in place, no external form
+- [ ] Add a row/column via "+" controls positioned below (row) and to the right (column) of the table, remove via a matching "−"
+- [ ] Resize a row/column by dragging its border, with sane min/max bounds
+- [ ] "Mettre en forme" button normalizes spacing/alignment/number formatting across the table in one click
+- [ ] Manual-mode data maps onto the same `Invoice`/`InvoiceLine`/`Service` model and calculation engine as mode rapide — same totals rules (integer cents, no floating point), same PDF pipeline, same preview-before-persist rule (Phase 15)
+- [ ] Switching mode mid-draft is either supported with a clear "this will restructure your invoice" warning, or deliberately disabled — decide once the manual data model's edge cases (e.g. redistributed services, packaging rounding) are scoped
+- [ ] Tour mode updated: the invoice-creation mini-tour (Phase 8) explains the mode-choice screen and gives mode manuel its own short walkthrough (add/remove row-column, resize, "Mettre en forme")
+
+## Security & Library Notes
+
+- Manual mode multiplies the amount of freehand/pasted text flowing into an invoice (arbitrary column labels, cell content). Any of it that gets rendered as HTML (in the live canvas or a rich preview) must be sanitized (e.g. DOMPurify) before render or persistence — never trust pasted content, same principle as Phase 4's "never trust external content." PDF generation must keep treating all of this as data, never as template/markup that gets interpreted.
+- Drag-to-resize and dynamic add/remove row/column is realistically not worth hand-rolling from scratch (unlike the Phase 8 tour engine, which was simple geometry): a small, focused library for resize/drag handles (e.g. `interact.js`, MIT-licensed, no server dependency) is reasonable to pull in here. Avoid full spreadsheet/grid libraries (Handsontable and similar) — they're heavier and mostly license-gated, and this feature needs a table with resize handles, not a spreadsheet engine.
+- Whatever library is chosen, it only touches presentation (drag/resize geometry) — parsing the resulting content into priced invoice data stays app code, so the calculation/rounding rules already documented (Phases 1, 5, 8.5) aren't duplicated or bypassed.
+
+---
+
+# Phase 10 — Sourcing Assistant (AI Supplier Search)
 
 ## Objective
 
