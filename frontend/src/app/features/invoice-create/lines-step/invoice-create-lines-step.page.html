@@ -1,0 +1,70 @@
+@if (createdInvoice(); as invoice) {
+  <div class="flex flex-col items-center gap-4 rounded-xl bg-green-50 p-8 text-center">
+    <h1 class="text-2xl font-bold text-green-900">Facture {{ invoice.number }} créée !</h1>
+    <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
+      <app-big-button>Télécharger le PDF</app-big-button>
+    </a>
+    <div class="w-full max-w-sm">
+      <app-big-button variant="secondary" (click)="startNewInvoice()">
+        Nouvelle facture
+      </app-big-button>
+    </div>
+  </div>
+} @else {
+  <h1 class="mb-2 text-2xl font-bold text-slate-900">
+    Nouvelle facture — Lignes &amp; prestations
+  </h1>
+  <button
+    type="button"
+    (click)="back()"
+    class="mb-6 text-sm font-medium text-blue-700 hover:underline"
+  >
+    ← Retour au client
+  </button>
+
+  <!-- Plain div, not <form>: lines/serviceLines are two independent
+       FormArrays with no umbrella FormGroup, so there is no NgForm/
+       FormGroupDirective on this element to turn a native submit event into
+       Angular's ngSubmit (which is what calls preventDefault) — a <form>
+       here would silently fall back to the browser's default full-page
+       GET-and-reload submit. -->
+  <div class="flex flex-col gap-6">
+    <section class="flex flex-col gap-4">
+      <h2 class="text-lg font-semibold text-slate-800">Lignes de facture</h2>
+
+      @for (line of lines.controls; track line; let i = $index) {
+        <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)" />
+      }
+
+      <app-big-button variant="secondary" type="button" (click)="addLine()">
+        + Ajouter une ligne
+      </app-big-button>
+    </section>
+
+    <section class="flex flex-col gap-4">
+      <h2 class="text-lg font-semibold text-slate-800">Prestations (main-d’œuvre, forfaits…)</h2>
+
+      @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
+        <app-invoice-service-line-form
+          [group]="serviceLine"
+          [index]="i"
+          [services]="draftStore.services()"
+          [lineLabels]="lineLabels()"
+          (remove)="removeServiceLine(i)"
+        />
+      }
+
+      <app-big-button variant="secondary" type="button" (click)="addServiceLine()">
+        + Ajouter une prestation
+      </app-big-button>
+    </section>
+
+    @if (errorMessage(); as message) {
+      <p class="text-center font-medium text-red-700">{{ message }}</p>
+    }
+
+    <app-big-button type="button" [disabled]="creating()" (click)="submit()">
+      {{ creating() ? 'Création…' : 'Créer la facture' }}
+    </app-big-button>
+  </div>
+}

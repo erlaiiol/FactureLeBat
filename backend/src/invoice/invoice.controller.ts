@@ -35,4 +35,17 @@ export class InvoiceController {
       disposition: `attachment; filename="facture-${data.number}.pdf"`,
     });
   }
+
+  // Phase 6: renders a PDF from a not-yet-saved draft so the artisan can
+  // preview an invoice from any step of the creation flow — never persists
+  // anything (see InvoiceService.previewPdf).
+  @Post('preview')
+  @Header('Content-Type', 'application/pdf')
+  async previewPdf(@Body() dto: CreateInvoiceDto): Promise<StreamableFile> {
+    const data = await this.invoiceService.previewPdf(dto);
+    const buffer = await this.pdfService.generateInvoicePdf(data);
+    return new StreamableFile(buffer, {
+      disposition: 'inline; filename="apercu-facture.pdf"',
+    });
+  }
 }

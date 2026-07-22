@@ -33,6 +33,7 @@
       placeholder="Ex : Main-d’œuvre"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Ce qui sera écrit sur la facture pour cette prestation." />
   </label>
 
   <div class="flex gap-3">
@@ -45,6 +46,7 @@
         min="0"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
+      <app-field-hint text="Le montant total de cette prestation." />
     </label>
 
     <label class="flex flex-1 flex-col gap-1">
@@ -56,6 +58,9 @@
         <option value="VISIBLE">Visible</option>
         <option value="REDISTRIBUTED">Répartie</option>
       </select>
+      <app-field-hint
+        text="Visible : sa propre ligne sur la facture. Répartie : le montant est ajouté aux autres lignes, sans apparaître seul."
+      />
     </label>
   </div>
 
@@ -69,6 +74,7 @@
         <option value="EQUAL">Égale entre toutes les lignes</option>
         <option value="WEIGHTED">Personnalisée (poids par ligne)</option>
       </select>
+      <app-field-hint text="Comment le montant est réparti entre les lignes de la facture." />
     </label>
 
     @if (isWeighted()) {
@@ -88,9 +94,12 @@
             />
           </label>
         }
+        <app-field-hint
+          text="Plus le poids d'une ligne est élevé, plus elle reçoit une grande part du montant."
+        />
       </div>
     }
   } @else {
-    <p class="text-xs text-slate-500">Cette prestation aura sa propre ligne sur la facture.</p>
+    <app-field-hint text="Cette prestation aura sa propre ligne sur la facture." />
   }
 </div>

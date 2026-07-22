@@ -20,6 +20,7 @@
       placeholder="Ex : Main-d’œuvre pose parquet"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Le nom affiché quand vous choisissez cette prestation sur une facture." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -29,6 +30,7 @@
       rows="3"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     ></textarea>
+    <app-field-hint text="Facultatif — des précisions internes sur cette prestation." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -39,6 +41,9 @@
       step="0.01"
       min="0"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+    <app-field-hint
+      text="Le montant total de cette prestation, sera pré-rempli sur vos factures."
     />
   </label>
 
@@ -51,10 +56,9 @@
       <option value="VISIBLE">Visible — sa propre ligne sur la facture</option>
       <option value="REDISTRIBUTED">Répartie — masquée, ajoutée aux autres lignes</option>
     </select>
-    <span class="text-xs text-slate-500">
-      Ce réglage ne fait que pré-remplir le choix lors de l’ajout à une facture — modifiable à
-      chaque fois.
-    </span>
+    <app-field-hint
+      text="Ce réglage ne fait que pré-remplir le choix lors de l’ajout à une facture — modifiable à chaque fois."
+    />
   </label>
 
   @if (errorMessage(); as message) {

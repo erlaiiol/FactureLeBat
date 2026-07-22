@@ -5,7 +5,26 @@ export const routes: Routes = [
   {
     path: 'factures/nouvelle',
     loadComponent: () =>
-      import('./features/invoice-create/invoice-create.page').then((m) => m.InvoiceCreatePage),
+      import('./features/invoice-create/invoice-create-shell.page').then(
+        (m) => m.InvoiceCreateShellPage,
+      ),
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'client' },
+      {
+        path: 'client',
+        loadComponent: () =>
+          import('./features/invoice-create/customer-step/invoice-create-customer-step.page').then(
+            (m) => m.InvoiceCreateCustomerStepPage,
+          ),
+      },
+      {
+        path: 'lignes',
+        loadComponent: () =>
+          import('./features/invoice-create/lines-step/invoice-create-lines-step.page').then(
+            (m) => m.InvoiceCreateLinesStepPage,
+          ),
+      },
+    ],
   },
   {
     path: 'factures',

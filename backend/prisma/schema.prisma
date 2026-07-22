@@ -13,9 +13,21 @@ enum LegalStatus {
   COMPANY
 }
 
-enum LineMode {
-  AREA
+// The curated, fixed vocabulary of units an artisan can bill in (Phase 7 —
+// replaces a free-text unit field). Only SQUARE_METER carries area
+// semantics (waste surcharge eligible); every other unit bills as a plain
+// quantity x unit price. See backend/src/common/unit.util.ts for the
+// French display labels and the isAreaUnit() predicate derived from this.
+enum Unit {
+  SQUARE_METER
+  LINEAR_METER
   UNIT
+  LUMP_SUM
+  HOUR
+  DAY
+  KILOGRAM
+  LITER
+  CUBIC_METER
 }
 
 enum WasteSurcharge {
@@ -30,49 +42,49 @@ enum ServiceVisibility {
 }
 
 model Company {
-  id                  String      @id @default(uuid())
+  id String @id @default(uuid())
 
-  name                String
-  siret               String
-  addressLine1        String
-  addressLine2        String?
-  postalCode          String
-  city                String
-  email               String?
-  phone               String?
+  name         String
+  siret        String
+  addressLine1 String
+  addressLine2 String?
+  postalCode   String
+  city         String
+  email        String?
+  phone        String?
 
-  legalStatus         LegalStatus
-  vatRateBasisPoints  Int         @default(2000)
+  legalStatus        LegalStatus
+  vatRateBasisPoints Int         @default(2000)
 
-  invoiceNumberPrefix String      @default("F")
-  nextInvoiceNumber   Int         @default(1)
+  invoiceNumberPrefix String @default("F")
+  nextInvoiceNumber   Int    @default(1)
 
-  invoices            Invoice[]
+  invoices Invoice[]
 
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Invoice {
-  id                 String        @id @default(uuid())
+  id String @id @default(uuid())
 
-  number             String        @unique
-  date               DateTime      @default(now())
+  number String   @unique
+  date   DateTime @default(now())
 
-  customerName       String
-  customerAddress    String?
-  customerEmail      String?
-  customerPhone      String?
+  customerName    String
+  customerAddress String?
+  customerEmail   String?
+  customerPhone   String?
 
   // Soft reference to the saved Customer this invoice was based on, if any.
   // The fields above remain the source of truth for this invoice (typed or
   // autofilled-then-edited by the artisan); onDelete: SetNull so deleting a
   // Customer record can never delete or corrupt an already-issued invoice.
-  customerId         String?
-  customer           Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
-  companyId          String
-  company            Company       @relation(fields: [companyId], references: [id])
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
 
   // Snapshotted from Company at creation time so a later change to the
   // artisan's legal status never retroactively changes an issued invoice's
@@ -80,18 +92,18 @@ model Invoice {
   vatApplicable      Boolean
   vatRateBasisPoints Int
 
-  lines              InvoiceLine[]
-  serviceLines       InvoiceServiceLine[]
+  lines        InvoiceLine[]
+  serviceLines InvoiceServiceLine[]
 
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([customerId])
 }
 
 model Customer {
-  id          String    @id @default(uuid())
+  id String @id @default(uuid())
 
   name        String
   companyName String?
@@ -100,24 +112,24 @@ model Customer {
   phone       String?
   siret       String?
 
-  invoices    Invoice[]
+  invoices Invoice[]
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Product {
-  id           String   @id @default(uuid())
+  id String @id @default(uuid())
 
   name         String
   description  String?
-  unit         String
+  unit         Unit
   priceCents   Int
   supplierName String?
   supplierUrl  String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Phase 5 catalog entry for non-material work (labor, expertise, misc
@@ -125,7 +137,7 @@ model Product {
 // default visibility mode that prefills (never locks) the invoice
 // service-line form.
 model Service {
-  id                String            @id @default(uuid())
+  id String @id @default(uuid())
 
   name              String
   description       String?
@@ -134,28 +146,30 @@ model Service {
 
   invoiceServiceLines InvoiceServiceLine[]
 
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model InvoiceLine {
-  id             String         @id @default(uuid())
+  id String @id @default(uuid())
 
-  invoiceId      String
-  invoice        Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  position       Int
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position  Int
 
-  description    String
-  unit           String
+  description String
+  // The calculation mode (area-with-waste-surcharge vs. plain quantity) is
+  // derived from this unit's semantics (isAreaUnit()), never stored
+  // separately — see docs/roadmap.md Phase 7 and unit.util.ts.
+  unit        Unit
 
-  mode           LineMode
   quantity       Decimal        @db.Decimal(10, 3)
   unitPriceCents Int
   wasteSurcharge WasteSurcharge @default(NONE)
 
   serviceWeights InvoiceServiceLineWeight[]
 
-  createdAt      DateTime       @default(now())
+  createdAt DateTime @default(now())
 
   @@index([invoiceId])
 }
@@ -167,30 +181,30 @@ model InvoiceLine {
 // always the source of truth for this invoice, same snapshot spirit as
 // Invoice.customerName — never re-read from `service` after creation.
 model InvoiceServiceLine {
-  id             String            @id @default(uuid())
+  id String @id @default(uuid())
 
-  invoiceId      String
-  invoice        Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  position       Int
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position  Int
 
   // Soft reference to a saved Service, if any — "autofill, not a lock" rule
   // (see conventions.md), onDelete: SetNull so deleting a Service can never
   // corrupt an already-issued invoice.
-  serviceId      String?
-  service        Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
-  name           String
-  description    String?
-  amountCents    Int
-  visibility     ServiceVisibility
+  name        String
+  description String?
+  amountCents Int
+  visibility  ServiceVisibility
 
   // Only populated when visibility = REDISTRIBUTED. An EQUAL split is
   // stored as a weight of 1 on every invoice line at creation time — there
   // is no separate "strategy" column, weighted distribution is the only
   // math the read path needs (see InvoiceCalculationService.computeWeightedSplit).
-  weights        InvoiceServiceLineWeight[]
+  weights InvoiceServiceLineWeight[]
 
-  createdAt      DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([invoiceId])
 }
@@ -200,15 +214,15 @@ model InvoiceServiceLine {
 // the weight is; the split itself is recomputed on every read, same
 // "derived data is never persisted" rule as invoice totals.
 model InvoiceServiceLineWeight {
-  id                   String             @id @default(uuid())
+  id String @id @default(uuid())
 
   invoiceServiceLineId String
   invoiceServiceLine   InvoiceServiceLine @relation(fields: [invoiceServiceLineId], references: [id], onDelete: Cascade)
 
-  invoiceLineId        String
-  invoiceLine          InvoiceLine        @relation(fields: [invoiceLineId], references: [id], onDelete: Cascade)
+  invoiceLineId String
+  invoiceLine   InvoiceLine @relation(fields: [invoiceLineId], references: [id], onDelete: Cascade)
 
-  weight               Int
+  weight Int
 
   @@unique([invoiceServiceLineId, invoiceLineId])
 }

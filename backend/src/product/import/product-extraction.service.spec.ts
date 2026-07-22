@@ -96,10 +96,10 @@ describe('ProductExtractionService', () => {
   });
 
   it.each([
-    ['Parquet 25.5 m² lot', 'm²'],
-    ['Colle 5 kg', 'kg'],
-    ['Sous-couche 10 m2', 'm²'],
-    ['Vendu à l’unité', 'unité'],
+    ['Parquet 25.5 m² lot', 'SQUARE_METER'],
+    ['Colle 5 kg', 'KILOGRAM'],
+    ['Sous-couche 10 m2', 'SQUARE_METER'],
+    ['Vendu à l’unité', 'UNIT'],
     ['Rien de reconnaissable dans ce texte', null],
   ])('detects the unit from "%s" as %s', (text, expectedUnit) => {
     const html = `<title>${text}</title>`;

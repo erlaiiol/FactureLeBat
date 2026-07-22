@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsNumber, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { LineMode, WasteSurcharge } from '../../../generated/prisma/enums';
+import { Unit, WasteSurcharge } from '../../../generated/prisma/enums';
 import { WasteSurchargeOnlyForArea } from './waste-surcharge-only-for-area.validator';
 
 // Upper bounds are generous for a real-world invoice line but finite: they
@@ -16,13 +16,11 @@ export class CreateInvoiceLineDto {
   @MaxLength(300)
   description: string;
 
-  @IsString()
-  @MinLength(1)
-  @MaxLength(20)
-  unit: string;
-
-  @IsEnum(LineMode)
-  mode: LineMode;
+  // Phase 7: a fixed, curated vocabulary — the client picks one from a
+  // dropdown, never types free text. The AREA/UNIT calculation mode is
+  // derived from this value (isAreaUnit()), not accepted as separate input.
+  @IsEnum(Unit)
+  unit: Unit;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 3 })

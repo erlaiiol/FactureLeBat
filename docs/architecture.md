@@ -69,6 +69,15 @@ Both modes share the same invariant: the invoice's displayed total increases by 
 4. `InvoiceService` hands the persisted row to `InvoiceMapper.toInvoiceWithTotals()`, which calls `InvoiceCalculationService` once per line and returns the full response — **no total is ever stored**; it's recomputed on every read.
 5. `GET /api/invoices/:id/pdf` follows the same path up to `InvoiceMapper.toPdfData()`, then hands a plain data object to `PdfService` (isolated: it knows nothing about Prisma or business rules, only how to lay out a document — see `pdf.service.ts`).
 
+### Request flow: previewing a draft invoice's PDF (Phase 6)
+
+`POST /invoices/preview` takes the same `CreateInvoiceDto` as a real create, but never touches Prisma beyond reading the (already-loaded) company profile — nothing is persisted, so the artisan can preview at any point before saving:
+
+1. `InvoiceController.previewPdf()` validates the body with the same `CreateInvoiceDto` as `create()`, then calls `InvoiceService.previewPdf()`.
+2. `InvoiceService.previewPdf()` loads the company profile and hands both to `InvoiceMapper.toPreviewPdfData()` — deliberately skips `create()`'s `customerId`/`serviceId` existence checks, since nothing is persisted and a stale id can't corrupt any stored data.
+3. `toPreviewPdfData()` runs `InvoiceCalculationService` positionally over `dto.lines`/`dto.serviceLines` (no persisted ids exist yet) instead of over persisted rows, reusing the same `expandServiceLineWeights` redistribution rule `create()` uses, so the two paths can never compute a different total for the same input. The result's `number` field is the literal placeholder `'BROUILLON'`, never a real allocated number.
+4. `PdfService` renders it exactly like a real invoice's PDF — it has no idea the data didn't come from a persisted row.
+
 ### Request flow: importing a product from a supplier URL (Phase 4)
 
 `POST /api/products/import` never touches Prisma — it's the one endpoint in the backend whose entire job is to make an outbound network call on the artisan's behalf, so its risk profile is different from everything else here and it's isolated accordingly:
@@ -97,8 +106,13 @@ src/app/
     models/      TypeScript types mirroring backend DTOs/response shapes
     services/    thin HttpClient wrappers (one per backend domain)
   features/
-    invoice-create/   the main screen: customer + line items + service lines (Phase 5) +
-                      live total preview
+    invoice-create/   the invoice creation flow (Phase 6): a shell
+                      (invoice-create-shell.page) hosting two routed steps —
+                      customer-step/ and lines-step/ — plus invoice-draft.store.ts,
+                      a shared providedIn:'root' store (customer + lines +
+                      service lines + live total preview) both steps and the
+                      shell read/write, persisted to localStorage so a
+                      refresh mid-flow doesn't lose the draft
     invoice-list/     list + PDF download
     customer-list/    saved customers, search
     customer-form/    create/edit a customer (one page, keyed off a route id param)

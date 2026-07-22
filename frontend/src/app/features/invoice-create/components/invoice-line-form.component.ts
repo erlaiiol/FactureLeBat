@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { LineMode, WasteSurcharge } from '../../../core/models/invoice.model';
+import { WasteSurcharge } from '../../../core/models/invoice.model';
+import { isAreaUnit, Unit, UNIT_OPTIONS } from '../../../core/models/unit.model';
+import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 
 export type InvoiceLineFormGroup = FormGroup<{
   description: FormControl<string>;
-  unit: FormControl<string>;
-  mode: FormControl<LineMode>;
+  unit: FormControl<Unit>;
   quantity: FormControl<number>;
   unitPriceEuros: FormControl<number>;
   wasteSurcharge: FormControl<WasteSurcharge>;
@@ -14,7 +15,7 @@ export type InvoiceLineFormGroup = FormGroup<{
 @Component({
   selector: 'app-invoice-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, FieldHintComponent],
   templateUrl: './invoice-line-form.component.html',
 })
 export class InvoiceLineFormComponent {
@@ -22,7 +23,12 @@ export class InvoiceLineFormComponent {
   readonly index = input.required<number>();
   readonly remove = output<void>();
 
+  protected readonly unitOptions = UNIT_OPTIONS;
+
+  // Phase 7: the calculation mode is no longer a separate choice — picking
+  // a unit that has area semantics (m²) is what turns on waste-surcharge
+  // billing, exactly like the backend derives it (see unit.util.ts).
   protected isAreaMode(): boolean {
-    return this.group().controls.mode.value === 'AREA';
+    return isAreaUnit(this.group().controls.unit.value);
   }
 }

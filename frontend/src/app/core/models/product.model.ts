@@ -1,8 +1,10 @@
+import { Unit } from './unit.model';
+
 export interface ProductProfile {
   id: string;
   name: string;
   description: string | null;
-  unit: string;
+  unit: Unit;
   priceCents: number;
   supplierName: string | null;
   supplierUrl: string | null;
@@ -13,7 +15,7 @@ export interface ProductProfile {
 export interface UpsertProductRequest {
   name: string;
   description?: string;
-  unit: string;
+  unit: Unit;
   priceCents: number;
   supplierName?: string;
   supplierUrl?: string;
@@ -25,7 +27,7 @@ export interface UpsertProductRequest {
 export interface ImportedProductDraft {
   name: string | null;
   description: string | null;
-  unit: string | null;
+  unit: Unit | null;
   priceCents: number | null;
   supplierName: string | null;
   supplierUrl: string;

@@ -1,4 +1,5 @@
-import { LineMode, WasteSurcharge } from '../../core/models/invoice.model';
+import { WasteSurcharge } from '../../core/models/invoice.model';
+import { isAreaUnit, Unit } from '../../core/models/unit.model';
 
 // Mirrors the backend's InvoiceCalculationService formulas so the create
 // screen can show a live running total while the artisan types.
@@ -6,7 +7,7 @@ import { LineMode, WasteSurcharge } from '../../core/models/invoice.model';
 // truth for the persisted invoice's totals, never this client-side estimate.
 
 export interface LinePreviewInput {
-  mode: LineMode;
+  unit: Unit;
   quantity: number;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
@@ -22,8 +23,9 @@ export function computeLineTotalPreviewCents(line: LinePreviewInput): number {
   if (!Number.isFinite(line.quantity) || !Number.isFinite(line.unitPriceCents)) {
     return 0;
   }
-  const wasteBasisPoints =
-    line.mode === 'AREA' ? WASTE_SURCHARGE_BASIS_POINTS[line.wasteSurcharge] : 0;
+  const wasteBasisPoints = isAreaUnit(line.unit)
+    ? WASTE_SURCHARGE_BASIS_POINTS[line.wasteSurcharge]
+    : 0;
   const billedQuantity = (line.quantity * (10000 + wasteBasisPoints)) / 10000;
   return Math.round(billedQuantity * line.unitPriceCents);
 }

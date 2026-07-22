@@ -7,7 +7,7 @@ import {
   InvoiceServiceLineWeightModel as InvoiceServiceLineWeight,
   CompanyModel as Company,
 } from '../../generated/prisma/models';
-import { LineMode, WasteSurcharge, ServiceVisibility } from '../../generated/prisma/enums';
+import { Unit, WasteSurcharge, ServiceVisibility } from '../../generated/prisma/enums';
 
 export type InvoiceWithLines = Invoice & {
   lines: InvoiceLine[];
@@ -17,8 +17,7 @@ export type InvoiceWithLines = Invoice & {
 
 export interface CreateInvoiceLineData {
   description: string;
-  unit: string;
-  mode: LineMode;
+  unit: Unit;
   quantity: number;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
@@ -95,7 +94,6 @@ export class InvoiceRepository {
               position: index,
               description: line.description,
               unit: line.unit,
-              mode: line.mode,
               quantity: line.quantity,
               unitPriceCents: line.unitPriceCents,
               wasteSurcharge: line.wasteSurcharge,

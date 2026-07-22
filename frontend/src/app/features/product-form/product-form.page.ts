@@ -2,16 +2,20 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Unit, UNIT_OPTIONS } from '../../core/models/unit.model';
 import { ProductService } from '../../core/services/product.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { FieldHintComponent } from '../../shared/components/field-hint.component';
 
 @Component({
   selector: 'app-product-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent],
+  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
   templateUrl: './product-form.page.html',
 })
 export class ProductFormPage {
+  protected readonly unitOptions = UNIT_OPTIONS;
+
   private readonly productService = inject(ProductService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
@@ -34,7 +38,7 @@ export class ProductFormPage {
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     description: [''],
-    unit: ['', Validators.required],
+    unit: this.fb.nonNullable.control<Unit>('SQUARE_METER', Validators.required),
     // Entered as a plain euro amount and converted to cents on submit — the
     // same boundary-conversion convention as the invoice line form.
     priceEuros: [0, [Validators.required, Validators.min(0)]],
@@ -91,7 +95,7 @@ export class ProductFormPage {
           this.form.patchValue({
             name: draft.name ?? this.form.value.name ?? '',
             description: draft.description ?? this.form.value.description ?? '',
-            unit: draft.unit ?? this.form.value.unit ?? '',
+            unit: draft.unit ?? this.form.value.unit,
             priceEuros:
               draft.priceCents != null ? draft.priceCents / 100 : this.form.value.priceEuros,
             supplierName: draft.supplierName ?? this.form.value.supplierName ?? '',

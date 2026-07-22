@@ -7,8 +7,8 @@ function basePayload(overrides: Record<string, unknown> = {}) {
   return {
     customerName: 'M. Dupont',
     lines: [
-      { description: 'Parquet', unit: 'm2', mode: 'AREA', quantity: 10, unitPriceCents: 4500 },
-      { description: 'Plinthes', unit: 'unite', mode: 'UNIT', quantity: 5, unitPriceCents: 800 },
+      { description: 'Parquet', unit: 'SQUARE_METER', quantity: 10, unitPriceCents: 4500 },
+      { description: 'Plinthes', unit: 'UNIT', quantity: 5, unitPriceCents: 800 },
     ],
     ...overrides,
   };

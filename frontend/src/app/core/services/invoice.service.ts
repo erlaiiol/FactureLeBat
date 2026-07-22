@@ -24,4 +24,11 @@ export class InvoiceService {
   pdfUrl(id: string): string {
     return `${this.baseUrl}/${id}/pdf`;
   }
+
+  // Phase 6: renders a PDF from a not-yet-saved draft — same request shape
+  // as create(), but nothing is persisted server-side (see
+  // InvoiceService.previewPdf on the backend).
+  previewPdf(request: CreateInvoiceRequest): Observable<Blob> {
+    return this.http.post(`${this.baseUrl}/preview`, request, { responseType: 'blob' });
+  }
 }

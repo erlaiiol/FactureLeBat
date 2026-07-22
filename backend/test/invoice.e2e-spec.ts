@@ -49,16 +49,14 @@ describe('Invoice pipeline (e2e)', () => {
         lines: [
           {
             description: 'Parquet chene massif pose',
-            unit: 'm2',
-            mode: 'AREA',
+            unit: 'SQUARE_METER',
             quantity: 10,
             unitPriceCents: 4500,
             wasteSurcharge: 'TEN',
           },
           {
             description: 'Plinthes',
-            unit: 'unite',
-            mode: 'UNIT',
+            unit: 'UNIT',
             quantity: 5,
             unitPriceCents: 800,
           },
@@ -112,8 +110,7 @@ describe('Invoice pipeline (e2e)', () => {
         lines: [
           {
             description: 'Plinthes',
-            unit: 'unite',
-            mode: 'UNIT',
+            unit: 'UNIT',
             quantity: 1,
             unitPriceCents: 100,
           },
@@ -138,8 +135,7 @@ describe('Invoice pipeline (e2e)', () => {
         lines: [
           {
             description: 'Plinthes',
-            unit: 'unite',
-            mode: 'UNIT',
+            unit: 'UNIT',
             quantity: 1,
             unitPriceCents: 100,
           },
@@ -151,8 +147,8 @@ describe('Invoice pipeline (e2e)', () => {
   // Phase 5: service lines, both visibility modes.
   describe('service lines', () => {
     const twoLines = [
-      { description: 'Parquet', unit: 'm2', mode: 'AREA', quantity: 10, unitPriceCents: 4500 },
-      { description: 'Plinthes', unit: 'unite', mode: 'UNIT', quantity: 5, unitPriceCents: 800 },
+      { description: 'Parquet', unit: 'SQUARE_METER', quantity: 10, unitPriceCents: 4500 },
+      { description: 'Plinthes', unit: 'UNIT', quantity: 5, unitPriceCents: 800 },
     ];
     const baseSubtotal = 10 * 4500 + 5 * 800;
 
@@ -284,6 +280,39 @@ describe('Invoice pipeline (e2e)', () => {
           ],
         })
         .expect(404);
+    });
+  });
+
+  // Phase 6: preview a draft invoice's PDF without ever saving it.
+  describe('preview', () => {
+    const twoLines = [
+      { description: 'Parquet', unit: 'SQUARE_METER', quantity: 10, unitPriceCents: 4500 },
+      { description: 'Plinthes', unit: 'UNIT', quantity: 5, unitPriceCents: 800 },
+    ];
+
+    it('renders a PDF for an unsaved draft, without persisting an invoice', async () => {
+      const invoiceCountBefore = await prisma.invoice.count();
+
+      const previewResponse = await request(app.getHttpServer())
+        .post('/api/invoices/preview')
+        .send({
+          customerName: 'E2E Preview Customer',
+          lines: twoLines,
+          serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000, visibility: 'VISIBLE' }],
+        })
+        .expect(201);
+
+      expect(previewResponse.headers['content-type']).toBe('application/pdf');
+      expect((previewResponse.body as Buffer).subarray(0, 4).toString('ascii')).toBe('%PDF');
+
+      expect(await prisma.invoice.count()).toBe(invoiceCountBefore);
+    });
+
+    it('rejects a preview of a draft with no lines, same validation as a real create', () => {
+      return request(app.getHttpServer())
+        .post('/api/invoices/preview')
+        .send({ customerName: 'No Lines Customer', lines: [] })
+        .expect(400);
     });
   });
 });

@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
-import { LineMode, WasteSurcharge } from '../../../generated/prisma/enums';
+import { Unit, WasteSurcharge } from '../../../generated/prisma/enums';
+import { isAreaUnit } from '../../common/unit.util';
 
 export interface LineCalculationInput {
-  mode: LineMode;
+  unit: Unit;
   quantity: Prisma.Decimal | number | string;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
@@ -40,8 +41,9 @@ const WASTE_SURCHARGE_BASIS_POINTS: Record<WasteSurcharge, number> = {
 export class InvoiceCalculationService {
   computeLineTotal(line: LineCalculationInput): LineCalculationResult {
     const quantity = new Prisma.Decimal(line.quantity);
-    const wasteBasisPoints =
-      line.mode === 'AREA' ? WASTE_SURCHARGE_BASIS_POINTS[line.wasteSurcharge] : 0;
+    const wasteBasisPoints = isAreaUnit(line.unit)
+      ? WASTE_SURCHARGE_BASIS_POINTS[line.wasteSurcharge]
+      : 0;
 
     const billedQuantity = quantity.mul(10000 + wasteBasisPoints).div(10000);
     const lineTotalExclVatCents = billedQuantity

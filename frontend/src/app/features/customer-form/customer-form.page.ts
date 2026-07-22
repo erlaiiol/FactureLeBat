@@ -4,11 +4,12 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CustomerService } from '../../core/services/customer.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { FieldHintComponent } from '../../shared/components/field-hint.component';
 
 @Component({
   selector: 'app-customer-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent],
+  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
   templateUrl: './customer-form.page.html',
 })
 export class CustomerFormPage {

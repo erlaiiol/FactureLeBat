@@ -7,11 +7,12 @@ import { ProductProfile } from '../../core/models/product.model';
 import { ProductService } from '../../core/services/product.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
+import { UnitLabelPipe } from '../../shared/pipes/unit-label.pipe';
 
 @Component({
   selector: 'app-product-list-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, CentsToEurosPipe],
+  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, CentsToEurosPipe, UnitLabelPipe],
   templateUrl: './product-list.page.html',
 })
 export class ProductListPage {

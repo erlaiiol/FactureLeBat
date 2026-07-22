@@ -1,11 +1,12 @@
-import { LineMode, ServiceVisibility, WasteSurcharge } from '../../../generated/prisma/enums';
+import { ServiceVisibility, Unit, WasteSurcharge } from '../../../generated/prisma/enums';
 
 export interface InvoiceLineWithTotal {
   id: string;
   position: number;
   description: string;
-  unit: string;
-  mode: LineMode;
+  // Phase 7: a fixed enum, not free text — the AREA/UNIT calculation mode
+  // is derived from it (isAreaUnit()), never a separate response field.
+  unit: Unit;
   // Serialized as a string (Prisma Decimal -> toString()), not a JS number:
   // JSON has no decimal type, and round-tripping through a float here would
   // reintroduce exactly the precision risk Decimal exists to avoid.

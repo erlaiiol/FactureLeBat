@@ -40,7 +40,7 @@ describe('Product pipeline (e2e)', () => {
       .post('/api/products')
       .send({
         name: 'E2E Parquet chene massif',
-        unit: 'm2',
+        unit: 'SQUARE_METER',
         priceCents: 4500,
         supplierName: 'E2E Supplier',
         supplierUrl: 'https://supplier.example.com/parquet-chene',
@@ -59,7 +59,7 @@ describe('Product pipeline (e2e)', () => {
 
     const updateResponse = await request(app.getHttpServer())
       .patch(`/api/products/${created.id}`)
-      .send({ name: 'E2E Parquet chene massif updated', unit: 'm2', priceCents: 4800 })
+      .send({ name: 'E2E Parquet chene massif updated', unit: 'SQUARE_METER', priceCents: 4800 })
       .expect(200);
     expect((updateResponse.body as ProductProfile).name).toBe('E2E Parquet chene massif updated');
     expect((updateResponse.body as ProductProfile).priceCents).toBe(4800);
@@ -78,7 +78,7 @@ describe('Product pipeline (e2e)', () => {
       .post('/api/products')
       .send({
         name: 'Bad Supplier Product',
-        unit: 'unite',
+        unit: 'UNIT',
         priceCents: 100,
         supplierUrl: 'not-a-url',
       })
@@ -97,7 +97,7 @@ describe('Product pipeline (e2e)', () => {
   it('returns 404 when patching an unknown product id, not a raw DB error', () => {
     return request(app.getHttpServer())
       .patch('/api/products/00000000-0000-0000-0000-000000000000')
-      .send({ name: 'Ghost Product', unit: 'unite', priceCents: 100 })
+      .send({ name: 'Ghost Product', unit: 'UNIT', priceCents: 100 })
       .expect(404);
   });
 

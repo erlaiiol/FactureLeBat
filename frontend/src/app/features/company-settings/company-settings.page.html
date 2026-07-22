@@ -17,6 +17,7 @@
       type="text"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Le nom affiché en haut de chaque facture." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -28,6 +29,7 @@
       maxlength="14"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Votre numéro d'identification légal — obligatoire sur toute facture." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -37,6 +39,7 @@
       type="text"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="L'adresse de votre entreprise, affichée sur vos factures." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -46,6 +49,7 @@
       type="text"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Facultatif — bâtiment, étage, zone d'activité…" />
   </label>
 
   <div class="flex gap-4">
@@ -56,6 +60,7 @@
         type="text"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
+      <app-field-hint text="Le code postal de votre entreprise." />
     </label>
     <label class="flex flex-[2] flex-col gap-1">
       <span class="text-sm font-medium text-slate-700">Ville</span>
@@ -64,6 +69,7 @@
         type="text"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
+      <app-field-hint text="La ville de votre entreprise." />
     </label>
   </div>
 
@@ -74,6 +80,7 @@
       type="email"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Facultatif — affiché sur vos factures pour vous contacter." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -83,6 +90,7 @@
       type="tel"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Facultatif — affiché sur vos factures pour vous contacter." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -94,6 +102,9 @@
       <option value="MICRO_ENTREPRENEUR">Micro-entrepreneur (sans TVA)</option>
       <option value="COMPANY">Entreprise (avec TVA)</option>
     </select>
+    <app-field-hint
+      text="Détermine si la TVA s'applique automatiquement sur vos futures factures."
+    />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -104,6 +115,7 @@
       step="0.1"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Utilisé uniquement si votre statut applique la TVA." />
   </label>
 
   <app-big-button type="submit" [disabled]="saving()">

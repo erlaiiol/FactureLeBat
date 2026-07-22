@@ -1,6 +1,47 @@
+import { CompanyModel } from '../../generated/prisma/models';
 import { InvoiceCalculationService } from './calculation/invoice-calculation.service';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { CreateInvoiceLineDto } from './dto/create-invoice-line.dto';
+import { RedistributionStrategy } from './dto/redistribution-strategy.enum';
 import { InvoiceMapper } from './invoice.mapper';
 import { InvoiceWithLines } from './invoice.repository';
+
+function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
+  return {
+    id: 'company-1',
+    name: 'Parquets Raillere',
+    siret: '12345678900012',
+    addressLine1: '1 rue des Artisans',
+    addressLine2: null,
+    postalCode: '69001',
+    city: 'Lyon',
+    email: null,
+    phone: null,
+    legalStatus: 'COMPANY',
+    vatRateBasisPoints: 2000,
+    invoiceNumberPrefix: 'F',
+    nextInvoiceNumber: 2,
+    createdAt: new Date('2026-01-15'),
+    updatedAt: new Date('2026-01-15'),
+    ...overrides,
+  };
+}
+
+function createInvoiceDtoFixture(overrides: Partial<CreateInvoiceDto> = {}): CreateInvoiceDto {
+  return {
+    customerName: 'M. Dupont',
+    lines: [
+      {
+        description: 'Parquet',
+        unit: 'SQUARE_METER',
+        quantity: 10,
+        unitPriceCents: 4500,
+        wasteSurcharge: 'NONE',
+      },
+    ],
+    ...overrides,
+  };
+}
 
 function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithLines {
   return {
@@ -23,8 +64,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
         invoiceId: 'inv-1',
         position: 0,
         description: 'Parquet',
-        unit: 'm2',
-        mode: 'AREA',
+        unit: 'SQUARE_METER',
         quantity: '10' as unknown as InvoiceWithLines['lines'][number]['quantity'],
         unitPriceCents: 4500,
         wasteSurcharge: 'NONE',
@@ -108,8 +148,7 @@ describe('InvoiceMapper', () => {
             invoiceId: 'inv-1',
             position: 0,
             description: 'Parquet',
-            unit: 'm2',
-            mode: 'AREA',
+            unit: 'SQUARE_METER',
             quantity: '10' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             unitPriceCents: 4500,
             wasteSurcharge: 'NONE',
@@ -120,8 +159,7 @@ describe('InvoiceMapper', () => {
             invoiceId: 'inv-1',
             position: 1,
             description: 'Plinthes',
-            unit: 'unite',
-            mode: 'UNIT',
+            unit: 'UNIT',
             quantity: '5' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             unitPriceCents: 800,
             wasteSurcharge: 'NONE',
@@ -179,6 +217,135 @@ describe('InvoiceMapper', () => {
       const withTotals = mapper.toInvoiceWithTotals(invoice);
       const pdfData = mapper.toPdfData(invoice);
       expect(pdfData.totalInclVatCents).toBe(withTotals.totalInclVatCents);
+    });
+  });
+
+  describe('toPreviewPdfData', () => {
+    it('computes the same line and VAT totals as the persisted path, for equivalent input', () => {
+      const invoice = invoiceWithLines();
+      const persisted = mapper.toPdfData(invoice);
+      const preview = mapper.toPreviewPdfData(createInvoiceDtoFixture(), companyFixture());
+
+      expect(preview.lines[0].totalCents).toBe(persisted.lines[0].totalCents);
+      expect(preview.subtotalExclVatCents).toBe(persisted.subtotalExclVatCents);
+      expect(preview.vatAmountCents).toBe(persisted.vatAmountCents);
+      expect(preview.totalInclVatCents).toBe(persisted.totalInclVatCents);
+    });
+
+    it('never sets a real invoice number, since nothing is persisted', () => {
+      const preview = mapper.toPreviewPdfData(createInvoiceDtoFixture(), companyFixture());
+      expect(preview.number).toBe('BROUILLON');
+    });
+
+    it('takes issuer identity from the passed-in company, not any persisted invoice', () => {
+      const preview = mapper.toPreviewPdfData(
+        createInvoiceDtoFixture(),
+        companyFixture({ name: 'Autre Artisan', siret: '98765432100099' }),
+      );
+      expect(preview.issuerName).toBe('Autre Artisan');
+      expect(preview.issuerSiret).toBe('98765432100099');
+    });
+
+    it('excludes VAT for a MICRO_ENTREPRENEUR company', () => {
+      const preview = mapper.toPreviewPdfData(
+        createInvoiceDtoFixture(),
+        companyFixture({ legalStatus: 'MICRO_ENTREPRENEUR' }),
+      );
+      expect(preview.vatApplicable).toBe(false);
+      expect(preview.vatAmountCents).toBe(0);
+      expect(preview.totalInclVatCents).toBe(preview.subtotalExclVatCents);
+    });
+
+    it('adds a VISIBLE service line amount to the subtotal without touching any line total', () => {
+      const dto = createInvoiceDtoFixture({
+        serviceLines: [
+          {
+            name: "Main-d'œuvre",
+            amountCents: 10000,
+            visibility: 'VISIBLE',
+          },
+        ],
+      });
+      const preview = mapper.toPreviewPdfData(dto, companyFixture());
+
+      expect(preview.lines[0].totalCents).toBe(45000);
+      expect(preview.serviceLines).toEqual([{ name: "Main-d'œuvre", amountCents: 10000 }]);
+      expect(preview.subtotalExclVatCents).toBe(45000 + 10000);
+    });
+
+    it('folds an EQUAL REDISTRIBUTED service line evenly across every draft line, matching the persisted expansion rule', () => {
+      const twoLines: CreateInvoiceLineDto[] = [
+        {
+          description: 'Parquet',
+          unit: 'SQUARE_METER',
+          quantity: 10,
+          unitPriceCents: 4500,
+          wasteSurcharge: 'NONE',
+        },
+        {
+          description: 'Plinthes',
+          unit: 'UNIT',
+          quantity: 5,
+          unitPriceCents: 800,
+          wasteSurcharge: 'NONE',
+        },
+      ];
+      const dto = createInvoiceDtoFixture({
+        lines: twoLines,
+        serviceLines: [
+          {
+            name: 'Savoir-faire',
+            amountCents: 10000,
+            visibility: 'REDISTRIBUTED',
+            redistributionStrategy: RedistributionStrategy.EQUAL,
+          },
+        ],
+      });
+      const preview = mapper.toPreviewPdfData(dto, companyFixture());
+
+      const baseSubtotal = 45000 + 4000; // 10*4500 + 5*800
+      const totalLineCents = preview.lines.reduce((sum, line) => sum + line.totalCents, 0);
+      expect(totalLineCents).toBe(baseSubtotal + 10000);
+      // No standalone service-line row for a REDISTRIBUTED line — already
+      // folded into the lines above, same rule as the persisted path.
+      expect(preview.serviceLines).toEqual([]);
+      expect(preview.subtotalExclVatCents).toBe(baseSubtotal + 10000);
+    });
+
+    it('folds a WEIGHTED REDISTRIBUTED service line by the given per-line weights', () => {
+      const twoLines: CreateInvoiceLineDto[] = [
+        {
+          description: 'Parquet',
+          unit: 'SQUARE_METER',
+          quantity: 10,
+          unitPriceCents: 4500,
+          wasteSurcharge: 'NONE',
+        },
+        {
+          description: 'Plinthes',
+          unit: 'UNIT',
+          quantity: 5,
+          unitPriceCents: 800,
+          wasteSurcharge: 'NONE',
+        },
+      ];
+      const dto = createInvoiceDtoFixture({
+        lines: twoLines,
+        serviceLines: [
+          {
+            name: 'Savoir-faire',
+            amountCents: 10000,
+            visibility: 'REDISTRIBUTED',
+            redistributionStrategy: RedistributionStrategy.WEIGHTED,
+            weights: [3, 1],
+          },
+        ],
+      });
+      const preview = mapper.toPreviewPdfData(dto, companyFixture());
+
+      // weight 3:1 split of 10000 -> 7500 / 2500
+      expect(preview.lines[0].totalCents).toBe(45000 + 7500);
+      expect(preview.lines[1].totalCents).toBe(4000 + 2500);
     });
   });
 });

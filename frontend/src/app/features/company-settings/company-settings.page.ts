@@ -4,11 +4,12 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CompanyService } from '../../core/services/company.service';
 import { LegalStatus } from '../../core/models/company.model';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { FieldHintComponent } from '../../shared/components/field-hint.component';
 
 @Component({
   selector: 'app-company-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent],
+  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
   templateUrl: './company-settings.page.html',
 })
 export class CompanySettingsPage {

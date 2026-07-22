@@ -50,6 +50,7 @@
       placeholder="Parquet chêne massif"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Le nom affiché quand vous choisissez ce produit sur une facture." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -59,6 +60,7 @@
       rows="3"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     ></textarea>
+    <app-field-hint text="Facultatif — des précisions internes (référence, teinte, épaisseur…)." />
   </label>
 
   <div class="flex gap-3">
@@ -71,15 +73,16 @@
         min="0"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
+      <app-field-hint text="Le prix pour une seule unité, sera pré-rempli sur vos factures." />
     </label>
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-slate-700">Unité</span>
-      <input
-        formControlName="unit"
-        type="text"
-        placeholder="m2"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-      />
+      <select formControlName="unit" class="rounded-lg border border-slate-300 px-4 py-3 text-lg">
+        @for (option of unitOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+      <app-field-hint text="La façon dont ce produit se vend (au m², à l’unité, au litre…)." />
     </label>
   </div>
 
@@ -90,6 +93,7 @@
       type="text"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Facultatif — chez qui vous achetez ce produit." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -100,6 +104,7 @@
       placeholder="https://…"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Facultatif — un lien vers la page du produit chez ce fournisseur." />
   </label>
 
   @if (errorMessage(); as message) {

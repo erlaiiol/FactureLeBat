@@ -33,7 +33,7 @@
             }
           </div>
           <span class="text-lg font-semibold text-slate-900">
-            {{ product.priceCents | centsToEuros }} / {{ product.unit }}
+            {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
           </span>
         </a>
       </li>

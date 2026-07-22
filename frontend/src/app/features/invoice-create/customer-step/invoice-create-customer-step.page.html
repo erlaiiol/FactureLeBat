@@ -1,0 +1,73 @@
+<h1 class="mb-6 text-2xl font-bold text-slate-900">Nouvelle facture — Client</h1>
+
+<form [formGroup]="customerForm" (ngSubmit)="next()" class="flex flex-col gap-4">
+  @if (draftStore.customers().length > 0) {
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Client enregistré</span>
+      <select
+        (change)="onCustomerSelected($any($event.target).value)"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      >
+        <option value="">— Sélectionner —</option>
+        @for (customer of draftStore.customers(); track customer.id) {
+          <option [value]="customer.id" [selected]="customer.id === selectedCustomerId()">
+            {{ customer.name }}
+          </option>
+        }
+      </select>
+    </label>
+  }
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Nom du client</span>
+    <input
+      formControlName="customerName"
+      type="text"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+    <app-field-hint text="Le nom qui apparaîtra sur la facture." />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Adresse</span>
+    <input
+      formControlName="customerAddress"
+      type="text"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+    <app-field-hint text="L'adresse à facturer, affichée sur la facture." />
+  </label>
+
+  <div class="flex gap-3">
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Email</span>
+      <input
+        formControlName="customerEmail"
+        type="email"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+      <app-field-hint text="Facultatif." />
+    </label>
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Téléphone</span>
+      <input
+        formControlName="customerPhone"
+        type="tel"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+      <app-field-hint text="Facultatif." />
+    </label>
+  </div>
+
+  @if (!selectedCustomerId()) {
+    <label class="flex items-center gap-2">
+      <input formControlName="saveAsNewCustomer" type="checkbox" class="h-5 w-5" />
+      <span class="text-sm font-medium text-slate-700">
+        Enregistrer ce client pour la prochaine fois
+      </span>
+    </label>
+    <app-field-hint text="Vous pourrez le retrouver directement sur vos prochaines factures." />
+  }
+
+  <app-big-button type="submit">Suivant : lignes &amp; prestations</app-big-button>
+</form>

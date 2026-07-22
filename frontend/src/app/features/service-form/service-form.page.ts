@@ -5,11 +5,12 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ServiceVisibility } from '../../core/models/service.model';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { FieldHintComponent } from '../../shared/components/field-hint.component';
 
 @Component({
   selector: 'app-service-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent],
+  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
   templateUrl: './service-form.page.html',
 })
 export class ServiceFormPage {

@@ -2,7 +2,7 @@ import { InvoiceCalculationService, LineCalculationInput } from './invoice-calcu
 
 function areaLine(overrides: Partial<LineCalculationInput> = {}): LineCalculationInput {
   return {
-    mode: 'AREA',
+    unit: 'SQUARE_METER',
     quantity: 10,
     unitPriceCents: 4500,
     wasteSurcharge: 'NONE',
@@ -12,7 +12,7 @@ function areaLine(overrides: Partial<LineCalculationInput> = {}): LineCalculatio
 
 function unitLine(overrides: Partial<LineCalculationInput> = {}): LineCalculationInput {
   return {
-    mode: 'UNIT',
+    unit: 'UNIT',
     quantity: 3,
     unitPriceCents: 1200,
     wasteSurcharge: 'NONE',
@@ -33,7 +33,7 @@ describe('InvoiceCalculationService', () => {
       expect(result.lineTotalExclVatCents).toBe(45000);
     });
 
-    it('applies a 10% waste surcharge to the billed quantity for area mode lines', () => {
+    it('applies a 10% waste surcharge to the billed quantity for a SQUARE_METER line', () => {
       const result = service.computeLineTotal(
         areaLine({ quantity: 10, unitPriceCents: 4500, wasteSurcharge: 'TEN' }),
       );
@@ -41,7 +41,7 @@ describe('InvoiceCalculationService', () => {
       expect(result.lineTotalExclVatCents).toBe(49500);
     });
 
-    it('applies a 20% waste surcharge to the billed quantity for area mode lines', () => {
+    it('applies a 20% waste surcharge to the billed quantity for a SQUARE_METER line', () => {
       const result = service.computeLineTotal(
         areaLine({ quantity: 10, unitPriceCents: 4500, wasteSurcharge: 'TWENTY' }),
       );
@@ -49,7 +49,7 @@ describe('InvoiceCalculationService', () => {
       expect(result.lineTotalExclVatCents).toBe(54000);
     });
 
-    it('computes a unit mode line total as quantity times unit price, ignoring any waste surcharge', () => {
+    it('computes a non-square-meter line total as quantity times unit price, ignoring any waste surcharge', () => {
       const result = service.computeLineTotal(
         unitLine({ quantity: 3, unitPriceCents: 1200, wasteSurcharge: 'TWENTY' }),
       );

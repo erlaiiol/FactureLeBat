@@ -18,17 +18,22 @@
       placeholder="Ex : Parquet chêne massif posé"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
-  </label>
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Mode de calcul</span>
-    <select formControlName="mode" class="rounded-lg border border-slate-300 px-4 py-3 text-lg">
-      <option value="AREA">Surface (m²)</option>
-      <option value="UNIT">Quantité (produits)</option>
-    </select>
+    <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
   </label>
 
   <div class="flex gap-3">
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Unité</span>
+      <select formControlName="unit" class="rounded-lg border border-slate-300 px-4 py-3 text-lg">
+        @for (option of unitOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+      <app-field-hint
+        text="Le m² active automatiquement le calcul de surface (avec chutes en option)."
+      />
+    </label>
+
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-slate-700">
         {{ isAreaMode() ? 'Surface (m²)' : 'Quantité' }}
@@ -39,15 +44,12 @@
         step="0.01"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
-    </label>
-
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Unité</span>
-      <input
-        formControlName="unit"
-        type="text"
-        placeholder="m2, unité…"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      <app-field-hint
+        [text]="
+          isAreaMode()
+            ? 'Le nombre de m² à facturer, chutes non comprises.'
+            : 'La quantité à facturer.'
+        "
       />
     </label>
   </div>
@@ -61,6 +63,7 @@
         step="0.01"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
+      <app-field-hint text="Le prix pour une seule unité, hors chutes éventuelles." />
     </label>
 
     @if (isAreaMode()) {
@@ -74,6 +77,9 @@
           <option value="TEN">+10 %</option>
           <option value="TWENTY">+20 %</option>
         </select>
+        <app-field-hint
+          text="Ajoute automatiquement de la matière facturée pour compenser les découpes perdues."
+        />
       </label>
     }
   </div>

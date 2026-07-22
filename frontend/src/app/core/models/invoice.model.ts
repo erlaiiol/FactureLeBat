@@ -1,12 +1,14 @@
-export type LineMode = 'AREA' | 'UNIT';
+import { Unit } from './unit.model';
+
 export type WasteSurcharge = 'NONE' | 'TEN' | 'TWENTY';
 export type ServiceLineVisibility = 'VISIBLE' | 'REDISTRIBUTED';
 export type RedistributionStrategy = 'EQUAL' | 'WEIGHTED';
 
+// Phase 7: the AREA/UNIT calculation mode is derived backend-side from
+// `unit` (isAreaUnit()) — it is no longer a field the client sends.
 export interface CreateInvoiceLineRequest {
   description: string;
-  unit: string;
-  mode: LineMode;
+  unit: Unit;
   quantity: number;
   unitPriceCents: number;
   wasteSurcharge?: WasteSurcharge;
@@ -40,8 +42,7 @@ export interface InvoiceLineWithTotal {
   id: string;
   position: number;
   description: string;
-  unit: string;
-  mode: LineMode;
+  unit: Unit;
   quantity: string;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;

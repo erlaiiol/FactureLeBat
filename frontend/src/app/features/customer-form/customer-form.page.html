@@ -19,6 +19,7 @@
       type="text"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Le nom de ce client, tel qu'il apparaîtra sur ses factures." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -28,6 +29,7 @@
       type="text"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
     />
+    <app-field-hint text="Facultatif — si ce client est une entreprise plutôt qu'un particulier." />
   </label>
 
   <label class="flex flex-col gap-1">
@@ -36,6 +38,9 @@
       formControlName="address"
       type="text"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+    <app-field-hint
+      text="L'adresse à facturer, reprise automatiquement sur ses prochaines factures."
     />
   </label>
 
@@ -47,6 +52,7 @@
         type="email"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
+      <app-field-hint text="Facultatif — pour lui envoyer ses factures." />
     </label>
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-slate-700">Téléphone</span>
@@ -55,6 +61,7 @@
         type="tel"
         class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
       />
+      <app-field-hint text="Facultatif — pour le recontacter facilement." />
     </label>
   </div>
 
@@ -66,6 +73,9 @@
       inputmode="numeric"
       maxlength="14"
       class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+    <app-field-hint
+      text="Facultatif — uniquement si ce client facture lui-même en tant que professionnel."
     />
   </label>
 

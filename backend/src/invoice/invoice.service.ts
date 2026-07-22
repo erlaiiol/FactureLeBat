@@ -3,9 +3,7 @@ import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
 import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
-import { ServiceVisibility } from '../../generated/prisma/enums';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
-import { RedistributionStrategy } from './dto/redistribution-strategy.enum';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceMapper } from './invoice.mapper';
 import {
@@ -14,6 +12,7 @@ import {
   InvoiceWithLines,
 } from './invoice.repository';
 import { InvoicePdfData } from './pdf/invoice-pdf-data.interface';
+import { expandServiceLineWeights } from './redistribution.util';
 
 // Orchestration only: loads the company profile, delegates numbering +
 // persistence to the repository, delegates response shaping to the mapper.
@@ -64,28 +63,12 @@ export class InvoiceService {
       lines: dto.lines.map((line) => ({
         description: line.description,
         unit: line.unit,
-        mode: line.mode,
         quantity: line.quantity,
         unitPriceCents: line.unitPriceCents,
         wasteSurcharge: line.wasteSurcharge,
       })),
       serviceLines: serviceLineDtos.map((serviceLine): CreateInvoiceServiceLineData => {
-        if (serviceLine.visibility !== ServiceVisibility.REDISTRIBUTED) {
-          return {
-            serviceId: serviceLine.serviceId,
-            name: serviceLine.name,
-            description: serviceLine.description,
-            amountCents: serviceLine.amountCents,
-            visibility: serviceLine.visibility,
-          };
-        }
-        // EQUAL is expanded here into an explicit weight of 1 per line —
-        // from this point on, the rest of the stack only ever deals with
-        // one concept, a weighted split (see RedistributionStrategy).
-        const weights =
-          serviceLine.redistributionStrategy === RedistributionStrategy.EQUAL
-            ? dto.lines.map(() => 1)
-            : serviceLine.weights!;
+        const weights = expandServiceLineWeights(serviceLine, dto.lines.length);
         return {
           serviceId: serviceLine.serviceId,
           name: serviceLine.name,
@@ -113,6 +96,16 @@ export class InvoiceService {
   async getPdfData(id: string): Promise<InvoicePdfData> {
     const invoice = await this.findRawById(id);
     return this.mapper.toPdfData(invoice);
+  }
+
+  // Phase 6: renders a PDF from an unsaved draft (no id, no invoice number
+  // yet) so the artisan can preview an invoice at any point before saving —
+  // deliberately skips create()'s customerId/serviceId existence checks,
+  // since nothing here is persisted and a stale/typo'd id can't corrupt any
+  // stored data. Only reads the company profile; touches no other table.
+  async previewPdf(dto: CreateInvoiceDto): Promise<InvoicePdfData> {
+    const company = await this.companyService.getProfile();
+    return this.mapper.toPreviewPdfData(dto, company);
   }
 
   private async findRawById(id: string): Promise<InvoiceWithLines> {

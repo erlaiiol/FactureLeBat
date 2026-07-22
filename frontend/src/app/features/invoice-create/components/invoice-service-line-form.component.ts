@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { RedistributionStrategy, ServiceLineVisibility } from '../../../core/models/invoice.model';
 import { ServiceProfile } from '../../../core/models/service.model';
+import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 
 export type InvoiceServiceLineFormGroup = FormGroup<{
   serviceId: FormControl<string | null>;
@@ -16,7 +17,7 @@ export type InvoiceServiceLineFormGroup = FormGroup<{
 @Component({
   selector: 'app-invoice-service-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, FieldHintComponent],
   templateUrl: './invoice-service-line-form.component.html',
 })
 export class InvoiceServiceLineFormComponent {

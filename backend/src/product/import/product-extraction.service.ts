@@ -1,24 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import * as cheerio from 'cheerio';
+import { Unit } from '../../../generated/prisma/enums';
 import { ImportedProductDraft } from './entities/imported-product.entity';
 
 const NAME_MAX_LENGTH = 200;
 const SUPPLIER_NAME_MAX_LENGTH = 200;
 const DESCRIPTION_MAX_LENGTH = 2000;
 
-// Recognized construction-material unit tokens, longest/most specific
-// first so e.g. "m2" doesn't shadow a match that should be "m3".
-const UNIT_PATTERNS: Array<{ token: string; regex: RegExp }> = [
-  { token: 'm²', regex: /\bm²|\bm2\b/i },
-  { token: 'm³', regex: /\bm³|\bm3\b/i },
-  { token: 'ml', regex: /\bml\b/i },
-  { token: 'kg', regex: /\bkg\b/i },
-  { token: 'L', regex: /\b(litres?|\d\s*l)\b/i },
+// Recognized construction-material unit tokens, mapped directly to the
+// fixed Unit vocabulary (Phase 7) rather than a raw scraped string — most
+// specific first so e.g. "m2" doesn't shadow a match that should be "m3".
+const UNIT_PATTERNS: Array<{ unit: Unit; regex: RegExp }> = [
+  { unit: Unit.SQUARE_METER, regex: /\bm²|\bm2\b/i },
+  { unit: Unit.CUBIC_METER, regex: /\bm³|\bm3\b/i },
+  { unit: Unit.LINEAR_METER, regex: /\bml\b/i },
+  { unit: Unit.KILOGRAM, regex: /\bkg\b/i },
+  { unit: Unit.LITER, regex: /\b(litres?|\d\s*l)\b/i },
   // `\b` doesn't recognize "é" as a word character in JS regex, so
   // "unité" at the end of a string/before punctuation would silently fail
   // to match with a trailing `\b` — use explicit lookarounds against ASCII
   // word characters instead (verified empirically, see product-extraction.service.spec.ts).
-  { token: 'unité', regex: /(?<![a-zA-Z0-9_])unit(é|e)s?(?![a-zA-Z0-9_])/i },
+  { unit: Unit.UNIT, regex: /(?<![a-zA-Z0-9_])unit(é|e)s?(?![a-zA-Z0-9_])/i },
 ];
 
 // Pure, dependency-free apart from cheerio (no NestJS DI needs, no Prisma,
@@ -157,10 +159,10 @@ export class ProductExtractionService {
     return cents <= 100_000_000 ? cents : null; // matches CreateProductDto's MAX_PRICE_CENTS
   }
 
-  private detectUnit(text: string): string | null {
-    for (const { token, regex } of UNIT_PATTERNS) {
+  private detectUnit(text: string): Unit | null {
+    for (const { unit, regex } of UNIT_PATTERNS) {
       if (regex.test(text)) {
-        return token;
+        return unit;
       }
     }
     return null;
