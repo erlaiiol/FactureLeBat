@@ -1,8 +1,14 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Unit, UNIT_LABELS, UNIT_OPTIONS } from '../../core/models/unit.model';
+import {
+  Unit,
+  UNIT_LABELS,
+  UNIT_OPTIONS,
+  UNIT_PRICE_BUTTON_LABELS,
+} from '../../core/models/unit.model';
 import { ProductService } from '../../core/services/product.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
@@ -39,68 +45,71 @@ export class ProductFormPage {
   // picked (e.g. "Vendu par colis de ... m²").
   protected readonly unitLabels = UNIT_LABELS;
 
-  // Phase 8.5 UX follow-up: "prix à l'unité" is the field that's actually
-  // stored (priceEuros below), but an artisan buying glue in boxes knows
-  // the box's real price, not a derived per-m² figure. This toggle and the
-  // package-price input are UI-only convenience — never sent to the
-  // backend — that compute priceEuros for them instead of asking them to
-  // do the division themselves.
-  protected readonly priceEntryMode = signal<'PER_UNIT' | 'PER_PACKAGE'>('PER_UNIT');
+  // UX follow-up: an artisan reads a packaging size off a supplier's price
+  // list as "45€/m², 405€ la boîte" — not as "9 m² par boîte" — so the
+  // artisan enters both real prices and the app deduces the packaging
+  // quantity, instead of asking them to do that division themselves. The
+  // package-price signal is local, UI-only convenience — never sent to the
+  // backend; only the deduced packagingQuantity (a real form control) is
+  // ever persisted.
   protected readonly packagePriceEuros = signal<number | null>(null);
+
+  // Advanced escape hatch: an artisan who already knows the exact packaging
+  // content (but not, or not precisely, the box price) can still type it
+  // directly — same "autofill, not a lock" rule as every other soft
+  // catalog/snapshot field in this codebase. Off by default since the
+  // two-price flow above is the common case.
+  protected readonly manualPackaging = signal(false);
 
   protected hasPackaging(): boolean {
     const packagingQuantity = this.form.controls.packagingQuantity.value;
     return packagingQuantity != null && packagingQuantity > 0;
   }
 
-  protected setPriceEntryMode(mode: 'PER_UNIT' | 'PER_PACKAGE'): void {
-    if (mode === 'PER_PACKAGE') {
-      const packagingQuantity = this.form.controls.packagingQuantity.value;
-      if (packagingQuantity) {
-        // Seed the package-price field from the current per-unit price so
-        // switching modes doesn't reset to zero — the artisan can then
-        // overwrite it with the box's real price.
-        this.packagePriceEuros.set(
-          Math.round(this.form.controls.priceEuros.value * packagingQuantity * 100) / 100,
-        );
-      }
-    }
-    this.priceEntryMode.set(mode);
+  protected unitPriceButtonLabel(): string {
+    return UNIT_PRICE_BUTTON_LABELS[this.form.controls.unit.value];
+  }
+
+  protected enableManualPackaging(): void {
+    this.manualPackaging.set(true);
+  }
+
+  // Leaving manual mode immediately re-derives packagingQuantity from
+  // whatever the two price fields currently hold, so the two never silently
+  // disagree once the artisan switches back.
+  protected disableManualPackaging(): void {
+    this.manualPackaging.set(false);
+    this.recomputePackagingQuantity(this.form.controls.priceEuros.value, this.packagePriceEuros());
+  }
+
+  protected onUnitPriceInput(rawValue: string): void {
+    this.recomputePackagingQuantity(Number(rawValue), this.packagePriceEuros());
   }
 
   protected onPackagePriceInput(rawValue: string): void {
     const packagePrice = Number(rawValue);
     this.packagePriceEuros.set(Number.isFinite(packagePrice) ? packagePrice : null);
-
-    const packagingQuantity = this.form.controls.packagingQuantity.value;
-    if (Number.isFinite(packagePrice) && packagingQuantity && packagingQuantity > 0) {
-      this.form.controls.priceEuros.setValue(
-        Math.round((packagePrice / packagingQuantity) * 100) / 100,
-      );
-    }
+    this.recomputePackagingQuantity(this.form.controls.priceEuros.value, packagePrice);
   }
 
-  // Whichever way the artisan chooses to enter the price, show the other
-  // one alongside it — so they can always check it against what their
-  // supplier actually shows, per-unit or per-box.
-  protected priceHint(): string {
-    const packagingQuantity = this.form.controls.packagingQuantity.value;
-    const unit = this.unitLabels[this.form.controls.unit.value];
-
-    if (this.priceEntryMode() === 'PER_PACKAGE') {
-      if (!packagingQuantity || this.packagePriceEuros() == null) {
-        return `Le prix à l'unité (${unit}) sera calculé automatiquement à partir du prix du conditionnement.`;
-      }
-      const perUnit = this.form.controls.priceEuros.value.toFixed(2);
-      return `${this.packagePriceEuros()} € pour ${packagingQuantity} ${unit} → ${perUnit} €/${unit}, calculé automatiquement.`;
+  // The single place that deduces "how much is in one package" from the two
+  // real prices — never runs while the artisan is using the manual override.
+  private recomputePackagingQuantity(unitPrice: number, packagePrice: number | null): void {
+    if (this.manualPackaging()) {
+      return;
     }
-
-    const unitPrice = this.form.controls.priceEuros.value;
-    if (packagingQuantity && packagingQuantity > 0 && unitPrice > 0) {
-      const packagePrice = (unitPrice * packagingQuantity).toFixed(2);
-      return `Le prix pour une seule unité (${unit}), sera pré-rempli sur vos factures — soit ${packagePrice} € pour un conditionnement de ${packagingQuantity} ${unit}.`;
+    const packagingQuantityControl = this.form.controls.packagingQuantity;
+    if (
+      Number.isFinite(unitPrice) &&
+      unitPrice > 0 &&
+      packagePrice != null &&
+      Number.isFinite(packagePrice) &&
+      packagePrice > 0
+    ) {
+      packagingQuantityControl.setValue(Math.round((packagePrice / unitPrice) * 1000) / 1000);
+    } else {
+      packagingQuantityControl.setValue(null);
     }
-    return `Le prix pour une seule unité (${unit}), sera pré-rempli sur vos factures.`;
   }
 
   protected readonly form = this.fb.nonNullable.group({
@@ -112,6 +121,8 @@ export class ProductFormPage {
     priceEuros: [0, [Validators.required, Validators.min(0)]],
     supplierName: [''],
     supplierUrl: ['', Validators.pattern(/^$|^https?:\/\/.+/)],
+    // Phase 11: short artisan-defined reference (e.g. "UC204850").
+    code: [''],
     // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for
     // a 9 m² box). Left null when the product is sold continuously — most
     // products. `null` (not 0) is the "not set" value here, unlike
@@ -134,6 +145,7 @@ export class ProductFormPage {
               priceEuros: product.priceCents / 100,
               supplierName: product.supplierName ?? '',
               supplierUrl: product.supplierUrl ?? '',
+              code: product.code ?? '',
               packagingQuantity: product.packagingQuantity
                 ? Number(product.packagingQuantity)
                 : null,
@@ -204,6 +216,7 @@ export class ProductFormPage {
       priceCents: Math.round(value.priceEuros * 100),
       supplierName: value.supplierName || undefined,
       supplierUrl: value.supplierUrl || undefined,
+      code: value.code || undefined,
       packagingQuantity: value.packagingQuantity ?? undefined,
     };
 
@@ -219,9 +232,13 @@ export class ProductFormPage {
         this.saving.set(false);
         void this.router.navigate(['/produits']);
       },
-      error: () => {
+      error: (error: HttpErrorResponse) => {
         this.saving.set(false);
-        this.errorMessage.set('Erreur lors de l’enregistrement. Veuillez réessayer.');
+        this.errorMessage.set(
+          error.status === 409
+            ? 'Ce code produit est déjà utilisé par un autre produit.'
+            : 'Erreur lors de l’enregistrement. Veuillez réessayer.',
+        );
       },
     });
   }

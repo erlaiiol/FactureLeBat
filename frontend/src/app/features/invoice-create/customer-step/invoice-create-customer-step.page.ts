@@ -71,6 +71,6 @@ export class InvoiceCreateCustomerStepPage {
       ...this.customerForm.getRawValue(),
       customerId: this.selectedCustomerId(),
     });
-    this.router.navigate(['/factures/nouvelle/lignes']);
+    this.router.navigate(['/factures/nouvelle/rapide/lignes']);
   }
 }

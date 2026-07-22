@@ -1,9 +1,16 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, input, output, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { computeBilledQuantity } from '../calculation-preview';
 import { WasteSurcharge } from '../../../core/models/invoice.model';
-import { isAreaUnit, Unit, UNIT_LABELS, UNIT_OPTIONS } from '../../../core/models/unit.model';
+import {
+  isAreaUnit,
+  Unit,
+  UNIT_LABELS,
+  UNIT_OPTIONS,
+  UNIT_PRICE_BUTTON_LABELS,
+} from '../../../core/models/unit.model';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
+import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 
 export type InvoiceLineFormGroup = FormGroup<{
   description: FormControl<string>;
@@ -13,18 +20,30 @@ export type InvoiceLineFormGroup = FormGroup<{
   wasteSurcharge: FormControl<WasteSurcharge>;
   packagingQuantity: FormControl<number | null>;
   roundUpToPackaging: FormControl<boolean>;
+  productCode: FormControl<string | null>;
+  // UI-only — never sent as part of the invoice-creation request, see
+  // InvoiceCreateLinesStepPage.submit().
+  saveAsNewProduct: FormControl<boolean>;
 }>;
 
 @Component({
   selector: 'app-invoice-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FieldHintComponent],
+  imports: [ReactiveFormsModule, FieldHintComponent, TourAnchorDirective],
   templateUrl: './invoice-line-form.component.html',
 })
 export class InvoiceLineFormComponent {
   readonly group = input.required<InvoiceLineFormGroup>();
   readonly index = input.required<number>();
   readonly remove = output<void>();
+
+  // Phase 8 onboarding tour: only the first rendered line ever carries the
+  // 'invoice-line-fields' anchor — the lines step always shows at least one
+  // blank line by default, so this is what lets the tour spotlight it
+  // without waiting for a click. Kept structural (an @if in the template,
+  // not a value bound unconditionally) so the anchor is never registered
+  // twice when more lines are added.
+  readonly firstLineAnchor = input<boolean>(false);
 
   protected readonly unitOptions = UNIT_OPTIONS;
   protected readonly unitLabels = UNIT_LABELS;
@@ -36,71 +55,95 @@ export class InvoiceLineFormComponent {
     return isAreaUnit(this.group().controls.unit.value);
   }
 
-  // Phase 8.5: the "arrondir au conditionnement" toggle only makes sense
-  // once a packaging quantity has actually been entered — hidden otherwise
-  // rather than shown disabled, same "click, don't write" spirit as the
-  // rest of this form.
+  // Whether "arrondir au conditionnement" is meaningful right now — it
+  // still stays visible either way (nothing in this section pops in or
+  // out), just disabled until there's a packaging quantity to round to.
   protected hasPackaging(): boolean {
     const packagingQuantity = this.group().controls.packagingQuantity.value;
     return packagingQuantity != null && packagingQuantity > 0;
   }
 
-  // UX follow-up: "prix unitaire" is the field actually sent to the backend
-  // (unitPriceEuros below), but an artisan buying glue in boxes knows the
-  // box's real price, not a derived per-m² figure. This toggle and the
-  // package-price input are local, UI-only convenience — they compute
-  // unitPriceEuros for the artisan instead of asking them to do the
-  // division themselves. Kept out of the FormGroup (unlike every other
-  // field here) specifically so they never leak into InvoiceDraftStore or
-  // the API request.
-  protected readonly priceEntryMode = signal<'PER_UNIT' | 'PER_PACKAGE'>('PER_UNIT');
+  protected unitPriceButtonLabel(): string {
+    return UNIT_PRICE_BUTTON_LABELS[this.group().controls.unit.value];
+  }
+
+  // UX follow-up: an artisan reads a packaging size off a supplier's price
+  // list as "45€/m², 405€ la boîte" — not as "9 m² par boîte" — so the
+  // artisan enters both real prices and the app deduces the packaging
+  // quantity, instead of asking them to do that division themselves. The
+  // package-price signal is local, UI-only convenience — kept out of the
+  // FormGroup (unlike every other field here) specifically so it never
+  // leaks into InvoiceDraftStore or the API request; only the deduced
+  // packagingQuantity (a real form control) is ever persisted.
   protected readonly packagePriceEuros = signal<number | null>(null);
 
-  protected setPriceEntryMode(mode: 'PER_UNIT' | 'PER_PACKAGE'): void {
-    if (mode === 'PER_PACKAGE') {
+  // Advanced escape hatch: an artisan who already knows the exact packaging
+  // content (but not, or not precisely, the box price) can still type it
+  // directly — same "autofill, not a lock" rule as every other soft
+  // catalog/snapshot field in this codebase. Off by default since the
+  // two-price flow above is the common case.
+  protected readonly manualPackaging = signal(false);
+
+  constructor() {
+    // Seed the package-price field from whatever packagingQuantity this line
+    // already has (e.g. hydrated from a saved draft) so the two price
+    // fields show sensible numbers immediately instead of starting blank.
+    // A required input's value isn't available until after construction, so
+    // this runs as a one-shot effect instead of plain constructor code —
+    // it only re-runs if `group` itself is ever reassigned, which doesn't
+    // happen here in practice.
+    effect(() => {
       const packagingQuantity = this.group().controls.packagingQuantity.value;
-      if (packagingQuantity) {
-        this.packagePriceEuros.set(
-          Math.round(this.group().controls.unitPriceEuros.value * packagingQuantity * 100) / 100,
-        );
+      const unitPrice = this.group().controls.unitPriceEuros.value;
+      if (packagingQuantity && packagingQuantity > 0 && Number.isFinite(unitPrice)) {
+        this.packagePriceEuros.set(Math.round(unitPrice * packagingQuantity * 100) / 100);
       }
-    }
-    this.priceEntryMode.set(mode);
+    });
+  }
+
+  protected enableManualPackaging(): void {
+    this.manualPackaging.set(true);
+  }
+
+  // Leaving manual mode immediately re-derives packagingQuantity from
+  // whatever the two price fields currently hold, so the two never silently
+  // disagree once the artisan switches back.
+  protected disableManualPackaging(): void {
+    this.manualPackaging.set(false);
+    this.recomputePackagingQuantity(
+      this.group().controls.unitPriceEuros.value,
+      this.packagePriceEuros(),
+    );
+  }
+
+  protected onUnitPriceInput(rawValue: string): void {
+    this.recomputePackagingQuantity(Number(rawValue), this.packagePriceEuros());
   }
 
   protected onPackagePriceInput(rawValue: string): void {
     const packagePrice = Number(rawValue);
     this.packagePriceEuros.set(Number.isFinite(packagePrice) ? packagePrice : null);
-
-    const packagingQuantity = this.group().controls.packagingQuantity.value;
-    if (Number.isFinite(packagePrice) && packagingQuantity && packagingQuantity > 0) {
-      this.group().controls.unitPriceEuros.setValue(
-        Math.round((packagePrice / packagingQuantity) * 100) / 100,
-      );
-    }
+    this.recomputePackagingQuantity(this.group().controls.unitPriceEuros.value, packagePrice);
   }
 
-  // Whichever way the artisan chooses to enter the price, show the other
-  // one alongside it — so they can always check it against what their
-  // supplier actually shows, per-unit or per-box.
-  protected priceHint(): string {
-    const packagingQuantity = this.group().controls.packagingQuantity.value;
-    const unit = this.unitLabels[this.group().controls.unit.value];
-
-    if (this.priceEntryMode() === 'PER_PACKAGE') {
-      if (!packagingQuantity || this.packagePriceEuros() == null) {
-        return `Le prix à l'unité (${unit}) sera calculé automatiquement à partir du prix du conditionnement.`;
-      }
-      const perUnit = this.group().controls.unitPriceEuros.value.toFixed(2);
-      return `${this.packagePriceEuros()} € pour ${packagingQuantity} ${unit} → ${perUnit} €/${unit}, calculé automatiquement.`;
+  // The single place that deduces "how much is in one package" from the two
+  // real prices — never runs while the artisan is using the manual override.
+  private recomputePackagingQuantity(unitPrice: number, packagePrice: number | null): void {
+    if (this.manualPackaging()) {
+      return;
     }
-
-    const unitPrice = this.group().controls.unitPriceEuros.value;
-    if (packagingQuantity && packagingQuantity > 0 && unitPrice > 0) {
-      const packagePrice = (unitPrice * packagingQuantity).toFixed(2);
-      return `Le prix pour une seule unité (${unit}), hors chutes éventuelles — soit ${packagePrice} € pour un conditionnement de ${packagingQuantity} ${unit}.`;
+    const packagingQuantityControl = this.group().controls.packagingQuantity;
+    if (
+      Number.isFinite(unitPrice) &&
+      unitPrice > 0 &&
+      packagePrice != null &&
+      Number.isFinite(packagePrice) &&
+      packagePrice > 0
+    ) {
+      packagingQuantityControl.setValue(Math.round((packagePrice / unitPrice) * 1000) / 1000);
+    } else {
+      packagingQuantityControl.setValue(null);
     }
-    return `Le prix pour une seule unité (${unit}), hors chutes éventuelles.`;
   }
 
   private readonly quantityFormatter = new Intl.NumberFormat('fr-FR', {

@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, startWith, switchMap } from 'rxjs';
 import { ProductProfile } from '../../core/models/product.model';
 import { ProductService } from '../../core/services/product.service';
+import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../shared/pipes/unit-label.pipe';
@@ -17,6 +18,7 @@ import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
     ReactiveFormsModule,
     RouterLink,
     BigButtonComponent,
+    BadgeComponent,
     CentsToEurosPipe,
     UnitLabelPipe,
     TourAnchorDirective,

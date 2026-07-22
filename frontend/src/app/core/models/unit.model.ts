@@ -47,3 +47,19 @@ export const UNIT_OPTIONS: readonly { value: Unit; label: string }[] = [
 export function isAreaUnit(unit: Unit): boolean {
   return unit === 'SQUARE_METER';
 }
+
+// Labels the "price per base unit" toggle button in the invoice line form
+// and product form. Deliberately never says "unité" for a package/lot (see
+// UNIT_LABELS.UNIT above, a distinct, already-taken meaning) — each phrase
+// reads naturally with its own unit instead of a generic "prix à l'unité".
+export const UNIT_PRICE_BUTTON_LABELS: Record<Unit, string> = {
+  SQUARE_METER: 'Prix au m²',
+  LINEAR_METER: 'Prix au ml',
+  UNIT: "Prix à l'unité",
+  LUMP_SUM: 'Prix au forfait',
+  HOUR: "Prix à l'heure",
+  DAY: 'Prix au jour',
+  KILOGRAM: 'Prix au kg',
+  LITER: 'Prix au litre',
+  CUBIC_METER: 'Prix au m³',
+};

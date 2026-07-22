@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InvoiceEntryMode } from '../../generated/prisma/enums';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
@@ -42,9 +43,13 @@ export class InvoiceService {
       await this.customerService.findById(dto.customerId);
     }
 
+    // Manual mode (Phase 9.5) has no serviceLines concept at all —
+    // ManualModeFieldsConsistency already rejects a request that tries to
+    // combine the two, so this can only run for entryMode GUIDED.
+    const entryMode = dto.entryMode ?? InvoiceEntryMode.GUIDED;
+    const serviceLineDtos = entryMode === InvoiceEntryMode.GUIDED ? (dto.serviceLines ?? []) : [];
     // Same reasoning applies to Service — there is no DELETE /services
     // endpoint either.
-    const serviceLineDtos = dto.serviceLines ?? [];
     for (const serviceLine of serviceLineDtos) {
       if (serviceLine.serviceId) {
         await this.serviceCatalogService.findById(serviceLine.serviceId);
@@ -60,17 +65,24 @@ export class InvoiceService {
       customerId: dto.customerId,
       vatApplicable: isVatApplicable(company.legalStatus),
       vatRateBasisPoints: company.vatRateBasisPoints,
-      lines: dto.lines.map((line) => ({
-        description: line.description,
-        unit: line.unit,
-        quantity: line.quantity,
-        unitPriceCents: line.unitPriceCents,
-        wasteSurcharge: line.wasteSurcharge,
-        packagingQuantity: line.packagingQuantity,
-        roundUpToPackaging: line.roundUpToPackaging ?? true,
-      })),
+      entryMode,
+      // ManualModeFieldsConsistency guarantees `lines` is a non-empty array
+      // whenever entryMode is GUIDED (the only branch that reads it below).
+      lines:
+        entryMode === InvoiceEntryMode.GUIDED
+          ? dto.lines!.map((line) => ({
+              description: line.description,
+              unit: line.unit,
+              quantity: line.quantity,
+              unitPriceCents: line.unitPriceCents,
+              wasteSurcharge: line.wasteSurcharge,
+              packagingQuantity: line.packagingQuantity,
+              roundUpToPackaging: line.roundUpToPackaging ?? true,
+              productCode: line.productCode,
+            }))
+          : [],
       serviceLines: serviceLineDtos.map((serviceLine): CreateInvoiceServiceLineData => {
-        const weights = expandServiceLineWeights(serviceLine, dto.lines.length);
+        const weights = expandServiceLineWeights(serviceLine, dto.lines!.length);
         return {
           serviceId: serviceLine.serviceId,
           name: serviceLine.name,
@@ -80,6 +92,20 @@ export class InvoiceService {
           weights,
         };
       }),
+      // ManualModeFieldsConsistency guarantees `manualTable` is present
+      // whenever entryMode is MANUAL (the only branch that reads it below).
+      manualColumns:
+        entryMode === InvoiceEntryMode.MANUAL
+          ? dto.manualTable!.columns.map((column) => ({
+              role: column.role,
+              label: column.label,
+              widthPx: column.widthPx,
+            }))
+          : undefined,
+      manualRows:
+        entryMode === InvoiceEntryMode.MANUAL
+          ? dto.manualTable!.rows.map((row) => ({ heightPx: row.heightPx, cells: row.cells }))
+          : undefined,
     });
 
     return this.mapper.toInvoiceWithTotals(invoice);

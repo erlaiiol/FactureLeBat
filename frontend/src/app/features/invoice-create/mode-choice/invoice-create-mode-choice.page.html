@@ -1,0 +1,32 @@
+<div class="mx-auto flex max-w-2xl flex-col gap-6 pb-12">
+  <div class="text-center">
+    <h1 class="text-2xl font-semibold text-ink">Nouvelle facture</h1>
+    <p class="mt-1 text-ink-soft">Comment souhaitez-vous la créer ?</p>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2">
+    <a
+      routerLink="rapide"
+      appTourAnchor="invoice-mode-rapide"
+      class="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-6 text-left shadow-sm transition hover:border-primary hover:shadow-md"
+    >
+      <span class="text-lg font-semibold text-ink">Mode rapide</span>
+      <span class="text-sm text-ink-soft">
+        Un client, des produits et prestations choisis pas à pas — le total se calcule pour vous.
+        Idéal pour aller vite.
+      </span>
+    </a>
+
+    <a
+      routerLink="manuel"
+      appTourAnchor="invoice-mode-manuel"
+      class="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-6 text-left shadow-sm transition hover:border-primary hover:shadow-md"
+    >
+      <span class="text-lg font-semibold text-ink">Mode manuel</span>
+      <span class="text-sm text-ink-soft">
+        Un tableau libre qui ressemble à la facture finale : cliquez et écrivez directement, ajoutez
+        des lignes ou des colonnes à votre façon.
+      </span>
+    </a>
+  </div>
+</div>

@@ -8,6 +8,9 @@ export interface ProductProfile {
   priceCents: number;
   supplierName: string | null;
   supplierUrl: string | null;
+  // Phase 11: short artisan-defined reference (e.g. "UC204850") — optional,
+  // unique when set.
+  code: string | null;
   // Phase 8.5: how many `unit`s come in one sellable package (e.g. "9" for
   // a 9 m² box). Serialized as a string like every other Decimal field in
   // this codebase — null means the product is sold continuously.
@@ -23,6 +26,7 @@ export interface UpsertProductRequest {
   priceCents: number;
   supplierName?: string;
   supplierUrl?: string;
+  code?: string;
   packagingQuantity?: number;
 }
 

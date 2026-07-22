@@ -341,4 +341,99 @@ describe('Invoice pipeline (e2e)', () => {
         .expect(400);
     });
   });
+
+  // Phase 9.5: the free-form canvas is an alternate input surface for the
+  // same Invoice — same numbering sequence, same /invoices list, same PDF
+  // endpoint, just a different line-item shape underneath.
+  describe('manual invoice mode (Phase 9.5)', () => {
+    const manualTable = {
+      columns: [
+        { role: 'DESCRIPTION', label: 'Désignation' },
+        { role: 'QUANTITY', label: 'Quantité' },
+        { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+      ],
+      rows: [
+        { cells: ['Parquet chêne massif', '10', '45.00'] },
+        { cells: ['Plinthes', '5', '8.00'] },
+      ],
+    };
+
+    it('creates a manual invoice, prices each row like a GUIDED UNIT-mode line, and generates a PDF', async () => {
+      const createResponse = await request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Manual Customer',
+          entryMode: 'MANUAL',
+          manualTable,
+        })
+        .expect(201);
+
+      const created = createResponse.body as InvoiceWithTotals;
+      createdInvoiceIds.push(created.id);
+      expect(created.number).toMatch(/^F-\d{6}$/);
+      expect(created.entryMode).toBe('MANUAL');
+      expect(created.lines).toEqual([]);
+      expect(created.serviceLines).toEqual([]);
+      expect(created.manualTable?.rows).toHaveLength(2);
+      // 10 * 4500 + 5 * 800, no waste surcharge (not a manual-mode concept).
+      expect(created.subtotalExclVatCents).toBe(45000 + 4000);
+
+      const getResponse = await request(app.getHttpServer())
+        .get(`/api/invoices/${created.id}`)
+        .expect(200);
+      const fetched = getResponse.body as InvoiceWithTotals;
+      expect(fetched.manualTable?.rows.map((row) => row.lineTotalExclVatCents)).toEqual([
+        45000, 4000,
+      ]);
+
+      const pdfResponse = await request(app.getHttpServer())
+        .get(`/api/invoices/${created.id}/pdf`)
+        .expect(200);
+      expect(pdfResponse.headers['content-type']).toBe('application/pdf');
+      expect((pdfResponse.body as Buffer).subarray(0, 4).toString('ascii')).toBe('%PDF');
+    });
+
+    it('rejects a manual invoice that also carries GUIDED lines', () => {
+      return request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Manual Customer',
+          entryMode: 'MANUAL',
+          manualTable,
+          lines: [{ description: 'Parquet', unit: 'UNIT', quantity: 1, unitPriceCents: 100 }],
+        })
+        .expect(400);
+    });
+
+    it('rejects a manual table missing the required UNIT_PRICE column', () => {
+      return request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Manual Customer',
+          entryMode: 'MANUAL',
+          manualTable: {
+            columns: manualTable.columns.filter((column) => column.role !== 'UNIT_PRICE'),
+            rows: [{ cells: ['Parquet chêne massif', '10'] }],
+          },
+        })
+        .expect(400);
+    });
+
+    it('previews a manual draft PDF without persisting an invoice', async () => {
+      const invoiceCountBefore = await prisma.invoice.count();
+
+      const previewResponse = await request(app.getHttpServer())
+        .post('/api/invoices/preview')
+        .send({
+          customerName: 'E2E Manual Preview Customer',
+          entryMode: 'MANUAL',
+          manualTable,
+        })
+        .expect(201);
+
+      expect(previewResponse.headers['content-type']).toBe('application/pdf');
+      expect((previewResponse.body as Buffer).subarray(0, 4).toString('ascii')).toBe('%PDF');
+      expect(await prisma.invoice.count()).toBe(invoiceCountBefore);
+    });
+  });
 });

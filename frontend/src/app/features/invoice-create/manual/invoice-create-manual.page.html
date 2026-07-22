@@ -1,0 +1,250 @@
+@if (createdInvoice(); as invoice) {
+  <div
+    class="mx-auto flex max-w-2xl flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center"
+  >
+    <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-success">
+      Facture {{ invoice.number }} créée !
+    </h1>
+    <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
+      <app-big-button>Télécharger le PDF</app-big-button>
+    </a>
+    <div class="w-full max-w-sm">
+      <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
+        Nouvelle facture
+      </app-big-button>
+    </div>
+  </div>
+} @else {
+  <div class="mx-auto flex max-w-5xl flex-col gap-6 pb-44">
+    <div>
+      <h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
+        Nouvelle facture — Mode manuel
+      </h1>
+      <button
+        type="button"
+        (click)="back()"
+        class="text-sm font-medium text-primary hover:underline"
+      >
+        ← Choisir un autre mode
+      </button>
+    </div>
+
+    <!-- Facturé à: freehand, click-to-edit customer fields — no picker, no
+         separate form, same "looks like the final document" canvas as the
+         table below. -->
+    <section
+      appTourAnchor="manual-customer-fields"
+      class="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4"
+    >
+      <span class="text-xs font-semibold uppercase tracking-wide text-ink-soft">Facturé à</span>
+      <input
+        type="text"
+        placeholder="Nom du client"
+        class="border-b border-transparent bg-transparent text-lg font-semibold text-ink outline-none focus:border-primary"
+        [value]="store.customer().customerName"
+        (input)="
+          store.setCustomer({ ...store.customer(), customerName: $any($event.target).value })
+        "
+      />
+      <input
+        type="text"
+        placeholder="Adresse"
+        class="border-b border-transparent bg-transparent text-sm text-ink outline-none focus:border-primary"
+        [value]="store.customer().customerAddress"
+        (input)="
+          store.setCustomer({ ...store.customer(), customerAddress: $any($event.target).value })
+        "
+      />
+      <div class="flex gap-4">
+        <input
+          type="email"
+          placeholder="Email"
+          class="border-b border-transparent bg-transparent text-sm text-ink outline-none focus:border-primary"
+          [value]="store.customer().customerEmail"
+          (input)="
+            store.setCustomer({ ...store.customer(), customerEmail: $any($event.target).value })
+          "
+        />
+        <input
+          type="text"
+          placeholder="Téléphone"
+          class="border-b border-transparent bg-transparent text-sm text-ink outline-none focus:border-primary"
+          [value]="store.customer().customerPhone"
+          (input)="
+            store.setCustomer({ ...store.customer(), customerPhone: $any($event.target).value })
+          "
+        />
+      </div>
+    </section>
+
+    <section appTourAnchor="manual-table" class="flex flex-col gap-3">
+      <div class="overflow-x-auto rounded-xl border border-line bg-surface">
+        <table class="w-full border-collapse" style="table-layout: fixed">
+          <colgroup>
+            <col style="width: 28px" />
+            @for (column of store.columns(); track column.id) {
+              <col [style.width.px]="column.widthPx" />
+            }
+            <col style="width: 36px" />
+            <col style="width: 120px" />
+          </colgroup>
+          <thead>
+            <tr class="bg-secondary-subtle">
+              <th></th>
+              @for (column of store.columns(); track column.id) {
+                <th class="relative border border-line p-2 text-left align-top">
+                  <div class="flex items-start gap-1">
+                    <input
+                      type="text"
+                      class="w-full min-w-0 border-b border-transparent bg-transparent text-xs font-semibold uppercase tracking-wide text-ink-soft outline-none focus:border-primary"
+                      [value]="column.label"
+                      (input)="onLabelInput(column, $event)"
+                    />
+                    @if (column.role === 'CUSTOM') {
+                      <button
+                        type="button"
+                        class="shrink-0 text-xs text-ink-soft hover:text-danger"
+                        aria-label="Supprimer la colonne"
+                        (click)="store.removeColumn(column.id)"
+                      >
+                        ✕
+                      </button>
+                    }
+                  </div>
+                  <span
+                    appManualResizeHandle="x"
+                    class="absolute inset-y-0 right-0 w-1.5 cursor-col-resize hover:bg-primary/30"
+                    (resized)="store.adjustColumnWidth(column.id, $event)"
+                  ></span>
+                </th>
+              }
+              <th class="border border-line p-1 text-center align-top">
+                <button
+                  type="button"
+                  appTourAnchor="manual-add-column"
+                  class="text-lg leading-none text-ink-soft hover:text-primary"
+                  aria-label="Ajouter une colonne"
+                  (click)="store.addCustomColumn()"
+                >
+                  +
+                </button>
+              </th>
+              <th
+                class="border border-line p-2 text-right align-top text-xs font-semibold uppercase tracking-wide text-ink-soft"
+              >
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of store.rows(); track row.id) {
+              <tr [style.height.px]="row.heightPx">
+                <td class="relative border border-line p-0 align-top">
+                  <button
+                    type="button"
+                    class="w-full py-1 text-center text-xs text-ink-soft hover:text-danger disabled:opacity-30"
+                    [disabled]="store.rows().length <= 1"
+                    aria-label="Supprimer la ligne"
+                    (click)="store.removeRow(row.id)"
+                  >
+                    ✕
+                  </button>
+                  <span
+                    appManualResizeHandle="y"
+                    class="absolute inset-x-0 bottom-0 h-1.5 cursor-row-resize hover:bg-primary/30"
+                    (resized)="store.adjustRowHeight(row.id, $event)"
+                  ></span>
+                </td>
+                @for (column of store.columns(); track column.id) {
+                  <td class="border border-line p-1 align-top">
+                    @if (column.role === 'DESCRIPTION') {
+                      <textarea
+                        rows="1"
+                        class="h-full w-full resize-none border-none bg-transparent text-sm text-ink outline-none"
+                        [value]="row.cells[column.id]"
+                        (input)="onCellInput(row.id, column.id, $event)"
+                      ></textarea>
+                    } @else {
+                      <input
+                        type="text"
+                        class="w-full border-none bg-transparent text-sm text-ink outline-none"
+                        [class.text-right]="
+                          column.role === 'QUANTITY' || column.role === 'UNIT_PRICE'
+                        "
+                        [value]="row.cells[column.id]"
+                        (input)="onCellInput(row.id, column.id, $event)"
+                      />
+                    }
+                  </td>
+                }
+                <td class="border border-line p-1"></td>
+                <td class="border border-line p-2 text-right font-mono text-sm text-ink">
+                  {{ rowTotalCents(row) | centsToEuros }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex flex-wrap gap-3">
+        <div class="max-w-xs flex-1">
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            type="button"
+            appTourAnchor="manual-add-row"
+            (click)="store.addRow()"
+          >
+            + Ajouter une ligne
+          </app-big-button>
+        </div>
+        <div class="max-w-xs flex-1">
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            type="button"
+            appTourAnchor="manual-format"
+            (click)="store.format()"
+          >
+            Mettre en forme
+          </app-big-button>
+        </div>
+      </div>
+    </section>
+
+    @if (errorMessage(); as message) {
+      <p class="text-center font-medium text-danger">{{ message }}</p>
+    }
+
+    <app-big-button type="button" [disabled]="creating()" (click)="submit()">
+      {{ creating() ? 'Création…' : 'Créer la facture' }}
+    </app-big-button>
+  </div>
+
+  <div class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface p-4 shadow-lg">
+    <div class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <app-invoice-totals-summary
+        appTourAnchor="manual-total"
+        [totals]="store.totalsPreview()"
+        [vatApplicable]="store.vatApplicable()"
+      />
+      <div class="w-full sm:w-64">
+        @if (previewError(); as message) {
+          <p class="mb-2 text-center text-sm font-medium text-danger">{{ message }}</p>
+        }
+        <app-big-button
+          variant="secondary"
+          tone="subtle"
+          appTourAnchor="manual-preview"
+          [disabled]="previewing() || !store.canPreview()"
+          (click)="preview()"
+        >
+          {{ previewing() ? 'Génération…' : 'Aperçu de la facture' }}
+        </app-big-button>
+      </div>
+    </div>
+  </div>
+
+  <app-pdf-preview-modal [pdfBlobUrl]="previewPdfUrl()" (closed)="closePreview()" />
+}

@@ -67,4 +67,11 @@ export class CreateInvoiceLineDto {
   @IsOptional()
   @IsBoolean()
   roundUpToPackaging?: boolean = true;
+
+  // Freehand product reference (e.g. "UC204850") — same snapshot spirit as
+  // packagingQuantity above, never a live reference to a Product row.
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  productCode?: string;
 }

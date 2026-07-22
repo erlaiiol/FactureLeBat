@@ -44,7 +44,14 @@ src/
                    Phase 5's weighted redistribution split (computeWeightedSplit)
     dto/           class-validator input contracts, including Phase 5's service-line
                    cross-field validators (service-line-visibility-consistency.validator.ts,
-                   service-line-weights-match-lines.validator.ts)
+                   service-line-weights-match-lines.validator.ts) and Phase 9.5's manual/
+                   subfolder (create-manual-table.dto.ts and its column/row DTOs +
+                   validators) plus manual-mode-fields-consistency.validator.ts, which
+                   enforces entryMode GUIDED/MANUAL mutual exclusivity on CreateInvoiceDto
+    manual/        Phase 9.5: manual-cell-parser.util.ts (parses a free-text cell into a
+                   Decimal) and manual-table-calculation.util.ts (computeManualRowTotalCents,
+                   reused by both the persisted-read and not-yet-saved preview paths — same
+                   role as redistribution.util.ts's expandServiceLineWeights)
     entities/      API response shapes (decoupled from Prisma's generated types)
     pdf/           PDF rendering (pdfmake), isolated from persistence/business logic
     invoice.mapper.ts     Prisma row -> API response / PDF data (response shaping only) —

@@ -54,6 +54,17 @@
   </label>
 
   <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Code produit</span>
+    <input
+      formControlName="code"
+      type="text"
+      placeholder="Ex : UC204850"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+    <app-field-hint text="Facultatif — la référence de ce produit chez votre fournisseur." />
+  </label>
+
+  <label class="flex flex-col gap-1">
     <span class="text-sm font-medium text-ink">Description</span>
     <textarea
       formControlName="description"
@@ -76,53 +87,6 @@
   <div class="flex flex-col gap-3 rounded-lg border border-line p-3">
     <span class="text-sm font-semibold text-ink">Prix du matériau</span>
 
-    <label class="flex flex-col gap-1">
-      <span class="text-sm font-medium text-ink">Contenu d'un conditionnement</span>
-      <input
-        formControlName="packagingQuantity"
-        type="number"
-        step="0.001"
-        min="0"
-        [placeholder]="'Ex : 9 (une boîte contient 9 ' + unitLabels[form.controls.unit.value] + ')'"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      />
-      <app-field-hint
-        [text]="
-          'Facultatif — si ce produit se vend par lot fixe (boîte, sac, rouleau…), indiquez combien de ' +
-          unitLabels[form.controls.unit.value] +
-          ' contient un seul conditionnement. Laissez vide si ce produit se vend en continu, sans lot fixe.'
-        "
-      />
-    </label>
-
-    <div class="flex flex-col gap-2">
-      <div class="flex gap-2">
-        <button
-          type="button"
-          (click)="setPriceEntryMode('PER_UNIT')"
-          [class.bg-secondary]="priceEntryMode() === 'PER_UNIT'"
-          [class.text-secondary-fg]="priceEntryMode() === 'PER_UNIT'"
-          [class.text-ink]="priceEntryMode() !== 'PER_UNIT'"
-          class="rounded-lg border border-line px-3 py-2 text-sm font-medium"
-        >
-          {{ unitPriceButtonLabel() }}
-        </button>
-        <button
-          type="button"
-          (click)="setPriceEntryMode('PER_PACKAGE')"
-          [class.bg-secondary]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.text-secondary-fg]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.text-ink]="priceEntryMode() !== 'PER_PACKAGE'"
-          class="rounded-lg border border-line px-3 py-2 text-sm font-medium"
-        >
-          Prix du conditionnement (ex : 1 paquet)
-        </button>
-      </div>
-      <app-field-hint
-        text="Indiquez le prix comme vous le connaissez — l'autre montant ci-dessous est calculé automatiquement."
-      />
-    </div>
-
     <div class="flex gap-3">
       <label class="flex flex-1 flex-col gap-1">
         <span class="text-sm font-medium text-ink">{{ unitPriceButtonLabel() }} (€)</span>
@@ -131,27 +95,81 @@
           type="number"
           step="0.01"
           min="0"
-          [readOnly]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.bg-bg]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.text-ink-soft]="priceEntryMode() === 'PER_PACKAGE'"
+          (input)="onUnitPriceInput($any($event.target).value)"
           class="rounded-lg border border-line px-4 py-3 text-lg"
         />
       </label>
 
       <label class="flex flex-1 flex-col gap-1">
-        <span class="text-sm font-medium text-ink">Prix du conditionnement (€)</span>
+        <span class="text-sm font-medium text-ink">Prix du conditionnement (ex : 1 boîte)</span>
         <input
           type="number"
           step="0.01"
           min="0"
-          [value]="packagePriceDisplay() ?? ''"
-          [readOnly]="priceEntryMode() === 'PER_UNIT'"
-          [class.bg-bg]="priceEntryMode() === 'PER_UNIT'"
-          [class.text-ink-soft]="priceEntryMode() === 'PER_UNIT'"
+          [value]="packagePriceEuros() ?? ''"
+          placeholder="Facultatif"
           (input)="onPackagePriceInput($any($event.target).value)"
           class="rounded-lg border border-line px-4 py-3 text-lg"
         />
       </label>
+    </div>
+    <app-field-hint
+      text="Renseignez les deux prix comme votre fournisseur les affiche — le contenu d'un conditionnement est déduit automatiquement ci-dessous."
+    />
+
+    <div class="rounded-lg border border-line bg-bg p-3 text-sm">
+      @if (manualPackaging()) {
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink"
+            >Contenu d'un conditionnement (saisie manuelle)</span
+          >
+          <input
+            formControlName="packagingQuantity"
+            type="number"
+            step="0.001"
+            min="0"
+            [placeholder]="
+              'Ex : 9 (une boîte contient 9 ' + unitLabels[form.controls.unit.value] + ')'
+            "
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+        </label>
+        <button
+          type="button"
+          (click)="disableManualPackaging()"
+          class="mt-2 text-sm font-medium text-primary hover:underline"
+        >
+          Revenir au calcul automatique
+        </button>
+      } @else if (hasPackaging()) {
+        <p class="text-ink">
+          → Ce conditionnement contient donc
+          <strong
+            >{{ form.controls.packagingQuantity.value }}
+            {{ unitLabels[form.controls.unit.value] }}</strong
+          >.
+        </p>
+        <button
+          type="button"
+          (click)="enableManualPackaging()"
+          class="mt-1 text-xs font-medium text-ink-soft hover:underline"
+        >
+          Je connais déjà le contenu exact
+        </button>
+      } @else {
+        <p class="text-ink-soft">
+          Facultatif — renseignez les deux prix ci-dessus pour calculer automatiquement le contenu
+          d'un conditionnement si ce produit se vend par lot fixe (boîte, sac, rouleau…). Laissez le
+          prix du conditionnement vide si ce produit se vend en continu, sans lot fixe.
+        </p>
+        <button
+          type="button"
+          (click)="enableManualPackaging()"
+          class="mt-1 text-xs font-medium text-ink-soft hover:underline"
+        >
+          Je connais déjà le contenu exact
+        </button>
+      }
     </div>
   </div>
 

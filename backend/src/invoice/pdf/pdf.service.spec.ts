@@ -17,6 +17,7 @@ function samplePdfData(): InvoicePdfData {
     customerAddress: null,
     customerEmail: null,
     customerPhone: null,
+    entryMode: 'GUIDED',
     lines: [
       {
         description: 'Parquet',
@@ -49,6 +50,23 @@ describe('PdfService', () => {
     const data = {
       ...samplePdfData(),
       serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000 }],
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer for a Phase 9.5 manual-mode invoice', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      entryMode: 'MANUAL',
+      lines: [],
+      manualTable: {
+        columns: [{ label: 'Désignation' }, { label: 'Quantité' }, { label: 'Prix unitaire' }],
+        rows: [{ cells: ['Parquet chêne massif', '10', '45.00'], totalCents: 45000 }],
+      },
     };
     const buffer = await service.generateInvoicePdf(data);
 

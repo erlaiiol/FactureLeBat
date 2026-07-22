@@ -7,6 +7,7 @@ const roboto = require('pdfmake/fonts/Roboto') as Record<string, unknown>;
 import {
   InvoicePdfData,
   InvoicePdfLine,
+  InvoicePdfManualRow,
   InvoicePdfServiceLine,
 } from './invoice-pdf-data.interface';
 
@@ -68,8 +69,10 @@ export class PdfService {
         { text: '\n' },
         this.buildParties(data),
         { text: '\n' },
-        this.buildLinesTable(data),
-        ...(data.serviceLines.length > 0
+        // Phase 9.5: a MANUAL invoice has no lines/serviceLines at all — its
+        // whole body is the free-form manualTable instead.
+        data.entryMode === 'MANUAL' ? this.buildManualTable(data) : this.buildLinesTable(data),
+        ...(data.entryMode === 'GUIDED' && data.serviceLines.length > 0
           ? [{ text: '\n' }, this.buildServiceLinesTable(data)]
           : []),
         { text: '\n' },
@@ -170,6 +173,29 @@ export class PdfService {
       table: {
         headerRows: 1,
         widths: ['*', 'auto', 'auto', 'auto', 'auto'],
+        body: [header, ...rows],
+      },
+    };
+  }
+
+  // Phase 9.5: renders a MANUAL invoice's free-form table — column count and
+  // labels are whatever the artisan defined on the canvas (always at least
+  // Description/Quantité/Prix unitaire), plus a synthetic trailing "Total"
+  // column this method computes the display string for (the one number in
+  // a manual row PdfService actually formats, everything else is rendered
+  // exactly as typed — see InvoicePdfManualRow).
+  private buildManualTable(data: InvoicePdfData): Content {
+    const table = data.manualTable!;
+    const header = [...table.columns.map((column) => column.label), 'Total'];
+    const rows = table.rows.map((row: InvoicePdfManualRow) => [
+      ...row.cells,
+      centsToEuros(row.totalCents),
+    ]);
+
+    return {
+      table: {
+        headerRows: 1,
+        widths: [...table.columns.map(() => '*'), 'auto'],
         body: [header, ...rows],
       },
     };

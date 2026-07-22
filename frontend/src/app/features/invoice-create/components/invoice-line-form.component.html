@@ -34,6 +34,17 @@
     </label>
   }
 
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Code produit</span>
+    <input
+      formControlName="productCode"
+      type="text"
+      placeholder="Ex : UC204850"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+    <app-field-hint text="Facultatif — la référence de ce produit chez votre fournisseur." />
+  </label>
+
   <div class="flex gap-3">
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-ink">Unité</span>
@@ -187,6 +198,14 @@
       </span>
     </label>
   </div>
+
+  <label class="flex items-center gap-2">
+    <input formControlName="saveAsNewProduct" type="checkbox" class="h-5 w-5" />
+    <span class="text-sm font-medium text-ink">Enregistrer ce produit dans mon catalogue</span>
+  </label>
+  <app-field-hint
+    text="Seules les infos réutilisables (nom, unité, prix, conditionnement, code) sont enregistrées — la quantité et l'arrondi restent propres à ce chantier."
+  />
 
   <div class="rounded-lg border border-line bg-bg p-3 text-sm text-ink">
     {{ quantitySummary() }}

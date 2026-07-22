@@ -7,8 +7,11 @@ import { OnboardingService } from '../../core/services/onboarding.service';
 import { TourAnchorRegistryService } from './tour-anchor-registry.service';
 import { TOUR_DEFINITIONS, TourStepDefinition } from './tour-definitions';
 
-// Which route prefix auto-launches which mini-tour, first match wins.
+// Which route prefix auto-launches which mini-tour, first match wins — the
+// Phase 9.5 mode-manuel prefix must come before the general
+// '/factures/nouvelle' one, or it would never be reached.
 const ROUTE_TOUR_MAP: ReadonlyArray<{ prefix: string; tourId: TourId }> = [
+  { prefix: '/factures/nouvelle/manuel', tourId: 'invoice-creation-manual' },
   { prefix: '/factures/nouvelle', tourId: 'invoice-creation' },
   { prefix: '/produits', tourId: 'catalog' },
   { prefix: '/prestations', tourId: 'catalog' },

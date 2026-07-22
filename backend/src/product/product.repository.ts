@@ -52,6 +52,7 @@ export class ProductRepository {
         priceCents: data.priceCents,
         supplierName: data.supplierName ?? null,
         supplierUrl: data.supplierUrl ?? null,
+        code: data.code ?? null,
         packagingQuantity: data.packagingQuantity ?? null,
       },
     });

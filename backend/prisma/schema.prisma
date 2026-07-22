@@ -41,6 +41,32 @@ enum ServiceVisibility {
   REDISTRIBUTED
 }
 
+// Phase 9.5: which input surface authored an invoice's line data. GUIDED
+// (default) is the pre-existing catalog/form-driven flow — lines/serviceLines
+// below. MANUAL is the free-form PDF-like canvas: its body lives in the
+// ManualInvoice* tables instead, and lines/serviceLines simply stay empty.
+// Deliberately a field on Invoice rather than a second model — both modes
+// share the same numbering sequence, customer fields, VAT snapshot, and PDF
+// pipeline; only the line-item shape differs. See docs/roadmap.md Phase 9.5.
+enum InvoiceEntryMode {
+  GUIDED
+  MANUAL
+}
+
+// A column of a MANUAL invoice's free-form table. Exactly one DESCRIPTION,
+// one QUANTITY, and one UNIT_PRICE column exist per manual invoice (enforced
+// by CreateManualTableDto, not the DB) — those three feed
+// InvoiceCalculationService.computeLineTotal exactly like a GUIDED line
+// (as a plain UNIT-mode line: no waste surcharge, no packaging). Any further
+// CUSTOM column is free text, rendered on the canvas/PDF but never priced —
+// deliberately not a formula engine, see docs/roadmap.md Phase 9.5.
+enum ManualColumnRole {
+  DESCRIPTION
+  QUANTITY
+  UNIT_PRICE
+  CUSTOM
+}
+
 model Company {
   id String @id @default(uuid())
 
@@ -101,8 +127,16 @@ model Invoice {
   vatApplicable      Boolean
   vatRateBasisPoints Int
 
+  // Phase 9.5: see InvoiceEntryMode above. GUIDED invoices use lines/
+  // serviceLines below; MANUAL invoices use manualColumns/manualRows instead
+  // and leave lines/serviceLines empty.
+  entryMode InvoiceEntryMode @default(GUIDED)
+
   lines        InvoiceLine[]
   serviceLines InvoiceServiceLine[]
+
+  manualColumns ManualInvoiceColumn[]
+  manualRows    ManualInvoiceRow[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -136,6 +170,12 @@ model Product {
   priceCents   Int
   supplierName String?
   supplierUrl  String?
+
+  // Phase 11: a short artisan-defined reference (SKU-like, e.g. "UC204850"),
+  // the way professional trades already identify catalog items — makes
+  // searching/scanning a large catalog faster than by name alone. Optional
+  // and freely editable, unique when set so it can double as a lookup key.
+  code String? @unique
 
   // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
   // 9 m² box of flooring). Null means the product is sold continuously
@@ -197,6 +237,12 @@ model InvoiceLine {
   packagingQuantity  Decimal? @db.Decimal(10, 3)
   roundUpToPackaging Boolean  @default(true)
 
+  // Freehand product reference for this line (e.g. "UC204850") — same
+  // snapshot/soft-reference spirit as packagingQuantity above: never tied to
+  // a live Product row, just jotted text the artisan can carry over even
+  // for an ad-hoc line that isn't saved to the catalog.
+  productCode String?
+
   serviceWeights InvoiceServiceLineWeight[]
 
   createdAt DateTime @default(now())
@@ -237,6 +283,66 @@ model InvoiceServiceLine {
   createdAt DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+// Phase 9.5 manual mode: one column of the free-form invoice canvas — see
+// ManualColumnRole above for what each role means for pricing.
+model ManualInvoiceColumn {
+  id String @id @default(uuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position  Int
+
+  role  ManualColumnRole
+  label String
+
+  // Persisted resize state (px) from dragging the column's edge on the
+  // canvas — purely presentational, never affects calculation.
+  widthPx Int?
+
+  cells ManualInvoiceCell[]
+
+  @@index([invoiceId])
+}
+
+// One row of the manual canvas = one priced line item, the same conceptual
+// unit as a GUIDED InvoiceLine.
+model ManualInvoiceRow {
+  id String @id @default(uuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position  Int
+
+  // Persisted resize state (px) from dragging the row's edge on the canvas —
+  // purely presentational, never affects calculation.
+  heightPx Int?
+
+  cells ManualInvoiceCell[]
+
+  @@index([invoiceId])
+}
+
+// One cell's raw text, exactly as the artisan typed it. Always plain text,
+// never markup: the canvas edits through real <input>/<textarea> elements,
+// which never interpret pasted content as HTML, so there is no injection
+// surface here to sanitize against (see docs/roadmap.md Phase 9.5's security
+// note — this is why no DOMPurify-style step exists in this pipeline).
+model ManualInvoiceCell {
+  id String @id @default(uuid())
+
+  rowId String
+  row   ManualInvoiceRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+  columnId String
+  column   ManualInvoiceColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  value String
+
+  @@unique([rowId, columnId])
+  @@index([rowId])
+  @@index([columnId])
 }
 
 // One artisan-set weight of a REDISTRIBUTED service line's amount onto one

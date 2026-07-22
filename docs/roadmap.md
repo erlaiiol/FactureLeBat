@@ -444,33 +444,43 @@ When starting a new invoice, the artisan first picks between two entry modes on 
 - **Mode rapide** — today's flow (Phases 6/7/8.5/11): customer picker, catalog-driven lines, guided fields, click over typing.
 - **Mode manuel** — a free-form, paper-like invoice canvas for artisans who are uncomfortable with forms, dropdowns, and multi-step flows, and would rather fill in something that looks and behaves like the final document itself.
 
-Both modes end at the same place: a valid invoice, priced and PDF-able through the existing pipeline. Manual mode is an alternate *input surface*, not a second invoicing engine.
+Both modes end at the same place: a valid invoice, priced and PDF-able through the existing pipeline. Manual mode is an alternate *input surface*, not a second invoicing engine — but it turned out to need its own body shape underneath (see Data Model below), not a literal reuse of `InvoiceLine`/`Service`.
 
 ## Manual Mode — Free-Form Invoice Canvas
 
-- The canvas looks like a PDF preview of an invoice: every string (client name, line description, quantity, price, totals, etc.) is directly clickable and editable in place, no separate form fields elsewhere on the page.
-- The classic invoice table can grow: "+" controls below the table add a row (horizontal), "+" controls to the right of the table add a column (vertical) — e.g. splitting one price into several sub-amounts, or adding a custom column the artisan needs.
-- Table rows/columns can be shrunk back down with a matching "−" control, and individually resized by dragging their edges (column width / row height), the way a spreadsheet or a table in a word processor behaves.
-- A single "Mettre en forme" (format) button cleans up spacing/alignment/number formatting across the whole table once the artisan is done typing, so nobody has to manually align columns or fix "1500" into "1 500,00 €" by hand.
-- Under the hood, this is still parsed into the same `Invoice`/`InvoiceLine`/`Service` shapes and priced by the existing `InvoiceCalculationService` — the canvas is a UI layer over the same data model, not a separate freehand document.
+- The canvas looks like a PDF preview of an invoice: every string (client name, line description, quantity, price, etc.) is directly clickable and editable in place (real `<input>`/`<textarea>` elements styled borderless, not a separate form).
+- The classic invoice table can grow: a "+" control below the table adds a row, a "+" control to the right of the table adds a custom column.
+- Rows and (non-required) columns can be removed with a matching "−"/"✕" control. Column width and row height are individually resizable by dragging their edge, the way a spreadsheet or word-processor table behaves.
+- A single "Mettre en forme" (format) button normalizes number formatting (quantity/unit price) and trims stray whitespace across the whole table in one click.
+- The "Total" column is always computed, never typed — it is a synthetic, read-only column appended at render time (client canvas and PDF alike), not part of the stored table.
+
+## Data Model
+
+Discovered during implementation that a MANUAL invoice's body is structurally too different from `InvoiceLine` (free-form columns vs. fixed unit/waste-surcharge/packaging fields) to reuse it directly, while still clearly being *the same kind of document* as a GUIDED invoice (same sequential numbering, same customer/VAT snapshot, same PDF pipeline). Resolved as: `Invoice` stays the single entity, with a new `entryMode: GUIDED | MANUAL` discriminator, and three satellite tables for the MANUAL body:
+
+- `ManualInvoiceColumn` (`role: DESCRIPTION | QUANTITY | UNIT_PRICE | CUSTOM`, `label`, `widthPx`) — exactly one `DESCRIPTION`/`QUANTITY`/`UNIT_PRICE` per invoice, any number of `CUSTOM`.
+- `ManualInvoiceRow` (`heightPx`) — one per priced line item, the manual-mode equivalent of an `InvoiceLine`.
+- `ManualInvoiceCell` (`rowId`, `columnId`, `value: String`) — always plain text, never markup.
+
+A GUIDED invoice's `lines`/`serviceLines` stay exactly as before; a MANUAL invoice leaves them empty and uses these three tables instead. `InvoiceMapper`/`PdfService` branch on `entryMode`.
 
 ## Features
 
-- [ ] "Nouvelle facture" now opens a mode-choice screen (mode rapide / mode manuel) before either flow starts
-- [ ] Mode rapide is exactly today's flow, unchanged
-- [ ] Mode manuel: PDF-like canvas where every field is click-to-edit in place, no external form
-- [ ] Add a row/column via "+" controls positioned below (row) and to the right (column) of the table, remove via a matching "−"
-- [ ] Resize a row/column by dragging its border, with sane min/max bounds
-- [ ] "Mettre en forme" button normalizes spacing/alignment/number formatting across the table in one click. Tries to have the "usual" invoice styling.
-- [ ] Manual-mode data maps onto the same `Invoice`/`InvoiceLine`/`Service` model and calculation engine as mode rapide — same totals rules (integer cents, no floating point), same PDF pipeline, same preview-before-persist rule (Phase 15)
-- [ ] Switching mode mid-draft is either supported with a clear "this will restructure your invoice" warning, or deliberately disabled — decide once the manual data model's edge cases (e.g. redistributed services, packaging rounding) are scoped
-- [ ] Tour mode updated: the invoice-creation mini-tour (Phase 8) explains the mode-choice screen and gives mode manuel its own short walkthrough (add/remove row-column, resize, "Mettre en forme")
+- [x] "Nouvelle facture" now opens a mode-choice screen (mode rapide / mode manuel) before either flow starts
+- [x] Mode rapide is exactly today's flow, unchanged (moved one path segment deeper, `factures/nouvelle/rapide/*`)
+- [x] Mode manuel: PDF-like canvas where every field is click-to-edit in place, no external form
+- [x] Add a row/column via "+" controls positioned below (row) and to the right (column) of the table, remove via a matching "−"
+- [x] Resize a row/column by dragging its border, with sane min/max bounds (40–800px columns, 24–400px rows)
+- [x] "Mettre en forme" button normalizes spacing/number formatting across the table in one click
+- [x] Manual-mode rows are priced by the existing `InvoiceCalculationService` as-is (treated as a plain `UNIT`-mode line: quantity × unit price, no waste surcharge/packaging — those are GUIDED-only concepts) — same totals rules (integer cents, no floating point), same PDF pipeline, same preview-before-persist flow as mode rapide
+- [x] Switching mode mid-draft is deliberately disabled — each mode has its own independent draft store/localStorage key; starting over in the other mode means starting a new draft, not converting one
+- [x] Tour mode updated: 'invoice-creation' now introduces the mode-choice screen before continuing into mode rapide; a new, separate 'invoice-creation-manual' mini-tour auto-launches the first time mode manuel is opened (add/remove row/column, resize, "Mettre en forme")
 
 ## Security & Library Notes
 
-- Manual mode multiplies the amount of freehand/pasted text flowing into an invoice (arbitrary column labels, cell content). Any of it that gets rendered as HTML (in the live canvas or a rich preview) must be sanitized (e.g. DOMPurify) before render or persistence — never trust pasted content, same principle as Phase 4's "never trust external content." PDF generation must keep treating all of this as data, never as template/markup that gets interpreted.
-- Drag-to-resize and dynamic add/remove row/column is realistically not worth hand-rolling from scratch (unlike the Phase 8 tour engine, which was simple geometry): a small, focused library for resize/drag handles (e.g. `interact.js`, MIT-licensed, no server dependency) is reasonable to pull in here. Avoid full spreadsheet/grid libraries (Handsontable and similar) — they're heavier and mostly license-gated, and this feature needs a table with resize handles, not a spreadsheet engine.
-- Whatever library is chosen, it only touches presentation (drag/resize geometry) — parsing the resulting content into priced invoice data stays app code, so the calculation/rounding rules already documented (Phases 1, 5, 8.5) aren't duplicated or bypassed.
+- **Cell editing uses real `<input>`/`<textarea>` elements, not `contenteditable` + DOMPurify.** A native form control's `.value` is always plain text — pasted content can never be interpreted as HTML through it, so there is no injection surface to sanitize against in the first place. This is a stronger guarantee than sanitizing after the fact, at lower implementation cost, so the DOMPurify step originally anticipated here was unnecessary. `PdfService`'s manual-table renderer still treats every cell as plain text data (never markup), same principle as the rest of the PDF pipeline.
+- **`interactjs`** (MIT-licensed) is used for drag-to-resize, exactly as anticipated — but only for the low-level drag-delta gesture (`ManualResizeHandleDirective`, a thin reusable directive wrapping `interact(...).draggable(...)`), not to resize DOM elements directly. The emitted pixel delta is clamped and applied to `ManualInvoiceDraftStore`'s own column/row size state, which is what's actually persisted.
+- Parsing cell content into priced invoice data stays app code on both ends: `manual-cell-parser.util.ts`/`manual-table-calculation.util.ts` (backend) and `manual-cell-format.util.ts` (frontend, preview-only) — `interactjs` never touches calculation, only presentation geometry.
 
 ---
 

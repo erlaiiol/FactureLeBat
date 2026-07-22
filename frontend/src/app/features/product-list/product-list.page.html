@@ -28,7 +28,12 @@
           class="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 hover:bg-bg"
         >
           <div>
-            <p class="font-semibold text-ink">{{ product.name }}</p>
+            <p class="flex items-center gap-2 font-semibold text-ink">
+              {{ product.name }}
+              @if (product.code) {
+                <app-badge variant="info" tone="subtle">{{ product.code }}</app-badge>
+              }
+            </p>
             @if (product.supplierName) {
               <p class="text-sm text-ink-soft">{{ product.supplierName }}</p>
             }

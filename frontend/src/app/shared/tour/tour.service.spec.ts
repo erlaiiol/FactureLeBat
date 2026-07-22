@@ -18,7 +18,9 @@ const routes = [
   { path: 'produits', component: BlankTestComponent },
   { path: 'prestations', component: BlankTestComponent },
   { path: 'factures/nouvelle', component: BlankTestComponent },
-  { path: 'factures/nouvelle/lignes', component: BlankTestComponent },
+  { path: 'factures/nouvelle/rapide/client', component: BlankTestComponent },
+  { path: 'factures/nouvelle/rapide/lignes', component: BlankTestComponent },
+  { path: 'factures/nouvelle/manuel', component: BlankTestComponent },
 ];
 
 const FRESH_STATE: OnboardingState = { tourEnabled: true, completedTours: [] };
@@ -130,6 +132,22 @@ describe('TourService', () => {
 
     expect(service.stepIndex()).toBe(1);
     expect(service.advancing()).toBe(false);
+  });
+
+  it('auto-starts the mode-manuel-specific tour, not the general invoice-creation one, on /factures/nouvelle/manuel', async () => {
+    const service = createService();
+
+    await harness.navigateByUrl('/factures/nouvelle/manuel');
+
+    expect(service.activeTourId()).toBe('invoice-creation-manual');
+  });
+
+  it('auto-starts the general invoice-creation tour on the mode-choice screen itself', async () => {
+    const service = createService();
+
+    await harness.navigateByUrl('/factures/nouvelle');
+
+    expect(service.activeTourId()).toBe('invoice-creation');
   });
 
   it('abandons the active tour, without marking it completed, when the artisan navigates away some other way', async () => {

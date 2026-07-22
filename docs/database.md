@@ -31,11 +31,12 @@ There is no multi-tenant auth yet (Phase 1 scope): exactly one row exists, alway
 | Field                              | Notes                                                                                                                                                                                                 |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `number`                           | `@unique`, format `{prefix}-{6-digit padded number}`                                                                                                                                                 |
+| `entryMode`                        | `GUIDED` \| `MANUAL` (Phase 9.5, default `GUIDED`) — which input surface authored this invoice's body. `GUIDED` uses `lines`/`serviceLines` below, `MANUAL` uses the `ManualInvoice*` tables instead and leaves `lines`/`serviceLines` empty. Both share this same row: numbering, customer, VAT snapshot, PDF pipeline. |
 | `vatApplicable`, `vatRateBasisPoints` | **Snapshotted** from `Company` at creation time — the one deliberate exception to "never persist derived data" in this schema. If the artisan's legal status changes later, already-issued invoices must keep the tax treatment they were issued under; a live join to `Company` would silently rewrite that. Everything else about the issuer (name, address, SIRET) *is* read live via the `company` relation, since getting those wrong retroactively is cosmetic, not financial. |
 | `customerName`, `customerAddress`, `customerEmail`, `customerPhone` | The source of truth for this invoice's customer info — typed or autofilled-then-edited by the artisan. Never rewritten from `Customer` after creation, same snapshot spirit as the VAT fields above. |
 | `customerId`                       | Optional soft reference to a `Customer` (`onDelete: SetNull`) — purely a link for future features (e.g. "this artisan's invoices for customer X"); the fields above remain authoritative regardless. |
 
-**No totals are stored** (`subtotalExclVatCents`, `vatAmountCents`, `totalInclVatCents` do not exist as columns). They are recomputed from `InvoiceLine` rows on every read, by `InvoiceCalculationService` via `InvoiceMapper`. This is a direct application of the project's core financial-data rule: derived values are calculated, not persisted and kept in sync by hand.
+**No totals are stored** (`subtotalExclVatCents`, `vatAmountCents`, `totalInclVatCents` do not exist as columns). They are recomputed from `InvoiceLine` rows (or, for a `MANUAL` invoice, `ManualInvoiceRow`/`ManualInvoiceCell` rows) on every read, by `InvoiceCalculationService` via `InvoiceMapper`. This is a direct application of the project's core financial-data rule: derived values are calculated, not persisted and kept in sync by hand.
 
 `GET /invoices` is capped at 200 rows (`InvoiceRepository.MAX_LISTED_INVOICES`), most recent first — capped rather than paginated for now, the same trade-off `Customer`/`Product` listings below now follow too.
 
@@ -47,6 +48,18 @@ There is no multi-tenant auth yet (Phase 1 scope): exactly one row exists, alway
 | `quantity`       | `Decimal(10,3)` — **not** `Float`. Area math (quantity × waste %) must not touch IEEE-754 floats before it feeds into money math. |
 | `unitPriceCents` | Always an integer. The backend never accepts a raw float-euros amount over the wire.                        |
 | `wasteSurcharge` | `NONE` \| `TEN` \| `TWENTY` (+0/10/20% billed quantity). Only meaningful for a `SQUARE_METER` line; a DTO-level custom validator (`WasteSurchargeOnlyForArea`) rejects a non-`NONE` value on any other unit — this is a business rule, not a schema constraint, so it lives in `dto/waste-surcharge-only-for-area.validator.ts`, not in `schema.prisma`. |
+
+Only populated for a `GUIDED` invoice — a `MANUAL` one has no rows here at all (see below).
+
+### `ManualInvoiceColumn` / `ManualInvoiceRow` / `ManualInvoiceCell` (Phase 9.5)
+
+The free-form table underneath a `MANUAL` invoice (`Invoice.entryMode`) — populated instead of `InvoiceLine`/`InvoiceServiceLine`, never alongside them.
+
+- **`ManualInvoiceColumn`**: `role` (`DESCRIPTION` \| `QUANTITY` \| `UNIT_PRICE` \| `CUSTOM`), `label`, `position`, `widthPx` (persisted drag-resize state). Exactly one `DESCRIPTION`/`QUANTITY`/`UNIT_PRICE` column exists per invoice (enforced by `CreateManualTableDto`'s `ManualColumnsCoverRequiredRoles` validator, not a DB constraint); any number of `CUSTOM` columns may exist alongside them.
+- **`ManualInvoiceRow`**: `position`, `heightPx` (persisted drag-resize state) — the manual-mode equivalent of an `InvoiceLine`, one per priced line item.
+- **`ManualInvoiceCell`**: `rowId` + `columnId` (`@@unique`) + `value: String` — always plain text exactly as typed, never markup. There is no sanitization step here because the frontend canvas edits through real `<input>`/`<textarea>` elements, which never let pasted content become HTML in the first place (see [roadmap.md](roadmap.md) Phase 9.5's security note).
+
+**Pricing**: only the `QUANTITY`/`UNIT_PRICE` cells of a row feed money math — parsed by `manual-cell-parser.util.ts` and priced via `InvoiceCalculationService.computeLineTotal` exactly as a plain `UNIT`-mode `InvoiceLine` would be (no waste surcharge, no packaging — those don't exist as manual-canvas concepts). A `CUSTOM` column's cells are purely informational text, rendered on the canvas/PDF but never summed into any total. Like every other computed figure in this schema, a row's `lineTotalExclVatCents` is never persisted — recomputed by `InvoiceMapper` on every read (see `computeManualRowTotalCents`).
 
 ### `Customer` (Phase 2)
 

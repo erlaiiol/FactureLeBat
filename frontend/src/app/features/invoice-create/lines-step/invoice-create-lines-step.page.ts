@@ -9,7 +9,7 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
-import { switchMap } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, switchMap } from 'rxjs';
 import {
   InvoiceWithTotals,
   RedistributionStrategy,
@@ -19,6 +19,7 @@ import {
 import { Unit } from '../../../core/models/unit.model';
 import { CustomerService } from '../../../core/services/customer.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
+import { ProductService } from '../../../core/services/product.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import {
@@ -53,6 +54,7 @@ export class InvoiceCreateLinesStepPage {
   private readonly router = inject(Router);
   private readonly customerService = inject(CustomerService);
   private readonly invoiceService = inject(InvoiceService);
+  private readonly productService = inject(ProductService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly draftStore = inject(InvoiceDraftStore);
 
@@ -95,6 +97,7 @@ export class InvoiceCreateLinesStepPage {
     wasteSurcharge: WasteSurcharge;
     packagingQuantity: number | null;
     roundUpToPackaging: boolean;
+    productCode: string | null;
   }): InvoiceLineFormGroup {
     return this.fb.nonNullable.group({
       description: this.fb.nonNullable.control(initial?.description ?? '', Validators.required),
@@ -116,6 +119,13 @@ export class InvoiceCreateLinesStepPage {
         Validators.min(0.001),
       ]),
       roundUpToPackaging: this.fb.nonNullable.control(initial?.roundUpToPackaging ?? true),
+      // Freehand product reference (e.g. "UC204850"), same soft-snapshot
+      // spirit as packagingQuantity above.
+      productCode: this.fb.control<string | null>(initial?.productCode ?? null),
+      // UI-only: whether to save this line as a new catalog Product on
+      // submit — never sent as-is to the invoice-creation request (see
+      // submit() below), mirrors the customer step's saveAsNewCustomer.
+      saveAsNewProduct: this.fb.nonNullable.control(false),
     });
   }
 
@@ -196,14 +206,14 @@ export class InvoiceCreateLinesStepPage {
   }
 
   protected back(): void {
-    this.router.navigate(['/factures/nouvelle/client']);
+    this.router.navigate(['/factures/nouvelle/rapide/client']);
   }
 
   protected startNewInvoice(): void {
     this.createdInvoice.set(null);
     this.errorMessage.set(null);
     this.draftStore.reset();
-    this.router.navigate(['/factures/nouvelle/client']);
+    this.router.navigate(['/factures/nouvelle/rapide/client']);
   }
 
   protected submit(): void {
@@ -234,25 +244,55 @@ export class InvoiceCreateLinesStepPage {
     this.creating.set(true);
     this.errorMessage.set(null);
 
+    // "Enregistrer ce produit" only saves the catalog-appropriate fields
+    // (name/unit/price/packaging/code) — never `quantity`, `wasteSurcharge`,
+    // or `roundUpToPackaging`, which describe this chantier, not the
+    // product itself. Best-effort: a failed catalog save (e.g. a duplicate
+    // code) must never block the invoice itself from being created.
+    const productSaveRequests = this.lines
+      .getRawValue()
+      .filter((line) => line.saveAsNewProduct)
+      .map((line) =>
+        this.productService
+          .create({
+            name: line.description,
+            unit: line.unit,
+            priceCents: Math.round(line.unitPriceEuros * 100),
+            code: line.productCode || undefined,
+            packagingQuantity: line.packagingQuantity ?? undefined,
+          })
+          .pipe(catchError(() => of(null))),
+      );
+    // Normalized to Observable<null> on both branches — a ternary between
+    // differently-typed Observables otherwise loses its generic argument
+    // when piped below (TS falls back to the no-op 0-arg pipe() overload).
+    const saveProducts$: Observable<null> =
+      productSaveRequests.length > 0
+        ? forkJoin(productSaveRequests).pipe(map(() => null))
+        : of(null);
+
     // "Enregistrer ce client" only applies to freehand entry — if a saved
     // customer was picked, there's nothing new to save.
-    const request$ =
-      customer.saveAsNewCustomer && !customer.customerId
-        ? this.customerService
-            .create({
-              name: customer.customerName,
-              address: customer.customerAddress || undefined,
-              email: customer.customerEmail || undefined,
-              phone: customer.customerPhone || undefined,
-            })
-            .pipe(
-              switchMap((newCustomer) =>
-                this.invoiceService.create(this.draftStore.buildInvoiceRequest(newCustomer.id)),
-              ),
-            )
-        : this.invoiceService.create(
-            this.draftStore.buildInvoiceRequest(customer.customerId ?? undefined),
-          );
+    const request$ = saveProducts$.pipe(
+      switchMap(() =>
+        customer.saveAsNewCustomer && !customer.customerId
+          ? this.customerService
+              .create({
+                name: customer.customerName,
+                address: customer.customerAddress || undefined,
+                email: customer.customerEmail || undefined,
+                phone: customer.customerPhone || undefined,
+              })
+              .pipe(
+                switchMap((newCustomer) =>
+                  this.invoiceService.create(this.draftStore.buildInvoiceRequest(newCustomer.id)),
+                ),
+              )
+          : this.invoiceService.create(
+              this.draftStore.buildInvoiceRequest(customer.customerId ?? undefined),
+            ),
+      ),
+    );
 
     request$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (invoice) => {

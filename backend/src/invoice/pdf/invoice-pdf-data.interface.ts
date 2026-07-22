@@ -1,3 +1,5 @@
+import { InvoiceEntryMode } from '../../../generated/prisma/enums';
+
 export interface InvoicePdfLine {
   description: string;
   unit: string;
@@ -16,6 +18,28 @@ export interface InvoicePdfLine {
 export interface InvoicePdfServiceLine {
   name: string;
   amountCents: number;
+}
+
+// Phase 9.5 manual mode. `cells` holds the artisan's raw typed text for
+// every non-computed column (DESCRIPTION/QUANTITY/UNIT_PRICE/CUSTOM, in
+// column order) exactly as stored — money formatting is not reapplied here,
+// same "PdfService only ever renders plain text" boundary as InvoicePdfLine
+// (the artisan's own "Mettre en forme" pass on the canvas is what cleans
+// this up before submission, not the PDF layer). `totalCents` is the one
+// computed value PdfService does format, rendered as a trailing "Total"
+// column.
+export interface InvoicePdfManualColumn {
+  label: string;
+}
+
+export interface InvoicePdfManualRow {
+  cells: string[];
+  totalCents: number;
+}
+
+export interface InvoicePdfManualTable {
+  columns: InvoicePdfManualColumn[];
+  rows: InvoicePdfManualRow[];
 }
 
 // Plain, serializable data object built by InvoiceService and handed to
@@ -39,8 +63,14 @@ export interface InvoicePdfData {
   customerEmail: string | null;
   customerPhone: string | null;
 
+  // Phase 9.5: GUIDED populates lines/serviceLines (manualTable absent).
+  // MANUAL populates manualTable instead (lines/serviceLines stay empty
+  // arrays, never undefined, so PdfService doesn't need to null-check them
+  // just to know which table to render — it branches on entryMode instead).
+  entryMode: InvoiceEntryMode;
   lines: InvoicePdfLine[];
   serviceLines: InvoicePdfServiceLine[];
+  manualTable?: InvoicePdfManualTable;
 
   vatApplicable: boolean;
   vatRateBasisPoints: number;

@@ -60,6 +60,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     vatRateBasisPoints: 2000,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
+    entryMode: 'GUIDED',
     lines: [
       {
         id: 'line-1',
@@ -72,10 +73,13 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
         wasteSurcharge: 'NONE',
         packagingQuantity: null,
         roundUpToPackaging: true,
+        productCode: null,
         createdAt: new Date('2026-01-15'),
       },
     ],
     serviceLines: [],
+    manualColumns: [],
+    manualRows: [],
     company: {
       id: 'company-1',
       name: 'Parquets Raillere',
@@ -123,6 +127,7 @@ describe('InvoiceMapper', () => {
             wasteSurcharge: 'NONE',
             packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             roundUpToPackaging: true,
+            productCode: null,
             createdAt: new Date('2026-01-15'),
           },
         ],
@@ -183,6 +188,9 @@ describe('InvoiceMapper', () => {
             quantity: '10' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             unitPriceCents: 4500,
             wasteSurcharge: 'NONE',
+            packagingQuantity: null,
+            roundUpToPackaging: true,
+            productCode: null,
             createdAt: new Date('2026-01-15'),
           },
           {
@@ -194,6 +202,9 @@ describe('InvoiceMapper', () => {
             quantity: '5' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             unitPriceCents: 800,
             wasteSurcharge: 'NONE',
+            packagingQuantity: null,
+            roundUpToPackaging: true,
+            productCode: null,
             createdAt: new Date('2026-01-15'),
           },
         ],
@@ -377,6 +388,116 @@ describe('InvoiceMapper', () => {
       // weight 3:1 split of 10000 -> 7500 / 2500
       expect(preview.lines[0].totalCents).toBe(45000 + 7500);
       expect(preview.lines[1].totalCents).toBe(4000 + 2500);
+    });
+  });
+
+  describe('Phase 9.5 manual invoice mode', () => {
+    function manualInvoiceFixture(): InvoiceWithLines {
+      return invoiceWithLines({
+        entryMode: 'MANUAL',
+        lines: [],
+        manualColumns: [
+          {
+            id: 'col-desc',
+            invoiceId: 'inv-1',
+            position: 0,
+            role: 'DESCRIPTION',
+            label: 'Désignation',
+            widthPx: null,
+          },
+          {
+            id: 'col-qty',
+            invoiceId: 'inv-1',
+            position: 1,
+            role: 'QUANTITY',
+            label: 'Quantité',
+            widthPx: null,
+          },
+          {
+            id: 'col-price',
+            invoiceId: 'inv-1',
+            position: 2,
+            role: 'UNIT_PRICE',
+            label: 'Prix unitaire',
+            widthPx: null,
+          },
+        ],
+        manualRows: [
+          {
+            id: 'row-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            heightPx: null,
+            cells: [
+              { id: 'cell-1', rowId: 'row-1', columnId: 'col-desc', value: 'Parquet chêne massif' },
+              { id: 'cell-2', rowId: 'row-1', columnId: 'col-qty', value: '10' },
+              { id: 'cell-3', rowId: 'row-1', columnId: 'col-price', value: '45.00' },
+            ],
+          },
+        ],
+      });
+    }
+
+    it('toInvoiceWithTotals prices each manual row like a GUIDED UNIT-mode line and leaves lines/serviceLines empty', () => {
+      const result = mapper.toInvoiceWithTotals(manualInvoiceFixture());
+
+      expect(result.entryMode).toBe('MANUAL');
+      expect(result.lines).toEqual([]);
+      expect(result.serviceLines).toEqual([]);
+      expect(result.manualTable!.rows[0].lineTotalExclVatCents).toBe(45000);
+      expect(result.subtotalExclVatCents).toBe(45000);
+    });
+
+    it('toInvoiceWithTotals matches cells back to columns by id, regardless of the order cells were persisted in', () => {
+      const invoice = manualInvoiceFixture();
+      // Simulate cells coming back from Prisma in a different order than the
+      // columns array — the mapper must match by columnId, not by index.
+      invoice.manualRows[0].cells.reverse();
+
+      const result = mapper.toInvoiceWithTotals(invoice);
+      expect(result.manualTable!.rows[0].cells.map((cell) => cell.value)).toEqual([
+        'Parquet chêne massif',
+        '10',
+        '45.00',
+      ]);
+      expect(result.manualTable!.rows[0].lineTotalExclVatCents).toBe(45000);
+    });
+
+    it('toPdfData renders the manual table and reuses the same totals as toInvoiceWithTotals', () => {
+      const invoice = manualInvoiceFixture();
+      const withTotals = mapper.toInvoiceWithTotals(invoice);
+      const pdfData = mapper.toPdfData(invoice);
+
+      expect(pdfData.entryMode).toBe('MANUAL');
+      expect(pdfData.manualTable!.rows[0].cells).toEqual(['Parquet chêne massif', '10', '45.00']);
+      expect(pdfData.manualTable!.rows[0].totalCents).toBe(45000);
+      expect(pdfData.totalInclVatCents).toBe(withTotals.totalInclVatCents);
+    });
+
+    it('toPreviewPdfData computes the same manual row total as the persisted path, for equivalent input', () => {
+      const persisted = mapper.toPdfData(manualInvoiceFixture());
+      const preview = mapper.toPreviewPdfData(
+        createInvoiceDtoFixture({
+          entryMode: 'MANUAL',
+          lines: undefined,
+          manualTable: {
+            columns: [
+              { role: 'DESCRIPTION', label: 'Désignation' },
+              { role: 'QUANTITY', label: 'Quantité' },
+              { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+            ],
+            rows: [{ cells: ['Parquet chêne massif', '10', '45.00'] }],
+          },
+        }),
+        companyFixture(),
+      );
+
+      expect(preview.entryMode).toBe('MANUAL');
+      expect(preview.number).toBe('BROUILLON');
+      expect(preview.manualTable!.rows[0].totalCents).toBe(
+        persisted.manualTable!.rows[0].totalCents,
+      );
+      expect(preview.totalInclVatCents).toBe(persisted.totalInclVatCents);
     });
   });
 });

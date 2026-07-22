@@ -38,6 +38,9 @@ export interface InvoiceLineDraft {
   // quantity billing) and is inert without a packagingQuantity.
   packagingQuantity: number | null;
   roundUpToPackaging: boolean;
+  // Freehand product reference (e.g. "UC204850"), never tied to a saved
+  // Product — same soft-snapshot spirit as packagingQuantity above.
+  productCode: string | null;
 }
 
 export interface InvoiceServiceLineDraft {
@@ -67,6 +70,7 @@ const EMPTY_LINE: InvoiceLineDraft = {
   wasteSurcharge: 'NONE',
   packagingQuantity: null,
   roundUpToPackaging: true,
+  productCode: null,
 };
 
 const DRAFT_STORAGE_KEY = 'facturelebat.invoiceDraft.v1';
@@ -200,6 +204,7 @@ export class InvoiceDraftStore {
       wasteSurcharge: isAreaUnit(line.unit) ? line.wasteSurcharge : 'NONE',
       packagingQuantity: line.packagingQuantity ?? undefined,
       roundUpToPackaging: line.roundUpToPackaging,
+      productCode: line.productCode ?? undefined,
     }));
 
     const serviceLines: CreateInvoiceServiceLineRequest[] = this.serviceLines().map(

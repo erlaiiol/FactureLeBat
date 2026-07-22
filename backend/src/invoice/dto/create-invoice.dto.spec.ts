@@ -216,3 +216,63 @@ describe('CreateInvoiceDto — Phase 8.5 packaging quantity', () => {
     expect(errors).not.toHaveLength(0);
   });
 });
+
+describe('CreateInvoiceDto — Phase 9.5 entryMode consistency', () => {
+  const manualTable = {
+    columns: [
+      { role: 'DESCRIPTION', label: 'Désignation' },
+      { role: 'QUANTITY', label: 'Quantité' },
+      { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+    ],
+    rows: [{ cells: ['Parquet chêne massif', '10', '45.00'] }],
+  };
+
+  it('defaults to GUIDED and accepts a plain lines-only payload with no entryMode at all', async () => {
+    const errors = await validateDto(basePayload());
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts an explicit entryMode GUIDED with lines and no manualTable', async () => {
+    const errors = await validateDto(basePayload({ entryMode: 'GUIDED' }));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects entryMode GUIDED with no lines at all', async () => {
+    const errors = await validateDto({ customerName: 'M. Dupont', entryMode: 'GUIDED', lines: [] });
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects entryMode GUIDED that also carries a manualTable', async () => {
+    const errors = await validateDto(basePayload({ entryMode: 'GUIDED', manualTable }));
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('accepts entryMode MANUAL with a manualTable and no lines/serviceLines', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects entryMode MANUAL with no manualTable', async () => {
+    const errors = await validateDto({ customerName: 'M. Dupont', entryMode: 'MANUAL' });
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects entryMode MANUAL that also carries lines', async () => {
+    const errors = await validateDto(basePayload({ entryMode: 'MANUAL', manualTable }));
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects entryMode MANUAL that also carries serviceLines', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      serviceLines: [{ name: 'Savoir-faire', amountCents: 1000, visibility: 'VISIBLE' }],
+    });
+    expect(errors).not.toHaveLength(0);
+  });
+});

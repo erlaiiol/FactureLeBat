@@ -5,13 +5,24 @@ import {
   InvoiceLineModel as InvoiceLine,
   InvoiceServiceLineModel as InvoiceServiceLine,
   InvoiceServiceLineWeightModel as InvoiceServiceLineWeight,
+  ManualInvoiceColumnModel as ManualInvoiceColumn,
+  ManualInvoiceRowModel as ManualInvoiceRow,
+  ManualInvoiceCellModel as ManualInvoiceCell,
   CompanyModel as Company,
 } from '../../generated/prisma/models';
-import { Unit, WasteSurcharge, ServiceVisibility } from '../../generated/prisma/enums';
+import {
+  Unit,
+  WasteSurcharge,
+  ServiceVisibility,
+  InvoiceEntryMode,
+  ManualColumnRole,
+} from '../../generated/prisma/enums';
 
 export type InvoiceWithLines = Invoice & {
   lines: InvoiceLine[];
   serviceLines: (InvoiceServiceLine & { weights: InvoiceServiceLineWeight[] })[];
+  manualColumns: ManualInvoiceColumn[];
+  manualRows: (ManualInvoiceRow & { cells: ManualInvoiceCell[] })[];
   company: Company;
 };
 
@@ -23,6 +34,7 @@ export interface CreateInvoiceLineData {
   wasteSurcharge: WasteSurcharge;
   packagingQuantity?: number;
   roundUpToPackaging: boolean;
+  productCode?: string;
 }
 
 export interface CreateInvoiceServiceLineData {
@@ -38,6 +50,21 @@ export interface CreateInvoiceServiceLineData {
   weights?: number[];
 }
 
+// Phase 9.5: one column of a MANUAL invoice's free-form table. Positional
+// cells on CreateManualRowData below are aligned with this array's order.
+export interface CreateManualColumnData {
+  role: ManualColumnRole;
+  label: string;
+  widthPx?: number;
+}
+
+export interface CreateManualRowData {
+  heightPx?: number;
+  // Positional, aligned with CreateInvoiceData.manualColumns (cells[i]
+  // targets manualColumns[i]) — same convention as service-line weights.
+  cells: string[];
+}
+
 export interface CreateInvoiceData {
   companyId: string;
   customerName: string;
@@ -47,13 +74,21 @@ export interface CreateInvoiceData {
   customerId?: string;
   vatApplicable: boolean;
   vatRateBasisPoints: number;
+  entryMode: InvoiceEntryMode;
   lines: CreateInvoiceLineData[];
   serviceLines: CreateInvoiceServiceLineData[];
+  // Only present for entryMode MANUAL — mutually exclusive with lines/
+  // serviceLines above (enforced at the DTO boundary, see
+  // ManualModeFieldsConsistency).
+  manualColumns?: CreateManualColumnData[];
+  manualRows?: CreateManualRowData[];
 }
 
 const INVOICE_INCLUDE = {
   lines: { orderBy: { position: 'asc' } },
   serviceLines: { orderBy: { position: 'asc' }, include: { weights: true } },
+  manualColumns: { orderBy: { position: 'asc' } },
+  manualRows: { orderBy: { position: 'asc' }, include: { cells: true } },
   company: true,
 } as const;
 
@@ -68,9 +103,14 @@ export class InvoiceRepository {
   // Service lines and their redistribution weights are created after the
   // invoice + product lines, still inside the same transaction: a
   // REDISTRIBUTED service line's weights reference the *generated* ids of
-  // the invoice lines above, so those ids must exist first. A final re-read
-  // (still inside the transaction, so it sees an atomic, fully-formed
-  // invoice or none at all) returns the shape InvoiceMapper needs.
+  // the invoice lines above, so those ids must exist first. Phase 9.5's
+  // manual columns/rows/cells follow the same shape of constraint: a cell
+  // references the *generated* id of a column created alongside the invoice,
+  // so columns are created first (nested in the invoice.create() call
+  // itself, like lines above), then rows-with-cells are created afterward,
+  // positionally matched to those columns. A final re-read (still inside the
+  // transaction, so it sees an atomic, fully-formed invoice or none at all)
+  // returns the shape InvoiceMapper needs.
   async createWithSequentialNumber(data: CreateInvoiceData): Promise<InvoiceWithLines> {
     return this.prisma.$transaction(async (tx) => {
       const company = await tx.company.update({
@@ -91,6 +131,7 @@ export class InvoiceRepository {
           customerId: data.customerId,
           vatApplicable: data.vatApplicable,
           vatRateBasisPoints: data.vatRateBasisPoints,
+          entryMode: data.entryMode,
           lines: {
             create: data.lines.map((line, index) => ({
               position: index,
@@ -101,10 +142,22 @@ export class InvoiceRepository {
               wasteSurcharge: line.wasteSurcharge,
               packagingQuantity: line.packagingQuantity,
               roundUpToPackaging: line.roundUpToPackaging,
+              productCode: line.productCode,
+            })),
+          },
+          manualColumns: {
+            create: (data.manualColumns ?? []).map((column, index) => ({
+              position: index,
+              role: column.role,
+              label: column.label,
+              widthPx: column.widthPx,
             })),
           },
         },
-        include: { lines: { orderBy: { position: 'asc' } } },
+        include: {
+          lines: { orderBy: { position: 'asc' } },
+          manualColumns: { orderBy: { position: 'asc' } },
+        },
       });
 
       for (const [index, serviceLine] of data.serviceLines.entries()) {
@@ -129,6 +182,22 @@ export class InvoiceRepository {
             })),
           });
         }
+      }
+
+      for (const [index, row] of (data.manualRows ?? []).entries()) {
+        await tx.manualInvoiceRow.create({
+          data: {
+            invoiceId: invoice.id,
+            position: index,
+            heightPx: row.heightPx,
+            cells: {
+              create: row.cells.map((value, columnIndex) => ({
+                columnId: invoice.manualColumns[columnIndex].id,
+                value,
+              })),
+            },
+          },
+        });
       }
 
       return tx.invoice.findUniqueOrThrow({ where: { id: invoice.id }, include: INVOICE_INCLUDE });

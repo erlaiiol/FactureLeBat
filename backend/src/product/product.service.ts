@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { ProductRepository } from './product.repository';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -21,8 +21,12 @@ export class ProductService {
     return product;
   }
 
-  create(dto: CreateProductDto): Promise<ProductProfile> {
-    return this.productRepository.create(dto);
+  async create(dto: CreateProductDto): Promise<ProductProfile> {
+    try {
+      return await this.productRepository.create(dto);
+    } catch (error) {
+      throw this.mapKnownError(error);
+    }
   }
 
   // Reports "not found" from the write itself rather than a separate
@@ -37,7 +41,17 @@ export class ProductService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
         throw new NotFoundException(`Product ${id} not found`);
       }
-      throw error;
+      throw this.mapKnownError(error);
     }
+  }
+
+  // `code` is the first unique non-id field on this model — P2002 is Prisma's
+  // generic unique-constraint-violation code, turned into a clean 409
+  // instead of an unhandled 500 from the raw DB error.
+  private mapKnownError(error: unknown): unknown {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return new ConflictException('Ce code produit est déjà utilisé.');
+    }
+    return error;
   }
 }

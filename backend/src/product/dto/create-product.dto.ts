@@ -51,6 +51,14 @@ export class CreateProductDto {
   @MaxLength(500)
   supplierUrl?: string;
 
+  // Phase 11: short artisan-defined reference (e.g. "UC204850"). Optional,
+  // freely editable, unique per row when set (see the DB constraint) — the
+  // uniqueness violation is turned into a clean 409 by ProductService.
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
+
   // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
   // 9 m² box of flooring). Optional — most products still sell
   // continuously; when set, this is what an invoice line uses to compute

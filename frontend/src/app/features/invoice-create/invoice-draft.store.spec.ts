@@ -38,6 +38,7 @@ const lineFixture: InvoiceLineDraft = {
   wasteSurcharge: 'NONE',
   packagingQuantity: null,
   roundUpToPackaging: true,
+  productCode: null,
 };
 
 describe('InvoiceDraftStore', () => {
@@ -154,7 +155,7 @@ describe('InvoiceDraftStore', () => {
 
       const request = store.buildInvoiceRequest();
 
-      expect(request.lines[0].unitPriceCents).toBe(4590);
+      expect(request.lines?.[0].unitPriceCents).toBe(4590);
     });
 
     it('omits optional customer fields left blank, and forwards the given customerId', () => {
