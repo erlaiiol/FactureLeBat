@@ -1,23 +1,25 @@
 @if (createdInvoice(); as invoice) {
-  <div class="flex flex-col items-center gap-4 rounded-xl bg-green-50 p-8 text-center">
-    <h1 class="text-2xl font-bold text-green-900">Facture {{ invoice.number }} créée !</h1>
+  <div class="flex flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center">
+    <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-success">
+      Facture {{ invoice.number }} créée !
+    </h1>
     <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
       <app-big-button>Télécharger le PDF</app-big-button>
     </a>
     <div class="w-full max-w-sm">
-      <app-big-button variant="secondary" (click)="startNewInvoice()">
+      <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
         Nouvelle facture
       </app-big-button>
     </div>
   </div>
 } @else {
-  <h1 class="mb-2 text-2xl font-bold text-slate-900">
+  <h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
     Nouvelle facture — Lignes &amp; prestations
   </h1>
   <button
     type="button"
     (click)="back()"
-    class="mb-6 text-sm font-medium text-blue-700 hover:underline"
+    class="mb-6 text-sm font-medium text-primary hover:underline"
   >
     ← Retour au client
   </button>
@@ -30,14 +32,23 @@
        GET-and-reload submit. -->
   <div class="flex flex-col gap-6">
     <section class="flex flex-col gap-4">
-      <h2 class="text-lg font-semibold text-slate-800">Lignes de facture</h2>
+      <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
+        Lignes de facture
+      </h2>
 
       @for (line of lines.controls; track line; let i = $index) {
-        <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)" />
+        <app-invoice-line-form
+          class="anim-line-in"
+          [group]="line"
+          [index]="i"
+          [firstLineAnchor]="i === 0"
+          (remove)="removeLine(i)"
+        />
       }
 
       <app-big-button
         variant="secondary"
+        tone="subtle"
         type="button"
         appTourAnchor="invoice-add-line"
         (click)="addLine()"
@@ -47,10 +58,13 @@
     </section>
 
     <section class="flex flex-col gap-4">
-      <h2 class="text-lg font-semibold text-slate-800">Prestations (main-d’œuvre, forfaits…)</h2>
+      <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
+        Prestations (main-d’œuvre, forfaits…)
+      </h2>
 
       @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
         <app-invoice-service-line-form
+          class="anim-line-in"
           [group]="serviceLine"
           [index]="i"
           [services]="draftStore.services()"
@@ -59,13 +73,13 @@
         />
       }
 
-      <app-big-button variant="secondary" type="button" (click)="addServiceLine()">
+      <app-big-button variant="secondary" tone="subtle" type="button" (click)="addServiceLine()">
         + Ajouter une prestation
       </app-big-button>
     </section>
 
     @if (errorMessage(); as message) {
-      <p class="text-center font-medium text-red-700">{{ message }}</p>
+      <p class="text-center font-medium text-danger">{{ message }}</p>
     }
 
     <app-big-button type="button" [disabled]="creating()" (click)="submit()">

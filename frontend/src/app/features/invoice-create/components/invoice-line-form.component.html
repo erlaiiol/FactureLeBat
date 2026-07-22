@@ -1,30 +1,43 @@
-<div [formGroup]="group()" class="flex flex-col gap-3 rounded-xl border border-slate-200 p-4">
+<div [formGroup]="group()" class="flex flex-col gap-3 rounded-xl border border-line p-4">
   <div class="flex items-center justify-between">
-    <span class="font-semibold text-slate-700">Ligne {{ index() + 1 }}</span>
+    <span class="font-semibold text-ink">Ligne {{ index() + 1 }}</span>
     <button
       type="button"
       (click)="remove.emit()"
-      class="text-sm font-medium text-red-600 hover:underline"
+      class="text-sm font-medium text-danger hover:underline"
     >
       Supprimer
     </button>
   </div>
 
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Description</span>
-    <input
-      formControlName="description"
-      type="text"
-      placeholder="Ex : Parquet chêne massif posé"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-    />
-    <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
-  </label>
+  @if (firstLineAnchor()) {
+    <label class="flex flex-col gap-1" appTourAnchor="invoice-line-fields">
+      <span class="text-sm font-medium text-ink">Description</span>
+      <input
+        formControlName="description"
+        type="text"
+        placeholder="Ex : Parquet chêne massif posé"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
+    </label>
+  } @else {
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Description</span>
+      <input
+        formControlName="description"
+        type="text"
+        placeholder="Ex : Parquet chêne massif posé"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
+    </label>
+  }
 
   <div class="flex gap-3">
     <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Unité</span>
-      <select formControlName="unit" class="rounded-lg border border-slate-300 px-4 py-3 text-lg">
+      <span class="text-sm font-medium text-ink">Unité</span>
+      <select formControlName="unit" class="rounded-lg border border-line px-4 py-3 text-lg">
         @for (option of unitOptions; track option.value) {
           <option [value]="option.value">{{ option.label }}</option>
         }
@@ -35,14 +48,14 @@
     </label>
 
     <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">
+      <span class="text-sm font-medium text-ink">
         {{ isAreaMode() ? 'Surface du chantier (m²)' : 'Quantité du chantier' }}
       </span>
       <input
         formControlName="quantity"
         type="number"
         step="0.01"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
       />
       <app-field-hint
         [text]="
@@ -56,10 +69,10 @@
 
   @if (isAreaMode()) {
     <label class="flex flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Chutes (matière en plus)</span>
+      <span class="text-sm font-medium text-ink">Chutes (matière en plus)</span>
       <select
         formControlName="wasteSurcharge"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
       >
         <option value="NONE">Aucune</option>
         <option value="TEN">+10 %</option>
@@ -71,97 +84,111 @@
     </label>
   }
 
-  <div class="flex gap-3">
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Contenu d'un conditionnement</span>
-      <input
-        formControlName="packagingQuantity"
-        type="number"
-        step="0.001"
-        min="0"
-        [placeholder]="
-          'Ex : 9 (une boîte contient 9 ' + unitLabels[group().controls.unit.value] + ')'
-        "
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-      />
-      <app-field-hint
-        [text]="
-          'Facultatif — si ce matériau se vend par lot fixe (boîte, sac, rouleau…), indiquez combien de ' +
-          unitLabels[group().controls.unit.value] +
-          ' contient un seul conditionnement. Laissez vide si ce matériau se vend en continu, sans lot fixe.'
-        "
-      />
-    </label>
+  <div class="flex flex-col gap-3 rounded-lg border border-line p-3">
+    <span class="text-sm font-semibold text-ink">Prix du matériau</span>
 
-    @if (hasPackaging()) {
-      <label class="flex flex-1 flex-row items-center gap-2 pt-6">
-        <input formControlName="roundUpToPackaging" type="checkbox" class="h-5 w-5" />
-        <span class="text-sm font-medium text-slate-700">
-          Facturer des conditionnements entiers (arrondir au lot)
-        </span>
+    <div class="flex gap-3">
+      <label class="flex flex-1 flex-col gap-1">
+        <span class="text-sm font-medium text-ink">{{ unitPriceButtonLabel() }} (€)</span>
+        <input
+          formControlName="unitPriceEuros"
+          type="number"
+          step="0.01"
+          (input)="onUnitPriceInput($any($event.target).value)"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
       </label>
-    }
+
+      <label class="flex flex-1 flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Prix du conditionnement (ex : 1 boîte)</span>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          [value]="packagePriceEuros() ?? ''"
+          placeholder="Facultatif"
+          (input)="onPackagePriceInput($any($event.target).value)"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+      </label>
+    </div>
+    <app-field-hint
+      text="Renseignez les deux prix comme votre fournisseur les affiche — le contenu d'un conditionnement est déduit automatiquement ci-dessous."
+    />
+
+    <div class="rounded-lg border border-line bg-bg p-3 text-sm">
+      @if (manualPackaging()) {
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink"
+            >Contenu d'un conditionnement (saisie manuelle)</span
+          >
+          <input
+            formControlName="packagingQuantity"
+            type="number"
+            step="0.001"
+            min="0"
+            [placeholder]="
+              'Ex : 9 (une boîte contient 9 ' + unitLabels[group().controls.unit.value] + ')'
+            "
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+        </label>
+        <button
+          type="button"
+          (click)="disableManualPackaging()"
+          class="mt-2 text-sm font-medium text-primary hover:underline"
+        >
+          Revenir au calcul automatique
+        </button>
+      } @else if (hasPackaging()) {
+        <p class="text-ink">
+          → Ce conditionnement contient donc
+          <strong
+            >{{ group().controls.packagingQuantity.value }}
+            {{ unitLabels[group().controls.unit.value] }}</strong
+          >.
+        </p>
+        <button
+          type="button"
+          (click)="enableManualPackaging()"
+          class="mt-1 text-xs font-medium text-ink-soft hover:underline"
+        >
+          Je connais déjà le contenu exact
+        </button>
+      } @else {
+        <p class="text-ink-soft">
+          Renseignez les deux prix ci-dessus pour calculer automatiquement le contenu d'un
+          conditionnement — ou laissez le prix du conditionnement vide si ce matériau se vend en
+          continu, sans lot fixe.
+        </p>
+        <button
+          type="button"
+          (click)="enableManualPackaging()"
+          class="mt-1 text-xs font-medium text-ink-soft hover:underline"
+        >
+          Je connais déjà le contenu exact
+        </button>
+      }
+    </div>
+
+    <label class="flex flex-row items-center gap-2">
+      <input
+        formControlName="roundUpToPackaging"
+        type="checkbox"
+        [disabled]="!hasPackaging()"
+        class="h-5 w-5"
+      />
+      <span
+        class="text-sm font-medium"
+        [class.text-ink]="hasPackaging()"
+        [class.text-ink-soft]="!hasPackaging()"
+      >
+        Facturer des conditionnements entiers (arrondir au lot)
+      </span>
+    </label>
   </div>
 
-  @if (hasPackaging()) {
-    <div class="flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
-      <span class="text-sm font-medium text-slate-700">
-        Comment connaissez-vous le prix de ce matériau ?
-      </span>
-      <div class="flex gap-2">
-        <button
-          type="button"
-          (click)="setPriceEntryMode('PER_UNIT')"
-          [class.bg-slate-700]="priceEntryMode() === 'PER_UNIT'"
-          [class.text-white]="priceEntryMode() === 'PER_UNIT'"
-          [class.text-slate-700]="priceEntryMode() !== 'PER_UNIT'"
-          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
-        >
-          Prix à l'unité
-        </button>
-        <button
-          type="button"
-          (click)="setPriceEntryMode('PER_PACKAGE')"
-          [class.bg-slate-700]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.text-white]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.text-slate-700]="priceEntryMode() !== 'PER_PACKAGE'"
-          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
-        >
-          Prix du conditionnement
-        </button>
-      </div>
-      <p class="text-xs text-slate-500">
-        Ex : une boîte de colle à 35 € qui couvre 25 m² — choisissez « Prix du conditionnement » et
-        entrez 35 €, le prix au m² sera calculé pour vous.
-      </p>
-    </div>
-  }
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">
-      {{ priceEntryMode() === 'PER_PACKAGE' ? 'Prix du conditionnement (€)' : 'Prix unitaire (€)' }}
-    </span>
-    @if (priceEntryMode() === 'PER_PACKAGE') {
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        [value]="packagePriceEuros() ?? ''"
-        (input)="onPackagePriceInput($any($event.target).value)"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-      />
-    } @else {
-      <input
-        formControlName="unitPriceEuros"
-        type="number"
-        step="0.01"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-      />
-    }
-    <app-field-hint [text]="priceHint()" />
-  </label>
-
-  <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+  <div class="rounded-lg border border-line bg-bg p-3 text-sm text-ink">
     {{ quantitySummary() }}
   </div>
 </div>

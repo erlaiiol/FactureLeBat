@@ -1,4 +1,6 @@
-<h1 class="mb-6 text-2xl font-bold text-slate-900">Nouvelle facture — Client</h1>
+<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
+  Nouvelle facture — Client
+</h1>
 
 <form
   [formGroup]="customerForm"
@@ -8,10 +10,10 @@
 >
   @if (draftStore.customers().length > 0) {
     <label class="flex flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Client enregistré</span>
+      <span class="text-sm font-medium text-ink">Client enregistré</span>
       <select
         (change)="onCustomerSelected($any($event.target).value)"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
       >
         <option value="">— Sélectionner —</option>
         @for (customer of draftStore.customers(); track customer.id) {
@@ -24,41 +26,41 @@
   }
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Nom du client</span>
+    <span class="text-sm font-medium text-ink">Nom du client</span>
     <input
       formControlName="customerName"
       type="text"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="Le nom qui apparaîtra sur la facture." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Adresse</span>
+    <span class="text-sm font-medium text-ink">Adresse</span>
     <input
       formControlName="customerAddress"
       type="text"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="L'adresse à facturer, affichée sur la facture." />
   </label>
 
   <div class="flex gap-3">
     <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Email</span>
+      <span class="text-sm font-medium text-ink">Email</span>
       <input
         formControlName="customerEmail"
         type="email"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
       />
       <app-field-hint text="Facultatif." />
     </label>
     <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Téléphone</span>
+      <span class="text-sm font-medium text-ink">Téléphone</span>
       <input
         formControlName="customerPhone"
         type="tel"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
       />
       <app-field-hint text="Facultatif." />
     </label>
@@ -67,7 +69,7 @@
   @if (!selectedCustomerId()) {
     <label class="flex items-center gap-2">
       <input formControlName="saveAsNewCustomer" type="checkbox" class="h-5 w-5" />
-      <span class="text-sm font-medium text-slate-700">
+      <span class="text-sm font-medium text-ink">
         Enregistrer ce client pour la prochaine fois
       </span>
     </label>

@@ -1,14 +1,14 @@
-<h1 class="mb-6 text-2xl font-bold text-slate-900">
+<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
   {{ isEditing ? 'Modifier le produit' : 'Nouveau produit' }}
 </h1>
 
 @if (loading()) {
-  <p class="text-slate-500">Chargement…</p>
+  <p class="text-ink-soft">Chargement…</p>
 }
 
 @if (!isEditing && !loading()) {
-  <div class="mb-6 flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <span class="text-sm font-medium text-slate-700">
+  <div class="mb-6 flex flex-col gap-2 rounded-xl border border-line bg-bg p-4">
+    <span class="text-sm font-medium text-ink">
       Importer depuis le site du fournisseur (optionnel)
     </span>
     <div class="flex gap-2">
@@ -16,22 +16,22 @@
         [formControl]="importUrl"
         type="url"
         placeholder="https://fournisseur.example.com/produit/parquet-oak"
-        class="flex-1 rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="flex-1 rounded-lg border border-line px-4 py-3 text-lg"
       />
       <button
         type="button"
         [disabled]="importing()"
         (click)="importFromUrl()"
-        class="shrink-0 rounded-lg bg-slate-700 px-4 py-3 font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+        class="shrink-0 rounded-lg bg-secondary px-4 py-3 font-medium text-secondary-fg hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {{ importing() ? 'Import…' : 'Importer' }}
       </button>
     </div>
-    <p class="text-xs text-slate-500">
+    <p class="text-xs text-ink-soft">
       Les champs ci-dessous seront pré-remplis mais resteront modifiables.
     </p>
     @if (importErrorMessage(); as message) {
-      <p class="text-sm font-medium text-red-700">{{ message }}</p>
+      <p class="text-sm font-medium text-danger">{{ message }}</p>
     }
   </div>
 }
@@ -43,29 +43,29 @@
   [class.hidden]="loading()"
 >
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Nom du produit</span>
+    <span class="text-sm font-medium text-ink">Nom du produit</span>
     <input
       formControlName="name"
       type="text"
       placeholder="Parquet chêne massif"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="Le nom affiché quand vous choisissez ce produit sur une facture." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Description</span>
+    <span class="text-sm font-medium text-ink">Description</span>
     <textarea
       formControlName="description"
       rows="3"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     ></textarea>
     <app-field-hint text="Facultatif — des précisions internes (référence, teinte, épaisseur…)." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Unité</span>
-    <select formControlName="unit" class="rounded-lg border border-slate-300 px-4 py-3 text-lg">
+    <span class="text-sm font-medium text-ink">Unité</span>
+    <select formControlName="unit" class="rounded-lg border border-line px-4 py-3 text-lg">
       @for (option of unitOptions; track option.value) {
         <option [value]="option.value">{{ option.label }}</option>
       }
@@ -73,105 +73,111 @@
     <app-field-hint text="La façon dont ce produit se vend (au m², à l’unité, au litre…)." />
   </label>
 
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Contenu d'un conditionnement</span>
-    <input
-      formControlName="packagingQuantity"
-      type="number"
-      step="0.001"
-      min="0"
-      [placeholder]="'Ex : 9 (une boîte contient 9 ' + unitLabels[form.controls.unit.value] + ')'"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-    />
-    <app-field-hint
-      [text]="
-        'Facultatif — si ce produit se vend par lot fixe (boîte, sac, rouleau…), indiquez combien de ' +
-        unitLabels[form.controls.unit.value] +
-        ' contient un seul conditionnement. Laissez vide si ce produit se vend en continu, sans lot fixe.'
-      "
-    />
-  </label>
+  <div class="flex flex-col gap-3 rounded-lg border border-line p-3">
+    <span class="text-sm font-semibold text-ink">Prix du matériau</span>
 
-  @if (hasPackaging()) {
-    <div class="flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
-      <span class="text-sm font-medium text-slate-700">Comment connaissez-vous le prix ?</span>
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Contenu d'un conditionnement</span>
+      <input
+        formControlName="packagingQuantity"
+        type="number"
+        step="0.001"
+        min="0"
+        [placeholder]="'Ex : 9 (une boîte contient 9 ' + unitLabels[form.controls.unit.value] + ')'"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint
+        [text]="
+          'Facultatif — si ce produit se vend par lot fixe (boîte, sac, rouleau…), indiquez combien de ' +
+          unitLabels[form.controls.unit.value] +
+          ' contient un seul conditionnement. Laissez vide si ce produit se vend en continu, sans lot fixe.'
+        "
+      />
+    </label>
+
+    <div class="flex flex-col gap-2">
       <div class="flex gap-2">
         <button
           type="button"
           (click)="setPriceEntryMode('PER_UNIT')"
-          [class.bg-slate-700]="priceEntryMode() === 'PER_UNIT'"
-          [class.text-white]="priceEntryMode() === 'PER_UNIT'"
-          [class.text-slate-700]="priceEntryMode() !== 'PER_UNIT'"
-          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+          [class.bg-secondary]="priceEntryMode() === 'PER_UNIT'"
+          [class.text-secondary-fg]="priceEntryMode() === 'PER_UNIT'"
+          [class.text-ink]="priceEntryMode() !== 'PER_UNIT'"
+          class="rounded-lg border border-line px-3 py-2 text-sm font-medium"
         >
-          Prix à l'unité
+          {{ unitPriceButtonLabel() }}
         </button>
         <button
           type="button"
           (click)="setPriceEntryMode('PER_PACKAGE')"
-          [class.bg-slate-700]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.text-white]="priceEntryMode() === 'PER_PACKAGE'"
-          [class.text-slate-700]="priceEntryMode() !== 'PER_PACKAGE'"
-          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+          [class.bg-secondary]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.text-secondary-fg]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.text-ink]="priceEntryMode() !== 'PER_PACKAGE'"
+          class="rounded-lg border border-line px-3 py-2 text-sm font-medium"
         >
-          Prix du conditionnement
+          Prix du conditionnement (ex : 1 paquet)
         </button>
       </div>
-      <p class="text-xs text-slate-500">
-        Ex : une boîte de colle à 35 € qui couvre 25 m² — choisissez « Prix du conditionnement » et
-        entrez 35 €, le prix au m² sera calculé pour vous.
-      </p>
+      <app-field-hint
+        text="Indiquez le prix comme vous le connaissez — l'autre montant ci-dessous est calculé automatiquement."
+      />
     </div>
-  }
+
+    <div class="flex gap-3">
+      <label class="flex flex-1 flex-col gap-1">
+        <span class="text-sm font-medium text-ink">{{ unitPriceButtonLabel() }} (€)</span>
+        <input
+          formControlName="priceEuros"
+          type="number"
+          step="0.01"
+          min="0"
+          [readOnly]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.bg-bg]="priceEntryMode() === 'PER_PACKAGE'"
+          [class.text-ink-soft]="priceEntryMode() === 'PER_PACKAGE'"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+      </label>
+
+      <label class="flex flex-1 flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Prix du conditionnement (€)</span>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          [value]="packagePriceDisplay() ?? ''"
+          [readOnly]="priceEntryMode() === 'PER_UNIT'"
+          [class.bg-bg]="priceEntryMode() === 'PER_UNIT'"
+          [class.text-ink-soft]="priceEntryMode() === 'PER_UNIT'"
+          (input)="onPackagePriceInput($any($event.target).value)"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+      </label>
+    </div>
+  </div>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">
-      {{ priceEntryMode() === 'PER_PACKAGE' ? 'Prix du conditionnement (€)' : 'Prix unitaire (€)' }}
-    </span>
-    @if (priceEntryMode() === 'PER_PACKAGE') {
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        [value]="packagePriceEuros() ?? ''"
-        (input)="onPackagePriceInput($any($event.target).value)"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-      />
-    } @else {
-      <input
-        formControlName="priceEuros"
-        type="number"
-        step="0.01"
-        min="0"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
-      />
-    }
-    <app-field-hint [text]="priceHint()" />
-  </label>
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Fournisseur</span>
+    <span class="text-sm font-medium text-ink">Fournisseur</span>
     <input
       formControlName="supplierName"
       type="text"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="Facultatif — chez qui vous achetez ce produit." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Site du fournisseur</span>
+    <span class="text-sm font-medium text-ink">Site du fournisseur</span>
     <input
       formControlName="supplierUrl"
       type="url"
       placeholder="https://…"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="Facultatif — un lien vers la page du produit chez ce fournisseur." />
   </label>
 
   @if (errorMessage(); as message) {
-    <p class="text-center font-medium text-red-700">{{ message }}</p>
+    <p class="text-center font-medium text-danger">{{ message }}</p>
   }
 
   <app-big-button type="submit" [disabled]="saving()">

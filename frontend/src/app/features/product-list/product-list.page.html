@@ -1,5 +1,5 @@
 <div class="mb-6 flex items-center justify-between gap-4">
-  <h1 class="text-2xl font-bold text-slate-900">Mes produits</h1>
+  <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-ink">Mes produits</h1>
   <a routerLink="/produits/nouveau" class="shrink-0">
     <app-big-button appTourAnchor="catalog-new-product">+ Nouveau produit</app-big-button>
   </a>
@@ -10,30 +10,30 @@
   type="text"
   placeholder="Rechercher un produit…"
   appTourAnchor="catalog-search"
-  class="mb-6 w-full rounded-lg border border-slate-300 px-4 py-3 text-lg"
+  class="mb-6 w-full rounded-lg border border-line px-4 py-3 text-lg"
 />
 
 @if (loading()) {
-  <p class="text-slate-500">Chargement…</p>
+  <p class="text-ink-soft">Chargement…</p>
 } @else if (errorMessage(); as message) {
-  <p class="font-medium text-red-700">{{ message }}</p>
+  <p class="font-medium text-danger">{{ message }}</p>
 } @else if (products().length === 0) {
-  <p class="text-slate-500">Aucun produit pour le moment.</p>
+  <p class="text-ink-soft">Aucun produit pour le moment.</p>
 } @else {
   <ul class="flex flex-col gap-3">
     @for (product of products(); track product.id) {
       <li>
         <a
           [routerLink]="['/produits', product.id]"
-          class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50"
+          class="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 hover:bg-bg"
         >
           <div>
-            <p class="font-semibold text-slate-900">{{ product.name }}</p>
+            <p class="font-semibold text-ink">{{ product.name }}</p>
             @if (product.supplierName) {
-              <p class="text-sm text-slate-600">{{ product.supplierName }}</p>
+              <p class="text-sm text-ink-soft">{{ product.supplierName }}</p>
             }
           </div>
-          <span class="text-lg font-semibold text-slate-900">
+          <span class="text-lg font-semibold text-ink font-mono">
             {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
           </span>
         </a>

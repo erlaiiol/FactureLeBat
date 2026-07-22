@@ -1,9 +1,9 @@
-<h1 class="mb-6 text-2xl font-bold text-slate-900">
+<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
   {{ isEditing ? 'Modifier le client' : 'Nouveau client' }}
 </h1>
 
 @if (loading()) {
-  <p class="text-slate-500">Chargement…</p>
+  <p class="text-ink-soft">Chargement…</p>
 }
 
 <form
@@ -13,31 +13,31 @@
   [class.hidden]="loading()"
 >
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Nom</span>
+    <span class="text-sm font-medium text-ink">Nom</span>
     <input
       formControlName="name"
       type="text"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="Le nom de ce client, tel qu'il apparaîtra sur ses factures." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Nom de l'entreprise</span>
+    <span class="text-sm font-medium text-ink">Nom de l'entreprise</span>
     <input
       formControlName="companyName"
       type="text"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="Facultatif — si ce client est une entreprise plutôt qu'un particulier." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Adresse</span>
+    <span class="text-sm font-medium text-ink">Adresse</span>
     <input
       formControlName="address"
       type="text"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint
       text="L'adresse à facturer, reprise automatiquement sur ses prochaines factures."
@@ -46,33 +46,33 @@
 
   <div class="flex gap-3">
     <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Email</span>
+      <span class="text-sm font-medium text-ink">Email</span>
       <input
         formControlName="email"
         type="email"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
       />
       <app-field-hint text="Facultatif — pour lui envoyer ses factures." />
     </label>
     <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-slate-700">Téléphone</span>
+      <span class="text-sm font-medium text-ink">Téléphone</span>
       <input
         formControlName="phone"
         type="tel"
-        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
       />
       <app-field-hint text="Facultatif — pour le recontacter facilement." />
     </label>
   </div>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">SIRET (si professionnel)</span>
+    <span class="text-sm font-medium text-ink">SIRET (si professionnel)</span>
     <input
       formControlName="siret"
       type="text"
       inputmode="numeric"
       maxlength="14"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint
       text="Facultatif — uniquement si ce client facture lui-même en tant que professionnel."
@@ -80,7 +80,7 @@
   </label>
 
   @if (errorMessage(); as message) {
-    <p class="text-center font-medium text-red-700">{{ message }}</p>
+    <p class="text-center font-medium text-danger">{{ message }}</p>
   }
 
   <app-big-button type="submit" [disabled]="saving()">

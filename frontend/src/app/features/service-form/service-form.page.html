@@ -1,9 +1,9 @@
-<h1 class="mb-6 text-2xl font-bold text-slate-900">
+<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
   {{ isEditing ? 'Modifier la prestation' : 'Nouvelle prestation' }}
 </h1>
 
 @if (loading()) {
-  <p class="text-slate-500">Chargement…</p>
+  <p class="text-ink-soft">Chargement…</p>
 }
 
 <form
@@ -13,34 +13,34 @@
   [class.hidden]="loading()"
 >
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Nom de la prestation</span>
+    <span class="text-sm font-medium text-ink">Nom de la prestation</span>
     <input
       formControlName="name"
       type="text"
       placeholder="Ex : Main-d’œuvre pose parquet"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint text="Le nom affiché quand vous choisissez cette prestation sur une facture." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Description</span>
+    <span class="text-sm font-medium text-ink">Description</span>
     <textarea
       formControlName="description"
       rows="3"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     ></textarea>
     <app-field-hint text="Facultatif — des précisions internes sur cette prestation." />
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Prix (€)</span>
+    <span class="text-sm font-medium text-ink">Prix (€)</span>
     <input
       formControlName="priceEuros"
       type="number"
       step="0.01"
       min="0"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     />
     <app-field-hint
       text="Le montant total de cette prestation, sera pré-rempli sur vos factures."
@@ -48,10 +48,10 @@
   </label>
 
   <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-slate-700">Visibilité par défaut sur une facture</span>
+    <span class="text-sm font-medium text-ink">Visibilité par défaut sur une facture</span>
     <select
       formControlName="defaultVisibility"
-      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
     >
       <option value="VISIBLE">Visible — sa propre ligne sur la facture</option>
       <option value="REDISTRIBUTED">Répartie — masquée, ajoutée aux autres lignes</option>
@@ -62,7 +62,7 @@
   </label>
 
   @if (errorMessage(); as message) {
-    <p class="text-center font-medium text-red-700">{{ message }}</p>
+    <p class="text-center font-medium text-danger">{{ message }}</p>
   }
 
   <app-big-button type="submit" [disabled]="saving()">
