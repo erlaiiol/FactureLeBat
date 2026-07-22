@@ -12,6 +12,21 @@ import {
 
 const BUNDLED_FONTS_DIR = dirname(require.resolve('pdfmake/fonts/Roboto'));
 
+// "Atelier sobre" (docs/design-system.md) applied to the one sanctioned spot
+// on the PDF: the header sent to the artisan's own client. Self-hosted
+// (OFL-licensed) .ttf files, same "bundled, never fetched" pattern as
+// Roboto above — never a network font load during PDF generation.
+const ZILLA_SLAB_TTF =
+  require.resolve('@expo-google-fonts/zilla-slab/600SemiBold/ZillaSlab_600SemiBold.ttf');
+const WORK_SANS_REGULAR_TTF =
+  require.resolve('@expo-google-fonts/work-sans/400Regular/WorkSans_400Regular.ttf');
+const WORK_SANS_BOLD_TTF =
+  require.resolve('@expo-google-fonts/work-sans/700Bold/WorkSans_700Bold.ttf');
+const ATELIER_FONTS_DIRS = [dirname(ZILLA_SLAB_TTF), dirname(WORK_SANS_REGULAR_TTF)];
+
+const ATELIER_WALNUT = '#6B4A34';
+const ATELIER_INK_SOFT = '#746A5D';
+
 const eur = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 // Intl's fr-FR formatting uses narrow no-break/no-break spaces as group and
 // currency separators, which the bundled Roboto font has no glyph for
@@ -20,11 +35,18 @@ const centsToEuros = (cents: number): string =>
   eur.format(cents / 100).replace(/[\u202F\u00A0]/g, ' ');
 
 pdfMake.addFonts(roboto as never);
+pdfMake.addFonts({
+  ZillaSlab: { normal: ZILLA_SLAB_TTF, bold: ZILLA_SLAB_TTF },
+  WorkSans: { normal: WORK_SANS_REGULAR_TTF, bold: WORK_SANS_BOLD_TTF },
+});
 // Invoice documents only ever contain static text/tables and the bundled
-// Roboto font files — never trust or fetch any other external/local content
-// while rendering them.
+// Roboto/Zilla Slab/Work Sans font files — never trust or fetch any other
+// external/local content while rendering them.
 pdfMake.setUrlAccessPolicy(() => false);
-pdfMake.setLocalAccessPolicy((path: string) => path.startsWith(BUNDLED_FONTS_DIR));
+pdfMake.setLocalAccessPolicy(
+  (path: string) =>
+    path.startsWith(BUNDLED_FONTS_DIR) || ATELIER_FONTS_DIRS.some((dir) => path.startsWith(dir)),
+);
 
 // Knows nothing about Prisma or business rules: only how to turn an
 // InvoicePdfData object into a PDF document (Invoice Service > Invoice Data
@@ -58,13 +80,44 @@ export class PdfService {
     };
   }
 
+  // "Atelier sobre" (docs/design-system.md): the only place on the PDF this
+  // identity is allowed — the delivered document can afford more warmth
+  // than the screens that produced it. Everything below the header (parties,
+  // tables, totals, legal footer) stays in the default Roboto/black-and-grey
+  // treatment, unaffected.
   private buildHeader(data: InvoicePdfData): Content {
     return {
-      columns: [
-        { text: `Facture ${data.number}`, style: 'title' },
+      stack: [
         {
-          text: `Date : ${data.date.toLocaleDateString('fr-FR')}`,
-          alignment: 'right',
+          columns: [
+            {
+              text: `Facture ${data.number}`,
+              font: 'ZillaSlab',
+              fontSize: 20,
+              bold: true,
+              color: ATELIER_WALNUT,
+            },
+            {
+              text: `Date : ${data.date.toLocaleDateString('fr-FR')}`,
+              font: 'WorkSans',
+              alignment: 'right',
+              color: ATELIER_INK_SOFT,
+            },
+          ],
+        },
+        {
+          canvas: [
+            {
+              type: 'line',
+              x1: 0,
+              y1: 0,
+              x2: 515,
+              y2: 0,
+              lineWidth: 1.5,
+              lineColor: ATELIER_WALNUT,
+            },
+          ],
+          margin: [0, 6, 0, 0],
         },
       ],
     };

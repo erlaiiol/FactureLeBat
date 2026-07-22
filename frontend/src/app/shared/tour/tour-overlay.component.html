@@ -1,51 +1,66 @@
 @if (tourService.currentStep(); as step) {
-  <div class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-live="polite">
-    <svg class="pointer-events-none absolute inset-0 h-full w-full">
-      <defs>
-        <mask id="tour-spotlight-mask">
-          <rect width="100%" height="100%" fill="white" />
-          @if (targetRect(); as rect) {
-            <rect
-              [attr.x]="rect.left - 8"
-              [attr.y]="rect.top - 8"
-              [attr.width]="rect.width + 16"
-              [attr.height]="rect.height + 16"
-              rx="12"
-              fill="black"
-            />
-          }
-        </mask>
-      </defs>
-      <rect
-        width="100%"
-        height="100%"
+  <!-- pointer-events-none here (and aria-modal="false") is deliberate: the
+       spotlighted element underneath must stay fillable/clickable while its
+       tour step is showing — only the dimmed backdrop path and the popover
+       below opt back into pointer-events-auto. -->
+  <div
+    class="pointer-events-none fixed inset-0 z-50"
+    role="dialog"
+    aria-modal="false"
+    aria-live="polite"
+  >
+    <svg class="absolute inset-0 h-full w-full">
+      <path
+        fill-rule="evenodd"
+        [attr.d]="spotlightPathD()"
         fill="rgba(15, 23, 42, 0.65)"
-        mask="url(#tour-spotlight-mask)"
+        class="pointer-events-auto"
       />
     </svg>
 
+    <!-- "Atelier sobre" (docs/design-system.md): the guided tour is a
+         narrative, human moment — one of the three sanctioned spots for
+         this warmer identity, distinct from the transactional screens it's
+         guiding the artisan through. -->
     <div
-      class="absolute w-80 max-w-[calc(100vw-24px)] rounded-2xl bg-white p-5 shadow-2xl transition-[top,left] duration-200"
+      class="bg-atelier-surface text-atelier-ink font-atelier-sans pointer-events-auto absolute w-80 max-w-[calc(100vw-24px)] rounded-2xl p-5 shadow-2xl transition-[top,left] duration-200"
+      [class.anim-tour-step-in]="stepAnimating()"
+      [class.anim-tour-completion-glow]="tourService.isLastStep()"
       [style.top.px]="popoverPosition().top"
       [style.left.px]="popoverPosition().left"
     >
-      <p class="mb-1 text-xs font-semibold tracking-wide text-blue-600 uppercase">
+      @if (tourService.isLastStep()) {
+        <svg
+          class="anim-tour-checkmark mb-2 h-8 w-8"
+          viewBox="0 0 24 24"
+          fill="none"
+          [style.stroke]="'var(--color-atelier-moss)'"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M4 12.5 L9.5 18 L20 6" />
+        </svg>
+      }
+      <p
+        class="mb-1 text-xs font-semibold tracking-wide text-[var(--color-atelier-walnut)] uppercase"
+      >
         Étape {{ tourService.stepIndex() + 1 }} / {{ tourService.stepCount() }}
       </p>
-      <div class="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+      <div class="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-atelier-bg)]">
         <div
-          class="h-full rounded-full bg-blue-600 transition-all duration-300"
+          class="h-full rounded-full bg-[var(--color-atelier-walnut)] transition-all duration-300"
           [style.width.%]="progressPercent()"
         ></div>
       </div>
-      <h2 class="mb-1 text-lg font-bold text-slate-900">{{ step.title }}</h2>
-      <p class="mb-4 text-sm text-slate-600">{{ step.body }}</p>
+      <h2 class="font-atelier-heading mb-1 text-lg font-semibold">{{ step.title }}</h2>
+      <p class="text-atelier-ink-soft mb-4 text-sm">{{ step.body }}</p>
       <div class="flex items-center justify-end gap-2">
         @if (!tourService.isLastStep()) {
           <button
             type="button"
             [disabled]="tourService.advancing()"
-            class="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            class="text-atelier-ink-soft rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--color-atelier-bg)] disabled:cursor-not-allowed disabled:opacity-50"
             (click)="tourService.skip()"
           >
             Passer
@@ -54,7 +69,7 @@
         <button
           type="button"
           [disabled]="tourService.advancing()"
-          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-lg bg-[var(--color-atelier-walnut)] px-4 py-2 text-sm font-semibold text-[var(--color-atelier-surface)] transition hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
           [class.animate-pulse]="tourService.isLastStep()"
           (click)="tourService.next()"
         >
