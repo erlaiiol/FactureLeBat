@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
+import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 6, step 1: dedicated customer picker/creation screen. Reads its
@@ -14,7 +15,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
 @Component({
   selector: 'app-invoice-create-customer-step-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
+  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent, TourAnchorDirective],
   templateUrl: './invoice-create-customer-step.page.html',
 })
 export class InvoiceCreateCustomerStepPage {

@@ -8,9 +8,24 @@ export interface LineCalculationInput {
   quantity: Prisma.Decimal | number | string;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
+  // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
+  // 9 m² box). Absent/null means the product is sold continuously — the
+  // packaging step below is then skipped entirely, exactly reproducing the
+  // pre-Phase-8.5 math.
+  packagingQuantity?: Prisma.Decimal | number | string | null;
+  // Whether the needed quantity is rounded up to the next whole package.
+  // Inert when packagingQuantity is absent — nothing to round to.
+  roundUpToPackaging?: boolean;
 }
 
 export interface LineCalculationResult {
+  // Site quantity after waste surcharge, before any packaging rounding —
+  // "how much material the job truly needs." Not itself billed; kept for
+  // display/breakdown purposes (see docs/roadmap.md Phase 8.5/Phase 15).
+  neededQuantity: Prisma.Decimal;
+  // What's actually priced: neededQuantity, rounded up to the next whole
+  // package when packaging rounding applies. Equal to neededQuantity
+  // whenever no packaging quantity is set, or rounding is turned off.
   billedQuantity: Prisma.Decimal;
   lineTotalExclVatCents: number;
 }
@@ -45,13 +60,21 @@ export class InvoiceCalculationService {
       ? WASTE_SURCHARGE_BASIS_POINTS[line.wasteSurcharge]
       : 0;
 
-    const billedQuantity = quantity.mul(10000 + wasteBasisPoints).div(10000);
+    const neededQuantity = quantity.mul(10000 + wasteBasisPoints).div(10000);
+
+    const packagingQuantity =
+      line.packagingQuantity != null ? new Prisma.Decimal(line.packagingQuantity) : null;
+    const billedQuantity =
+      line.roundUpToPackaging && packagingQuantity && packagingQuantity.greaterThan(0)
+        ? neededQuantity.div(packagingQuantity).ceil().mul(packagingQuantity)
+        : neededQuantity;
+
     const lineTotalExclVatCents = billedQuantity
       .mul(line.unitPriceCents)
       .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP)
       .toNumber();
 
-    return { billedQuantity, lineTotalExclVatCents };
+    return { neededQuantity, billedQuantity, lineTotalExclVatCents };
   }
 
   // Split out so callers that already computed each line's total once (see

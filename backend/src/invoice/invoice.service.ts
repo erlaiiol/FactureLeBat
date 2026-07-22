@@ -66,6 +66,8 @@ export class InvoiceService {
         quantity: line.quantity,
         unitPriceCents: line.unitPriceCents,
         wasteSurcharge: line.wasteSurcharge,
+        packagingQuantity: line.packagingQuantity,
+        roundUpToPackaging: line.roundUpToPackaging ?? true,
       })),
       serviceLines: serviceLineDtos.map((serviceLine): CreateInvoiceServiceLineData => {
         const weights = expandServiceLineWeights(serviceLine, dto.lines.length);

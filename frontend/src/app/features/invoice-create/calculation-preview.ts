@@ -11,6 +11,11 @@ export interface LinePreviewInput {
   quantity: number;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
+  // Phase 8.5: mirrors InvoiceCalculationService's packaging rounding step
+  // so the always-visible running total never diverges from what the
+  // backend will actually bill once a packaging quantity is set.
+  packagingQuantity?: number | null;
+  roundUpToPackaging?: boolean;
 }
 
 const WASTE_SURCHARGE_BASIS_POINTS: Record<WasteSurcharge, number> = {
@@ -26,7 +31,12 @@ export function computeLineTotalPreviewCents(line: LinePreviewInput): number {
   const wasteBasisPoints = isAreaUnit(line.unit)
     ? WASTE_SURCHARGE_BASIS_POINTS[line.wasteSurcharge]
     : 0;
-  const billedQuantity = (line.quantity * (10000 + wasteBasisPoints)) / 10000;
+  const neededQuantity = (line.quantity * (10000 + wasteBasisPoints)) / 10000;
+  const packagingQuantity = line.packagingQuantity;
+  const billedQuantity =
+    line.roundUpToPackaging && packagingQuantity && packagingQuantity > 0
+      ? Math.ceil(neededQuantity / packagingQuantity) * packagingQuantity
+      : neededQuantity;
   return Math.round(billedQuantity * line.unitPriceCents);
 }
 

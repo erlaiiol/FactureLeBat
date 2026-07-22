@@ -5,6 +5,7 @@ import { CompanyService } from '../../core/services/company.service';
 import { LegalStatus } from '../../core/models/company.model';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
+import { TourService } from '../../shared/tour/tour.service';
 
 @Component({
   selector: 'app-company-settings-page',
@@ -16,11 +17,13 @@ export class CompanySettingsPage {
   private readonly companyService = inject(CompanyService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly tourService = inject(TourService);
 
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly saved = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly toursReplayed = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
@@ -104,5 +107,14 @@ export class CompanySettingsPage {
           this.errorMessage.set('Erreur lors de l’enregistrement. Veuillez réessayer.');
         },
       });
+  }
+
+  protected onTourEnabledChange(enabled: boolean): void {
+    this.tourService.setTourEnabled(enabled);
+  }
+
+  protected replayTours(): void {
+    this.tourService.replayTours();
+    this.toursReplayed.set(true);
   }
 }

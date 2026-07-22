@@ -8,11 +8,19 @@ import { ProductService } from '../../core/services/product.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../shared/pipes/unit-label.pipe';
+import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 
 @Component({
   selector: 'app-product-list-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, CentsToEurosPipe, UnitLabelPipe],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BigButtonComponent,
+    CentsToEurosPipe,
+    UnitLabelPipe,
+    TourAnchorDirective,
+  ],
   templateUrl: './product-list.page.html',
 })
 export class ProductListPage {

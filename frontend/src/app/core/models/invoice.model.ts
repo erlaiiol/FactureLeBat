@@ -12,6 +12,11 @@ export interface CreateInvoiceLineRequest {
   quantity: number;
   unitPriceCents: number;
   wasteSurcharge?: WasteSurcharge;
+  // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
+  // 9 m² box) — freehand, optional. roundUpToPackaging defaults to true
+  // backend-side and is inert without a packagingQuantity.
+  packagingQuantity?: number;
+  roundUpToPackaging?: boolean;
 }
 
 // Phase 5: a service added to the invoice, either its own visible amount or
@@ -46,6 +51,11 @@ export interface InvoiceLineWithTotal {
   quantity: string;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
+  // Phase 8.5: what's actually priced, after waste surcharge and any
+  // packaging rounding — equal to `quantity` whenever no packaging applies.
+  billedQuantity: string;
+  packagingQuantity: string | null;
+  roundUpToPackaging: boolean;
   lineTotalExclVatCents: number;
 }
 

@@ -87,6 +87,32 @@ describe('Invoice pipeline (e2e)', () => {
     expect((pdfResponse.body as Buffer).subarray(0, 4).toString('ascii')).toBe('%PDF');
   });
 
+  it('bills a packaged line for whole packages, rounding the site quantity up when it does not land on an exact box count', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/api/invoices')
+      .send({
+        customerName: 'E2E Packaging Customer',
+        lines: [
+          {
+            description: 'Parquet bambou en boite de 9m2',
+            unit: 'SQUARE_METER',
+            quantity: 23,
+            unitPriceCents: 4500,
+            packagingQuantity: 9,
+          },
+        ],
+      })
+      .expect(201);
+
+    const created = createResponse.body as InvoiceWithTotals;
+    createdInvoiceIds.push(created.id);
+    // 23 m2 needed -> rounds up to 3 boxes of 9 m2 = 27 m2 billed (roundUpToPackaging
+    // defaults to true), priced at 27 * 4500 rather than the raw 23 m2 site quantity.
+    expect(created.lines[0].quantity).toBe('23');
+    expect(created.lines[0].billedQuantity).toBe('27');
+    expect(created.subtotalExclVatCents).toBe(27 * 4500);
+  });
+
   it('rejects an invoice with no lines', () => {
     return request(app.getHttpServer())
       .post('/api/invoices')

@@ -44,6 +44,7 @@ describe('Product pipeline (e2e)', () => {
         priceCents: 4500,
         supplierName: 'E2E Supplier',
         supplierUrl: 'https://supplier.example.com/parquet-chene',
+        packagingQuantity: 9,
       })
       .expect(201);
 
@@ -51,6 +52,7 @@ describe('Product pipeline (e2e)', () => {
     createdProductIds.push(created.id);
     expect(created.name).toBe('E2E Parquet chene massif');
     expect(created.priceCents).toBe(4500);
+    expect(created.packagingQuantity).toBe('9');
 
     const getResponse = await request(app.getHttpServer())
       .get(`/api/products/${created.id}`)
@@ -64,6 +66,9 @@ describe('Product pipeline (e2e)', () => {
     expect((updateResponse.body as ProductProfile).name).toBe('E2E Parquet chene massif updated');
     expect((updateResponse.body as ProductProfile).priceCents).toBe(4800);
     expect((updateResponse.body as ProductProfile).supplierName).toBeNull();
+    // Same "full replace" PATCH contract as supplierName above — omitting
+    // packagingQuantity clears it rather than leaving the old value in place.
+    expect((updateResponse.body as ProductProfile).packagingQuantity).toBeNull();
 
     const searchResponse = await request(app.getHttpServer())
       .get('/api/products')

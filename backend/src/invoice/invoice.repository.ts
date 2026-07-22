@@ -21,6 +21,8 @@ export interface CreateInvoiceLineData {
   quantity: number;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
+  packagingQuantity?: number;
+  roundUpToPackaging: boolean;
 }
 
 export interface CreateInvoiceServiceLineData {
@@ -97,6 +99,8 @@ export class InvoiceRepository {
               quantity: line.quantity,
               unitPriceCents: line.unitPriceCents,
               wasteSurcharge: line.wasteSurcharge,
+              packagingQuantity: line.packagingQuantity,
+              roundUpToPackaging: line.roundUpToPackaging,
             })),
           },
         },

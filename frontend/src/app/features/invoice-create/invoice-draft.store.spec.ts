@@ -36,6 +36,8 @@ const lineFixture: InvoiceLineDraft = {
   quantity: 10,
   unitPriceEuros: 45,
   wasteSurcharge: 'NONE',
+  packagingQuantity: null,
+  roundUpToPackaging: true,
 };
 
 describe('InvoiceDraftStore', () => {

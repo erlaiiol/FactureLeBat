@@ -21,6 +21,8 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     vatRateBasisPoints: 2000,
     invoiceNumberPrefix: 'F',
     nextInvoiceNumber: 2,
+    tourEnabled: true,
+    completedTours: [],
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     ...overrides,
@@ -68,6 +70,8 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
         quantity: '10' as unknown as InvoiceWithLines['lines'][number]['quantity'],
         unitPriceCents: 4500,
         wasteSurcharge: 'NONE',
+        packagingQuantity: null,
+        roundUpToPackaging: true,
         createdAt: new Date('2026-01-15'),
       },
     ],
@@ -86,6 +90,8 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
       vatRateBasisPoints: 2000,
       invoiceNumberPrefix: 'F',
       nextInvoiceNumber: 2,
+      tourEnabled: true,
+      completedTours: [],
       createdAt: new Date('2026-01-15'),
       updatedAt: new Date('2026-01-15'),
     },
@@ -101,6 +107,31 @@ describe('InvoiceMapper', () => {
       const result = mapper.toInvoiceWithTotals(invoiceWithLines());
       expect(result.lines[0].lineTotalExclVatCents).toBe(45000);
       expect(result.subtotalExclVatCents).toBe(45000);
+    });
+
+    it('exposes the billed (post-packaging-rounding) quantity and prices off it, not the raw site quantity', () => {
+      const invoice = invoiceWithLines({
+        lines: [
+          {
+            id: 'line-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            description: 'Parquet',
+            unit: 'SQUARE_METER',
+            quantity: '23' as unknown as InvoiceWithLines['lines'][number]['quantity'],
+            unitPriceCents: 4500,
+            wasteSurcharge: 'NONE',
+            packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
+            roundUpToPackaging: true,
+            createdAt: new Date('2026-01-15'),
+          },
+        ],
+      });
+      const result = mapper.toInvoiceWithTotals(invoice);
+
+      expect(result.lines[0].quantity).toBe('23');
+      expect(result.lines[0].billedQuantity).toBe('27');
+      expect(result.lines[0].lineTotalExclVatCents).toBe(27 * 4500);
     });
 
     it('computes VAT and total from the subtotal when VAT is applicable', () => {

@@ -13,6 +13,13 @@ export interface InvoiceLineWithTotal {
   quantity: string;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
+  // Phase 8.5: the quantity actually priced, after waste surcharge and any
+  // packaging rounding — see InvoiceCalculationService.computeLineTotal.
+  // Equal to `quantity` (as a string) whenever no packaging rounding
+  // applies; never persisted, always recomputed here.
+  billedQuantity: string;
+  packagingQuantity: string | null;
+  roundUpToPackaging: boolean;
   // Includes any amount redistributed onto this line by a REDISTRIBUTED
   // service line (Phase 5) — always recomputed, never persisted (see
   // InvoiceMapper.toInvoiceWithTotals).

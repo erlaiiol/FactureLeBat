@@ -6,11 +6,12 @@ import { debounceTime, distinctUntilChanged, startWith, switchMap } from 'rxjs';
 import { CustomerProfile } from '../../core/models/customer.model';
 import { CustomerService } from '../../core/services/customer.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 
 @Component({
   selector: 'app-customer-list-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent],
+  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, TourAnchorDirective],
   templateUrl: './customer-list.page.html',
 })
 export class CustomerListPage {

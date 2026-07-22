@@ -36,7 +36,7 @@
 
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-slate-700">
-        {{ isAreaMode() ? 'Surface (m²)' : 'Quantité' }}
+        {{ isAreaMode() ? 'Surface du chantier (m²)' : 'Quantité du chantier' }}
       </span>
       <input
         formControlName="quantity"
@@ -47,8 +47,8 @@
       <app-field-hint
         [text]="
           isAreaMode()
-            ? 'Le nombre de m² à facturer, chutes non comprises.'
-            : 'La quantité à facturer.'
+            ? 'Ce dont le chantier a besoin, chutes non comprises — pas forcément ce qui sera facturé.'
+            : 'Ce dont le chantier a besoin — pas forcément ce qui sera facturé.'
         "
       />
     </label>
@@ -80,6 +80,32 @@
         <app-field-hint
           text="Ajoute automatiquement de la matière facturée pour compenser les découpes perdues."
         />
+      </label>
+    }
+  </div>
+
+  <div class="flex gap-3">
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-slate-700">Conditionnement</span>
+      <input
+        formControlName="packagingQuantity"
+        type="number"
+        step="0.001"
+        min="0"
+        [placeholder]="'Ex : 9 ' + unitLabels[group().controls.unit.value] + ' par boîte'"
+        class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+      />
+      <app-field-hint
+        text="Facultatif — si ce produit se vend en colis fixe (boîte, sac, rouleau…), indiquez la quantité par colis pour que la quantité facturée soit arrondie automatiquement."
+      />
+    </label>
+
+    @if (hasPackaging()) {
+      <label class="flex flex-1 flex-row items-center gap-2 pt-6">
+        <input formControlName="roundUpToPackaging" type="checkbox" class="h-5 w-5" />
+        <span class="text-sm font-medium text-slate-700">
+          Arrondir au conditionnement (facturer des colis entiers)
+        </span>
       </label>
     }
   </div>

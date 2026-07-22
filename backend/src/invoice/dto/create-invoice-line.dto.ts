@@ -1,5 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNumber, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { Unit, WasteSurcharge } from '../../../generated/prisma/enums';
 import { WasteSurchargeOnlyForArea } from './waste-surcharge-only-for-area.validator';
 
@@ -36,4 +47,24 @@ export class CreateInvoiceLineDto {
   @IsEnum(WasteSurcharge)
   @WasteSurchargeOnlyForArea()
   wasteSurcharge: WasteSurcharge = WasteSurcharge.NONE;
+
+  // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
+  // 9 m² box). Freehand/snapshotted, same "autofill, not a lock" rule as
+  // every other soft catalog reference — optional because most lines are
+  // still sold continuously.
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  @Max(MAX_QUANTITY)
+  packagingQuantity?: number;
+
+  // Whether the billed quantity rounds up to the next whole package.
+  // Defaults to true (automated calculation is the default; the artisan
+  // opts out for exact-quantity billing) and is inert when
+  // packagingQuantity is absent — no cross-field validator needed since
+  // there's nothing to round to in that case.
+  @IsOptional()
+  @IsBoolean()
+  roundUpToPackaging?: boolean = true;
 }

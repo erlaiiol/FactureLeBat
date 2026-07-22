@@ -87,6 +87,25 @@
   </div>
 
   <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Conditionnement</span>
+    <input
+      formControlName="packagingQuantity"
+      type="number"
+      step="0.001"
+      min="0"
+      placeholder="Ex : 9"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+    <app-field-hint
+      [text]="
+        'Facultatif — si ce produit se vend en colis fixe (ex : boîte de 9 ' +
+        unitLabels[form.controls.unit.value] +
+        '), indiquez la quantité par colis. Laissez vide s’il se vend en continu.'
+      "
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
     <span class="text-sm font-medium text-slate-700">Fournisseur</span>
     <input
       formControlName="supplierName"

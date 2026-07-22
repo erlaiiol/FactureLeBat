@@ -20,6 +20,7 @@ import { Unit } from '../../../core/models/unit.model';
 import { CustomerService } from '../../../core/services/customer.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import {
   InvoiceLineFormComponent,
   InvoiceLineFormGroup,
@@ -43,6 +44,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
     BigButtonComponent,
     InvoiceLineFormComponent,
     InvoiceServiceLineFormComponent,
+    TourAnchorDirective,
   ],
   templateUrl: './invoice-create-lines-step.page.html',
 })
@@ -91,6 +93,8 @@ export class InvoiceCreateLinesStepPage {
     quantity: number;
     unitPriceEuros: number;
     wasteSurcharge: WasteSurcharge;
+    packagingQuantity: number | null;
+    roundUpToPackaging: boolean;
   }): InvoiceLineFormGroup {
     return this.fb.nonNullable.group({
       description: this.fb.nonNullable.control(initial?.description ?? '', Validators.required),
@@ -106,6 +110,12 @@ export class InvoiceCreateLinesStepPage {
       wasteSurcharge: this.fb.nonNullable.control<WasteSurcharge>(
         initial?.wasteSurcharge ?? 'NONE',
       ),
+      // Phase 8.5: freehand packaging info for this line — see
+      // InvoiceLineFormComponent for the "arrondir au conditionnement" toggle.
+      packagingQuantity: this.fb.control<number | null>(initial?.packagingQuantity ?? null, [
+        Validators.min(0.001),
+      ]),
+      roundUpToPackaging: this.fb.nonNullable.control(initial?.roundUpToPackaging ?? true),
     });
   }
 

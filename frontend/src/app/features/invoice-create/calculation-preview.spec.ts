@@ -20,6 +20,31 @@ describe('computeLineTotalPreviewCents', () => {
     });
     expect(cents).toBe(4000);
   });
+
+  it('rounds up to the next whole package when a packaging quantity is set and rounding is on', () => {
+    const cents = computeLineTotalPreviewCents({
+      unit: 'SQUARE_METER',
+      quantity: 23,
+      unitPriceCents: 4500,
+      wasteSurcharge: 'NONE',
+      packagingQuantity: 9,
+      roundUpToPackaging: true,
+    });
+    // 23 m² needed -> 3 boxes of 9 m² = 27 m² billed
+    expect(cents).toBe(27 * 4500);
+  });
+
+  it('bills the exact quantity when roundUpToPackaging is false, even with a packaging quantity set', () => {
+    const cents = computeLineTotalPreviewCents({
+      unit: 'SQUARE_METER',
+      quantity: 23,
+      unitPriceCents: 4500,
+      wasteSurcharge: 'NONE',
+      packagingQuantity: 9,
+      roundUpToPackaging: false,
+    });
+    expect(cents).toBe(23 * 4500);
+  });
 });
 
 describe('computeTotalsPreview', () => {

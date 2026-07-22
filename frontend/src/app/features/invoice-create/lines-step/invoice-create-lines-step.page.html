@@ -36,7 +36,12 @@
         <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)" />
       }
 
-      <app-big-button variant="secondary" type="button" (click)="addLine()">
+      <app-big-button
+        variant="secondary"
+        type="button"
+        appTourAnchor="invoice-add-line"
+        (click)="addLine()"
+      >
         + Ajouter une ligne
       </app-big-button>
     </section>

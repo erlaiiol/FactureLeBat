@@ -1,6 +1,8 @@
+import { Type } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
@@ -15,6 +17,8 @@ import { Unit } from '../../../generated/prisma/enums';
 // extra zero) before it reaches invoice-line prefill, not a real business
 // limit. Matches CreateInvoiceLineDto's MAX_UNIT_PRICE_CENTS.
 const MAX_PRICE_CENTS = 100_000_000; // 1,000,000.00 €
+// Matches CreateInvoiceLineDto's MAX_QUANTITY — same sanity-cap reasoning.
+const MAX_PACKAGING_QUANTITY = 1_000_000;
 
 export class CreateProductDto {
   @IsString()
@@ -46,4 +50,15 @@ export class CreateProductDto {
   @IsUrl()
   @MaxLength(500)
   supplierUrl?: string;
+
+  // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
+  // 9 m² box of flooring). Optional — most products still sell
+  // continuously; when set, this is what an invoice line uses to compute
+  // how many whole packages a job needs (see InvoiceCalculationService).
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  @Max(MAX_PACKAGING_QUANTITY)
+  packagingQuantity?: number;
 }

@@ -32,6 +32,12 @@ export interface InvoiceLineDraft {
   quantity: number;
   unitPriceEuros: number;
   wasteSurcharge: WasteSurcharge;
+  // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
+  // 9 m² box) — freehand, optional. roundUpToPackaging defaults to true
+  // (automated calculation is the default; the artisan opts out for exact
+  // quantity billing) and is inert without a packagingQuantity.
+  packagingQuantity: number | null;
+  roundUpToPackaging: boolean;
 }
 
 export interface InvoiceServiceLineDraft {
@@ -59,6 +65,8 @@ const EMPTY_LINE: InvoiceLineDraft = {
   quantity: 0,
   unitPriceEuros: 0,
   wasteSurcharge: 'NONE',
+  packagingQuantity: null,
+  roundUpToPackaging: true,
 };
 
 const DRAFT_STORAGE_KEY = 'facturelebat.invoiceDraft.v1';
@@ -107,6 +115,8 @@ export class InvoiceDraftStore {
       quantity: line.quantity,
       unitPriceCents: Math.round(line.unitPriceEuros * 100),
       wasteSurcharge: line.wasteSurcharge,
+      packagingQuantity: line.packagingQuantity,
+      roundUpToPackaging: line.roundUpToPackaging,
     }));
     return computeTotalsPreview(
       lineInputs,
@@ -188,6 +198,8 @@ export class InvoiceDraftStore {
       quantity: line.quantity,
       unitPriceCents: Math.round(line.unitPriceEuros * 100),
       wasteSurcharge: isAreaUnit(line.unit) ? line.wasteSurcharge : 'NONE',
+      packagingQuantity: line.packagingQuantity ?? undefined,
+      roundUpToPackaging: line.roundUpToPackaging,
     }));
 
     const serviceLines: CreateInvoiceServiceLineRequest[] = this.serviceLines().map(
@@ -236,7 +248,9 @@ export class InvoiceDraftStore {
         this.customer.set({ ...EMPTY_CUSTOMER, ...parsed.customer });
       }
       if (Array.isArray(parsed.lines) && parsed.lines.length > 0) {
-        this.lines.set(parsed.lines);
+        // Merge over EMPTY_LINE so a draft persisted before Phase 8.5 (missing
+        // packagingQuantity/roundUpToPackaging) still hydrates to valid values.
+        this.lines.set(parsed.lines.map((line) => ({ ...EMPTY_LINE, ...line })));
       }
       if (Array.isArray(parsed.serviceLines)) {
         this.serviceLines.set(parsed.serviceLines);

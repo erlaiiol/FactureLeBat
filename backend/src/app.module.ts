@@ -8,6 +8,7 @@ import { validateEnv } from './config/env.validation';
 import { CustomerModule } from './customer/customer.module';
 import { DatabaseModule } from './database/database.module';
 import { InvoiceModule } from './invoice/invoice.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { ProductModule } from './product/product.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 
@@ -23,6 +24,7 @@ import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
     CompanyModule,
     CustomerModule,
     InvoiceModule,
+    OnboardingModule,
     ProductModule,
     ServiceCatalogModule,
   ],

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Unit, UNIT_OPTIONS } from '../../core/models/unit.model';
+import { Unit, UNIT_LABELS, UNIT_OPTIONS } from '../../core/models/unit.model';
 import { ProductService } from '../../core/services/product.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
@@ -35,6 +35,10 @@ export class ProductFormPage {
   protected readonly importing = signal(false);
   protected readonly importErrorMessage = signal<string | null>(null);
 
+  // Used to phrase the packaging field's hint in the unit the artisan just
+  // picked (e.g. "Vendu par colis de ... m²").
+  protected readonly unitLabels = UNIT_LABELS;
+
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     description: [''],
@@ -44,6 +48,11 @@ export class ProductFormPage {
     priceEuros: [0, [Validators.required, Validators.min(0)]],
     supplierName: [''],
     supplierUrl: ['', Validators.pattern(/^$|^https?:\/\/.+/)],
+    // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for
+    // a 9 m² box). Left null when the product is sold continuously — most
+    // products. `null` (not 0) is the "not set" value here, unlike
+    // priceEuros, since a packaging quantity of 0 would be meaningless.
+    packagingQuantity: this.fb.control<number | null>(null, Validators.min(0.001)),
   });
 
   constructor() {
@@ -61,6 +70,9 @@ export class ProductFormPage {
               priceEuros: product.priceCents / 100,
               supplierName: product.supplierName ?? '',
               supplierUrl: product.supplierUrl ?? '',
+              packagingQuantity: product.packagingQuantity
+                ? Number(product.packagingQuantity)
+                : null,
             });
           },
           error: () => {
@@ -128,6 +140,7 @@ export class ProductFormPage {
       priceCents: Math.round(value.priceEuros * 100),
       supplierName: value.supplierName || undefined,
       supplierUrl: value.supplierUrl || undefined,
+      packagingQuantity: value.packagingQuantity ?? undefined,
     };
 
     this.saving.set(true);

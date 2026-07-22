@@ -35,6 +35,10 @@ src/
   service-catalog/ non-material work catalog (Phase 5) — CRUD + search, same shape as product/
                    (named service-catalog, not service, to avoid a ServiceService class name
                    stuttering against NestJS's own "service" layering term)
+  onboarding/      Phase 8 tour state (tourEnabled/completedTours) — a thin module of its
+                   own reading/writing two columns on the Company singleton, kept out of
+                   company/ so its GET/PATCH never has to go through CompanyController's
+                   full-replace UpdateCompanyDto
   invoice/         the core domain
     calculation/   pure, dependency-free pricing math (InvoiceCalculationService), including
                    Phase 5's weighted redistribution split (computeWeightedSplit)
@@ -65,6 +69,10 @@ Both modes share the same invariant: the invoice's displayed total increases by 
 ### Units and calculation mode (Phase 7)
 
 `InvoiceLine.unit` and `Product.unit` are both the same fixed `Unit` enum (`SQUARE_METER`, `LINEAR_METER`, `UNIT`, `LUMP_SUM`, `HOUR`, `DAY`, `KILOGRAM`, `LITER`, `CUBIC_METER`) instead of free text — the artisan picks one from a dropdown, never types it. The old AREA/UNIT `mode` field is gone entirely: `common/unit.util.ts`'s `isAreaUnit(unit)` (true only for `SQUARE_METER`) is the single source of truth `InvoiceCalculationService.computeLineTotal()`, the `WasteSurchargeOnlyForArea` DTO validator, and `InvoiceMapper` all derive the old mode distinction from, computed fresh every time rather than accepted as separate client input or persisted as its own column — the same "derived data is never persisted" rule as invoice totals. `UNIT_LABELS` in the same file maps each enum value to its French display string (`SQUARE_METER` → `"m²"`); `InvoiceMapper` applies it only when building PDF data, so `PdfService` stays ignorant of the enum, and JSON API responses keep returning the raw enum value like every other enum field.
+
+### Onboarding tour state (Phase 8)
+
+`Company.tourEnabled`/`Company.completedTours` (a `String[]` of tour ids) back the frontend's onboarding tour — see the Phase 8 roadmap notes for why they live on the singleton `Company` row rather than a new per-user table. `OnboardingRepository` reuses `company/company.constants.ts`'s `DEFAULT_COMPANY_PROFILE` for the same "PATCH can legitimately be the first write" upsert reasoning as `CompanyRepository`, since onboarding state can be touched before any `Company` profile GET/PATCH ever happens.
 
 ### Request flow: creating an invoice
 
@@ -127,11 +135,24 @@ src/app/
     service-list/     service catalog (Phase 5), search — same shape as product-list/
     service-form/     create/edit a service (Phase 5) — same shape as product-form/,
                       minus the import step, plus a default-visibility selector
-    company-settings/ singleton artisan profile editor
+    company-settings/ singleton artisan profile editor — also hosts the Phase 8
+                      "Visites guidées" toggle and "Rejouer les visites guidées" button
   shared/
     components/  small reusable presentational components (e.g. app-big-button,
                  app-field-hint — the Phase 7 persistent under-field tooltip)
     pipes/       e.g. centsToEuros, unitLabel (Unit enum -> French display string)
+    tour/        Phase 8 onboarding tour engine, hand-built (no third-party tour
+                 library, same precedent as app-field-hint): tour-definitions.ts
+                 declares the three mini-tours' steps; TourService
+                 (providedIn: 'root') is the single source of truth for tour
+                 state, auto-launching a tour on first visit to its section and
+                 walking it (including cross-route steps) via the router;
+                 TourAnchorDirective/TourAnchorRegistryService let any element
+                 opt into being spotlighted by a stable id regardless of which
+                 routed page renders it; tour-position.util.ts is the pure,
+                 unit-tested popover-placement math; TourOverlayComponent is
+                 mounted once at the app root and renders only while a tour
+                 is active
 ```
 
 Each `features/*` folder is a routed, lazily-loaded page (`loadComponent` in `app.routes.ts`). Pages that call the API always guard their subscriptions with `takeUntilDestroyed()` so a slow response arriving after navigation away never touches a destroyed component's state.

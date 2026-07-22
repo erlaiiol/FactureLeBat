@@ -28,14 +28,18 @@ export class InvoiceMapper {
   toInvoiceWithTotals(invoice: InvoiceWithLines): InvoiceWithTotals {
     // Base product/material line totals, before any service redistribution.
     const lineTotalsById = new Map<string, number>();
+    const billedQuantityById = new Map<string, string>();
     for (const line of invoice.lines) {
-      const { lineTotalExclVatCents } = this.calculationService.computeLineTotal({
+      const { lineTotalExclVatCents, billedQuantity } = this.calculationService.computeLineTotal({
         unit: line.unit,
         quantity: line.quantity,
         unitPriceCents: line.unitPriceCents,
         wasteSurcharge: line.wasteSurcharge,
+        packagingQuantity: line.packagingQuantity,
+        roundUpToPackaging: line.roundUpToPackaging,
       });
       lineTotalsById.set(line.id, lineTotalExclVatCents);
+      billedQuantityById.set(line.id, billedQuantity.toString());
     }
 
     let visibleServiceAmountCents = 0;
@@ -93,6 +97,9 @@ export class InvoiceMapper {
       quantity: line.quantity.toString(),
       unitPriceCents: line.unitPriceCents,
       wasteSurcharge: line.wasteSurcharge,
+      billedQuantity: billedQuantityById.get(line.id)!,
+      packagingQuantity: line.packagingQuantity?.toString() ?? null,
+      roundUpToPackaging: line.roundUpToPackaging,
       lineTotalExclVatCents: lineTotalsById.get(line.id)!,
     }));
 
@@ -148,6 +155,10 @@ export class InvoiceMapper {
         // "PDF generation must be isolated from business logic").
         unit: UNIT_LABELS[line.unit],
         quantity: line.quantity,
+        // Only set when packaging rounding actually changed the priced
+        // quantity — PdfService renders it as a clarifying note rather than
+        // silently hiding the difference (see docs/roadmap.md Phase 8.5).
+        billedQuantity: line.billedQuantity !== line.quantity ? line.billedQuantity : undefined,
         unitPriceCents: line.unitPriceCents,
         totalCents: line.lineTotalExclVatCents,
       })),
@@ -178,15 +189,17 @@ export class InvoiceMapper {
     const vatApplicable = isVatApplicable(company.legalStatus);
     const vatRateBasisPoints = company.vatRateBasisPoints;
 
-    const lineTotalsCents = dto.lines.map(
-      (line) =>
-        this.calculationService.computeLineTotal({
-          unit: line.unit,
-          quantity: line.quantity,
-          unitPriceCents: line.unitPriceCents,
-          wasteSurcharge: line.wasteSurcharge,
-        }).lineTotalExclVatCents,
+    const lineCalculations = dto.lines.map((line) =>
+      this.calculationService.computeLineTotal({
+        unit: line.unit,
+        quantity: line.quantity,
+        unitPriceCents: line.unitPriceCents,
+        wasteSurcharge: line.wasteSurcharge,
+        packagingQuantity: line.packagingQuantity,
+        roundUpToPackaging: line.roundUpToPackaging ?? true,
+      }),
     );
+    const lineTotalsCents = lineCalculations.map((c) => c.lineTotalExclVatCents);
 
     let visibleServiceAmountCents = 0;
     const pdfServiceLines: InvoicePdfServiceLine[] = [];
@@ -207,13 +220,18 @@ export class InvoiceMapper {
       });
     }
 
-    const pdfLines = dto.lines.map((line, index) => ({
-      description: line.description,
-      unit: UNIT_LABELS[line.unit],
-      quantity: line.quantity.toString(),
-      unitPriceCents: line.unitPriceCents,
-      totalCents: lineTotalsCents[index],
-    }));
+    const pdfLines = dto.lines.map((line, index) => {
+      const quantity = line.quantity.toString();
+      const billedQuantity = lineCalculations[index].billedQuantity.toString();
+      return {
+        description: line.description,
+        unit: UNIT_LABELS[line.unit],
+        quantity,
+        billedQuantity: billedQuantity !== quantity ? billedQuantity : undefined,
+        unitPriceCents: line.unitPriceCents,
+        totalCents: lineTotalsCents[index],
+      };
+    });
 
     const subtotalExclVatCents =
       lineTotalsCents.reduce((sum, cents) => sum + cents, 0) + visibleServiceAmountCents;

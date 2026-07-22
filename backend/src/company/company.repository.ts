@@ -1,19 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { LegalStatus } from '../../generated/prisma/enums';
 import { CompanyModel as Company } from '../../generated/prisma/models';
-import { SINGLETON_COMPANY_ID } from './company.constants';
+import { DEFAULT_COMPANY_PROFILE, SINGLETON_COMPANY_ID } from './company.constants';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 
-const DEFAULT_COMPANY = {
-  id: SINGLETON_COMPANY_ID,
-  name: 'Mon entreprise',
-  siret: '',
-  addressLine1: '',
-  postalCode: '',
-  city: '',
-  legalStatus: LegalStatus.MICRO_ENTREPRENEUR,
-} as const;
+const DEFAULT_COMPANY = { id: SINGLETON_COMPANY_ID, ...DEFAULT_COMPANY_PROFILE } as const;
 
 @Injectable()
 export class CompanyRepository {

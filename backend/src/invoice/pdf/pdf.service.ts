@@ -105,7 +105,10 @@ export class PdfService {
     const rows = data.lines.map((line: InvoicePdfLine) => [
       line.description,
       line.unit,
-      line.quantity,
+      // Phase 8.5: billedQuantity is only ever set when packaging rounding
+      // changed what's actually priced away from the raw site quantity —
+      // shown as a clarifying note, never a silent substitution.
+      line.billedQuantity ? `${line.quantity} (facturé : ${line.billedQuantity})` : line.quantity,
       centsToEuros(line.unitPriceCents),
       centsToEuros(line.totalCents),
     ]);

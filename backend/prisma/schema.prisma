@@ -59,6 +59,15 @@ model Company {
   invoiceNumberPrefix String @default("F")
   nextInvoiceNumber   Int    @default(1)
 
+  // Phase 8 onboarding tour: tourEnabled is the master on/off switch,
+  // completedTours holds the ids (see onboarding/onboarding.constants.ts)
+  // of tours the artisan has finished or skipped, so they never resurface
+  // uninvited. Lives on the singleton Company row since there's no
+  // per-user account yet (pre-Phase-13) — same reasoning as every other
+  // "one implicit user" field here.
+  tourEnabled    Boolean  @default(true)
+  completedTours String[] @default([])
+
   invoices Invoice[]
 
   createdAt DateTime @default(now())
@@ -128,6 +137,14 @@ model Product {
   supplierName String?
   supplierUrl  String?
 
+  // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
+  // 9 m² box of flooring). Null means the product is sold continuously
+  // (today's behavior, unchanged) — this is what lets an invoice line
+  // compute how many whole packages a job actually needs instead of
+  // conflating the site's raw measurement with what gets billed. See
+  // docs/roadmap.md Phase 8.5 and InvoiceLine.packagingQuantity below.
+  packagingQuantity Decimal? @db.Decimal(10, 3)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -166,6 +183,19 @@ model InvoiceLine {
   quantity       Decimal        @db.Decimal(10, 3)
   unitPriceCents Int
   wasteSurcharge WasteSurcharge @default(NONE)
+
+  // Phase 8.5 — snapshotted/freehand, same "autofill, not a lock" rule as
+  // every other soft catalog reference here: never re-read from Product
+  // after the line is created. `quantity` above stays the artisan's raw
+  // site/job measurement ("site quantity"); packagingQuantity is how many
+  // `unit`s come in one sellable package (e.g. 9 for a 9 m² box).
+  // roundUpToPackaging controls whether the billed quantity is rounded up
+  // to the next whole package — defaults to true (automated calculation is
+  // the default, manual exact-quantity billing is the artisan's opt-out)
+  // and is simply inert when packagingQuantity is null. See
+  // InvoiceCalculationService.computeLineTotal for where this is applied.
+  packagingQuantity  Decimal? @db.Decimal(10, 3)
+  roundUpToPackaging Boolean  @default(true)
 
   serviceWeights InvoiceServiceLineWeight[]
 

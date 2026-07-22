@@ -176,3 +176,43 @@ describe('CreateInvoiceDto — Phase 5 service lines', () => {
     expect(errors).not.toHaveLength(0);
   });
 });
+
+describe('CreateInvoiceDto — Phase 8.5 packaging quantity', () => {
+  it('accepts a line with no packaging quantity at all (sold continuously, unchanged behavior)', async () => {
+    const errors = await validateDto(basePayload());
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts a line with a packaging quantity and an explicit roundUpToPackaging flag', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      lines: [
+        {
+          description: 'Parquet',
+          unit: 'SQUARE_METER',
+          quantity: 23,
+          unitPriceCents: 4500,
+          packagingQuantity: 9,
+          roundUpToPackaging: false,
+        },
+      ],
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a zero or negative packaging quantity', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      lines: [
+        {
+          description: 'Parquet',
+          unit: 'SQUARE_METER',
+          quantity: 23,
+          unitPriceCents: 4500,
+          packagingQuantity: 0,
+        },
+      ],
+    });
+    expect(errors).not.toHaveLength(0);
+  });
+});

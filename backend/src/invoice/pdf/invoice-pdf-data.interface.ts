@@ -2,6 +2,10 @@ export interface InvoicePdfLine {
   description: string;
   unit: string;
   quantity: string;
+  // Phase 8.5: only set when packaging rounding actually changed the
+  // priced quantity away from the raw site quantity above — PdfService
+  // renders it as a small clarifying note, never silently.
+  billedQuantity?: string;
   unitPriceCents: number;
   totalCents: number;
 }

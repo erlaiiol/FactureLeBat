@@ -62,6 +62,54 @@ describe('InvoiceCalculationService', () => {
       // 3.333 * 100 = 333.3 cents -> rounds to 333
       expect(result.lineTotalExclVatCents).toBe(333);
     });
+
+    it('bills the exact needed quantity when the packaging quantity divides it evenly', () => {
+      const result = service.computeLineTotal(
+        areaLine({ quantity: 18, packagingQuantity: 9, roundUpToPackaging: true }),
+      );
+      expect(result.neededQuantity.toNumber()).toBe(18);
+      expect(result.billedQuantity.toNumber()).toBe(18);
+    });
+
+    it('rounds the billed quantity up to the next whole package when the need is not an exact multiple', () => {
+      const result = service.computeLineTotal(
+        areaLine({
+          quantity: 23,
+          unitPriceCents: 4500,
+          packagingQuantity: 9,
+          roundUpToPackaging: true,
+        }),
+      );
+      // 23 m² needed -> 3 boxes of 9 m² = 27 m² billed
+      expect(result.billedQuantity.toNumber()).toBe(27);
+      expect(result.lineTotalExclVatCents).toBe(27 * 4500);
+    });
+
+    it('applies waste surcharge before packaging rounding', () => {
+      const result = service.computeLineTotal(
+        areaLine({
+          quantity: 20,
+          wasteSurcharge: 'TEN',
+          packagingQuantity: 9,
+          roundUpToPackaging: true,
+        }),
+      );
+      // 20 m² + 10% waste = 22 m² needed -> rounds up to 27 m² (3 boxes)
+      expect(result.neededQuantity.toNumber()).toBe(22);
+      expect(result.billedQuantity.toNumber()).toBe(27);
+    });
+
+    it('bills the exact (unrounded) quantity when roundUpToPackaging is false, even with a packaging quantity set', () => {
+      const result = service.computeLineTotal(
+        areaLine({ quantity: 23, packagingQuantity: 9, roundUpToPackaging: false }),
+      );
+      expect(result.billedQuantity.toNumber()).toBe(23);
+    });
+
+    it('ignores packaging rounding entirely when no packaging quantity is set, regardless of the flag', () => {
+      const result = service.computeLineTotal(areaLine({ quantity: 23, roundUpToPackaging: true }));
+      expect(result.billedQuantity.toNumber()).toBe(23);
+    });
   });
 
   describe('computeInvoiceTotals', () => {

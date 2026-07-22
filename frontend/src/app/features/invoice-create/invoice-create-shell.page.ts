@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summary.component';
 import { InvoiceDraftStore } from './invoice-draft.store';
 
@@ -19,6 +20,7 @@ import { InvoiceDraftStore } from './invoice-draft.store';
     RouterLinkActive,
     BigButtonComponent,
     InvoiceTotalsSummaryComponent,
+    TourAnchorDirective,
   ],
   templateUrl: './invoice-create-shell.page.html',
 })

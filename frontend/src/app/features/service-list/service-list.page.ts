@@ -7,11 +7,18 @@ import { ServiceProfile } from '../../core/models/service.model';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
+import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 
 @Component({
   selector: 'app-service-list-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, CentsToEurosPipe],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BigButtonComponent,
+    CentsToEurosPipe,
+    TourAnchorDirective,
+  ],
   templateUrl: './service-list.page.html',
 })
 export class ServiceListPage {
