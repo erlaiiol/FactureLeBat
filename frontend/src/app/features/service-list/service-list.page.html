@@ -1,0 +1,46 @@
+<div class="mb-6 flex items-center justify-between gap-4">
+  <h1 class="text-2xl font-bold text-slate-900">Mes prestations</h1>
+  <a routerLink="/prestations/nouvelle" class="shrink-0">
+    <app-big-button>+ Nouvelle prestation</app-big-button>
+  </a>
+</div>
+
+<input
+  [formControl]="search"
+  type="text"
+  placeholder="Rechercher une prestation…"
+  class="mb-6 w-full rounded-lg border border-slate-300 px-4 py-3 text-lg"
+/>
+
+@if (loading()) {
+  <p class="text-slate-500">Chargement…</p>
+} @else if (errorMessage(); as message) {
+  <p class="font-medium text-red-700">{{ message }}</p>
+} @else if (services().length === 0) {
+  <p class="text-slate-500">Aucune prestation pour le moment.</p>
+} @else {
+  <ul class="flex flex-col gap-3">
+    @for (service of services(); track service.id) {
+      <li>
+        <a
+          [routerLink]="['/prestations', service.id]"
+          class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50"
+        >
+          <div>
+            <p class="font-semibold text-slate-900">{{ service.name }}</p>
+            <p class="text-sm text-slate-600">
+              {{
+                service.defaultVisibility === 'VISIBLE'
+                  ? 'Visible par défaut'
+                  : 'Répartie par défaut'
+              }}
+            </p>
+          </div>
+          <span class="text-lg font-semibold text-slate-900">
+            {{ service.priceCents | centsToEuros }}
+          </span>
+        </a>
+      </li>
+    }
+  </ul>
+}

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InvoiceCalculationService } from './calculation/invoice-calculation.service';
-import { InvoiceLineWithTotal, InvoiceWithTotals } from './entities/invoice.entity';
+import {
+  InvoiceLineWithTotal,
+  InvoiceServiceLineWithAmounts,
+  InvoiceWithTotals,
+} from './entities/invoice.entity';
 import { InvoiceWithLines } from './invoice.repository';
 import { InvoicePdfData } from './pdf/invoice-pdf-data.interface';
 
@@ -13,31 +17,83 @@ export class InvoiceMapper {
   constructor(private readonly calculationService: InvoiceCalculationService) {}
 
   // Totals are never persisted: they are recomputed from the invoice lines
-  // every time an invoice is read. Each line's total is computed exactly
-  // once here and reused for both the per-line figures and the subtotal.
+  // (and, since Phase 5, the service lines) every time an invoice is read.
+  // Each line's total is computed exactly once here and reused for both the
+  // per-line figures and the subtotal.
   toInvoiceWithTotals(invoice: InvoiceWithLines): InvoiceWithTotals {
-    const lines: InvoiceLineWithTotal[] = invoice.lines.map((line) => {
+    // Base product/material line totals, before any service redistribution.
+    const lineTotalsById = new Map<string, number>();
+    for (const line of invoice.lines) {
       const { lineTotalExclVatCents } = this.calculationService.computeLineTotal({
         mode: line.mode,
         quantity: line.quantity,
         unitPriceCents: line.unitPriceCents,
         wasteSurcharge: line.wasteSurcharge,
       });
+      lineTotalsById.set(line.id, lineTotalExclVatCents);
+    }
 
-      return {
-        id: line.id,
-        position: line.position,
-        description: line.description,
-        unit: line.unit,
-        mode: line.mode,
-        quantity: line.quantity.toString(),
-        unitPriceCents: line.unitPriceCents,
-        wasteSurcharge: line.wasteSurcharge,
-        lineTotalExclVatCents,
-      };
-    });
+    let visibleServiceAmountCents = 0;
+    const serviceLines: InvoiceServiceLineWithAmounts[] = invoice.serviceLines.map(
+      (serviceLine) => {
+        if (serviceLine.visibility === 'VISIBLE') {
+          visibleServiceAmountCents += serviceLine.amountCents;
+          return {
+            id: serviceLine.id,
+            position: serviceLine.position,
+            name: serviceLine.name,
+            description: serviceLine.description,
+            amountCents: serviceLine.amountCents,
+            visibility: serviceLine.visibility,
+          };
+        }
 
-    const subtotalExclVatCents = lines.reduce((sum, line) => sum + line.lineTotalExclVatCents, 0);
+        // REDISTRIBUTED: split the amount across the invoice's own lines,
+        // in the order the weights were persisted for, and fold each share
+        // directly into that line's displayed total — never persisted, only
+        // ever recomputed here (see conventions.md's "derived data is never
+        // persisted" rule). computeWeightedSplit guarantees the shares sum
+        // to exactly serviceLine.amountCents, which is what makes the
+        // invoice total increase by exactly the service amount regardless
+        // of visibility mode.
+        const shares = this.calculationService.computeWeightedSplit({
+          amountCents: serviceLine.amountCents,
+          weights: serviceLine.weights.map((w) => w.weight),
+        });
+        const distribution = serviceLine.weights.map((weightRow, index) => {
+          lineTotalsById.set(
+            weightRow.invoiceLineId,
+            (lineTotalsById.get(weightRow.invoiceLineId) ?? 0) + shares[index],
+          );
+          return { invoiceLineId: weightRow.invoiceLineId, amountCents: shares[index] };
+        });
+
+        return {
+          id: serviceLine.id,
+          position: serviceLine.position,
+          name: serviceLine.name,
+          description: serviceLine.description,
+          amountCents: serviceLine.amountCents,
+          visibility: serviceLine.visibility,
+          distribution,
+        };
+      },
+    );
+
+    const lines: InvoiceLineWithTotal[] = invoice.lines.map((line) => ({
+      id: line.id,
+      position: line.position,
+      description: line.description,
+      unit: line.unit,
+      mode: line.mode,
+      quantity: line.quantity.toString(),
+      unitPriceCents: line.unitPriceCents,
+      wasteSurcharge: line.wasteSurcharge,
+      lineTotalExclVatCents: lineTotalsById.get(line.id)!,
+    }));
+
+    const subtotalExclVatCents =
+      lines.reduce((sum, line) => sum + line.lineTotalExclVatCents, 0) + visibleServiceAmountCents;
     const vatAmountCents = this.calculationService.computeVatAmountCents(
       subtotalExclVatCents,
       invoice.vatApplicable,
@@ -56,6 +112,7 @@ export class InvoiceMapper {
       vatApplicable: invoice.vatApplicable,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
       lines,
+      serviceLines,
       subtotalExclVatCents,
       vatAmountCents,
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
@@ -87,6 +144,12 @@ export class InvoiceMapper {
         unitPriceCents: line.unitPriceCents,
         totalCents: line.lineTotalExclVatCents,
       })),
+      // Only VISIBLE service lines get their own line on the PDF —
+      // REDISTRIBUTED ones are, by definition, already folded into the
+      // product/material lines above and must never be shown separately.
+      serviceLines: withTotals.serviceLines
+        .filter((serviceLine) => serviceLine.visibility === 'VISIBLE')
+        .map((serviceLine) => ({ name: serviceLine.name, amountCents: serviceLine.amountCents })),
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
       subtotalExclVatCents: withTotals.subtotalExclVatCents,

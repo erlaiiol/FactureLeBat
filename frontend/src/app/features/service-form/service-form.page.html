@@ -1,0 +1,67 @@
+<h1 class="mb-6 text-2xl font-bold text-slate-900">
+  {{ isEditing ? 'Modifier la prestation' : 'Nouvelle prestation' }}
+</h1>
+
+@if (loading()) {
+  <p class="text-slate-500">Chargement…</p>
+}
+
+<form
+  [formGroup]="form"
+  (ngSubmit)="submit()"
+  class="flex flex-col gap-4"
+  [class.hidden]="loading()"
+>
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Nom de la prestation</span>
+    <input
+      formControlName="name"
+      type="text"
+      placeholder="Ex : Main-d’œuvre pose parquet"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Description</span>
+    <textarea
+      formControlName="description"
+      rows="3"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    ></textarea>
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Prix (€)</span>
+    <input
+      formControlName="priceEuros"
+      type="number"
+      step="0.01"
+      min="0"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    />
+  </label>
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-slate-700">Visibilité par défaut sur une facture</span>
+    <select
+      formControlName="defaultVisibility"
+      class="rounded-lg border border-slate-300 px-4 py-3 text-lg"
+    >
+      <option value="VISIBLE">Visible — sa propre ligne sur la facture</option>
+      <option value="REDISTRIBUTED">Répartie — masquée, ajoutée aux autres lignes</option>
+    </select>
+    <span class="text-xs text-slate-500">
+      Ce réglage ne fait que pré-remplir le choix lors de l’ajout à une facture — modifiable à
+      chaque fois.
+    </span>
+  </label>
+
+  @if (errorMessage(); as message) {
+    <p class="text-center font-medium text-red-700">{{ message }}</p>
+  }
+
+  <app-big-button type="submit" [disabled]="saving()">
+    {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+  </app-big-button>
+</form>

@@ -147,4 +147,143 @@ describe('Invoice pipeline (e2e)', () => {
       })
       .expect(404);
   });
+
+  // Phase 5: service lines, both visibility modes.
+  describe('service lines', () => {
+    const twoLines = [
+      { description: 'Parquet', unit: 'm2', mode: 'AREA', quantity: 10, unitPriceCents: 4500 },
+      { description: 'Plinthes', unit: 'unite', mode: 'UNIT', quantity: 5, unitPriceCents: 800 },
+    ];
+    const baseSubtotal = 10 * 4500 + 5 * 800;
+
+    it('adds a VISIBLE service line amount to the subtotal without changing any line total', async () => {
+      const createResponse = await request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Visible Service Customer',
+          lines: twoLines,
+          serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000, visibility: 'VISIBLE' }],
+        })
+        .expect(201);
+
+      const created = createResponse.body as InvoiceWithTotals;
+      createdInvoiceIds.push(created.id);
+      expect(created.lines[0].lineTotalExclVatCents).toBe(10 * 4500);
+      expect(created.lines[1].lineTotalExclVatCents).toBe(5 * 800);
+      expect(created.serviceLines).toHaveLength(1);
+      expect(created.serviceLines[0].amountCents).toBe(10000);
+      expect(created.serviceLines[0].visibility).toBe('VISIBLE');
+      expect(created.subtotalExclVatCents).toBe(baseSubtotal + 10000);
+    });
+
+    it('redistributes a REDISTRIBUTED + EQUAL service line evenly across the invoice lines, never losing a cent', async () => {
+      const createResponse = await request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Equal Redistribution Customer',
+          lines: twoLines,
+          serviceLines: [
+            {
+              name: 'Savoir-faire',
+              amountCents: 10001,
+              visibility: 'REDISTRIBUTED',
+              redistributionStrategy: 'EQUAL',
+            },
+          ],
+        })
+        .expect(201);
+
+      const created = createResponse.body as InvoiceWithTotals;
+      createdInvoiceIds.push(created.id);
+      // No service line total is shown on its own — it's folded into the lines.
+      const lineTotalSum = created.lines.reduce((sum, l) => sum + l.lineTotalExclVatCents, 0);
+      expect(lineTotalSum).toBe(baseSubtotal + 10001);
+      expect(created.subtotalExclVatCents).toBe(baseSubtotal + 10001);
+      // Equal split of an odd amount: one line gets the extra cent, deterministically.
+      expect([
+        created.lines[0].lineTotalExclVatCents,
+        created.lines[1].lineTotalExclVatCents,
+      ]).toEqual(expect.arrayContaining([10 * 4500 + 5001, 5 * 800 + 5000]));
+    });
+
+    it('redistributes a REDISTRIBUTED + WEIGHTED service line proportionally to the given weights', async () => {
+      const createResponse = await request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Weighted Redistribution Customer',
+          lines: twoLines,
+          serviceLines: [
+            {
+              name: 'Savoir-faire',
+              amountCents: 10000,
+              visibility: 'REDISTRIBUTED',
+              redistributionStrategy: 'WEIGHTED',
+              weights: [1, 3],
+            },
+          ],
+        })
+        .expect(201);
+
+      const created = createResponse.body as InvoiceWithTotals;
+      createdInvoiceIds.push(created.id);
+      expect(created.lines[0].lineTotalExclVatCents).toBe(10 * 4500 + 2500);
+      expect(created.lines[1].lineTotalExclVatCents).toBe(5 * 800 + 7500);
+      expect(created.subtotalExclVatCents).toBe(baseSubtotal + 10000);
+    });
+
+    it('rejects a REDISTRIBUTED + WEIGHTED service line whose weights do not match the line count', () => {
+      return request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Bad Weights Customer',
+          lines: twoLines,
+          serviceLines: [
+            {
+              name: 'Savoir-faire',
+              amountCents: 10000,
+              visibility: 'REDISTRIBUTED',
+              redistributionStrategy: 'WEIGHTED',
+              weights: [1, 2, 3],
+            },
+          ],
+        })
+        .expect(400);
+    });
+
+    it('rejects a VISIBLE service line that also carries redistribution fields', () => {
+      return request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Bad Visibility Customer',
+          lines: twoLines,
+          serviceLines: [
+            {
+              name: 'Savoir-faire',
+              amountCents: 10000,
+              visibility: 'VISIBLE',
+              redistributionStrategy: 'EQUAL',
+            },
+          ],
+        })
+        .expect(400);
+    });
+
+    it('rejects an invoice referencing an unknown serviceId', () => {
+      return request(app.getHttpServer())
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Unknown Service Link',
+          lines: twoLines,
+          serviceLines: [
+            {
+              serviceId: '00000000-0000-0000-0000-000000000000',
+              name: 'Savoir-faire',
+              amountCents: 10000,
+              visibility: 'VISIBLE',
+            },
+          ],
+        })
+        .expect(404);
+    });
+  });
 });

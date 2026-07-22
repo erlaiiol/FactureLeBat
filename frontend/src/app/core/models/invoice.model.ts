@@ -1,5 +1,7 @@
 export type LineMode = 'AREA' | 'UNIT';
 export type WasteSurcharge = 'NONE' | 'TEN' | 'TWENTY';
+export type ServiceLineVisibility = 'VISIBLE' | 'REDISTRIBUTED';
+export type RedistributionStrategy = 'EQUAL' | 'WEIGHTED';
 
 export interface CreateInvoiceLineRequest {
   description: string;
@@ -10,6 +12,20 @@ export interface CreateInvoiceLineRequest {
   wasteSurcharge?: WasteSurcharge;
 }
 
+// Phase 5: a service added to the invoice, either its own visible amount or
+// a hidden one redistributed into the `lines` above. `weights` is positional
+// (aligned with `lines`) and only sent for the WEIGHTED strategy — EQUAL is
+// implicit on the backend (see docs/conventions.md).
+export interface CreateInvoiceServiceLineRequest {
+  serviceId?: string;
+  name: string;
+  description?: string;
+  amountCents: number;
+  visibility: ServiceLineVisibility;
+  redistributionStrategy?: RedistributionStrategy;
+  weights?: number[];
+}
+
 export interface CreateInvoiceRequest {
   customerName: string;
   customerAddress?: string;
@@ -17,6 +33,7 @@ export interface CreateInvoiceRequest {
   customerPhone?: string;
   customerId?: string;
   lines: CreateInvoiceLineRequest[];
+  serviceLines?: CreateInvoiceServiceLineRequest[];
 }
 
 export interface InvoiceLineWithTotal {
@@ -31,6 +48,16 @@ export interface InvoiceLineWithTotal {
   lineTotalExclVatCents: number;
 }
 
+export interface InvoiceServiceLineWithAmounts {
+  id: string;
+  position: number;
+  name: string;
+  description: string | null;
+  amountCents: number;
+  visibility: ServiceLineVisibility;
+  distribution?: { invoiceLineId: string; amountCents: number }[];
+}
+
 export interface InvoiceWithTotals {
   id: string;
   number: string;
@@ -43,6 +70,7 @@ export interface InvoiceWithTotals {
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   lines: InvoiceLineWithTotal[];
+  serviceLines: InvoiceServiceLineWithAmounts[];
   subtotalExclVatCents: number;
   vatAmountCents: number;
   totalInclVatCents: number;

@@ -24,6 +24,11 @@ enum WasteSurcharge {
   TWENTY
 }
 
+enum ServiceVisibility {
+  VISIBLE
+  REDISTRIBUTED
+}
+
 model Company {
   id                  String      @id @default(uuid())
 
@@ -76,6 +81,7 @@ model Invoice {
   vatRateBasisPoints Int
 
   lines              InvoiceLine[]
+  serviceLines       InvoiceServiceLine[]
 
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -114,6 +120,24 @@ model Product {
   updatedAt    DateTime @updatedAt
 }
 
+// Phase 5 catalog entry for non-material work (labor, expertise, misc
+// charges) — same shape as Product minus the supplier fields, plus a
+// default visibility mode that prefills (never locks) the invoice
+// service-line form.
+model Service {
+  id                String            @id @default(uuid())
+
+  name              String
+  description       String?
+  priceCents        Int
+  defaultVisibility ServiceVisibility @default(VISIBLE)
+
+  invoiceServiceLines InvoiceServiceLine[]
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
 model InvoiceLine {
   id             String         @id @default(uuid())
 
@@ -129,7 +153,62 @@ model InvoiceLine {
   unitPriceCents Int
   wasteSurcharge WasteSurcharge @default(NONE)
 
+  serviceWeights InvoiceServiceLineWeight[]
+
   createdAt      DateTime       @default(now())
 
   @@index([invoiceId])
+}
+
+// A service added to an invoice (Phase 5): either its own visible line
+// (`visibility: VISIBLE`, rendered separately from product lines — see
+// architecture.md) or a hidden amount redistributed into the invoice's other
+// lines (`visibility: REDISTRIBUTED`, via `weights` below). `amountCents` is
+// always the source of truth for this invoice, same snapshot spirit as
+// Invoice.customerName — never re-read from `service` after creation.
+model InvoiceServiceLine {
+  id             String            @id @default(uuid())
+
+  invoiceId      String
+  invoice        Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position       Int
+
+  // Soft reference to a saved Service, if any — "autofill, not a lock" rule
+  // (see conventions.md), onDelete: SetNull so deleting a Service can never
+  // corrupt an already-issued invoice.
+  serviceId      String?
+  service        Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  name           String
+  description    String?
+  amountCents    Int
+  visibility     ServiceVisibility
+
+  // Only populated when visibility = REDISTRIBUTED. An EQUAL split is
+  // stored as a weight of 1 on every invoice line at creation time — there
+  // is no separate "strategy" column, weighted distribution is the only
+  // math the read path needs (see InvoiceCalculationService.computeWeightedSplit).
+  weights        InvoiceServiceLineWeight[]
+
+  createdAt      DateTime          @default(now())
+
+  @@index([invoiceId])
+}
+
+// One artisan-set weight of a REDISTRIBUTED service line's amount onto one
+// invoice line. The actual redistributed cents are never persisted — only
+// the weight is; the split itself is recomputed on every read, same
+// "derived data is never persisted" rule as invoice totals.
+model InvoiceServiceLineWeight {
+  id                   String             @id @default(uuid())
+
+  invoiceServiceLineId String
+  invoiceServiceLine   InvoiceServiceLine @relation(fields: [invoiceServiceLineId], references: [id], onDelete: Cascade)
+
+  invoiceLineId        String
+  invoiceLine          InvoiceLine        @relation(fields: [invoiceLineId], references: [id], onDelete: Cascade)
+
+  weight               Int
+
+  @@unique([invoiceServiceLineId, invoiceLineId])
 }

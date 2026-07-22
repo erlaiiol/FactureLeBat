@@ -26,6 +26,7 @@ function samplePdfData(): InvoicePdfData {
         totalCents: 45000,
       },
     ],
+    serviceLines: [],
     vatApplicable: false,
     vatRateBasisPoints: 2000,
     subtotalExclVatCents: 45000,
@@ -38,6 +39,18 @@ describe('PdfService', () => {
   it('generates a non-empty PDF buffer for a valid invoice data object', async () => {
     const service = new PdfService();
     const buffer = await service.generateInvoicePdf(samplePdfData());
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer when a VISIBLE service line is present', async () => {
+    const service = new PdfService();
+    const data = {
+      ...samplePdfData(),
+      serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000 }],
+    };
+    const buffer = await service.generateInvoicePdf(data);
 
     expect(buffer.length).toBeGreaterThan(0);
     expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');

@@ -107,4 +107,36 @@ describe('InvoiceCalculationService', () => {
       expect(service.computeVatAmountCents(100000, false, 2000)).toBe(0);
     });
   });
+
+  describe('computeWeightedSplit', () => {
+    it('splits an amount evenly across equal weights, assigning the remainder to the first entries', () => {
+      const result = service.computeWeightedSplit({ amountCents: 100, weights: [1, 1, 1] });
+      expect(result).toEqual([34, 33, 33]);
+      expect(result.reduce((sum, cents) => sum + cents, 0)).toBe(100);
+    });
+
+    it('splits an amount proportionally to unequal weights', () => {
+      const result = service.computeWeightedSplit({ amountCents: 10000, weights: [1, 3] });
+      expect(result).toEqual([2500, 7500]);
+    });
+
+    it('never loses or invents a cent, however unevenly the remainder falls', () => {
+      const result = service.computeWeightedSplit({ amountCents: 1001, weights: [7, 11, 13] });
+      expect(result.reduce((sum, cents) => sum + cents, 0)).toBe(1001);
+    });
+
+    it('gives the entire amount to the only weighted line when the rest are excluded (weight 0)', () => {
+      const result = service.computeWeightedSplit({ amountCents: 5000, weights: [0, 1, 0] });
+      expect(result).toEqual([0, 5000, 0]);
+    });
+
+    it('is deterministic: the same weights always produce the same split', () => {
+      const input = { amountCents: 12347, weights: [2, 5, 3, 1] };
+      expect(service.computeWeightedSplit(input)).toEqual(service.computeWeightedSplit(input));
+    });
+
+    it('throws if weights sum to zero, since that means an upstream invariant was violated', () => {
+      expect(() => service.computeWeightedSplit({ amountCents: 100, weights: [0, 0] })).toThrow();
+    });
+  });
 });

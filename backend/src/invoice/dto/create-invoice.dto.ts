@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  IsArray,
   ArrayMinSize,
   IsEmail,
   IsOptional,
@@ -11,10 +12,14 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CreateInvoiceLineDto } from './create-invoice-line.dto';
+import { CreateInvoiceServiceLineDto } from './create-invoice-service-line.dto';
+import { ServiceLineWeightsMatchLines } from './service-line-weights-match-lines.validator';
 
 // No real invoice needs more lines than this — capping it bounds the cost of
 // PDF rendering and the calculation loop per request.
 const MAX_LINES = 200;
+// Same reasoning, applied to Phase 5 service lines.
+const MAX_SERVICE_LINES = 50;
 
 export class CreateInvoiceDto {
   @IsString()
@@ -49,4 +54,16 @@ export class CreateInvoiceDto {
   @ValidateNested({ each: true })
   @Type(() => CreateInvoiceLineDto)
   lines: CreateInvoiceLineDto[];
+
+  // Phase 5: services added to the invoice, each either its own visible
+  // amount or hidden and redistributed into the lines above (see
+  // CreateInvoiceServiceLineDto). Optional and defaults to none — most
+  // invoices are still just product lines.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_SERVICE_LINES)
+  @ValidateNested({ each: true })
+  @Type(() => CreateInvoiceServiceLineDto)
+  @ServiceLineWeightsMatchLines()
+  serviceLines?: CreateInvoiceServiceLineDto[];
 }

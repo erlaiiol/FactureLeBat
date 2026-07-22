@@ -34,15 +34,20 @@ export interface TotalsPreview {
   totalInclVatCents: number;
 }
 
+// Phase 5: a service line — visible or redistributed — always increases the
+// displayed total by its full amount (see docs/roadmap.md's Phase 5
+// invariant); the preview only needs that aggregate, never the per-line
+// breakdown a REDISTRIBUTED line produces, since this screen shows no
+// per-line totals to begin with. No need to duplicate the weighted-split
+// math here just for a running total.
 export function computeTotalsPreview(
   lines: readonly LinePreviewInput[],
   vatApplicable: boolean,
   vatRateBasisPoints: number,
+  serviceAmountCents = 0,
 ): TotalsPreview {
-  const subtotalExclVatCents = lines.reduce(
-    (sum, line) => sum + computeLineTotalPreviewCents(line),
-    0,
-  );
+  const subtotalExclVatCents =
+    lines.reduce((sum, line) => sum + computeLineTotalPreviewCents(line), 0) + serviceAmountCents;
   const vatAmountCents = vatApplicable
     ? Math.round((subtotalExclVatCents * vatRateBasisPoints) / 10000)
     : 0;

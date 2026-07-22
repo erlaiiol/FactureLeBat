@@ -274,12 +274,18 @@ Same shape as Product, minus supplier fields:
 
 ## Features
 
-- [ ] Create and manage services (name, price), mirroring the product catalog
-- [ ] Add a service to an invoice as its own visible line
-- [ ] Add a service to an invoice as a hidden amount, redistributed into the other lines
-- [ ] Choose redistribution strategy: equal split across lines, or manual per-line weighting
-- [ ] Redistribution math stays integer-cents only, with rounding remainders assigned deterministically (no floating point, no cents lost or invented)
-- [ ] Displayed invoice total always increases by the exact service amount added, in both visible and redistributed modes
+- [x] Create and manage services (name, price), mirroring the product catalog
+- [x] Add a service to an invoice as its own visible line
+- [x] Add a service to an invoice as a hidden amount, redistributed into the other lines
+- [x] Choose redistribution strategy: equal split across lines, or manual per-line weighting
+- [x] Redistribution math stays integer-cents only, with rounding remainders assigned deterministically (no floating point, no cents lost or invented)
+- [x] Displayed invoice total always increases by the exact service amount added, in both visible and redistributed modes
+
+## Implementation notes
+
+- **Weighted redistribution, not two code paths.** An EQUAL split is expanded into an explicit weight of `1` per invoice line at creation time (`InvoiceService.create`); from persistence through to display, the system only ever deals with one concept — a weighted split (`InvoiceCalculationService.computeWeightedSplit`, the "largest remainder"/Hamilton apportionment method). This is what guarantees the redistributed cents always sum to exactly the service amount, with the leftover cent(s) assigned deterministically (largest fractional remainder first, ties broken by ascending line index).
+- **Visible service lines render separately, not merged into the product lines.** A `Service` has no quantity/unit/waste-surcharge dimension, unlike `InvoiceLine` — forcing it into that shape would have meant fake `quantity: 1` rows. Instead, `InvoiceServiceLine` is its own entity, and the API/PDF expose it as its own `serviceLines` list. VISIBLE ones get their own PDF table section ("Prestations"); REDISTRIBUTED ones never appear there — their amount is already folded into the product lines' displayed totals.
+- **Nothing about a redistribution is persisted except the weights.** Same "derived data is never persisted" rule as invoice totals (see conventions.md): `InvoiceServiceLineWeight` stores only the artisan-set weight per line; the actual redistributed cents are recomputed by `InvoiceMapper` on every read.
 
 
 ---
@@ -338,6 +344,62 @@ A playful, step-by-step guided tour that helps new users take the app in hand, t
 - [ ] Tour can be enabled or disabled at any time by the user
 - [ ] Lightweight, gamified feel: progress indicator, friendly copy, small moments of delight rather than a dry walkthrough
 - [ ] Tour completion/skip state persisted per user or company so it doesn't resurface uninvited once dismissed
+
+
+---
+
+# Phase 10 — Visual Identity & Motion
+
+## Objective
+
+Give the application a deliberate visual identity instead of default Tailwind styling, and a small, consistent motion system so interactions feel responsive without becoming noisy.
+
+Full decisions (palette, typography, the line-marking badge, motion timing) are documented in [design-system.md](design-system.md) — this phase is about implementing what that document already decided.
+
+## Features
+
+- [ ] Translate the "Chantier calibré" palette and type scale into Tailwind v4 `@theme` tokens (`frontend/src/styles.css`)
+- [ ] Dark-mode variant of "Chantier calibré" for the working application
+- [ ] Apply "Atelier sobre" only at its three sanctioned locations (invoice PDF header, guided tour, "Mon activité" settings) — never on data-entry screens
+- [ ] Implement the line-marking badge (shape, color, rotation) as a shared component
+- [ ] Implement the motion primitives (`lineIn`, `totalPulse`, `badgeStamp`, tour step transitions, tour-completion reward) respecting `prefers-reduced-motion`
+- [ ] Implement the semantic color tokens (primary/secondary/success/warning/danger/info, solid + subtle variants) as shared button/badge components
+
+
+---
+
+# Phase 9 — Sourcing Assistant (AI Supplier Search)
+
+## Objective
+
+Let the artisan find real-world suppliers and prices for a product on the current invoice/quote, without typing a search query themselves.
+
+Concretely: for a line like "20 m² of bamboo boat-deck flooring," near the customer's city, with a job date a few days out, the assistant proposes several supplier candidates with prices — the same kind of answer an artisan would get by asking an AI chat assistant directly, but wired into the invoice so it needs zero free text.
+
+The assistant should also suggest complementary materials for the job (adhesive, underlayment, finish, trims, etc.) with a "search again" button per suggestion, so a search for one product can fan out into searches for what else the job needs.
+
+## Why this is a bigger step than earlier phases
+
+Unlike Phases 1–8, this phase depends on an external, non-deterministic source (the live web) and an LLM to interpret it. Two things must be designed deliberately, not assumed:
+
+- **Reliability ceiling.** A model reading supplier web pages can find a *listed* price, but delivery windows, regional stock, and "can this actually reach Lyon in 2 days" are rarely published in a machine-readable way. Results must be framed as a starting point to verify with the supplier by phone/site — never as a guaranteed price or ETA. Silently promising accuracy the tool can't deliver is the main risk here.
+- **Cost model.** Search for a free 'to start with' model. A "per day use" must be implemented. (Groq ?)
+
+## Architecture
+
+- Backend: a `sourcing` module using the AI Messages API with the server-side `web_search` tool (optionally `web_fetch` to pull a candidate page's full content once found) — no separate search-engine subscription needed, stays inside the existing free AI integration.
+- The query is assembled server-side from data already on the invoice: product/service name, quantity, unit, customer address, and target job date — the artisan never types a query, only presses a button.
+- Reuse Phase 4's safe-fetch/extraction pipeline (`product-extraction.service.ts`, `safe-fetcher.service.ts`, `ip-guard.ts`) to pull a structured price/unit out of each candidate supplier page, instead of trusting the model's raw read of a search snippet.
+- Complementary-material suggestions are a plain (non-search) model call informed by the product's name/category — cheaper and faster than a search, since it's drawing on general knowledge rather than live pricing.
+- Frontend : must have a "beta" badge that shows it's clearly not 'fully done yet'.
+
+## Features
+
+- [ ] "Trouver des fournisseurs" button on a product/service invoice line — no free text, assembles the query from existing invoice + customer data
+- [ ] Returns a short list (e.g. 5) of candidate suppliers with name, price, source link, and an explicit "verify before ordering" notice
+- [ ] Suggests complementary materials/products for the job, each with its own one-click "search suppliers for this too" button
+- [ ] Per-invoice/per-day search cap to bound cost; cache results so reopening a line doesn't re-trigger a live search
+- [ ] Results are informational only — never auto-added to the invoice or auto-selected as a product without artisan confirmation
 
 
 ---

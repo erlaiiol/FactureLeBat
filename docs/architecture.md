@@ -31,17 +31,35 @@ src/
       safe-fetcher.service.ts     SSRF-safe fetch: DNS-validated at connect time, bounded size/time/redirects
       product-extraction.service.ts  pure: HTML string -> best-effort draft (JSON-LD / Open Graph / <title>)
       product-import.service.ts   orchestration only, mirrors invoice.service.ts's role
+  service-catalog/ non-material work catalog (Phase 5) — CRUD + search, same shape as product/
+                   (named service-catalog, not service, to avoid a ServiceService class name
+                   stuttering against NestJS's own "service" layering term)
   invoice/         the core domain
-    calculation/   pure, dependency-free pricing math (InvoiceCalculationService)
-    dto/           class-validator input contracts
+    calculation/   pure, dependency-free pricing math (InvoiceCalculationService), including
+                   Phase 5's weighted redistribution split (computeWeightedSplit)
+    dto/           class-validator input contracts, including Phase 5's service-line
+                   cross-field validators (service-line-visibility-consistency.validator.ts,
+                   service-line-weights-match-lines.validator.ts)
     entities/      API response shapes (decoupled from Prisma's generated types)
     pdf/           PDF rendering (pdfmake), isolated from persistence/business logic
-    invoice.mapper.ts     Prisma row -> API response / PDF data (response shaping only)
+    invoice.mapper.ts     Prisma row -> API response / PDF data (response shaping only) —
+                          also where a Phase 5 REDISTRIBUTED service line's weighted split
+                          into the invoice's own lines actually happens, computed fresh on
+                          every read, never persisted
     invoice.service.ts    orchestration only
     invoice.repository.ts Prisma calls only
 ```
 
 **Why this split matters in practice**: `InvoiceService` never touches Prisma directly and never computes a total — it asks `InvoiceRepository` to persist, `InvoiceMapper` to shape the response, and (transitively, via the mapper) `InvoiceCalculationService` to do the math. Each of those can be unit-tested — or replaced — without touching the others. `InvoiceCalculationService` in particular has no NestJS or Prisma dependency at all; it's plain TypeScript, which is why it has the most thorough test suite in the codebase (see `invoice-calculation.service.spec.ts`).
+
+### Service lines (Phase 5)
+
+A `Service` (`service-catalog/`) is a catalog entry mirroring `Product`, minus the supplier fields, plus a `defaultVisibility`. Adding one to an invoice creates an `InvoiceServiceLine` — a soft reference to the `Service` (same "autofill, not a lock" rule as `Invoice.customerId`) with its own snapshotted `name`/`description`/`amountCents`:
+
+- **`VISIBLE`**: rendered as its own entry in the invoice's `serviceLines` response array and its own table on the PDF ("Prestations") — deliberately *not* merged into the `lines` array, since a service has no quantity/unit/waste-surcharge dimension to fit that shape.
+- **`REDISTRIBUTED`**: never appears on its own. Instead, an `InvoiceServiceLineWeight` row per targeted `InvoiceLine` stores an artisan-set weight (an `EQUAL` split is simply a weight of `1` on every line, expanded at creation time — see `InvoiceService.create`). `InvoiceMapper.toInvoiceWithTotals()` calls `InvoiceCalculationService.computeWeightedSplit()` on every read to turn those weights into cents, folding each share directly into that line's displayed `lineTotalExclVatCents`. Nothing about the split itself is persisted — same "derived data is never persisted" rule as invoice totals (see [conventions.md](conventions.md)).
+
+Both modes share the same invariant: the invoice's displayed total increases by exactly the service's `amountCents`, whichever mode is used.
 
 ### Request flow: creating an invoice
 
@@ -79,13 +97,17 @@ src/app/
     models/      TypeScript types mirroring backend DTOs/response shapes
     services/    thin HttpClient wrappers (one per backend domain)
   features/
-    invoice-create/   the main screen: customer + line items + live total preview
+    invoice-create/   the main screen: customer + line items + service lines (Phase 5) +
+                      live total preview
     invoice-list/     list + PDF download
     customer-list/    saved customers, search
     customer-form/    create/edit a customer (one page, keyed off a route id param)
     product-list/     material catalog, search
     product-form/     create/edit a product (one page, keyed off a route id param);
                       create mode also offers "import from supplier URL" (Phase 4)
+    service-list/     service catalog (Phase 5), search — same shape as product-list/
+    service-form/     create/edit a service (Phase 5) — same shape as product-form/,
+                      minus the import step, plus a default-visibility selector
     company-settings/ singleton artisan profile editor
   shared/
     components/  small reusable presentational components (e.g. app-big-button)

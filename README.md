@@ -2,12 +2,13 @@
 
 Invoice generator for independent construction artisans (flooring, electrical, plumbing, drywall...). An artisan can fill in their business profile, save reusable customers and catalog materials (including importing product data straight from a supplier's product page), create an invoice — priced either by surface area (m², with an optional +10%/+20% material margin for offcuts) or by unit count — and download it as a PDF.
 
-Phases 1-4 of the roadmap are done (see [docs/roadmap.md](docs/roadmap.md) for what's next):
+Phases 1-5 of the roadmap are done (see [docs/roadmap.md](docs/roadmap.md) for what's next):
 
 - **Invoices** — surface-area or unit-count line pricing, sequential/gapless numbering, server-computed totals, PDF export.
 - **Customers** — saved records, searchable; a saved customer is a one-shot autofill on the invoice form (never a lock — every field stays editable), and the artisan can save a freshly-typed customer for next time.
 - **Products** — a searchable material catalog (name, price, unit, supplier).
 - **Smart import** — paste a supplier product page URL and the product form prefills itself (name/price/unit/description/supplier), extracted from the page's structured data (`schema.org`/Open Graph). The fetch is SSRF-hardened: it refuses to connect to loopback/private/link-local/cloud-metadata addresses, validated at the exact moment the connection opens (not a separate check beforehand) so a DNS-rebinding attack can't slip through.
+- **Services & flexible pricing** — a searchable catalog of non-material work (labor, expertise, misc charges), addable to an invoice either as its own visible line or as a hidden amount redistributed into the other lines (evenly, or with artisan-set per-line weights). Redistribution is integer-cents only, with the rounding remainder assigned deterministically — no cents lost or invented, and the invoice's displayed total always increases by exactly the service amount, in both modes.
 
 No authentication yet — this is a single-artisan tool today (see [docs/roadmap.md](docs/roadmap.md) for what multi-tenant would need).
 

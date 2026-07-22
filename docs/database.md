@@ -75,6 +75,41 @@ at 500 rows (`ProductRepository.MAX_LISTED_PRODUCTS`), the same "capped,
 not yet paginated" trade-off as `GET /invoices`'s 200-row cap (see
 [api.md](api.md#get-invoices)).
 
+### `Service` (Phase 5)
+
+The artisan's catalog of non-material work (labor, expertise, misc
+charges) — `name`, `priceCents` (integer cents), optional `description`,
+and `defaultVisibility` (`VISIBLE` | `REDISTRIBUTED`, prefills — never
+locks — the visibility choice when the artisan adds it to an invoice).
+Same shape as `Product` minus the supplier fields. `GET /services` is
+capped at 500 rows (`ServiceCatalogRepository.MAX_LISTED_SERVICES`), same
+trade-off as `Product`/`Customer`/`Invoice`.
+
+### `InvoiceServiceLine` / `InvoiceServiceLineWeight` (Phase 5)
+
+A service added to a specific invoice. `InvoiceServiceLine.serviceId` is
+an optional soft reference to a saved `Service` (`onDelete: SetNull`,
+same "autofill, not a lock" rule as `Invoice.customerId`) — `name`,
+`description`, and `amountCents` on the row itself are always the source
+of truth, snapshotted at creation and never re-read from `Service`
+afterward.
+
+- **`visibility: VISIBLE`**: the line is rendered on its own (its own API
+  response entry, its own PDF table row) — it has no `InvoiceLine`
+  counterpart, since a service has no quantity/unit/waste-surcharge
+  dimension to force into that shape.
+- **`visibility: REDISTRIBUTED`**: the line is never rendered on its own.
+  Instead, one `InvoiceServiceLineWeight` row per targeted `InvoiceLine`
+  stores an artisan-set integer `weight` (`@@unique([invoiceServiceLineId,
+  invoiceLineId])`). An `EQUAL` split is simply a weight of `1` on every
+  invoice line — there is no separate "strategy" column anywhere; weighted
+  redistribution is the only math the read path ever does (see
+  `InvoiceCalculationService.computeWeightedSplit` in
+  [architecture.md](architecture.md#service-lines-phase-5)). The actual
+  redistributed cents are **never persisted** — `InvoiceMapper` recomputes
+  them from the stored weights on every read and folds them into the
+  targeted `InvoiceLine`'s displayed total.
+
 ## Money rules (enforced throughout, not just in the schema)
 
 - All monetary amounts are **integer cents** (`Int` columns, `number` in TypeScript representing whole cents). `39.90 €` is `3990`.

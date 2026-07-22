@@ -43,6 +43,21 @@ export const routes: Routes = [
       import('./features/product-form/product-form.page').then((m) => m.ProductFormPage),
   },
   {
+    path: 'prestations',
+    loadComponent: () =>
+      import('./features/service-list/service-list.page').then((m) => m.ServiceListPage),
+  },
+  {
+    path: 'prestations/nouvelle',
+    loadComponent: () =>
+      import('./features/service-form/service-form.page').then((m) => m.ServiceFormPage),
+  },
+  {
+    path: 'prestations/:id',
+    loadComponent: () =>
+      import('./features/service-form/service-form.page').then((m) => m.ServiceFormPage),
+  },
+  {
     path: 'entreprise',
     loadComponent: () =>
       import('./features/company-settings/company-settings.page').then(

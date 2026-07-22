@@ -20,6 +20,13 @@ export interface InvoiceTotals {
   totalInclVatCents: number;
 }
 
+export interface WeightedSplitInput {
+  amountCents: number;
+  // One non-negative integer weight per target, in order. An equal split
+  // is just every weight set to 1 — there is no separate "equal" code path.
+  weights: readonly number[];
+}
+
 const WASTE_SURCHARGE_BASIS_POINTS: Record<WasteSurcharge, number> = {
   NONE: 0,
   TEN: 1000,
@@ -76,5 +83,38 @@ export class InvoiceCalculationService {
       vatAmountCents,
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
     };
+  }
+
+  // Splits amountCents across weights.length targets in exact proportion to
+  // each weight, integer cents only, with the result always summing to
+  // exactly amountCents — no cents lost or invented (Phase 5 requirement
+  // for redistributed service lines). Floor-dividing each share first, then
+  // handing out the leftover cents one at a time to the targets with the
+  // largest fractional remainder (the "largest remainder"/Hamilton
+  // apportionment method), ties broken by ascending index, is what makes
+  // this deterministic: the same weights always produce the same split.
+  computeWeightedSplit({ amountCents, weights }: WeightedSplitInput): number[] {
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    if (totalWeight <= 0) {
+      // Callers (InvoiceMapper) only ever reach this with weights that sum
+      // to a positive total — enforced upstream by ServiceLineWeightsMatchLines
+      // at the DTO boundary. A zero total here would mean that invariant was
+      // violated, not a normal runtime condition to recover from.
+      throw new Error('computeWeightedSplit requires weights summing to more than zero');
+    }
+
+    const shares = weights.map((weight) => Math.floor((amountCents * weight) / totalWeight));
+    const distributedCents = shares.reduce((sum, share) => sum + share, 0);
+    const remainingCents = amountCents - distributedCents;
+
+    const orderedByRemainder = weights
+      .map((weight, index) => ({ index, remainder: (amountCents * weight) % totalWeight }))
+      .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+
+    const result = [...shares];
+    for (let i = 0; i < remainingCents; i++) {
+      result[orderedByRemainder[i].index] += 1;
+    }
+    return result;
   }
 }

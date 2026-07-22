@@ -18,6 +18,8 @@ Every backend domain (`company/`, `invoice/`) follows the same shape — a new d
 
 When a service starts doing more than one job, split it — this already happened once: `InvoiceService` used to build API/PDF response shapes inline; that logic is now `InvoiceMapper` (`src/invoice/invoice.mapper.ts`), so `InvoiceService` only orchestrates repository + company + mapper calls. If you're adding a new computed view of an invoice, extend `InvoiceMapper`, not `InvoiceService`.
 
+**Naming a domain "Service" collides with NestJS's own layering term.** Phase 5's catalog domain is called `service-catalog/` (`ServiceCatalogController`/`ServiceCatalogService`/`ServiceCatalogRepository`), not `service/` — a `ServiceService` class name is a stutter that reads as a typo. The Prisma model itself is still just `Service` (that's a data-level name, not a NestJS layer, so no collision there).
+
 Calculation logic is *never* inlined into a service or controller — it lives in `InvoiceCalculationService` (`src/invoice/calculation/`), which has zero NestJS/Prisma dependencies on purpose, so it can be instantiated and tested with `new InvoiceCalculationService()` and no test module setup at all.
 
 ## Money and quantities
@@ -31,6 +33,8 @@ Calculation logic is *never* inlined into a service or controller — it lives i
 If a value can be computed from other stored data, it is computed on every read, not cached in a column. Invoice totals are the running example: there is no `totalCents` column anywhere — `InvoiceMapper` calls `InvoiceCalculationService` fresh every time an invoice is serialized for a response.
 
 **The one deliberate exception**: `Invoice.vatApplicable` / `Invoice.vatRateBasisPoints` are snapshotted from `Company` at creation time. This is a conscious trade documented at the point of the decision (see the comment in `schema.prisma` and [database.md](database.md#invoice)) — an issued invoice's tax treatment must not silently change if the artisan's legal status changes later. If you're tempted to add another "snapshot" field, ask whether it's protecting against the same kind of retroactive-correctness problem, or whether it's just caching for convenience (in which case: don't).
+
+**Phase 5 applies this same rule to service-line redistribution.** `InvoiceServiceLineWeight` persists only the artisan-set *weight* per line — never the redistributed cents themselves. `InvoiceMapper.toInvoiceWithTotals()` calls `InvoiceCalculationService.computeWeightedSplit()` fresh on every read to turn those weights into cents and folds each share into that line's `lineTotalExclVatCents`, the same way it recomputes the invoice subtotal every time rather than storing one.
 
 ## Saved records are autofill, not a lock (Customer attach)
 
@@ -95,6 +99,8 @@ Any new HTTP-facing code should assume these are already in place (`main.ts` / `
 ## No business-logic duplication
 
 The backend is the single source of truth for calculations. The one narrow, deliberate exception is the invoice-create screen's **live total preview** (`features/invoice-create/calculation-preview.ts`) — it mirrors the backend's pricing formulas in pure client-side functions so the artisan sees a running total while typing, before anything is submitted. It is explicitly commented as "preview only" at its definition, and the screen always renders the real backend response as the actual invoice once created — never the client-side estimate. Don't extend this pattern to other calculations without the same justification (a real-time UX requirement that a round-trip to the server can't satisfy).
+
+Phase 5's service lines stayed inside that same exception without growing it: since the preview only ever shows the aggregate subtotal/VAT/total (never a per-line total), and both service-line modes add their full amount to that aggregate by definition, the preview only needs `subtotal += serviceAmountCents` — it does **not** duplicate `computeWeightedSplit`'s weighted-redistribution math on the client. If a future screen needs to preview *per-line* totals under a pending redistribution, that would be new client-side business logic and needs the same justification as the rest of this section, not a silent copy-paste of the backend algorithm.
 
 ## Comments
 

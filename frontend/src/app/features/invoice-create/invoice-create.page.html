@@ -91,6 +91,24 @@
       </app-big-button>
     </section>
 
+    <section class="flex flex-col gap-4">
+      <h2 class="text-lg font-semibold text-slate-800">Prestations (main-d’œuvre, forfaits…)</h2>
+
+      @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
+        <app-invoice-service-line-form
+          [group]="serviceLine"
+          [index]="i"
+          [services]="services()"
+          [lineLabels]="lineLabels()"
+          (remove)="removeServiceLine(i)"
+        />
+      }
+
+      <app-big-button variant="secondary" type="button" (click)="addServiceLine()">
+        + Ajouter une prestation
+      </app-big-button>
+    </section>
+
     <app-invoice-totals-summary [totals]="totalsPreview()" [vatApplicable]="vatApplicable()" />
 
     @if (errorMessage(); as message) {

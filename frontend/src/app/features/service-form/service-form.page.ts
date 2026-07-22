@@ -1,0 +1,96 @@
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { ServiceVisibility } from '../../core/models/service.model';
+import { ServiceCatalogService } from '../../core/services/service-catalog.service';
+import { BigButtonComponent } from '../../shared/components/big-button.component';
+
+@Component({
+  selector: 'app-service-form-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ReactiveFormsModule, BigButtonComponent],
+  templateUrl: './service-form.page.html',
+})
+export class ServiceFormPage {
+  private readonly serviceCatalogService = inject(ServiceCatalogService);
+  private readonly fb = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  private readonly serviceId = this.route.snapshot.paramMap.get('id');
+  protected readonly isEditing = this.serviceId !== null;
+
+  protected readonly loading = signal(this.isEditing);
+  protected readonly saving = signal(false);
+  protected readonly errorMessage = signal<string | null>(null);
+
+  protected readonly form = this.fb.nonNullable.group({
+    name: ['', Validators.required],
+    description: [''],
+    // Entered as a plain euro amount and converted to cents on submit —
+    // same boundary-conversion convention as the product/invoice line forms.
+    priceEuros: [0, [Validators.required, Validators.min(0)]],
+    defaultVisibility: this.fb.nonNullable.control<ServiceVisibility>('VISIBLE'),
+  });
+
+  constructor() {
+    if (this.serviceId) {
+      this.serviceCatalogService
+        .getById(this.serviceId)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (service) => {
+            this.loading.set(false);
+            this.form.patchValue({
+              name: service.name,
+              description: service.description ?? '',
+              priceEuros: service.priceCents / 100,
+              defaultVisibility: service.defaultVisibility,
+            });
+          },
+          error: () => {
+            this.loading.set(false);
+            this.errorMessage.set('Impossible de charger cette prestation.');
+          },
+        });
+    }
+  }
+
+  protected submit(): void {
+    if (this.saving()) {
+      return; // already in flight — ignore a fast double click/tap
+    }
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+
+    const value = this.form.getRawValue();
+    const payload = {
+      name: value.name,
+      description: value.description || undefined,
+      priceCents: Math.round(value.priceEuros * 100),
+      defaultVisibility: value.defaultVisibility,
+    };
+
+    this.saving.set(true);
+    this.errorMessage.set(null);
+
+    const request = this.serviceId
+      ? this.serviceCatalogService.update(this.serviceId, payload)
+      : this.serviceCatalogService.create(payload);
+
+    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        this.saving.set(false);
+        void this.router.navigate(['/prestations']);
+      },
+      error: () => {
+        this.saving.set(false);
+        this.errorMessage.set('Erreur lors de l’enregistrement. Veuillez réessayer.');
+      },
+    });
+  }
+}

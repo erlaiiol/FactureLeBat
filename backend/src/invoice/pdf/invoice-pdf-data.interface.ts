@@ -6,6 +6,14 @@ export interface InvoicePdfLine {
   totalCents: number;
 }
 
+// Only VISIBLE service lines (Phase 5) ever reach the PDF as their own
+// entry — REDISTRIBUTED ones are already folded into the lines above by the
+// time InvoiceMapper builds this object, and must never appear here too.
+export interface InvoicePdfServiceLine {
+  name: string;
+  amountCents: number;
+}
+
 // Plain, serializable data object built by InvoiceService and handed to
 // PdfService — the PDF generator has no knowledge of Prisma or business
 // rules beyond formatting this object.
@@ -28,6 +36,7 @@ export interface InvoicePdfData {
   customerPhone: string | null;
 
   lines: InvoicePdfLine[];
+  serviceLines: InvoicePdfServiceLine[];
 
   vatApplicable: boolean;
   vatRateBasisPoints: number;

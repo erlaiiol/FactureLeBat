@@ -7,24 +7,33 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { switchMap } from 'rxjs';
 import { CompanyProfile } from '../../core/models/company.model';
 import { CustomerProfile } from '../../core/models/customer.model';
 import {
   CreateInvoiceLineRequest,
+  CreateInvoiceServiceLineRequest,
   InvoiceWithTotals,
+  RedistributionStrategy,
+  ServiceLineVisibility,
   WasteSurcharge,
 } from '../../core/models/invoice.model';
+import { ServiceProfile } from '../../core/models/service.model';
 import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { computeTotalsPreview } from './calculation-preview';
 import {
   InvoiceLineFormComponent,
   InvoiceLineFormGroup,
 } from './components/invoice-line-form.component';
+import {
+  InvoiceServiceLineFormComponent,
+  InvoiceServiceLineFormGroup,
+} from './components/invoice-service-line-form.component';
 import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summary.component';
 
 @Component({
@@ -34,6 +43,7 @@ import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summa
     ReactiveFormsModule,
     BigButtonComponent,
     InvoiceLineFormComponent,
+    InvoiceServiceLineFormComponent,
     InvoiceTotalsSummaryComponent,
   ],
   templateUrl: './invoice-create.page.html',
@@ -43,6 +53,7 @@ export class InvoiceCreatePage {
   private readonly companyService = inject(CompanyService);
   private readonly customerService = inject(CustomerService);
   private readonly invoiceService = inject(InvoiceService);
+  private readonly serviceCatalogService = inject(ServiceCatalogService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly company = signal<CompanyProfile | null>(null);
@@ -69,7 +80,28 @@ export class InvoiceCreatePage {
     initialValue: this.lines.getRawValue(),
   });
 
+  // Phase 5: services added to the invoice, either their own visible line
+  // or a hidden amount redistributed into the lines above. Empty by
+  // default — most invoices are still just product lines.
+  protected readonly services = signal<ServiceProfile[]>([]);
+  protected readonly serviceLines = this.fb.array<InvoiceServiceLineFormGroup>([]);
+
+  private readonly serviceLinesValue = toSignal(this.serviceLines.valueChanges, {
+    initialValue: this.serviceLines.getRawValue(),
+  });
+
+  protected readonly lineLabels = computed(() =>
+    this.linesValue().map((line, index) => line.description || `Ligne ${index + 1}`),
+  );
+
   protected readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
+
+  private readonly serviceAmountCents = computed(() =>
+    this.serviceLinesValue().reduce((sum, serviceLine) => {
+      const cents = Math.round((serviceLine.amountEuros ?? 0) * 100);
+      return Number.isFinite(cents) && cents > 0 ? sum + cents : sum;
+    }, 0),
+  );
 
   protected readonly totalsPreview = computed(() => {
     const company = this.company();
@@ -79,7 +111,12 @@ export class InvoiceCreatePage {
       unitPriceCents: Math.round((line.unitPriceEuros ?? 0) * 100),
       wasteSurcharge: line.wasteSurcharge ?? 'NONE',
     }));
-    return computeTotalsPreview(lineInputs, this.vatApplicable(), company?.vatRateBasisPoints ?? 0);
+    return computeTotalsPreview(
+      lineInputs,
+      this.vatApplicable(),
+      company?.vatRateBasisPoints ?? 0,
+      this.serviceAmountCents(),
+    );
   });
 
   constructor() {
@@ -97,6 +134,13 @@ export class InvoiceCreatePage {
       .getAll()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (customers) => this.customers.set(customers) });
+
+    // Best-effort, same reasoning: an empty "prestation enregistrée" picker
+    // still leaves the ad-hoc name/price service-line flow fully usable.
+    this.serviceCatalogService
+      .getAll()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (services) => this.services.set(services) });
   }
 
   protected onCustomerSelected(customerId: string): void {
@@ -131,12 +175,55 @@ export class InvoiceCreatePage {
 
   protected addLine(): void {
     this.lines.push(this.createLineGroup());
+    this.syncAllServiceLineWeights();
   }
 
   protected removeLine(index: number): void {
     if (this.lines.length > 1) {
       this.lines.removeAt(index);
+      this.syncAllServiceLineWeights();
     }
+  }
+
+  private createServiceLineGroup(): InvoiceServiceLineFormGroup {
+    const group = this.fb.nonNullable.group({
+      serviceId: this.fb.control<string | null>(null),
+      name: this.fb.nonNullable.control('', Validators.required),
+      description: this.fb.nonNullable.control(''),
+      amountEuros: this.fb.nonNullable.control(0, [Validators.required, Validators.min(0)]),
+      visibility: this.fb.nonNullable.control<ServiceLineVisibility>('VISIBLE'),
+      redistributionStrategy: this.fb.nonNullable.control<RedistributionStrategy>('EQUAL'),
+      weights: this.fb.array<FormControl<number>>([]),
+    });
+    this.syncServiceLineWeights(group);
+    return group;
+  }
+
+  // Keeps a service line's `weights` FormArray sized to exactly the current
+  // number of invoice lines — one weight input per line, in order — so the
+  // form is always ready to submit a WEIGHTED redistribution even though the
+  // weight inputs are only shown once that strategy is picked (see
+  // InvoiceServiceLineFormComponent).
+  private syncServiceLineWeights(group: InvoiceServiceLineFormGroup): void {
+    const weights = group.controls.weights;
+    while (weights.length < this.lines.length) {
+      weights.push(this.fb.nonNullable.control(1, [Validators.required, Validators.min(0)]));
+    }
+    while (weights.length > this.lines.length) {
+      weights.removeAt(weights.length - 1);
+    }
+  }
+
+  private syncAllServiceLineWeights(): void {
+    this.serviceLines.controls.forEach((group) => this.syncServiceLineWeights(group));
+  }
+
+  protected addServiceLine(): void {
+    this.serviceLines.push(this.createServiceLineGroup());
+  }
+
+  protected removeServiceLine(index: number): void {
+    this.serviceLines.removeAt(index);
   }
 
   protected pdfUrl(invoiceId: string): string {
@@ -152,15 +239,19 @@ export class InvoiceCreatePage {
       this.lines.removeAt(0);
     }
     this.lines.push(this.createLineGroup());
+    while (this.serviceLines.length > 0) {
+      this.serviceLines.removeAt(0);
+    }
   }
 
   protected submit(): void {
     if (this.creating()) {
       return; // already in flight — ignore a fast double click/tap
     }
-    if (this.customerForm.invalid || this.lines.invalid) {
+    if (this.customerForm.invalid || this.lines.invalid || this.serviceLines.invalid) {
       this.customerForm.markAllAsTouched();
       this.lines.markAllAsTouched();
+      this.serviceLines.markAllAsTouched();
       return;
     }
 
@@ -174,6 +265,30 @@ export class InvoiceCreatePage {
       wasteSurcharge: line.mode === 'AREA' ? line.wasteSurcharge : 'NONE',
     }));
 
+    const serviceLines: CreateInvoiceServiceLineRequest[] = this.serviceLines
+      .getRawValue()
+      .map((serviceLine) => {
+        if (serviceLine.visibility === 'VISIBLE') {
+          return {
+            serviceId: serviceLine.serviceId ?? undefined,
+            name: serviceLine.name,
+            description: serviceLine.description || undefined,
+            amountCents: Math.round(serviceLine.amountEuros * 100),
+            visibility: 'VISIBLE' as const,
+          };
+        }
+        return {
+          serviceId: serviceLine.serviceId ?? undefined,
+          name: serviceLine.name,
+          description: serviceLine.description || undefined,
+          amountCents: Math.round(serviceLine.amountEuros * 100),
+          visibility: 'REDISTRIBUTED' as const,
+          redistributionStrategy: serviceLine.redistributionStrategy,
+          weights:
+            serviceLine.redistributionStrategy === 'WEIGHTED' ? serviceLine.weights : undefined,
+        };
+      });
+
     this.creating.set(true);
     this.errorMessage.set(null);
 
@@ -184,6 +299,7 @@ export class InvoiceCreatePage {
       customerPhone: customer.customerPhone || undefined,
       customerId,
       lines,
+      serviceLines: serviceLines.length > 0 ? serviceLines : undefined,
     });
 
     // "Enregistrer ce client" only applies to freehand entry — if a saved

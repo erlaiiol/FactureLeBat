@@ -214,6 +214,48 @@ See `backend/src/product/import/safe-fetcher.service.ts` and
 (10 requests/min/IP) than the rest of the API, since it triggers a real
 outbound network call per request.
 
+## Services
+
+The artisan's catalog of non-material work (Phase 5) — labor, expertise,
+misc charges. Same shape and conventions as `/products` (see above), minus
+the supplier fields, plus `defaultVisibility`.
+
+### `GET /services`
+
+Returns all services, ordered by name. Optional `?search=` filters
+case-insensitively on `name`.
+
+### `GET /services/:id`
+
+Returns a single service. `404` if the id doesn't exist.
+
+### `POST /services`
+
+```json
+{
+  "name": "Main-d'œuvre pose parquet",
+  "description": "Pose collée, préparation du support incluse.",
+  "priceCents": 25000,
+  "defaultVisibility": "VISIBLE"
+}
+```
+
+| Field               | Type                          | Notes                                             |
+| -------------------- | ------------------------------ | ---------------------------------------------------- |
+| `name`              | string, 1-200 chars            |                                                    |
+| `description`       | string, ≤2000 chars, optional  |                                                    |
+| `priceCents`        | integer ≥ 0                    | **integer cents**, same convention as `Product.priceCents` |
+| `defaultVisibility` | `"VISIBLE"` \| `"REDISTRIBUTED"` | prefills (never locks) the visibility choice when this service is added to an invoice |
+
+**Response** `201 Created` — full service record (`id`, `createdAt`,
+`updatedAt` included).
+
+### `PATCH /services/:id`
+
+Full replace of the editable fields, same shape as the `POST` body and the
+same convention as `PATCH /products/:id` — an omitted optional field is
+cleared to `null`. `404` if the id doesn't exist.
+
 ## Invoices
 
 ### `POST /invoices`
@@ -243,6 +285,20 @@ Creates an invoice: computes totals server-side, assigns the next sequential num
       "quantity": 12,
       "unitPriceCents": 800
     }
+  ],
+  "serviceLines": [
+    {
+      "name": "Main-d'œuvre pose parquet",
+      "amountCents": 25000,
+      "visibility": "VISIBLE"
+    },
+    {
+      "name": "Savoir-faire",
+      "amountCents": 10000,
+      "visibility": "REDISTRIBUTED",
+      "redistributionStrategy": "WEIGHTED",
+      "weights": [1, 3]
+    }
   ]
 }
 ```
@@ -259,6 +315,20 @@ Creates an invoice: computes totals server-side, assigns the next sequential num
 | `lines[].quantity`                | number ≥ 0, ≤3 decimal places |                                                                     |
 | `lines[].unitPriceCents`          | integer ≥ 0                   | **integer cents** — the client converts euros to cents once, before sending |
 | `lines[].wasteSurcharge`          | `"NONE"` \| `"TEN"` \| `"TWENTY"`, optional (default `"NONE"`) | must be `"NONE"` when `mode` is `"UNIT"` (rejected otherwise) |
+| `serviceLines`                    | array, ≤50 items, optional (default none) | Phase 5 — services added to the invoice                |
+| `serviceLines[].serviceId`        | string (UUID), optional       | soft reference to a saved `Service` — confirmed to exist (`404` if not), same "autofill, never overridden" rule as `customerId` |
+| `serviceLines[].name`             | string, 1-200 chars           |                                                                     |
+| `serviceLines[].description`      | string, ≤2000 chars, optional |                                                                     |
+| `serviceLines[].amountCents`      | integer ≥ 0                   | **integer cents** — the full amount this service contributes        |
+| `serviceLines[].visibility`       | `"VISIBLE"` \| `"REDISTRIBUTED"` | `VISIBLE`: own entry in the response/PDF. `REDISTRIBUTED`: hidden, folded into `lines[]` totals instead |
+| `serviceLines[].redistributionStrategy` | `"EQUAL"` \| `"WEIGHTED"`, required iff `visibility` is `REDISTRIBUTED`, forbidden otherwise | `EQUAL`: split evenly across every `lines[]` entry. `WEIGHTED`: split per `weights` |
+| `serviceLines[].weights`          | integer[] ≥ 0, required iff `redistributionStrategy` is `WEIGHTED`, forbidden otherwise | **Positional**, aligned with `lines` (`weights[i]` targets `lines[i]`) — length must equal `lines.length`, and must sum to more than zero |
+
+Redistribution math is always integer-cents, with any rounding remainder
+assigned deterministically (largest-remainder method) — see
+[architecture.md](architecture.md#service-lines-phase-5). Both service
+visibility modes increase the invoice's displayed total by exactly
+`amountCents`.
 
 **Response** `201 Created` — see the shared invoice shape below.
 
@@ -297,6 +367,19 @@ Returns a single invoice. `404` if the id doesn't exist.
       "lineTotalExclVatCents": 126225
     }
   ],
+  "serviceLines": [
+    {
+      "id": "9c6a7e3d-3d2a-4b8b-9d0e-2a6f9b6e7a10",
+      "position": 0,
+      "name": "Savoir-faire",
+      "description": null,
+      "amountCents": 10000,
+      "visibility": "REDISTRIBUTED",
+      "distribution": [
+        { "invoiceLineId": "04f3f798-0ea8-47f1-bf79-d0e778200c83", "amountCents": 2500 }
+      ]
+    }
+  ],
   "subtotalExclVatCents": 135825,
   "vatAmountCents": 0,
   "totalInclVatCents": 135825
@@ -304,6 +387,13 @@ Returns a single invoice. `404` if the id doesn't exist.
 ```
 
 Note `quantity` is serialized as a **string** (not a number) — see [database.md](database.md#invoiceline) for why. All monetary fields are integer cents.
+
+`serviceLines[].lineTotalExclVatCents` above is already folded into the
+matching `lines[].lineTotalExclVatCents` for a `REDISTRIBUTED` line —
+`serviceLines[].distribution` is exposed purely for transparency (so the
+artisan/frontend can see where a hidden amount actually went), it is not
+an additional amount to add anywhere. `distribution` is only present for
+`REDISTRIBUTED` service lines; a `VISIBLE` one has no such field.
 
 ### `GET /invoices/:id/pdf`
 
@@ -320,6 +410,6 @@ Standard Nest HTTP exception shape:
 | Status | When                                                                 |
 | ------- | ----------------------------------------------------------------------- |
 | 400    | DTO validation failed (`message` is an array of human-readable reasons), or `POST /products/import` couldn't extract anything usable |
-| 404    | Invoice/Customer/Product id not found — including on `PATCH`, not just `GET` |
+| 404    | Invoice/Customer/Product/Service id not found — including on `PATCH`, not just `GET` |
 | 429    | Rate limit exceeded — 100 req/min/IP by default, tightened to 10 req/min/IP for `POST /products/import` |
 | 500    | Unhandled server error (no internal details are leaked in the response) |

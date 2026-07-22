@@ -4,7 +4,11 @@ import pdfMake from 'pdfmake';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const roboto = require('pdfmake/fonts/Roboto') as Record<string, unknown>;
-import { InvoicePdfData, InvoicePdfLine } from './invoice-pdf-data.interface';
+import {
+  InvoicePdfData,
+  InvoicePdfLine,
+  InvoicePdfServiceLine,
+} from './invoice-pdf-data.interface';
 
 const BUNDLED_FONTS_DIR = dirname(require.resolve('pdfmake/fonts/Roboto'));
 
@@ -43,6 +47,9 @@ export class PdfService {
         this.buildParties(data),
         { text: '\n' },
         this.buildLinesTable(data),
+        ...(data.serviceLines.length > 0
+          ? [{ text: '\n' }, this.buildServiceLinesTable(data)]
+          : []),
         { text: '\n' },
         this.buildTotals(data),
         { text: '\n\n' },
@@ -107,6 +114,25 @@ export class PdfService {
       table: {
         headerRows: 1,
         widths: ['*', 'auto', 'auto', 'auto', 'auto'],
+        body: [header, ...rows],
+      },
+    };
+  }
+
+  // Only VISIBLE service lines (Phase 5) ever reach here — REDISTRIBUTED
+  // ones are already folded into buildLinesTable's totals by the time
+  // InvoiceMapper builds this data object, so they never appear twice.
+  private buildServiceLinesTable(data: InvoicePdfData): Content {
+    const header = ['Prestations', 'Montant'];
+    const rows = data.serviceLines.map((line: InvoicePdfServiceLine) => [
+      line.name,
+      centsToEuros(line.amountCents),
+    ]);
+
+    return {
+      table: {
+        headerRows: 1,
+        widths: ['*', 'auto'],
         body: [header, ...rows],
       },
     };

@@ -9,6 +9,7 @@ import { CustomerModule } from './customer/customer.module';
 import { DatabaseModule } from './database/database.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { ProductModule } from './product/product.module';
+import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ProductModule } from './product/product.module';
     CustomerModule,
     InvoiceModule,
     ProductModule,
+    ServiceCatalogModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -3,11 +3,17 @@ import { PrismaService } from '../database/prisma.service';
 import {
   InvoiceModel as Invoice,
   InvoiceLineModel as InvoiceLine,
+  InvoiceServiceLineModel as InvoiceServiceLine,
+  InvoiceServiceLineWeightModel as InvoiceServiceLineWeight,
   CompanyModel as Company,
 } from '../../generated/prisma/models';
-import { LineMode, WasteSurcharge } from '../../generated/prisma/enums';
+import { LineMode, WasteSurcharge, ServiceVisibility } from '../../generated/prisma/enums';
 
-export type InvoiceWithLines = Invoice & { lines: InvoiceLine[]; company: Company };
+export type InvoiceWithLines = Invoice & {
+  lines: InvoiceLine[];
+  serviceLines: (InvoiceServiceLine & { weights: InvoiceServiceLineWeight[] })[];
+  company: Company;
+};
 
 export interface CreateInvoiceLineData {
   description: string;
@@ -16,6 +22,19 @@ export interface CreateInvoiceLineData {
   quantity: number;
   unitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
+}
+
+export interface CreateInvoiceServiceLineData {
+  serviceId?: string;
+  name: string;
+  description?: string;
+  amountCents: number;
+  visibility: ServiceVisibility;
+  // Present iff visibility === REDISTRIBUTED, positional/aligned with the
+  // `lines` array above (weights[i] targets the line created from lines[i]).
+  // An EQUAL split has already been expanded into an explicit weight of 1
+  // per line by the time this reaches the repository (see InvoiceService.create).
+  weights?: number[];
 }
 
 export interface CreateInvoiceData {
@@ -28,7 +47,14 @@ export interface CreateInvoiceData {
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   lines: CreateInvoiceLineData[];
+  serviceLines: CreateInvoiceServiceLineData[];
 }
+
+const INVOICE_INCLUDE = {
+  lines: { orderBy: { position: 'asc' } },
+  serviceLines: { orderBy: { position: 'asc' }, include: { weights: true } },
+  company: true,
+} as const;
 
 @Injectable()
 export class InvoiceRepository {
@@ -37,6 +63,13 @@ export class InvoiceRepository {
   // Increments the company's invoice counter and creates the invoice in the
   // same transaction: the row lock taken by the UPDATE serializes concurrent
   // invoice creation, keeping numbering sequential and gapless.
+  //
+  // Service lines and their redistribution weights are created after the
+  // invoice + product lines, still inside the same transaction: a
+  // REDISTRIBUTED service line's weights reference the *generated* ids of
+  // the invoice lines above, so those ids must exist first. A final re-read
+  // (still inside the transaction, so it sees an atomic, fully-formed
+  // invoice or none at all) returns the shape InvoiceMapper needs.
   async createWithSequentialNumber(data: CreateInvoiceData): Promise<InvoiceWithLines> {
     return this.prisma.$transaction(async (tx) => {
       const company = await tx.company.update({
@@ -46,7 +79,7 @@ export class InvoiceRepository {
       const usedNumber = company.nextInvoiceNumber - 1;
       const number = `${company.invoiceNumberPrefix}-${String(usedNumber).padStart(6, '0')}`;
 
-      return tx.invoice.create({
+      const invoice = await tx.invoice.create({
         data: {
           number,
           companyId: data.companyId,
@@ -69,16 +102,39 @@ export class InvoiceRepository {
             })),
           },
         },
-        include: { lines: { orderBy: { position: 'asc' } }, company: true },
+        include: { lines: { orderBy: { position: 'asc' } } },
       });
+
+      for (const [index, serviceLine] of data.serviceLines.entries()) {
+        const createdServiceLine = await tx.invoiceServiceLine.create({
+          data: {
+            invoiceId: invoice.id,
+            position: index,
+            serviceId: serviceLine.serviceId,
+            name: serviceLine.name,
+            description: serviceLine.description,
+            amountCents: serviceLine.amountCents,
+            visibility: serviceLine.visibility,
+          },
+        });
+
+        if (serviceLine.visibility === 'REDISTRIBUTED') {
+          await tx.invoiceServiceLineWeight.createMany({
+            data: serviceLine.weights!.map((weight, lineIndex) => ({
+              invoiceServiceLineId: createdServiceLine.id,
+              invoiceLineId: invoice.lines[lineIndex].id,
+              weight,
+            })),
+          });
+        }
+      }
+
+      return tx.invoice.findUniqueOrThrow({ where: { id: invoice.id }, include: INVOICE_INCLUDE });
     });
   }
 
   findById(id: string): Promise<InvoiceWithLines | null> {
-    return this.prisma.invoice.findUnique({
-      where: { id },
-      include: { lines: { orderBy: { position: 'asc' } }, company: true },
-    });
+    return this.prisma.invoice.findUnique({ where: { id }, include: INVOICE_INCLUDE });
   }
 
   // Capped rather than paginated for now (Phase 1 has no list UI pagination
@@ -90,7 +146,7 @@ export class InvoiceRepository {
 
   findAll(): Promise<InvoiceWithLines[]> {
     return this.prisma.invoice.findMany({
-      include: { lines: { orderBy: { position: 'asc' } }, company: true },
+      include: INVOICE_INCLUDE,
       orderBy: { date: 'desc' },
       take: InvoiceRepository.MAX_LISTED_INVOICES,
     });
