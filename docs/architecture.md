@@ -79,7 +79,17 @@ Both modes share the same invariant: the invoice's displayed total increases by 
 
 ### Onboarding tour state (Phase 8)
 
-`Company.tourEnabled`/`Company.completedTours` (a `String[]` of tour ids) back the frontend's onboarding tour — see the Phase 8 roadmap notes for why they live on the singleton `Company` row rather than a new per-user table. `OnboardingRepository` reuses `company/company.constants.ts`'s `DEFAULT_COMPANY_PROFILE` for the same "PATCH can legitimately be the first write" upsert reasoning as `CompanyRepository`, since onboarding state can be touched before any `Company` profile GET/PATCH ever happens.
+`Company.tourEnabled`/`Company.completedTours` (a `String[]` of tour ids) back the frontend's onboarding tour — see the Phase 8 roadmap notes for why they live on the singleton `Company` row rather than a new per-user table. `OnboardingRepository` reuses `company/company.constants.ts`'s `DEFAULT_COMPANY_PROFILE` for the same "PATCH can legitimately be the first write" upsert reasoning as `CompanyRepository`, since onboarding state can be touched before any `Company` profile GET/PATCH ever happens. Phase 9.5 adds a fourth tour id, `invoice-creation-manual`, to the fixed set both `backend/src/onboarding/onboarding.constants.ts` and the frontend's `onboarding.model.ts` mirror.
+
+### Manual invoice mode (Phase 9.5)
+
+`Invoice.entryMode` (`GUIDED` default, or `MANUAL`) decides which of two independent bodies a given invoice has: `GUIDED` uses `lines`/`serviceLines` exactly as before; `MANUAL` uses `manualColumns`/`manualRows` (each row's cells keyed by column id) and leaves `lines`/`serviceLines` empty. Every place that reads an invoice branches on this field:
+
+- `InvoiceMapper.toInvoiceWithTotals()`/`toPdfData()`/`toPreviewPdfData()` each have a `GUIDED` path (unchanged) and a `MANUAL` path (`toManualInvoiceWithTotals`/`toManualPdfData`/`toManualPreviewPdfData`) that prices every row via `manual/manual-table-calculation.util.ts`'s `computeManualRowTotalCents` — this treats a manual row as a plain `UNIT`-mode `InvoiceLine` (quantity × unit price, no waste surcharge/packaging), so `InvoiceCalculationService` itself needed zero changes.
+- `InvoiceRepository.createWithSequentialNumber()` creates `manualColumns` nested inside the same `invoice.create()` call as `lines` (so cells can reference the generated column ids afterward), then creates each `manualRow` + its cells in a second pass — the same two-phase shape Phase 5's service-line weights already established (create the parent row(s) first, then rows that reference their generated ids).
+- `PdfService` branches its table-building step on `data.entryMode`: `buildLinesTable`/`buildServiceLinesTable` for `GUIDED`, `buildManualTable` for `MANUAL` (arbitrary artisan-defined columns plus a synthetic trailing "Total" column it formats itself — every other cell is rendered exactly as stored, since "Mettre en forme" is a frontend-only convenience, not a backend guarantee).
+
+**Frontend**: `factures/nouvelle` is now a mode-choice screen (`InvoiceCreateModeChoicePage`) with two children — `rapide/` (the pre-existing shell + `client`/`lignes` steps, just moved one path segment deeper, otherwise unchanged) and `manuel/` (`InvoiceCreateManualPage`, a single page, no sub-routes). Mode manuel has its own `ManualInvoiceDraftStore` (`providedIn: 'root'`, own `localStorage` key) — deliberately not a variant of `InvoiceDraftStore`, since mode switching mid-draft is unsupported and the two bodies don't share a shape. Column/row drag-resize is `interact.js`'s `draggable()` wrapped in a small reusable `ManualResizeHandleDirective` that emits a raw pixel delta; the store clamps and owns the actual size, `interact.js` never touches invoice data.
 
 ### Request flow: creating an invoice
 
@@ -126,13 +136,16 @@ src/app/
     models/      TypeScript types mirroring backend DTOs/response shapes
     services/    thin HttpClient wrappers (one per backend domain)
   features/
-    invoice-create/   the invoice creation flow (Phase 6): a shell
-                      (invoice-create-shell.page) hosting two routed steps —
-                      customer-step/ and lines-step/ — plus invoice-draft.store.ts,
-                      a shared providedIn:'root' store (customer + lines +
-                      service lines + live total preview) both steps and the
-                      shell read/write, persisted to localStorage so a
-                      refresh mid-flow doesn't lose the draft
+    invoice-create/   the invoice creation flow: mode-choice/ (Phase 9.5) is the
+                      first screen under factures/nouvelle, offering mode rapide
+                      (Phase 6's shell — invoice-create-shell.page hosting two
+                      routed steps, customer-step/ and lines-step/, now under
+                      factures/nouvelle/rapide/ — plus invoice-draft.store.ts, a
+                      shared providedIn:'root' store persisted to localStorage)
+                      or mode manuel (manual/ — InvoiceCreateManualPage, a
+                      single page with its own ManualInvoiceDraftStore and own
+                      localStorage key; mode switching mid-draft is unsupported,
+                      so the two stores never interact)
     invoice-list/     list + PDF download
     customer-list/    saved customers, search
     customer-form/    create/edit a customer (one page, keyed off a route id param)
@@ -150,7 +163,10 @@ src/app/
     pipes/       e.g. centsToEuros, unitLabel (Unit enum -> French display string)
     tour/        Phase 8 onboarding tour engine, hand-built (no third-party tour
                  library, same precedent as app-field-hint): tour-definitions.ts
-                 declares the three mini-tours' steps; TourService
+                 declares the four mini-tours' steps (Phase 9.5 adds
+                 'invoice-creation-manual', route-mapped to factures/nouvelle/manuel
+                 ahead of the general factures/nouvelle prefix in ROUTE_TOUR_MAP so
+                 the more specific prefix wins); TourService
                  (providedIn: 'root') is the single source of truth for tour
                  state, auto-launching a tour on first visit to its section and
                  walking it (including cross-route steps) via the router;
