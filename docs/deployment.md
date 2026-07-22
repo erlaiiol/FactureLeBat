@@ -109,6 +109,15 @@ docker compose -f infra/docker-compose.prod.yml logs -f                  # prod,
 docker compose -f infra/docker-compose.prod.yml logs -f backend          # prod, one service
 ```
 
+The commands above are Docker's own log driver — they only go back as far as Docker's retention and disappear if a container is recreated. The backend also writes colored, leveled, rotated log files to a `backend_logs` named volume (`combined-YYYY-MM-DD.log`, everything; `error-YYYY-MM-DD.log`, failures only, kept longer) that survive restarts/redeploys independently of Docker's log driver:
+
+```bash
+make logs-files-prod    # tail -f the combined log
+make logs-errors-prod   # tail -f the error-only log
+```
+
+For direct filesystem access without going through `docker compose exec` (e.g. to `scp` a log off the VPS), find the volume's real path with `docker volume inspect facturelebat-prod_backend_logs --format '{{ .Mountpoint }}'`. See [logging.md](logging.md) for the log format, levels, and how request ids let you trace one request across the whole log.
+
 ## Secrets
 
 - `infra/.env` is gitignored and never committed — it's the only place `POSTGRES_PASSWORD`, `GROQ_API_KEY`, and `APP_ENCRYPTION_KEY` live in prod.

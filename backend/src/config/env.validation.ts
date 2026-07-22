@@ -16,6 +16,17 @@ enum NodeEnv {
   Test = 'test',
 }
 
+// Mirrors LOG_LEVELS in src/logging/winston.config.ts — kept as a separate
+// literal here (rather than importing it) since validateEnv runs before any
+// other module in the app is safe to assume fully resolved.
+enum LogLevel {
+  Error = 'error',
+  Warn = 'warn',
+  Info = 'info',
+  Http = 'http',
+  Debug = 'debug',
+}
+
 // One class, one job: describe every env var the app reads and its
 // constraints, so a misconfigured deployment fails fast at boot with a
 // readable error instead of crashing (or silently misbehaving) later on
@@ -46,6 +57,14 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   CORS_ORIGIN?: string;
+
+  // Defaults to 'debug' in development and 'info' in production — see
+  // buildWinstonOptions(). Set explicitly to turn on Prisma query logging
+  // (only emitted below 'info') on a prod instance while debugging, without
+  // a redeploy that changes NODE_ENV.
+  @IsEnum(LogLevel)
+  @IsOptional()
+  LOG_LEVEL?: LogLevel;
 
   // Phase 10 sourcing assistant. Deliberately optional: an artisan can run
   // the whole app with this unset, SourcingService just reports the feature

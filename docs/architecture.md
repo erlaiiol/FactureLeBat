@@ -125,6 +125,7 @@ Both modes share the same invariant: the invoice's displayed total increases by 
 - **Input validation**: global `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })` — every DTO field is validated and coerced; unknown fields are rejected outright.
 - **API prefix**: everything is served under `/api` (`app.setGlobalPrefix('api')`) — this is what lets Nginx route `/api/*` to the backend and everything else to the static frontend in prod.
 - **Graceful shutdown**: `app.enableShutdownHooks()` — without it, Nest never listens for `SIGTERM`/`SIGINT`, so `OnModuleDestroy` hooks (`PrismaService` disconnecting, `SafeFetcherService` closing its pooled `undici.Agent`) would only ever run when a test calls `app.close()` directly, never on a real `docker stop`/redeploy.
+- **Logging**: Winston (`nest-winston`) replaces Nest's default console logger app-wide — colored, leveled, request-correlated (`x-request-id` via `AsyncLocalStorage`), written to both the console and rotated files under `backend/logs/`. A global exception filter (`AllExceptionsFilter`) and an HTTP request-logging middleware make sure every request and every uncaught error is logged, not just what individual services choose to log. See [logging.md](logging.md).
 
 ## Frontend (`frontend/`)
 

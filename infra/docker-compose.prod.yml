@@ -32,6 +32,13 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       PORT: 3000
+    volumes:
+      # Rotated log files (backend/src/logging/) outlive container restarts
+      # and are readable straight off the VPS's disk — not just through
+      # `docker compose logs`, whose retention is Docker's own logging
+      # driver, not this app's. See docs/logging.md for where this volume
+      # lives on disk and `make logs-files-prod` to tail it.
+      - backend_logs:/app/logs
 
   frontend:
     build:
@@ -66,3 +73,4 @@ volumes:
   # a cert and risks Let's Encrypt's rate limits.
   caddy_data:
   caddy_config:
+  backend_logs:

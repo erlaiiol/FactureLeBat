@@ -35,6 +35,13 @@ COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build /app/entrypoint.sh /app/wait-for-db.sh ./
 RUN chmod +x entrypoint.sh wait-for-db.sh
 
+# Created here (not left to winston-daily-rotate-file's own mkdir at
+# runtime) so it exists in the image *before* the chown below and before
+# `backend_logs` (docker-compose.prod.yml) is attached — a fresh named
+# volume is seeded from the image's content/ownership at its mount point,
+# so this is what makes the volume writable by the unprivileged `node`
+# user instead of ending up root-owned.
+RUN mkdir -p logs
 RUN chown -R node:node /app
 USER node
 
