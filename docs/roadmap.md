@@ -416,12 +416,21 @@ Full decisions (palette, typography, the line-marking badge, motion timing) are 
 
 ## Features
 
-- [ ] Translate the "Chantier calibré" palette and type scale into Tailwind v4 `@theme` tokens (`frontend/src/styles.css`)
-- [ ] Light and Dark-mode variant of "Chantier calibré" for the working application. Togglable with a button.
-- [ ] Apply "Atelier sobre" only at its three sanctioned locations (invoice PDF header, guided tour, "Mon activité" settings) — never on data-entry screens
-- [ ] Implement the line-marking badge (shape, color, rotation) as a shared component
-- [ ] Implement the motion primitives (`lineIn`, `totalPulse`, `badgeStamp`, tour step transitions, tour-completion reward) respecting `prefers-reduced-motion`
-- [ ] Implement the semantic color tokens (primary/secondary/success/warning/danger/info, solid + subtle variants) as shared button/badge components
+- [x] Translate the "Chantier calibré" palette and type scale into Tailwind v4 `@theme` tokens (`frontend/src/styles.css`)
+- [x] Light and Dark-mode variant of "Chantier calibré" for the working application. Togglable with a button.
+- [x] Apply "Atelier sobre" only at its three sanctioned locations (invoice PDF header, guided tour, "Mon activité" settings) — never on data-entry screens
+- [x] Implement the line-marking badge (shape, color, rotation) as a shared component
+- [x] Implement the motion primitives (`lineIn`, `totalPulse`, `badgeStamp`, tour step transitions, tour-completion reward) respecting `prefers-reduced-motion`
+- [x] Implement the semantic color tokens (primary/secondary/success/warning/danger/info, solid + subtle variants) as shared button/badge components
+
+## Implementation notes
+
+- **Fonts are self-hosted, never a CDN.** `@fontsource/*` (frontend, woff2, imported once per weight in `styles.css`) and `@expo-google-fonts/*` (backend, real `.ttf` files pdfmake needs on disk) — both OFL-licensed, both bundled into the build/container image, same "never fetch external content" precedent as `SafeFetcherService`/pdfmake's locked-down access policy. No new font is loaded over the network at runtime.
+- **Dark mode is a manual toggle, not `prefers-color-scheme`.** `ThemeService` (`core/services/theme.service.ts`, `providedIn: 'root'`) holds a `light`/`dark` signal, toggled from the nav bar, persisted to `localStorage` (same try/catch-degrades-to-default pattern as `InvoiceDraftStore`/`TourService`), and applied via a `.dark` class on `<html>` — `styles.css` redefines Tailwind's `dark:` variant with `@custom-variant dark (&:where(.dark, .dark *))` instead of the v4 default (media-query-only, no manual override possible).
+- **The semantic color tokens live once, in `BigButtonComponent`/`BadgeComponent`.** Both take `variant` (primary/secondary/success/warning/danger/info) and `tone` (solid/subtle) inputs resolved through a literal `Record<Variant, Record<Tone, string>>` lookup — a template-literal like `` `bg-${variant}` `` would never be picked up by Tailwind's class scanner, so every combination has to exist as a real string somewhere in source.
+- **The line-marking badge is its own component (`LineBadgeComponent`), deliberately separate from `BadgeComponent`.** Same reasoning as the design doc: mixing the stamped/rotated motif into the straight-rectangle semantic badges would dilute both. Wired into `InvoiceServiceLineFormComponent` wherever a service line is set to `REDISTRIBUTED`.
+- **Motion primitives are plain CSS `@keyframes` + classes in `styles.css`, not an animation library** — consistent with the rest of the app's small-owned-primitives precedent (Phase 8's hand-built tour engine). `totalPulse` and the tour's step-transition/completion-reward animations replay on every state change (not just once) via the same trick: toggle the class off, then back on inside a `queueMicrotask`/`effect`, since the element itself is never destroyed/recreated between changes.
+- **"Atelier sobre" landed in exactly the three sanctioned spots.** The invoice PDF header (`PdfService.buildHeader`, Zilla Slab + Work Sans + walnut, everything else on the document stays Roboto/black-and-grey), the guided tour overlay, and the "Mon activité" section of company settings (wrapped in its own `<section>`, ending before the unrelated "Visites guidées" block, which stays "Chantier calibré").
 
 
 ---
@@ -452,7 +461,7 @@ Both modes end at the same place: a valid invoice, priced and PDF-able through t
 - [ ] Mode manuel: PDF-like canvas where every field is click-to-edit in place, no external form
 - [ ] Add a row/column via "+" controls positioned below (row) and to the right (column) of the table, remove via a matching "−"
 - [ ] Resize a row/column by dragging its border, with sane min/max bounds
-- [ ] "Mettre en forme" button normalizes spacing/alignment/number formatting across the table in one click
+- [ ] "Mettre en forme" button normalizes spacing/alignment/number formatting across the table in one click. Tries to have the "usual" invoice styling.
 - [ ] Manual-mode data maps onto the same `Invoice`/`InvoiceLine`/`Service` model and calculation engine as mode rapide — same totals rules (integer cents, no floating point), same PDF pipeline, same preview-before-persist rule (Phase 15)
 - [ ] Switching mode mid-draft is either supported with a clear "this will restructure your invoice" warning, or deliberately disabled — decide once the manual data model's edge cases (e.g. redistributed services, packaging rounding) are scoped
 - [ ] Tour mode updated: the invoice-creation mini-tour (Phase 8) explains the mode-choice screen and gives mode manuel its own short walkthrough (add/remove row-column, resize, "Mettre en forme")
