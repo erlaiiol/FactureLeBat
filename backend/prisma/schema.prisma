@@ -67,6 +67,16 @@ enum ManualColumnRole {
   CUSTOM
 }
 
+// Phase 10: which kind of AI sourcing call a cached SourcingSearch row is
+// for — the two calls have very different cost/nature (a live web search vs.
+// a plain knowledge-only completion, see docs/roadmap.md Phase 10) but share
+// the same cache/daily-cap plumbing, hence one table with a discriminator
+// rather than two near-identical models.
+enum SourcingSearchKind {
+  SUPPLIER_SEARCH
+  COMPLEMENTARY_SUGGESTIONS
+}
+
 model Company {
   id String @id @default(uuid())
 
@@ -94,7 +104,8 @@ model Company {
   tourEnabled    Boolean  @default(true)
   completedTours String[] @default([])
 
-  invoices Invoice[]
+  invoices         Invoice[]
+  sourcingSearches SourcingSearch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -361,4 +372,35 @@ model InvoiceServiceLineWeight {
   weight Int
 
   @@unique([invoiceServiceLineId, invoiceLineId])
+}
+
+// Phase 10: cached result of one AI sourcing call (supplier search or
+// complementary-material suggestions). Doubles as both the cache ("reopening
+// a line doesn't re-trigger a live search") and the daily-cap log (counting
+// rows created today per company IS counting real Groq calls made today,
+// since a cache hit never inserts a new row) — one table serves both jobs,
+// see SourcingRepository.
+model SourcingSearch {
+  id String @id @default(uuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  kind SourcingSearchKind
+
+  // Stable hash of the normalized query params (product name, quantity,
+  // unit, city, job date / product name+category) — never the raw params
+  // themselves, so this stays one short indexed column regardless of kind.
+  queryHash String
+
+  // The validated, already-shaped response (candidates or suggestions) —
+  // see sourcing/entities/*.ts for the shape stored here per kind. Never
+  // the model's raw text: SourcingService only ever persists output that
+  // has already passed groq-response.util.ts's validation.
+  resultJson Json
+
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, kind, queryHash])
+  @@index([companyId, createdAt])
 }

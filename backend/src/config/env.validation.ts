@@ -37,6 +37,23 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   CORS_ORIGIN?: string;
+
+  // Phase 10 sourcing assistant. Deliberately optional: an artisan can run
+  // the whole app with this unset, SourcingService just reports the feature
+  // as unavailable instead of the app refusing to boot (see conventions.md's
+  // "no auth yet, no forced third-party dependency" posture).
+  @IsOptional()
+  @IsString()
+  GROQ_API_KEY?: string;
+
+  // Global (single-company) cap on real Groq calls per day, across both
+  // supplier search and complementary suggestions — bounds cost on an
+  // account with no per-user billing yet (pre-Phase-13/14). Cache hits never
+  // count against it (see SourcingRepository).
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  SOURCING_DAILY_SEARCH_CAP = 20;
 }
 
 // Wired into ConfigModule.forRoot({ validate }) in AppModule — runs once at

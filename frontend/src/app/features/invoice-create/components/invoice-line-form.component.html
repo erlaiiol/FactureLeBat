@@ -210,4 +210,11 @@
   <div class="rounded-lg border border-line bg-bg p-3 text-sm text-ink">
     {{ quantitySummary() }}
   </div>
+
+  <app-sourcing-panel
+    [productName]="group().controls.description.value"
+    [quantity]="group().controls.quantity.value"
+    [unit]="group().controls.unit.value"
+    [customerLocation]="customerLocation()"
+  />
 </div>

@@ -11,6 +11,7 @@ import { InvoiceModule } from './invoice/invoice.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ProductModule } from './product/product.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
+import { SourcingModule } from './sourcing/sourcing.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
     OnboardingModule,
     ProductModule,
     ServiceCatalogModule,
+    SourcingModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

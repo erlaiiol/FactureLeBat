@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import { Unit } from '../../../generated/prisma/enums';
+import { parsePriceToCents } from '../../common/price.util';
 import { ImportedProductDraft } from './entities/imported-product.entity';
 
 const NAME_MAX_LENGTH = 200;
@@ -42,7 +43,7 @@ export class ProductExtractionService {
     const rawSupplierName = this.metaContent($, 'og:site_name') ?? this.hostnameOf(sourceUrl);
     const priceCents =
       jsonLd.priceCents ??
-      this.parsePriceToCents(
+      parsePriceToCents(
         this.metaContent($, 'product:price:amount') ?? this.metaContent($, 'og:price:amount'),
       );
 
@@ -87,7 +88,7 @@ export class ProductExtractionService {
 
       result.name = this.asString(product.name);
       result.description = this.asString(product.description);
-      result.priceCents = this.parsePriceToCents(this.extractOfferPrice(product.offers));
+      result.priceCents = parsePriceToCents(this.extractOfferPrice(product.offers));
     });
 
     return result;
@@ -139,24 +140,6 @@ export class ProductExtractionService {
     } catch {
       return null;
     }
-  }
-
-  private parsePriceToCents(raw: string | null): number | null {
-    if (!raw) {
-      return null;
-    }
-    let normalized = raw.replace(/[^\d.,]/g, '').trim();
-    if (normalized.includes(',') && !normalized.includes('.')) {
-      normalized = normalized.replace(',', '.');
-    } else {
-      normalized = normalized.replace(/,/g, '');
-    }
-    const value = Number.parseFloat(normalized);
-    if (!Number.isFinite(value) || value < 0) {
-      return null;
-    }
-    const cents = Math.round(value * 100);
-    return cents <= 100_000_000 ? cents : null; // matches CreateProductDto's MAX_PRICE_CENTS
   }
 
   private detectUnit(text: string): Unit | null {

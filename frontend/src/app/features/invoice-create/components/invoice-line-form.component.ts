@@ -1,6 +1,15 @@
-import { ChangeDetectionStrategy, Component, effect, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { computeBilledQuantity } from '../calculation-preview';
+import { InvoiceDraftStore } from '../invoice-draft.store';
 import { WasteSurcharge } from '../../../core/models/invoice.model';
 import {
   isAreaUnit,
@@ -11,6 +20,7 @@ import {
 } from '../../../core/models/unit.model';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { SourcingPanelComponent } from './sourcing-panel.component';
 
 export type InvoiceLineFormGroup = FormGroup<{
   description: FormControl<string>;
@@ -29,13 +39,23 @@ export type InvoiceLineFormGroup = FormGroup<{
 @Component({
   selector: 'app-invoice-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FieldHintComponent, TourAnchorDirective],
+  imports: [ReactiveFormsModule, FieldHintComponent, TourAnchorDirective, SourcingPanelComponent],
   templateUrl: './invoice-line-form.component.html',
 })
 export class InvoiceLineFormComponent {
+  // Phase 10: only reads the customer's freehand address to localize a
+  // supplier search — the store is already a singleton shared by the whole
+  // "nouvelle facture" flow, so injecting it here is simpler than threading
+  // another input down from the lines-step page for one read-only field.
+  private readonly draftStore = inject(InvoiceDraftStore);
+
   readonly group = input.required<InvoiceLineFormGroup>();
   readonly index = input.required<number>();
   readonly remove = output<void>();
+
+  protected customerLocation(): string | null {
+    return this.draftStore.customer().customerAddress || null;
+  }
 
   // Phase 8 onboarding tour: only the first rendered line ever carries the
   // 'invoice-line-fields' anchor — the lines step always shows at least one
