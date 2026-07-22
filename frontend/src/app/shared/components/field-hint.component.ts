@@ -8,7 +8,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 @Component({
   selector: 'app-field-hint',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<p class="text-xs text-slate-500">{{ text() }}</p>`,
+  template: `<p class="text-xs text-ink-soft">{{ text() }}</p>`,
 })
 export class FieldHintComponent {
   readonly text = input.required<string>();
