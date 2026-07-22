@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ThemeService } from './core/services/theme.service';
 import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
 
 @Component({
@@ -9,4 +10,6 @@ import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
-export class App {}
+export class App {
+  protected readonly themeService = inject(ThemeService);
+}

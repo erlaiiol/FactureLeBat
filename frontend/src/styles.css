@@ -1,1 +1,249 @@
 @import 'tailwindcss';
+
+/* Self-hosted (no external font CDN — same "never depend on external content"
+   principle as SafeFetcherService/pdfmake's locked-down access policy).
+   One weight per family is imported: the design system uses exactly one
+   weight per typographic role (see docs/design-system.md). */
+@import '@fontsource/barlow-condensed/700.css';
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+/* "Atelier sobre" accent typefaces (tour, PDF header, "Mon activité" only) */
+@import '@fontsource/work-sans/400.css';
+@import '@fontsource/work-sans/700.css';
+@import '@fontsource/zilla-slab/600.css';
+
+/* Manual dark-mode toggle (ThemeService adds/removes .dark on <html>) rather
+   than Tailwind v4's default prefers-color-scheme-only strategy. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-heading: 'Barlow Condensed', sans-serif;
+  --font-sans: 'Barlow', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-atelier-heading: 'Zilla Slab', serif;
+  --font-atelier-sans: 'Work Sans', sans-serif;
+
+  /* "Chantier calibré" — primary identity, light mode values.
+     Dark-mode values override these same tokens under :root.dark below. */
+  --color-bg: #fbfbf9;
+  --color-surface: #ffffff;
+  --color-ink: #1a1a1a;
+  --color-ink-soft: #6b6b63;
+  --color-line: #e7e6df;
+  --color-accent: #ff6b00;
+
+  --color-badge-bg: #d6fa2b;
+  --color-badge-ink: #1a1a1a;
+  --color-badge-edge: #a9c619;
+
+  /* Semantic colors — solid (filled) + subtle (tinted) variants */
+  --color-primary: #ff6b00;
+  --color-primary-fg: #ffffff;
+  --color-primary-subtle: #fde4d0;
+  --color-primary-subtle-fg: #9a4a12;
+  --color-primary-subtle-border: #f3b98a;
+
+  --color-secondary: #6b6b63;
+  --color-secondary-fg: #ffffff;
+  --color-secondary-subtle: #eceae3;
+  --color-secondary-subtle-fg: #4a4a44;
+  --color-secondary-subtle-border: #d6d2c6;
+
+  --color-success: #1f7a4d;
+  --color-success-fg: #ffffff;
+  --color-success-subtle: #dcf2e4;
+  --color-success-subtle-fg: #135c36;
+  --color-success-subtle-border: #9fd9b7;
+
+  --color-warning: #e8a400;
+  --color-warning-fg: #1a1a1a;
+  --color-warning-subtle: #fcefc7;
+  --color-warning-subtle-fg: #7a5200;
+  --color-warning-subtle-border: #f0ce7a;
+
+  --color-danger: #d6432c;
+  --color-danger-fg: #ffffff;
+  --color-danger-subtle: #fbe1db;
+  --color-danger-subtle-fg: #8a2a16;
+  --color-danger-subtle-border: #eda894;
+
+  --color-info: #2e5d82;
+  --color-info-fg: #ffffff;
+  --color-info-subtle: #dceaf2;
+  --color-info-subtle-fg: #1e425c;
+  --color-info-subtle-border: #a9c7da;
+
+  /* "Atelier sobre" — secondary identity, accent-only (tour, PDF header,
+     "Mon activité"). Never used on data-entry screens. No dark variant:
+     it's an occasional warm accent, not a working theme. */
+  --color-atelier-bg: #ede8de;
+  --color-atelier-surface: #fbf9f4;
+  --color-atelier-ink: #2b2622;
+  --color-atelier-ink-soft: #746a5d;
+  --color-atelier-walnut: #6b4a34;
+  --color-atelier-moss: #5c6b4f;
+
+  --ease-out-sharp: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-entrance: 250ms;
+  --duration-emphasis: 400ms;
+}
+
+:root.dark {
+  --color-bg: #171714;
+  --color-surface: #201f1c;
+  --color-ink: #f2f1ec;
+  --color-ink-soft: #a6a49a;
+  --color-line: #34332d;
+  --color-accent: #ff8533;
+
+  --color-badge-bg: #c7ea1f;
+  --color-badge-ink: #14170a;
+  --color-badge-edge: #97ad1a;
+
+  --color-primary: #ff8533;
+  --color-primary-fg: #1a1a1a;
+  --color-primary-subtle: #4a2a10;
+  --color-primary-subtle-fg: #f7c79a;
+  --color-primary-subtle-border: #7a4620;
+
+  --color-secondary: #9a988d;
+  --color-secondary-fg: #1a1a1a;
+  --color-secondary-subtle: #34332c;
+  --color-secondary-subtle-fg: #d6d2c6;
+  --color-secondary-subtle-border: #4a483f;
+
+  --color-success: #3fbd80;
+  --color-success-fg: #0d1f16;
+  --color-success-subtle: #123423;
+  --color-success-subtle-fg: #9fd9b7;
+  --color-success-subtle-border: #1f5c3d;
+
+  --color-warning: #f0be3d;
+  --color-warning-fg: #1a1a1a;
+  --color-warning-subtle: #40330c;
+  --color-warning-subtle-fg: #f0ce7a;
+  --color-warning-subtle-border: #7a5200;
+
+  --color-danger: #e8705a;
+  --color-danger-fg: #1a1200;
+  --color-danger-subtle: #401d15;
+  --color-danger-subtle-fg: #eda894;
+  --color-danger-subtle-border: #8a2a16;
+
+  --color-info: #6ea3c9;
+  --color-info-fg: #0d1a24;
+  --color-info-subtle: #13293a;
+  --color-info-subtle-fg: #a9c7da;
+  --color-info-subtle-border: #1e425c;
+}
+
+* {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Motion primitives — docs/design-system.md#motion. Each is applied by
+   toggling the class on the element the moment its triggering state change
+   happens (a new line/badge mounting, a total value changing); none run
+   ambiently. */
+@keyframes line-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.anim-line-in {
+  animation: line-in var(--duration-entrance) var(--ease-out-sharp);
+}
+
+@keyframes total-pulse {
+  0% {
+    transform: scale(1);
+    color: inherit;
+  }
+  40% {
+    transform: scale(1.12);
+    color: var(--color-accent);
+  }
+  100% {
+    transform: scale(1);
+    color: inherit;
+  }
+}
+.anim-total-pulse {
+  display: inline-block;
+  animation: total-pulse var(--duration-emphasis) var(--ease-out-sharp);
+}
+
+@keyframes badge-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-1.5deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.08) rotate(-1.5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-1.5deg);
+  }
+}
+.anim-badge-stamp {
+  animation: badge-stamp var(--duration-emphasis) var(--ease-out-sharp);
+}
+
+@keyframes tour-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.anim-tour-step-in {
+  animation: tour-step-in var(--duration-entrance) var(--ease-out-sharp);
+}
+
+@keyframes tour-checkmark-draw {
+  from {
+    stroke-dashoffset: 48;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes tour-completion-glow {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 24px 8px color-mix(in srgb, var(--color-success) 35%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 0%, transparent);
+  }
+}
+.anim-tour-checkmark path {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: tour-checkmark-draw 500ms var(--ease-out-sharp) forwards;
+}
+.anim-tour-completion-glow {
+  animation: tour-completion-glow 900ms var(--ease-out-sharp);
+}

@@ -1,42 +1,54 @@
-<div class="min-h-screen bg-slate-50">
-  <nav class="flex gap-2 border-b border-slate-200 bg-white px-4 py-3">
-    <a
-      routerLink="/factures/nouvelle"
-      routerLinkActive="bg-blue-600 text-white"
-      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >Nouvelle facture</a
+<div class="min-h-screen bg-bg text-ink font-sans">
+  <nav class="flex items-center gap-2 border-b border-line bg-surface px-4 py-3">
+    <div class="flex flex-1 flex-wrap gap-2">
+      <a
+        routerLink="/factures/nouvelle"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+        >Nouvelle facture</a
+      >
+      <a
+        routerLink="/factures"
+        routerLinkActive="bg-primary text-primary-fg"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+        >Mes factures</a
+      >
+      <a
+        routerLink="/clients"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+        >Mes clients</a
+      >
+      <a
+        routerLink="/produits"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+        >Mes produits</a
+      >
+      <a
+        routerLink="/prestations"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+        >Mes prestations</a
+      >
+      <a
+        routerLink="/entreprise"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+        >Mon entreprise</a
+      >
+    </div>
+    <button
+      type="button"
+      (click)="themeService.toggle()"
+      class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+      [attr.aria-label]="
+        themeService.theme() === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'
+      "
     >
-    <a
-      routerLink="/factures"
-      routerLinkActive="bg-blue-600 text-white"
-      [routerLinkActiveOptions]="{ exact: true }"
-      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >Mes factures</a
-    >
-    <a
-      routerLink="/clients"
-      routerLinkActive="bg-blue-600 text-white"
-      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >Mes clients</a
-    >
-    <a
-      routerLink="/produits"
-      routerLinkActive="bg-blue-600 text-white"
-      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >Mes produits</a
-    >
-    <a
-      routerLink="/prestations"
-      routerLinkActive="bg-blue-600 text-white"
-      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >Mes prestations</a
-    >
-    <a
-      routerLink="/entreprise"
-      routerLinkActive="bg-blue-600 text-white"
-      class="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >Mon entreprise</a
-    >
+      {{ themeService.theme() === 'dark' ? '☀️ Clair' : '🌙 Sombre' }}
+    </button>
   </nav>
   <main class="mx-auto max-w-3xl p-4">
     <router-outlet />
