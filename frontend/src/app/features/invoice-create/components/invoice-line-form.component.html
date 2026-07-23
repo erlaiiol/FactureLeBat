@@ -10,29 +10,16 @@
     </button>
   </div>
 
-  @if (firstLineAnchor()) {
-    <label class="flex flex-col gap-1" appTourAnchor="invoice-line-fields">
-      <span class="text-sm font-medium text-ink">Description</span>
-      <input
-        formControlName="description"
-        type="text"
-        placeholder="Ex : Parquet chêne massif posé"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      />
-      <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
-    </label>
-  } @else {
-    <label class="flex flex-col gap-1">
-      <span class="text-sm font-medium text-ink">Description</span>
-      <input
-        formControlName="description"
-        type="text"
-        placeholder="Ex : Parquet chêne massif posé"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      />
-      <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
-    </label>
-  }
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Description</span>
+    <input
+      formControlName="description"
+      type="text"
+      placeholder="Ex : Parquet chêne massif posé"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+    <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
+  </label>
 
   <label class="flex flex-col gap-1">
     <span class="text-sm font-medium text-ink">Code produit</span>

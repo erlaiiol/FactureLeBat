@@ -19,7 +19,6 @@ import {
   UNIT_PRICE_BUTTON_LABELS,
 } from '../../../core/models/unit.model';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
-import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { SourcingPanelComponent } from './sourcing-panel.component';
 
 export type InvoiceLineFormGroup = FormGroup<{
@@ -41,7 +40,7 @@ export type InvoiceLineFormGroup = FormGroup<{
 @Component({
   selector: 'app-invoice-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FieldHintComponent, TourAnchorDirective, SourcingPanelComponent],
+  imports: [ReactiveFormsModule, FieldHintComponent, SourcingPanelComponent],
   templateUrl: './invoice-line-form.component.html',
 })
 export class InvoiceLineFormComponent {
@@ -58,14 +57,6 @@ export class InvoiceLineFormComponent {
   protected customerLocation(): string | null {
     return this.draftStore.customer().customerAddress || null;
   }
-
-  // Phase 8 onboarding tour: only the first rendered line ever carries the
-  // 'invoice-line-fields' anchor — the lines step always shows at least one
-  // blank line by default, so this is what lets the tour spotlight it
-  // without waiting for a click. Kept structural (an @if in the template,
-  // not a value bound unconditionally) so the anchor is never registered
-  // twice when more lines are added.
-  readonly firstLineAnchor = input<boolean>(false);
 
   protected readonly unitOptions = UNIT_OPTIONS;
   protected readonly unitLabels = UNIT_LABELS;

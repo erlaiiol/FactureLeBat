@@ -169,6 +169,14 @@
   animation: line-in var(--duration-entrance) var(--ease-out-sharp);
 }
 
+/* Phase 13.5 gallery redesign: a product/service card collapsing into its
+   compact gallery form (on "Valider") or expanding back out (clicked to
+   edit) — same entrance feel as line-in, reused rather than inventing a
+   second motion primitive for what is, structurally, a card appearing. */
+.anim-card-collapse {
+  animation: line-in var(--duration-entrance) var(--ease-out-sharp);
+}
+
 @keyframes total-pulse {
   0% {
     transform: scale(1);

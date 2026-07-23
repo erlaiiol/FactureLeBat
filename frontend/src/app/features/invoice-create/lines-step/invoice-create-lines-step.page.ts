@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,7 +23,6 @@ import { Unit } from '../../../core/models/unit.model';
 import { CustomerService } from '../../../core/services/customer.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { ProductService } from '../../../core/services/product.service';
-import { BadgeComponent } from '../../../shared/components/badge.component';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
@@ -38,29 +37,35 @@ import {
   InvoiceServiceLineFormGroup,
 } from '../components/invoice-service-line-form.component';
 import { QuickProductCreateComponent } from '../components/quick-product-create.component';
+import { QuickServiceCreateComponent } from '../components/quick-service-create.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 import { SendInvoiceEmailModalComponent } from '../../invoice-list/send-invoice-email-modal.component';
 
-// Phase 6/13.5, step 2: the catalog toggle grid (products/services listed
-// with an on/off switch, one click activates them with an inline quantity
-// input) plus the freehand line/service-line lists below it for anything
-// not in the catalog, and the final "Créer la facture" submit. Same
-// FormArray-based editing as before Phase 13.5 — seeded from, and
-// continuously synced back into, the shared InvoiceDraftStore so the
-// shell's total and preview button reflect this step's edits immediately.
+// Phase 6/13.5 gallery redesign, step 2: two fixed "+" buttons (product,
+// service) replace the old always-visible catalog toggle grid and the
+// "+ Ligne libre"/"+ Prestation libre" buttons below a running list of big
+// forms. Clicking a button opens a small flyout — catalog pick, quick
+// create, or a one-off free line — that pushes into the same FormArrays as
+// before; every active line/service-line renders as a card that starts
+// expanded (the full form, unchanged) and collapses into a compact gallery
+// card once "Valider" confirms it, or back out again on click to edit.
+// Still seeded from, and continuously synced back into, the shared
+// InvoiceDraftStore so the shell's total and preview button reflect this
+// step's edits immediately.
 @Component({
   selector: 'app-invoice-create-lines-step-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
     DatePipe,
+    DecimalPipe,
     BigButtonComponent,
-    BadgeComponent,
     CentsToEurosPipe,
     UnitLabelPipe,
     InvoiceLineFormComponent,
     InvoiceServiceLineFormComponent,
     QuickProductCreateComponent,
+    QuickServiceCreateComponent,
     SendInvoiceEmailModalComponent,
     TourAnchorDirective,
   ],
@@ -78,18 +83,20 @@ export class InvoiceCreateLinesStepPage {
   protected readonly creating = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
-  // Phase 13.5: whether the "+ Nouveau produit" quick-create form is open —
-  // a card in the toggle grid, not a separate route/dialog.
+  // Phase 13.5 gallery redesign: which of the two fixed "+" flyouts is open
+  // (mutually exclusive — opening one closes the other) and whether its
+  // "nouveau" quick-create sub-form is showing in place of the catalog list.
+  protected readonly productPanelOpen = signal(false);
+  protected readonly servicePanelOpen = signal(false);
   protected readonly showQuickProductCreate = signal(false);
+  protected readonly showQuickServiceCreate = signal(false);
   // Phase 13.5: "Envoyer par mail" reachable right from this screen's
   // success state, reusing invoice-list's own modal — no detour through
   // "Mes factures" just to send the invoice just created.
   protected readonly showEmailModal = signal(false);
 
   protected readonly lines = this.fb.array<InvoiceLineFormGroup>(
-    this.draftStore.lines().length > 0
-      ? this.draftStore.lines().map((line) => this.createLineGroup(line))
-      : [this.createLineGroup()],
+    this.draftStore.lines().map((line) => this.createLineGroup(line)),
   );
 
   private readonly linesValue = toSignal(this.lines.valueChanges, {
@@ -104,15 +111,29 @@ export class InvoiceCreateLinesStepPage {
     initialValue: this.serviceLines.getRawValue(),
   });
 
+  // Phase 13.5 gallery redesign: cards collapsed into their compact gallery
+  // form. A group only ever enters this set via collapseLine/collapseService
+  // Line ("Valider") — a freshly added line/service-line (catalog pick,
+  // quick-create, or free) always starts expanded so the artisan sees the
+  // fields they just triggered, never a card they didn't ask to fill.
+  // Restored draft lines (navigating back to this step) are the one
+  // exception, seeded collapsed below when they already hold valid data.
+  protected readonly collapsedLines = signal<ReadonlySet<InvoiceLineFormGroup>>(
+    new Set(this.lines.controls.filter((group) => group.valid)),
+  );
+  protected readonly collapsedServiceLines = signal<ReadonlySet<InvoiceServiceLineFormGroup>>(
+    new Set(this.serviceLines.controls.filter((group) => group.valid)),
+  );
+
   protected readonly lineLabels = computed(() =>
     this.linesValue().map((line, index) => line.description || `Ligne ${index + 1}`),
   );
 
   // Phase 13.5: which catalog Product/Service currently has an active line,
-  // and at which index — this is what lets the toggle grid render as
-  // on/off and know which line to remove on toggle-off, without a separate
-  // hand-maintained id→index map that could drift out of sync with the
-  // FormArrays themselves (see catalogProductId/catalogServiceId).
+  // and at which index — this is what lets the flyout's catalog list render
+  // an "activé" state and know which line to remove on a second click,
+  // without a separate hand-maintained id→index map that could drift out of
+  // sync with the FormArrays themselves (see catalogProductId/catalogServiceId).
   protected readonly activeProductLineIndex = computed(() => {
     const map = new Map<string, number>();
     this.linesValue().forEach((line, index) => {
@@ -144,9 +165,9 @@ export class InvoiceCreateLinesStepPage {
       .map((serviceLine) => this.draftStore.resolvedServiceAmountCents(serviceLine)),
   );
 
-  // Live per-line total for the toggle grid's inline recap — same preview-
-  // only mirror as InvoiceDraftStore.totalsPreview, just broken out per line
-  // instead of summed, since that's what the grid needs to show.
+  // Live per-line total for the gallery's compact card and expanded-form
+  // recap — same preview-only mirror as InvoiceDraftStore.totalsPreview,
+  // just broken out per line instead of summed.
   protected readonly lineTotalsCents = computed(() =>
     // FormArray.valueChanges types every field as possibly-undefined
     // (Angular's typed-forms convention — see getRawValue() vs value) even
@@ -216,9 +237,14 @@ export class InvoiceCreateLinesStepPage {
     });
   }
 
-  protected addLine(): void {
+  // Phase 13.5 gallery redesign: the "+ Ligne ponctuelle" flyout entry — a
+  // blank card, not tied to any catalog Product, same as today's
+  // "Enregistrer ce produit" checkbox inside the expanded form for an
+  // artisan who wants a one-off charge without polluting their catalog.
+  protected addFreeLine(): void {
     this.lines.push(this.createLineGroup());
     this.syncAllServiceLineWeights();
+    this.productPanelOpen.set(false);
   }
 
   // Phase 11/13.5: catalog-driven invoicing. Toggling on a catalog Product
@@ -246,16 +272,18 @@ export class InvoiceCreateLinesStepPage {
   }
 
   protected removeLine(index: number): void {
-    if (this.lines.length > 1) {
-      this.lines.removeAt(index);
-      this.syncAllServiceLineWeights();
-    }
+    const group = this.lines.at(index);
+    this.lines.removeAt(index);
+    this.syncAllServiceLineWeights();
+    this.uncollapseLine(group);
   }
 
-  // Phase 13.5: the toggle grid's single entry point for a catalog Product
-  // row — flips it on (adds a line) or off (removes its line) depending on
+  // Phase 13.5: the catalog flyout's single entry point for a Product row —
+  // flips it on (adds a line) or off (removes its line) depending on
   // whether one is already active, so the template only ever needs one
-  // click handler per row instead of separate add/remove bindings.
+  // click handler per row instead of separate add/remove bindings. The
+  // flyout itself stays open afterwards so several materials can be picked
+  // in one go.
   protected toggleProduct(product: ProductProfile): void {
     const activeIndex = this.activeProductLineIndex().get(product.id);
     if (activeIndex != null) {
@@ -265,14 +293,15 @@ export class InvoiceCreateLinesStepPage {
     this.addProductFromCatalog(product);
   }
 
-  // Phase 13.5: a product created via QuickProductCreateComponent's "+
-  // Nouveau produit" card joins the catalog grid immediately and is
+  // Phase 13.5: a product created via QuickProductCreateComponent's
+  // "Nouveau produit" flyout entry joins the catalog immediately and is
   // activated right away — the artisan came here to add a line, not to
   // create a catalog entry and then have to find and toggle it separately.
   protected onProductCreated(product: ProductProfile): void {
     this.draftStore.addProductToCatalog(product);
     this.addProductFromCatalog(product);
     this.showQuickProductCreate.set(false);
+    this.productPanelOpen.set(false);
   }
 
   private createServiceLineGroup(initial?: {
@@ -334,8 +363,11 @@ export class InvoiceCreateLinesStepPage {
     this.serviceLines.controls.forEach((group) => this.syncServiceLineWeights(group));
   }
 
-  protected addServiceLine(): void {
+  // Phase 13.5 gallery redesign: the "+ Prestation libre" flyout entry — a
+  // blank card, never tied to a catalog Service.
+  protected addFreeServiceLine(): void {
     this.serviceLines.push(this.createServiceLineGroup());
+    this.servicePanelOpen.set(false);
   }
 
   // Phase 11/13.5: same catalog prefill as addProductFromCatalog above, for
@@ -363,10 +395,12 @@ export class InvoiceCreateLinesStepPage {
   }
 
   protected removeServiceLine(index: number): void {
+    const group = this.serviceLines.at(index);
     this.serviceLines.removeAt(index);
+    this.uncollapseServiceLine(group);
   }
 
-  // Phase 13.5: same toggle entry point as toggleProduct, for a Service.
+  // Phase 13.5: same flyout toggle entry point as toggleProduct, for a Service.
   protected toggleService(service: ServiceProfile): void {
     const activeIndex = this.activeServiceLineIndex().get(service.id);
     if (activeIndex != null) {
@@ -374,6 +408,110 @@ export class InvoiceCreateLinesStepPage {
       return;
     }
     this.addServiceFromCatalog(service);
+  }
+
+  // Phase 13.5 gallery redesign: a service created via QuickServiceCreate
+  // Component's "Nouvelle prestation" flyout entry, same immediate-catalog-
+  // and-activate treatment as onProductCreated.
+  protected onServiceCreated(service: ServiceProfile): void {
+    this.draftStore.addServiceToCatalog(service);
+    this.addServiceFromCatalog(service);
+    this.showQuickServiceCreate.set(false);
+    this.servicePanelOpen.set(false);
+  }
+
+  // Phase 13.5 gallery redesign: opening one flyout closes the other and
+  // resets its own quick-create sub-view, so re-opening later always starts
+  // back on the catalog list.
+  protected toggleProductPanel(): void {
+    this.servicePanelOpen.set(false);
+    this.showQuickServiceCreate.set(false);
+    this.productPanelOpen.update((open) => !open);
+    if (!this.productPanelOpen()) {
+      this.showQuickProductCreate.set(false);
+    }
+  }
+
+  protected toggleServicePanel(): void {
+    this.productPanelOpen.set(false);
+    this.showQuickProductCreate.set(false);
+    this.servicePanelOpen.update((open) => !open);
+    if (!this.servicePanelOpen()) {
+      this.showQuickServiceCreate.set(false);
+    }
+  }
+
+  protected closePanels(): void {
+    this.productPanelOpen.set(false);
+    this.servicePanelOpen.set(false);
+    this.showQuickProductCreate.set(false);
+    this.showQuickServiceCreate.set(false);
+  }
+
+  // Phase 13.5 gallery redesign: "Valider" on an expanded card — collapses
+  // it into its compact gallery form once it actually holds valid data,
+  // otherwise surfaces the same validation errors the full form already
+  // knows how to show (markAllAsTouched), same pattern as submit() below.
+  protected collapseLine(group: InvoiceLineFormGroup): void {
+    if (group.invalid) {
+      group.markAllAsTouched();
+      return;
+    }
+    this.collapsedLines.update((set) => new Set(set).add(group));
+  }
+
+  protected expandLine(group: InvoiceLineFormGroup): void {
+    this.collapsedLines.update((set) => {
+      const next = new Set(set);
+      next.delete(group);
+      return next;
+    });
+  }
+
+  protected isLineCollapsed(group: InvoiceLineFormGroup): boolean {
+    return this.collapsedLines().has(group);
+  }
+
+  private uncollapseLine(group: InvoiceLineFormGroup): void {
+    if (!this.collapsedLines().has(group)) {
+      return;
+    }
+    this.collapsedLines.update((set) => {
+      const next = new Set(set);
+      next.delete(group);
+      return next;
+    });
+  }
+
+  protected collapseServiceLine(group: InvoiceServiceLineFormGroup): void {
+    if (group.invalid) {
+      group.markAllAsTouched();
+      return;
+    }
+    this.collapsedServiceLines.update((set) => new Set(set).add(group));
+  }
+
+  protected expandServiceLine(group: InvoiceServiceLineFormGroup): void {
+    this.collapsedServiceLines.update((set) => {
+      const next = new Set(set);
+      next.delete(group);
+      return next;
+    });
+  }
+
+  protected isServiceLineCollapsed(group: InvoiceServiceLineFormGroup): boolean {
+    return this.collapsedServiceLines().has(group);
+  }
+
+  private uncollapseServiceLine(group: InvoiceServiceLineFormGroup): void {
+    if (!this.collapsedServiceLines().has(group)) {
+      return;
+    }
+    this.collapsedServiceLines.update((set) => {
+      const next = new Set(set);
+      next.delete(group);
+      return next;
+    });
   }
 
   protected pdfUrl(invoiceId: string): string {

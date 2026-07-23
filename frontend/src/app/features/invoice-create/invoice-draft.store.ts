@@ -134,7 +134,10 @@ export class InvoiceDraftStore {
   readonly services = signal<ServiceProfile[]>([]);
 
   readonly customer = signal<InvoiceCustomerDraft>(EMPTY_CUSTOMER);
-  readonly lines = signal<InvoiceLineDraft[]>([{ ...EMPTY_LINE }]);
+  // Phase 13.5 gallery redesign: no default blank line — the lines step now
+  // starts as an empty gallery, a card only exists once the artisan actually
+  // adds one via a fixed "+" button (see InvoiceCreateLinesStepPage).
+  readonly lines = signal<InvoiceLineDraft[]>([]);
   readonly serviceLines = signal<InvoiceServiceLineDraft[]>([]);
 
   readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
@@ -269,9 +272,15 @@ export class InvoiceDraftStore {
     this.products.update((products) => [...products, product]);
   }
 
+  // Same immediate-visibility reasoning as addProductToCatalog, for a
+  // Service created inline via QuickServiceCreateComponent.
+  addServiceToCatalog(service: ServiceProfile): void {
+    this.services.update((services) => [...services, service]);
+  }
+
   reset(): void {
     this.customer.set(EMPTY_CUSTOMER);
-    this.lines.set([{ ...EMPTY_LINE }]);
+    this.lines.set([]);
     this.serviceLines.set([]);
     this.clearStorage();
   }

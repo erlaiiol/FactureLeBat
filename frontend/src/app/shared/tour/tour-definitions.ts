@@ -40,19 +40,14 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         route: '/factures/nouvelle/rapide/lignes',
-        anchorId: 'invoice-line-fields',
-        title: 'Renseignez un matériau ou une prestation',
-        body: 'Décrivez ce que vous facturez, la quantité et le prix — le total se calcule automatiquement. Vous pourrez aussi ajouter des prestations plus bas.',
+        anchorId: 'invoice-add-product-button',
+        title: 'Ajoutez un matériau ou un produit',
+        body: 'Cliquez sur ce bouton orange pour choisir un produit de votre catalogue, en créer un nouveau, ou ajouter une ligne ponctuelle — quantité et prix se remplissent juste après, le total se calcule automatiquement.',
       },
       {
-        anchorId: 'invoice-add-line',
-        title: 'Besoin d’une autre ligne ?',
-        body: 'Ajoutez autant de lignes que nécessaire pour ce chantier.',
-      },
-      {
-        anchorId: 'invoice-add-service-line',
+        anchorId: 'invoice-add-service-button',
         title: 'Et la main-d’œuvre ?',
-        body: 'Cliquez ici pour ajouter une prestation — main-d’œuvre, forfait, déplacement… — en plus de vos matériaux.',
+        body: 'Ce bouton bleu fait pareil pour vos prestations — main-d’œuvre, forfait, déplacement…',
       },
       {
         anchorId: 'invoice-total',
@@ -66,7 +61,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         title: 'Vous êtes prêt !',
-        body: 'Vous savez tout pour créer vos factures. Bon travail !',
+        body: 'Vous savez tout pour créer vos factures. Vos clients, produits et prestations restent modifiables à tout moment via le bouton dédié dans chaque liste ("Mes clients", "Mes produits", "Mes prestations"). Bon travail !',
       },
     ],
   },
