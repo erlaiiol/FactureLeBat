@@ -169,12 +169,42 @@
   animation: line-in var(--duration-entrance) var(--ease-out-sharp);
 }
 
-/* Phase 13.5 gallery redesign: a product/service card collapsing into its
-   compact gallery form (on "Valider") or expanding back out (clicked to
-   edit) — same entrance feel as line-in, reused rather than inventing a
-   second motion primitive for what is, structurally, a card appearing. */
-.anim-card-collapse {
-  animation: line-in var(--duration-entrance) var(--ease-out-sharp);
+/* Phase 13.5 gallery redesign: "Valider" shrinks a full-size card down into
+   its compact gallery form — starts scaled up (standing in for the bigger
+   card it just was) and settles to its real size, instead of just fading
+   in like line-in above. The gallery card's actual position in the DOM
+   (after every other already-collapsed card, since new lines are always
+   pushed to the end of the FormArray) is what makes it "join the end of
+   the gallery" — this animation is the shrink half of that motion. */
+@keyframes card-shrink-in {
+  from {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.anim-card-shrink-in {
+  animation: card-shrink-in var(--duration-entrance) var(--ease-out-sharp);
+}
+
+/* Phase 13.5 gallery redesign: the two fixed "+" buttons. A CSS-grid
+   icon/label split — rather than animating the button's own width — keeps
+   the "+" glyph perfectly centered in its fixed 3.5rem cell at every step
+   of the expansion; animating width directly would center the glyph
+   against the *whole* button, which drifts as the hidden label's layout
+   box is included. `.is-open` mirrors :hover for the Angular-driven open
+   state (flyout open, or on touch where :hover never fires). */
+.fixed-add-button {
+  display: grid;
+  grid-template-columns: 3.5rem 0fr;
+  transition: grid-template-columns var(--duration-entrance) var(--ease-out-sharp);
+}
+.fixed-add-button:hover,
+.fixed-add-button.is-open {
+  grid-template-columns: 3.5rem 12rem;
 }
 
 @keyframes total-pulse {

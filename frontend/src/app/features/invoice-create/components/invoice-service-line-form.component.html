@@ -115,4 +115,9 @@
   } @else {
     <app-field-hint text="Cette prestation aura sa propre ligne sur la facture." />
   }
+
+  <!-- Phase 13.5 gallery redesign: see InvoiceLineFormComponent's ng-content
+       for why this exists — the page's "Valider" button lives inside this
+       card's own border. -->
+  <ng-content />
 </div>

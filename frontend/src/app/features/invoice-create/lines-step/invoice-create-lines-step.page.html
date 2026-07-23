@@ -52,13 +52,15 @@
         type="button"
         appTourAnchor="invoice-add-product-button"
         (click)="toggleProductPanel()"
-        class="group flex h-14 w-14 items-center gap-2 overflow-hidden rounded-full bg-primary px-4 text-primary-fg shadow-lg transition-[width] duration-300 ease-out hover:w-64"
-        [class.w-64]="productPanelOpen()"
+        class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-primary text-primary-fg shadow-lg"
+        [class.is-open]="productPanelOpen()"
         aria-label="Ajouter un produit"
       >
-        <span class="shrink-0 text-2xl leading-none">+</span>
+        <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+          +
+        </span>
         <span
-          class="font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+          class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
           [class.opacity-100]="productPanelOpen()"
         >
           Ajouter un produit
@@ -131,13 +133,15 @@
         type="button"
         appTourAnchor="invoice-add-service-button"
         (click)="toggleServicePanel()"
-        class="group flex h-14 w-14 items-center gap-2 overflow-hidden rounded-full bg-info px-4 text-info-fg shadow-lg transition-[width] duration-300 ease-out hover:w-64"
-        [class.w-64]="servicePanelOpen()"
+        class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-info text-info-fg shadow-lg"
+        [class.is-open]="servicePanelOpen()"
         aria-label="Ajouter une prestation"
       >
-        <span class="shrink-0 text-2xl leading-none">+</span>
+        <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+          +
+        </span>
         <span
-          class="font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+          class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
           [class.opacity-100]="servicePanelOpen()"
         >
           Ajouter une prestation
@@ -222,19 +226,59 @@
       </p>
     }
 
-    <!-- The "gallery": every active product/service line, either collapsed
-         to a compact card (name/prix unitaire/quantité/total, click to
-         re-open) or expanded to its full form (unchanged
-         InvoiceLineFormComponent/InvoiceServiceLineFormComponent — waste
-         surcharge, packaging, sourcing, redistribution weights all stay
-         exactly as they were) with a "Valider" button to collapse it back. -->
+    <!-- Cards currently being edited (just added, or reopened from the
+         gallery below) — full width, one after another, in the order they
+         were added. Full form unchanged (waste surcharge, packaging,
+         sourcing, redistribution weights); "Valider" now lives inside the
+         card's own border via ng-content, and is a distinct `success`
+         color from "Créer la facture" so the two are never confused. -->
+    @for (line of lines.controls; track line; let i = $index) {
+      @if (!isLineCollapsed(line)) {
+        <div class="anim-line-in">
+          <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)">
+            <app-big-button variant="success" type="button" (click)="collapseLine(line)">
+              Valider
+            </app-big-button>
+          </app-invoice-line-form>
+        </div>
+      }
+    }
+    @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
+      @if (!isServiceLineCollapsed(serviceLine)) {
+        <div class="anim-line-in">
+          <app-invoice-service-line-form
+            [group]="serviceLine"
+            [index]="i"
+            [services]="draftStore.services()"
+            [lineLabels]="lineLabels()"
+            (remove)="removeServiceLine(i)"
+          >
+            <app-big-button
+              variant="success"
+              type="button"
+              (click)="collapseServiceLine(serviceLine)"
+            >
+              Valider
+            </app-big-button>
+          </app-invoice-service-line-form>
+        </div>
+      }
+    }
+
+    <!-- The "gallery": every validated product/service line as a compact
+         card (name/prix unitaire/quantité/total) — click to reopen for
+         editing. New lines are always pushed to the end of their
+         FormArray, so a card validated just now naturally renders after
+         every already-collapsed card here, with the shrink-in animation
+         standing in for the "card just got smaller and joined the
+         gallery" motion. -->
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
       @for (line of lines.controls; track line; let i = $index) {
         @if (isLineCollapsed(line)) {
           <button
             type="button"
             (click)="expandLine(line)"
-            class="anim-card-collapse flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-primary-subtle-border"
+            class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-primary-subtle-border"
           >
             <div class="flex items-start justify-between gap-2">
               <span class="font-medium text-ink">{{ line.controls.description.value }}</span>
@@ -257,11 +301,6 @@
               {{ lineTotalsCents()[i] | centsToEuros }}
             </span>
           </button>
-        } @else {
-          <div class="anim-line-in flex flex-col gap-3 sm:col-span-2">
-            <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)" />
-            <app-big-button type="button" (click)="collapseLine(line)">Valider</app-big-button>
-          </div>
         }
       }
 
@@ -270,7 +309,7 @@
           <button
             type="button"
             (click)="expandServiceLine(serviceLine)"
-            class="anim-card-collapse flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-info-subtle-border"
+            class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-info-subtle-border"
           >
             <div class="flex items-start justify-between gap-2">
               <span class="font-medium text-ink">{{ serviceLine.controls.name.value }}</span>
@@ -288,19 +327,6 @@
               {{ serviceLineAmountsCents()[i] | centsToEuros }}
             </span>
           </button>
-        } @else {
-          <div class="anim-line-in flex flex-col gap-3 sm:col-span-2">
-            <app-invoice-service-line-form
-              [group]="serviceLine"
-              [index]="i"
-              [services]="draftStore.services()"
-              [lineLabels]="lineLabels()"
-              (remove)="removeServiceLine(i)"
-            />
-            <app-big-button type="button" (click)="collapseServiceLine(serviceLine)">
-              Valider
-            </app-big-button>
-          </div>
         }
       }
     </section>
