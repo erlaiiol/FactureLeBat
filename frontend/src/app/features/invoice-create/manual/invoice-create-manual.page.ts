@@ -133,6 +133,17 @@ export class InvoiceCreateManualPage {
     this.store.reset();
   }
 
+  // Same purpose as startNewInvoice() but reachable mid-edit, not only from
+  // the post-success screen — a confirm() guard since this discards unsaved
+  // input with no undo, exactly like the shell page's rapide-mode equivalent.
+  protected resetDraft(): void {
+    if (!window.confirm('Vider tous les champs de cette facture et repartir de zéro ?')) {
+      return;
+    }
+    this.errorMessage.set(null);
+    this.store.reset();
+  }
+
   protected submit(): void {
     if (this.creating()) {
       return;

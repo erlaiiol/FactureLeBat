@@ -28,9 +28,9 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         body: 'Créons votre première facture ensemble, étape par étape.',
       },
       {
-        anchorId: 'invoice-mode-rapide',
+        anchorId: 'invoice-mode-choice',
         title: 'Deux façons de facturer',
-        body: 'Le mode rapide vous guide pas à pas. Le mode manuel ouvre un tableau libre, à remplir comme sur la facture finale — essayons le mode rapide.',
+        body: 'Le mode rapide vous guide pas à pas. Le mode manuel ouvre un tableau libre, à remplir comme sur la facture finale. Cliquez sur celui que vous préférez, ou laissez-vous guider en mode rapide avec "Suivant".',
       },
       {
         route: '/factures/nouvelle/rapide/client',
@@ -48,6 +48,11 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         anchorId: 'invoice-add-line',
         title: 'Besoin d’une autre ligne ?',
         body: 'Ajoutez autant de lignes que nécessaire pour ce chantier.',
+      },
+      {
+        anchorId: 'invoice-add-service-line',
+        title: 'Et la main-d’œuvre ?',
+        body: 'Cliquez ici pour ajouter une prestation — main-d’œuvre, forfait, déplacement… — en plus de vos matériaux.',
       },
       {
         anchorId: 'invoice-total',

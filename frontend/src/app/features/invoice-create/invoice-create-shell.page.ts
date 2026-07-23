@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { PdfPreviewModalComponent } from '../../shared/components/pdf-preview-modal.component';
@@ -29,6 +29,7 @@ import { InvoiceDraftStore } from './invoice-draft.store';
 export class InvoiceCreateShellPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
   protected readonly draftStore = inject(InvoiceDraftStore);
 
   protected readonly previewing = signal(false);
@@ -72,6 +73,17 @@ export class InvoiceCreateShellPage {
   protected closePreview(): void {
     this.revokeCurrentPreviewUrl();
     this.previewPdfUrl.set(null);
+  }
+
+  // Lets the artisan bail out of a stuck/unwanted draft instead of being
+  // stuck with whatever InvoiceDraftStore persisted to localStorage — a
+  // confirm() guard since this discards unsaved input with no undo.
+  protected resetDraft(): void {
+    if (!window.confirm('Vider tous les champs de cette facture et repartir de zéro ?')) {
+      return;
+    }
+    this.draftStore.reset();
+    this.router.navigate(['/factures/nouvelle/rapide/client']);
   }
 
   private revokeCurrentPreviewUrl(): void {

@@ -41,6 +41,17 @@
     </div>
     <button
       type="button"
+      (click)="toggleTour()"
+      class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+      [attr.aria-label]="
+        tourService.tourEnabled() ? 'Désactiver les visites guidées' : 'Activer les visites guidées'
+      "
+      [attr.aria-pressed]="tourService.tourEnabled()"
+    >
+      {{ tourService.tourEnabled() ? '🧭 Visites guidées' : '🧭 Visites désactivées' }}
+    </button>
+    <button
+      type="button"
       (click)="themeService.toggle()"
       class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
       [attr.aria-label]="

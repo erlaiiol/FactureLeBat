@@ -80,7 +80,13 @@
         />
       }
 
-      <app-big-button variant="secondary" tone="subtle" type="button" (click)="addServiceLine()">
+      <app-big-button
+        variant="secondary"
+        tone="subtle"
+        type="button"
+        appTourAnchor="invoice-add-service-line"
+        (click)="addServiceLine()"
+      >
         + Ajouter une prestation
       </app-big-button>
     </section>

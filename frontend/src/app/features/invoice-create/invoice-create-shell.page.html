@@ -1,19 +1,30 @@
 <div class="mx-auto flex max-w-2xl flex-col gap-6 pb-44">
-  <nav class="flex gap-2 text-sm font-medium">
-    <a
-      routerLink="client"
-      routerLinkActive="bg-primary text-primary-fg"
-      class="rounded-full bg-secondary-subtle px-4 py-2 text-ink"
+  <nav class="flex items-center justify-between gap-2 text-sm font-medium">
+    <div class="flex gap-2">
+      <a
+        routerLink="client"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="rounded-full bg-secondary-subtle px-4 py-2 text-ink"
+      >
+        1. Client
+      </a>
+      <a
+        routerLink="lignes"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="rounded-full bg-secondary-subtle px-4 py-2 text-ink"
+      >
+        2. Lignes &amp; prestations
+      </a>
+    </div>
+    <button
+      type="button"
+      (click)="resetDraft()"
+      class="rounded-full px-3 py-2 text-ink-soft hover:bg-danger-subtle hover:text-danger"
+      aria-label="Vider la facture et recommencer"
+      title="Vider la facture et recommencer"
     >
-      1. Client
-    </a>
-    <a
-      routerLink="lignes"
-      routerLinkActive="bg-primary text-primary-fg"
-      class="rounded-full bg-secondary-subtle px-4 py-2 text-ink"
-    >
-      2. Lignes &amp; prestations
-    </a>
+      🗑️
+    </button>
   </nav>
 
   <router-outlet />

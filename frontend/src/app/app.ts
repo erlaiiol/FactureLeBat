@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ThemeService } from './core/services/theme.service';
+import { TourService } from './shared/tour/tour.service';
 import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
 
 @Component({
@@ -12,4 +13,9 @@ import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
 })
 export class App {
   protected readonly themeService = inject(ThemeService);
+  protected readonly tourService = inject(TourService);
+
+  protected toggleTour(): void {
+    this.tourService.setTourEnabled(!this.tourService.tourEnabled());
+  }
 }
