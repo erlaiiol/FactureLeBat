@@ -59,6 +59,19 @@ export function computeLineTotalPreviewCents(line: LinePreviewInput): number {
   return Math.round(billedQuantity * line.unitPriceCents);
 }
 
+// Phase 13.5: a PERCENTAGE-mode Service's contribution isn't typed per
+// invoice — it's this percentage of `baseCents` (see
+// InvoiceDraftStore.percentageBaseCents for what "base" means). PREVIEW
+// ONLY, same carve-out as the rest of this file: the concrete amountCents
+// this produces is what actually gets submitted as the service line's
+// amount, so the backend never needs to know a line was percentage-derived.
+export function computePercentageServiceAmountCents(
+  baseCents: number,
+  percentageBasisPoints: number,
+): number {
+  return Math.round((baseCents * percentageBasisPoints) / 10000);
+}
+
 export interface TotalsPreview {
   subtotalExclVatCents: number;
   vatAmountCents: number;

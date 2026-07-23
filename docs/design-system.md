@@ -78,6 +78,7 @@ Work Sans (400/700) for body and UI text; **Zilla Slab (600) reserved for headin
 1. **The invoice PDF header sent to the client** — the delivered document can afford more warmth than the screen that produced it; it's the artisan's professional face to their own client.
 2. **The guided tour** (Phase 8) — a narrative, human moment, distinct from the transactional screens it's guiding the user through.
 3. **"Mon activité" in settings** — company identity (name, SIRET, legal status), not transactional data entry.
+4. **The public landing page** (Phase 13.3) — the application talking about the artisan's business to a stranger, the same non-transactional register as the other three spots.
 
 If a new screen is being designed and it's unclear which identity applies, default to "Chantier calibré" — "Atelier sobre" is the exception, not a second theme to reach for casually.
 
@@ -106,4 +107,4 @@ Rules that apply everywhere:
 
 ## Status
 
-These are design decisions, not yet implemented in `frontend/`. The next step is translating the two palettes and the type scale into Tailwind v4 `@theme` tokens in `frontend/src/styles.css`, plus a dark-mode variant of "Chantier calibré" (the working app needs one; "Atelier sobre" being an accent-only, occasional treatment may not).
+Both palettes and the type scale are implemented as Tailwind v4 `@theme` tokens in `frontend/src/styles.css`, including a dark-mode variant of "Chantier calibré" ("Atelier sobre" stays a light-only, accent-only treatment, per its own "where it's allowed to appear" list above). "Atelier sobre" has a fourth spot as of Phase 13.3: the public landing page (`features/landing/`).

@@ -2,79 +2,111 @@
   Nouvelle facture — Client
 </h1>
 
-<form
-  [formGroup]="customerForm"
-  (ngSubmit)="next()"
-  appTourAnchor="invoice-customer-picker"
-  class="flex flex-col gap-4"
->
-  @if (draftStore.customers().length > 0) {
-    <label class="flex flex-col gap-1">
-      <span class="text-sm font-medium text-ink">Client enregistré</span>
-      <select
-        (change)="onCustomerSelected($any($event.target).value)"
+<div appTourAnchor="invoice-customer-picker" class="flex flex-col gap-4">
+  @if (mode() === 'grid') {
+    @if (draftStore.customers().length > 0) {
+      <input
+        [value]="search()"
+        (input)="onSearch($any($event.target).value)"
+        type="text"
+        placeholder="Rechercher un client…"
         class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+    }
+
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      @for (customer of filteredCustomers(); track customer.id) {
+        <button
+          type="button"
+          (click)="pickCustomer(customer)"
+          class="flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm transition hover:border-primary hover:shadow-md"
+        >
+          <span class="font-semibold text-ink">{{ customer.name }}</span>
+          @if (customer.companyName) {
+            <span class="text-sm text-ink-soft">{{ customer.companyName }}</span>
+          }
+          @if (customer.address) {
+            <span class="truncate text-sm text-ink-soft">{{ customer.address }}</span>
+          }
+        </button>
+      }
+
+      <button
+        type="button"
+        (click)="startNewCustomer()"
+        class="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line p-4 text-center font-semibold text-primary hover:bg-primary-subtle/30"
       >
-        <option value="">— Sélectionner —</option>
-        @for (customer of draftStore.customers(); track customer.id) {
-          <option [value]="customer.id" [selected]="customer.id === selectedCustomerId()">
-            {{ customer.name }}
-          </option>
-        }
-      </select>
-    </label>
+        + Nouveau client
+      </button>
+    </div>
+
+    @if (draftStore.customers().length > 0 && filteredCustomers().length === 0) {
+      <p class="text-sm text-ink-soft">Aucun client ne correspond à cette recherche.</p>
+    }
+  } @else {
+    @if (draftStore.customers().length > 0) {
+      <button
+        type="button"
+        (click)="backToGrid()"
+        class="text-left text-sm font-medium text-primary hover:underline"
+      >
+        ← Choisir un client existant
+      </button>
+    }
+
+    <form [formGroup]="customerForm" (ngSubmit)="next()" class="flex flex-col gap-4">
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Nom du client</span>
+        <input
+          formControlName="customerName"
+          type="text"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        <app-field-hint text="Le nom qui apparaîtra sur la facture." />
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Adresse</span>
+        <input
+          formControlName="customerAddress"
+          type="text"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        <app-field-hint text="L'adresse à facturer, affichée sur la facture." />
+      </label>
+
+      <div class="flex gap-3">
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm font-medium text-ink">Email</span>
+          <input
+            formControlName="customerEmail"
+            type="email"
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+          <app-field-hint text="Facultatif." />
+        </label>
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm font-medium text-ink">Téléphone</span>
+          <input
+            formControlName="customerPhone"
+            type="tel"
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+          <app-field-hint text="Facultatif." />
+        </label>
+      </div>
+
+      @if (!selectedCustomerId()) {
+        <label class="flex items-center gap-2">
+          <input formControlName="saveAsNewCustomer" type="checkbox" class="h-5 w-5" />
+          <span class="text-sm font-medium text-ink">
+            Enregistrer ce client pour la prochaine fois
+          </span>
+        </label>
+        <app-field-hint text="Vous pourrez le retrouver directement sur vos prochaines factures." />
+      }
+
+      <app-big-button type="submit">Suivant : lignes &amp; prestations</app-big-button>
+    </form>
   }
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">Nom du client</span>
-    <input
-      formControlName="customerName"
-      type="text"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
-    />
-    <app-field-hint text="Le nom qui apparaîtra sur la facture." />
-  </label>
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">Adresse</span>
-    <input
-      formControlName="customerAddress"
-      type="text"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
-    />
-    <app-field-hint text="L'adresse à facturer, affichée sur la facture." />
-  </label>
-
-  <div class="flex gap-3">
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-ink">Email</span>
-      <input
-        formControlName="customerEmail"
-        type="email"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      />
-      <app-field-hint text="Facultatif." />
-    </label>
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-ink">Téléphone</span>
-      <input
-        formControlName="customerPhone"
-        type="tel"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      />
-      <app-field-hint text="Facultatif." />
-    </label>
-  </div>
-
-  @if (!selectedCustomerId()) {
-    <label class="flex items-center gap-2">
-      <input formControlName="saveAsNewCustomer" type="checkbox" class="h-5 w-5" />
-      <span class="text-sm font-medium text-ink">
-        Enregistrer ce client pour la prochaine fois
-      </span>
-    </label>
-    <app-field-hint text="Vous pourrez le retrouver directement sur vos prochaines factures." />
-  }
-
-  <app-big-button type="submit">Suivant : lignes &amp; prestations</app-big-button>
-</form>
+</div>

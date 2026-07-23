@@ -37,17 +37,31 @@
   </label>
 
   <div class="flex gap-3">
-    <label class="flex flex-1 flex-col gap-1">
-      <span class="text-sm font-medium text-ink">Montant (€)</span>
-      <input
-        formControlName="amountEuros"
-        type="number"
-        step="0.01"
-        min="0"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      />
-      <app-field-hint text="Le montant total de cette prestation." />
-    </label>
+    @if (isPercentageMode()) {
+      <div class="flex flex-1 flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Montant (calculé)</span>
+        <p class="rounded-lg border border-line bg-bg px-4 py-3 text-lg font-mono text-ink">
+          {{ resolvedAmountCents() / 100 | number: '1.2-2' }} €
+        </p>
+        <app-field-hint
+          text="Calculé automatiquement : {{
+            group().controls.percentageBasisPoints.value! / 100
+          }}% du total des lignes et prestations visibles de cette facture."
+        />
+      </div>
+    } @else {
+      <label class="flex flex-1 flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Montant (€)</span>
+        <input
+          formControlName="amountEuros"
+          type="number"
+          step="0.01"
+          min="0"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        <app-field-hint text="Le montant total de cette prestation." />
+      </label>
+    }
 
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-ink">Visibilité</span>

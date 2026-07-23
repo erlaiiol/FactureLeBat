@@ -39,6 +39,7 @@ const lineFixture: InvoiceLineDraft = {
   packagingQuantity: null,
   roundUpToPackaging: true,
   productCode: null,
+  catalogProductId: null,
 };
 
 describe('InvoiceDraftStore', () => {
@@ -83,6 +84,9 @@ describe('InvoiceDraftStore', () => {
           visibility: 'VISIBLE',
           redistributionStrategy: 'EQUAL',
           weights: [],
+          pricingMode: 'FIXED',
+          percentageBasisPoints: null,
+          catalogServiceId: null,
         },
       ]);
 
@@ -112,6 +116,9 @@ describe('InvoiceDraftStore', () => {
           visibility: 'REDISTRIBUTED',
           redistributionStrategy: 'EQUAL',
           weights: [1, 1],
+          pricingMode: 'FIXED',
+          percentageBasisPoints: null,
+          catalogServiceId: null,
         },
       ]);
 
@@ -137,6 +144,9 @@ describe('InvoiceDraftStore', () => {
           visibility: 'REDISTRIBUTED',
           redistributionStrategy: 'WEIGHTED',
           weights: [3, 1],
+          pricingMode: 'FIXED',
+          percentageBasisPoints: null,
+          catalogServiceId: null,
         },
       ]);
 
@@ -170,6 +180,69 @@ describe('InvoiceDraftStore', () => {
       expect(request.customerAddress).toBeUndefined();
       expect(request.customerEmail).toBeUndefined();
       expect(request.customerPhone).toBeUndefined();
+    });
+  });
+
+  describe('Phase 13.5 — PERCENTAGE service line resolution', () => {
+    it('computes a PERCENTAGE service line amount from the product lines total, not a typed amount', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]); // 10 x 45€ = 450€ = 45000 cents
+      store.setServiceLines([
+        {
+          serviceId: 'service-1',
+          catalogServiceId: 'service-1',
+          name: 'Marge 30%',
+          description: '',
+          amountEuros: 0,
+          visibility: 'VISIBLE',
+          redistributionStrategy: 'EQUAL',
+          weights: [],
+          pricingMode: 'PERCENTAGE',
+          percentageBasisPoints: 3000, // 30%
+        },
+      ]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.serviceLines?.[0].amountCents).toBe(13_500); // 30% of 45000
+    });
+
+    it('gives two PERCENTAGE lines the same base each (no compounding on one another)', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]); // 45000 cents
+      store.setServiceLines([
+        {
+          serviceId: 'service-1',
+          catalogServiceId: 'service-1',
+          name: 'Marge 30%',
+          description: '',
+          amountEuros: 0,
+          visibility: 'VISIBLE',
+          redistributionStrategy: 'EQUAL',
+          weights: [],
+          pricingMode: 'PERCENTAGE',
+          percentageBasisPoints: 3000,
+        },
+        {
+          serviceId: 'service-2',
+          catalogServiceId: 'service-2',
+          name: 'Marge 10%',
+          description: '',
+          amountEuros: 0,
+          visibility: 'VISIBLE',
+          redistributionStrategy: 'EQUAL',
+          weights: [],
+          pricingMode: 'PERCENTAGE',
+          percentageBasisPoints: 1000,
+        },
+      ]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.serviceLines?.[0].amountCents).toBe(13_500); // 30% of 45000
+      expect(request.serviceLines?.[1].amountCents).toBe(4_500); // 10% of 45000, not of 45000+13500
     });
   });
 

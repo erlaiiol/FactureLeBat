@@ -41,6 +41,19 @@ enum ServiceVisibility {
   REDISTRIBUTED
 }
 
+// Phase 13.5: how a catalog Service's contribution to an invoice is priced.
+// FIXED (default, pre-existing behavior) is a typed euro amount (priceCents).
+// PERCENTAGE stores a share of the invoice instead (percentageBasisPoints,
+// same basis-point convention as Company.vatRateBasisPoints) — e.g. an
+// artisan's own "Marge 30%" service, reused on every invoice instead of
+// recomputing a markup by hand each time. Exactly one of priceCents/
+// percentageBasisPoints is meaningful per mode (enforced by
+// ServicePricingConsistency at the DTO boundary, not the DB).
+enum ServicePricingMode {
+  FIXED
+  PERCENTAGE
+}
+
 // Phase 9.5: which input surface authored an invoice's line data. GUIDED
 // (default) is the pre-existing catalog/form-driven flow — lines/serviceLines
 // below. MANUAL is the free-form PDF-like canvas: its body lives in the
@@ -392,10 +405,23 @@ model Product {
 model Service {
   id String @id @default(uuid())
 
-  name              String
-  description       String?
-  priceCents        Int
-  defaultVisibility ServiceVisibility @default(VISIBLE)
+  name        String
+  description String?
+
+  // Phase 13.5: pricingMode picks which of the two below is meaningful.
+  // priceCents is nullable now (was required pre-Phase-13.5) since a
+  // PERCENTAGE-mode service has none; percentageBasisPoints is the mirror
+  // image, only meaningful for PERCENTAGE (3000 = 30.00%, same convention as
+  // Company.vatRateBasisPoints). Computing an invoice line's actual amount
+  // from a PERCENTAGE service happens client-side, at line-activation time —
+  // see docs/roadmap.md Phase 13.5's implementation notes for why this
+  // doesn't need a backend/InvoiceServiceLine change: the resulting
+  // amountCents is submitted like any other service line, same "autofill,
+  // not a lock" snapshot as every other catalog reference in this app.
+  pricingMode           ServicePricingMode @default(FIXED)
+  priceCents            Int?
+  percentageBasisPoints Int?
+  defaultVisibility     ServiceVisibility  @default(VISIBLE)
 
   // Phase 11: same short artisan-defined reference as Product.code — makes
   // searching/scanning a large service catalog faster than by name alone.

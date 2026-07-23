@@ -33,7 +33,7 @@ Three claims are load-bearing here, and the page should be able to prove each on
 
 ## Tone and visual identity
 
-The landing page is the application *talking about* the artisan's business, not asking them to enter numbers quickly — the same situation [design-system.md](design-system.md) already carved out "Atelier sobre" for (currently used at the invoice PDF header, the guided tour, and "Mon activité" settings). Phase 13.3 should treat the public site as a strong candidate fourth spot for that identity, rather than reusing "Chantier calibré" (which was explicitly optimized for fast, dense data entry — the opposite job a landing page has to do). Final call belongs to Phase 13.3's implementation.
+The landing page is the application *talking about* the artisan's business, not asking them to enter numbers quickly — the same situation [design-system.md](design-system.md) already carved out "Atelier sobre" for (used at the invoice PDF header, the guided tour, and "Mon activité" settings). Phase 13.3 confirmed the public site as that identity's fourth spot, rather than reusing "Chantier calibré" (which was explicitly optimized for fast, dense data entry — the opposite job a landing page has to do). CTA buttons are the one deliberate exception, in `bg-primary` (the "Chantier calibré" accent) so the actionable element pops and matches the button the artisan clicks everywhere else once signed up.
 
 ## What this page is not
 

@@ -3,15 +3,30 @@
     <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-success">
       Facture {{ invoice.number }} créée !
     </h1>
+    @if (invoice.sentAt) {
+      <p class="text-sm text-success">
+        Envoyée le {{ invoice.sentAt | date: 'dd/MM/yyyy' }} à {{ invoice.sentToEmail }}
+      </p>
+    }
     <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
       <app-big-button>Télécharger le PDF</app-big-button>
     </a>
+    <div class="w-full max-w-sm">
+      <app-big-button variant="secondary" tone="subtle" (click)="openEmailModal()">
+        Envoyer par mail
+      </app-big-button>
+    </div>
     <div class="w-full max-w-sm">
       <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
         Nouvelle facture
       </app-big-button>
     </div>
   </div>
+  <app-send-invoice-email-modal
+    [invoice]="showEmailModal() ? invoice : null"
+    (closed)="closeEmailModal()"
+    (sent)="onEmailSent($event)"
+  />
 } @else {
   <h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
     Nouvelle facture — Lignes &amp; prestations
@@ -31,12 +46,188 @@
        here would silently fall back to the browser's default full-page
        GET-and-reload submit. -->
   <div class="flex flex-col gap-6">
-    <app-catalog-picker
-      [products]="draftStore.products()"
-      [services]="draftStore.services()"
-      (pickProduct)="addProductFromCatalog($event)"
-      (pickService)="addServiceFromCatalog($event)"
-    />
+    <!-- Phase 13.5: catalog browsing and invoice lines merged into one
+         screen — every product/service is a toggle; turning one on
+         activates it as an invoice line right here, with an inline
+         quantity input, no separate "add" step. Full detail editing
+         (waste surcharge, packaging, redistribution…) stays available in
+         the lists further down, which share the exact same form controls. -->
+    <section class="flex flex-col gap-3 rounded-xl border border-line p-4">
+      <span class="font-heading uppercase tracking-wide text-sm font-semibold text-ink">
+        Mon catalogue
+      </span>
+
+      @if (draftStore.products().length === 0 && draftStore.services().length === 0) {
+        <p class="text-sm text-ink-soft">
+          Aucun produit ou prestation enregistré pour l’instant — créez-en un ci-dessous, ou ajoutez
+          une ligne libre plus bas.
+        </p>
+      }
+
+      @if (draftStore.products().length > 0 || showQuickProductCreate()) {
+        <ul class="flex flex-col gap-2">
+          @for (product of draftStore.products(); track product.id) {
+            @let activeIndex = activeProductLineIndex().get(product.id);
+            <li class="flex flex-col gap-2 rounded-lg border border-line bg-surface p-3">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    [attr.aria-checked]="activeIndex != null"
+                    (click)="toggleProduct(product)"
+                    class="relative h-7 w-12 shrink-0 rounded-full transition"
+                    [class.bg-primary]="activeIndex != null"
+                    [class.bg-secondary-subtle]="activeIndex == null"
+                  >
+                    <span
+                      class="absolute top-1 h-5 w-5 rounded-full bg-surface shadow transition-all"
+                      [class.left-6]="activeIndex != null"
+                      [class.left-1]="activeIndex == null"
+                    ></span>
+                  </button>
+                  <div>
+                    <p class="flex items-center gap-2 font-medium text-ink">
+                      {{ product.name }}
+                      @if (product.code) {
+                        <app-badge variant="info" tone="subtle">{{ product.code }}</app-badge>
+                      }
+                    </p>
+                    <p class="text-sm text-ink-soft">
+                      {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              @if (activeIndex != null) {
+                <div class="flex items-center gap-3 border-t border-line pt-2">
+                  <label class="flex flex-1 flex-col gap-1">
+                    <span class="text-sm font-medium text-ink"
+                      >Quantité ({{ product.unit | unitLabel }})</span
+                    >
+                    <input
+                      [formControl]="lines.at(activeIndex).controls.quantity"
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      class="rounded-lg border border-line px-4 py-3 text-lg"
+                    />
+                  </label>
+                  <span class="font-mono text-lg font-semibold text-ink">
+                    {{ lineTotalsCents()[activeIndex] | centsToEuros }}
+                  </span>
+                </div>
+              }
+            </li>
+          }
+
+          @if (showQuickProductCreate()) {
+            <li>
+              <app-quick-product-create
+                (created)="onProductCreated($event)"
+                (cancel)="showQuickProductCreate.set(false)"
+              />
+            </li>
+          } @else {
+            <li>
+              <button
+                type="button"
+                appTourAnchor="catalog-new-product"
+                (click)="showQuickProductCreate.set(true)"
+                class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
+              >
+                + Nouveau produit
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <button
+          type="button"
+          appTourAnchor="catalog-new-product"
+          (click)="showQuickProductCreate.set(true)"
+          class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
+        >
+          + Nouveau produit
+        </button>
+      }
+
+      @if (draftStore.services().length > 0) {
+        <ul class="flex flex-col gap-2">
+          @for (service of draftStore.services(); track service.id) {
+            @let activeServiceIndex = activeServiceLineIndex().get(service.id);
+            <li class="flex flex-col gap-2 rounded-lg border border-line bg-surface p-3">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    [attr.aria-checked]="activeServiceIndex != null"
+                    (click)="toggleService(service)"
+                    class="relative h-7 w-12 shrink-0 rounded-full transition"
+                    [class.bg-primary]="activeServiceIndex != null"
+                    [class.bg-secondary-subtle]="activeServiceIndex == null"
+                  >
+                    <span
+                      class="absolute top-1 h-5 w-5 rounded-full bg-surface shadow transition-all"
+                      [class.left-6]="activeServiceIndex != null"
+                      [class.left-1]="activeServiceIndex == null"
+                    ></span>
+                  </button>
+                  <div>
+                    <p class="flex items-center gap-2 font-medium text-ink">
+                      {{ service.name }}
+                      @if (service.code) {
+                        <app-badge variant="info" tone="subtle">{{ service.code }}</app-badge>
+                      }
+                    </p>
+                    <p class="text-sm text-ink-soft">
+                      @if (service.pricingMode === 'PERCENTAGE') {
+                        {{ service.percentageBasisPoints! / 100 }}% de la facture
+                      } @else {
+                        {{ service.priceCents | centsToEuros }}
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              @if (activeServiceIndex != null) {
+                <div class="flex items-center gap-3 border-t border-line pt-2">
+                  @if (service.pricingMode === 'FIXED') {
+                    <label class="flex flex-1 flex-col gap-1">
+                      <span class="text-sm font-medium text-ink">Montant (€)</span>
+                      <input
+                        [formControl]="serviceLines.at(activeServiceIndex).controls.amountEuros"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        class="rounded-lg border border-line px-4 py-3 text-lg"
+                      />
+                    </label>
+                  } @else {
+                    <span class="flex-1 font-mono text-lg font-semibold text-ink">
+                      {{ serviceLineAmountsCents()[activeServiceIndex] | centsToEuros }}
+                    </span>
+                  }
+                  <label class="flex flex-col gap-1">
+                    <span class="text-sm font-medium text-ink">Visibilité</span>
+                    <select
+                      [formControl]="serviceLines.at(activeServiceIndex).controls.visibility"
+                      class="rounded-lg border border-line px-4 py-3 text-lg"
+                    >
+                      <option value="VISIBLE">Visible</option>
+                      <option value="REDISTRIBUTED">Répartie</option>
+                    </select>
+                  </label>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
 
     <section class="flex flex-col gap-4">
       <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
@@ -60,7 +251,7 @@
         appTourAnchor="invoice-add-line"
         (click)="addLine()"
       >
-        + Ajouter une ligne
+        + Ligne libre
       </app-big-button>
     </section>
 
@@ -87,7 +278,7 @@
         appTourAnchor="invoice-add-service-line"
         (click)="addServiceLine()"
       >
-        + Ajouter une prestation
+        + Prestation libre
       </app-big-button>
     </section>
 

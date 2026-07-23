@@ -1,6 +1,14 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import {
+  ActivatedRoute,
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterLinkActive,
+  RouterOutlet,
+} from '@angular/router';
+import { filter, map } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { ThemeService } from './core/services/theme.service';
 import { TourService } from './shared/tour/tour.service';
@@ -18,7 +26,25 @@ export class App {
   protected readonly tourService = inject(TourService);
   protected readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly activatedRoute = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+
+  // Phase 13.3: lets the landing page opt out of the app shell's
+  // `max-w-3xl` content container (see app.routes.ts's `fullBleed` route
+  // data) — every other route is a form/list that wants that width cap.
+  protected readonly isFullBleed = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map(() => {
+        let route = this.activatedRoute.snapshot;
+        while (route.firstChild) {
+          route = route.firstChild;
+        }
+        return route.data['fullBleed'] === true;
+      }),
+    ),
+    { initialValue: false },
+  );
 
   protected toggleTour(): void {
     this.tourService.setTourEnabled(!this.tourService.tourEnabled());

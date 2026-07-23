@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { RedistributionStrategy, ServiceLineVisibility } from '../../../core/models/invoice.model';
-import { ServiceProfile } from '../../../core/models/service.model';
+import { ServicePricingMode, ServiceProfile } from '../../../core/models/service.model';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { LineBadgeComponent } from '../../../shared/components/line-badge.component';
+import { InvoiceDraftStore } from '../invoice-draft.store';
 
 export type InvoiceServiceLineFormGroup = FormGroup<{
   serviceId: FormControl<string | null>;
@@ -13,15 +15,25 @@ export type InvoiceServiceLineFormGroup = FormGroup<{
   visibility: FormControl<ServiceLineVisibility>;
   redistributionStrategy: FormControl<RedistributionStrategy>;
   weights: FormArray<FormControl<number>>;
+  // Phase 13.5: FIXED (default) is today's typed-euro-amount behavior,
+  // authoritative via amountEuros above. PERCENTAGE ignores amountEuros —
+  // see InvoiceDraftStore.resolvedServiceAmountCents, which recomputes this
+  // line's real amount live instead.
+  pricingMode: FormControl<ServicePricingMode>;
+  percentageBasisPoints: FormControl<number | null>;
+  // UI-only, see InvoiceServiceLineDraft.catalogServiceId.
+  catalogServiceId: FormControl<string | null>;
 }>;
 
 @Component({
   selector: 'app-invoice-service-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FieldHintComponent, LineBadgeComponent],
+  imports: [ReactiveFormsModule, DecimalPipe, FieldHintComponent, LineBadgeComponent],
   templateUrl: './invoice-service-line-form.component.html',
 })
 export class InvoiceServiceLineFormComponent {
+  private readonly draftStore = inject(InvoiceDraftStore);
+
   readonly group = input.required<InvoiceServiceLineFormGroup>();
   readonly index = input.required<number>();
   readonly services = input.required<ServiceProfile[]>();
@@ -44,6 +56,20 @@ export class InvoiceServiceLineFormComponent {
     return this.group().controls.weights.controls;
   }
 
+  protected isPercentageMode(): boolean {
+    return this.group().controls.pricingMode.value === 'PERCENTAGE';
+  }
+
+  // Live, read-only amount for a PERCENTAGE line — "computed at build time,
+  // not typed per invoice" (docs/roadmap.md Phase 13.5). Reads the store's
+  // canonical serviceLines (kept in sync by the parent page's valueChanges
+  // subscription) rather than this.group().getRawValue() directly, so it
+  // reacts to every other line/service-line changing too, not just this one.
+  protected resolvedAmountCents(): number {
+    const serviceLine = this.draftStore.serviceLines()[this.index()];
+    return serviceLine ? this.draftStore.resolvedServiceAmountCents(serviceLine) : 0;
+  }
+
   protected onServiceSelected(serviceId: string): void {
     if (!serviceId) {
       return;
@@ -56,9 +82,12 @@ export class InvoiceServiceLineFormComponent {
     // "autofill, not a lock" rule as the customer/import pickers elsewhere.
     this.group().patchValue({
       serviceId: service.id,
+      catalogServiceId: service.id,
       name: service.name,
       description: service.description ?? '',
-      amountEuros: service.priceCents / 100,
+      pricingMode: service.pricingMode,
+      amountEuros: service.pricingMode === 'FIXED' ? (service.priceCents ?? 0) / 100 : 0,
+      percentageBasisPoints: service.percentageBasisPoints,
       visibility: service.defaultVisibility,
     });
   }

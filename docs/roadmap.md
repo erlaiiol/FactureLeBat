@@ -608,17 +608,38 @@ Turn FactureLeBat from a single-artisan tool into a real multi-user SaaS: every 
 
 ## Features
 
-- [ ] JWT-based authentication (access + refresh tokens)
-- [ ] Account creation and login with email/password
-- [ ] OAuth2 login/signup via Google
-- [ ] All existing data models (Customer, Invoice, Product, Service) scoped to an owning user/account — no cross-tenant data access, enforced at the query layer, not just the UI
-- [ ] Migration path for whatever data already exists from the pre-auth single-tenant phases
+- [x] JWT-based authentication (access + refresh tokens)
+- [x] Account creation and login with email/password
+- [x] OAuth2 login/signup via Google
+- [x] All existing data models (Customer, Invoice, Product, Service) scoped to an owning user/account — no cross-tenant data access, enforced at the query layer, not just the UI
+- [x] Migration path for whatever data already exists from the pre-auth single-tenant phases
 
 ## Security requirements
 
-- [ ] Passwords hashed with a modern algorithm (e.g. argon2/bcrypt), never stored or logged in plaintext
-- [ ] Refresh tokens revocable (logout invalidates them server-side, not just client-side deletion)
-- [ ] Standard OAuth2 protections for the Google flow (state parameter, PKCE where applicable, redirect URI allow-list)
+- [x] Passwords hashed with a modern algorithm (e.g. argon2/bcrypt), never stored or logged in plaintext
+- [x] Refresh tokens revocable (logout invalidates them server-side, not just client-side deletion)
+- [x] Standard OAuth2 protections for the Google flow (state parameter, PKCE where applicable, redirect URI allow-list)
+
+## Extended scope (decided during implementation)
+
+Beyond the roadmap draft above, this phase also shipped the full practical/legal surface of a production auth system: "rester connecté" (remember-me), a newsletter opt-in, mandatory CGU/politique de confidentialité consent, non-blocking email verification, password reset, and RGPD self-service account deletion.
+
+## Implementation notes
+
+- **1 User = 1 Company, strictly — no team/multi-user-per-company model.** `User.companyId` is `@unique`; a `Company` row is now only ever created inside `UserRepository.createWithCompany()`'s transaction, alongside its one owning `User`. `User.role` (`ARTISAN`/`ADMIN`) is added now, unused until Phase 14's admin dashboard, specifically so granting admin access later needs no further migration.
+- **Tokens live in httpOnly cookies, never a bearer header or localStorage** — decided explicitly with the user given the app handles client/financial data, over the XSS-token-theft risk of any JS-readable storage. Access tokens (JWT, 15 min, `JwtStrategy` reads them via a custom passport-jwt cookie extractor) and refresh tokens (opaque random values, hashed with SHA-256 before being persisted in `RefreshToken` — a DB leak alone can never be replayed) are separate cookies scoped to `/api` and `/api/auth` respectively.
+- **Refresh rotation with reuse detection.** `POST /auth/refresh` always revokes the presented token and issues a new one; presenting an *already-revoked* token again is treated as a stolen/leaked-token signal and revokes every session for that user (`RefreshTokenRepository.revokeAllForUser`), not just the one in play.
+- **"Rester connecté" is threaded through as a persisted `remembered` boolean on `RefreshToken`**, not inferred from `expiresAt - createdAt` (which would silently break if either constant ever changed) — a rotated token keeps the same remembered-ness as the one it replaced. Unchecked, the refresh cookie is also a browser session cookie (no `Expires`), the "belt" to the short server-side expiry's "suspenders".
+- **CSRF: hand-rolled double-submit cookie, not Angular's built-in `withXsrfConfiguration()`.** Angular's own XSRF interceptor silently no-ops for cross-origin requests (`xsrfInterceptorFn` compares `location.origin` to the request's origin) — exactly this app's dev topology (frontend `:4200`, API `:3000`, different origins even though both are "ours"). `frontend/.../xsrf.interceptor.ts` reimplements the same mechanic by reading the cookie directly, without that restriction; `CsrfGuard` (backend) enforces it on every authenticated, state-changing request. The `XSRF-TOKEN` cookie is deliberately `path: '/'` (not `/api` like the other two) — a cookie's `Path` also gates `document.cookie` *readability* from whatever page the browser is on, not just which requests it's attached to, and the SPA's own pages never live under `/api`.
+- **Tenant scoping is explicit parameter threading, not a Prisma extension/middleware** — `sourcing.repository.ts` (already `companyId`-scoped pre-Phase-13) was the template every retrofitted repository (`customer`, `product`, `service-catalog`, plus fixing `invoice`'s previously-unenforced read-scoping) copies: every method takes `companyId` explicitly, `findById` uses `findFirst({ where: { id, companyId } })` (never `findUnique`, which would let a cross-tenant id's existence leak through a different error shape), and `update`/`delete` use `updateMany`/`deleteMany` + an affected-count check (`NoRowsAffectedError`) since Prisma's typed `.update()` `where` only accepts unique fields, not an extra `companyId` filter.
+- **`Product.code`/`Service.code` uniqueness moved from global to per-company** (`@@unique([companyId, code])`) — now that every artisan has their own catalog, two different artisans using the same SKU-like code is expected, not a conflict.
+- **RGPD self-service deletion is one cascading `prisma.company.delete()`.** Every table that hangs off a tenant (`User`, `Customer`, `Product`, `Service`, `Invoice`, `SourcingSearch`, `RefreshToken`, `AuthToken`) now has `onDelete: Cascade` pointed at `Company` (added to `Invoice`'s existing relation too, which had none before). **Known limitation, stated rather than silently built around:** this doesn't yet reconcile with French commercial law's ~10-year invoice retention obligation (Code de commerce art. L123-22) against RGPD's own legal-obligation exception to the right to erasure (GDPR Art. 17.3.b) — an anonymize-but-retain-financial-records flow is a materially bigger feature, deliberately deferred, same honest-reliability-ceiling posture as Phase 10/12's own documented limits.
+- **System transactional email (verification, password reset) is a separate credential set (`SYSTEM_SMTP_*`) from Phase 12's `mail-settings`**, which sends invoices from the *artisan's own* address to *their* clients — this is the app's own mailbox. Reuses `MailerService` as-is (it already took `SmtpCredentials` as a plain parameter, never hardcoded to the artisan's account). Optional at boot, same "boots fine without it" posture as `GROQ_API_KEY`: registration/login still work with it unset, verification/reset emails just can't send.
+- **Email verification is deliberately non-blocking** — registration auto-logs-in immediately; a persistent (never modal) banner in the nav prompts verification, matching the product's low-friction philosophy over a stricter but more common "verify before you can do anything" pattern.
+- **`JWT_ACCESS_SECRET` is the one new required env var** (fails boot like `DATABASE_URL`) — everything else new (`GOOGLE_CLIENT_*`, `SYSTEM_SMTP_*`, `JWT_*` expiry tuning, `FRONTEND_URL`) is optional with sensible defaults, following the existing `GROQ_API_KEY`/`APP_ENCRYPTION_KEY` precedent for opt-in features.
+- **`GoogleStrategy` is only registered as a provider when both `GOOGLE_CLIENT_ID`/`SECRET` are set**, checked via `process.env` directly at `AuthModule`'s metadata-evaluation time (before Nest's DI/`ConfigService` exist) — passport strategies throw eagerly from their own constructor otherwise, which would crash boot for a deployment that never configured Google login. `GoogleOAuthEnabledGuard` gives `/auth/google*` a clean 503 instead of passport's raw "unknown strategy" error when unconfigured.
+- **`infra/docker-compose.prod.yml`'s `backend` service gained `env_file: - .env`** — it had none before, a pre-existing gap that silently kept `GROQ_API_KEY`/`APP_ENCRYPTION_KEY` (and now every Phase 13 var) from ever reaching the prod container. Fixed as part of this phase since `JWT_ACCESS_SECRET` being unreachable would otherwise crash prod boot outright.
+- **e2e tests now authenticate.** A global `JwtAuthGuard` meant every pre-existing e2e spec started 401ing; `test/utils/auth.ts` (`registerTestUser`/`authedRequest`) and `test/utils/test-app.ts` (a shared `createTestApp()` — the specs build their Nest app directly from `AppModule`, bypassing `main.ts`'s real `bootstrap()`, so `cookie-parser` middleware has to be replicated in the test harness too, or `req.cookies` is silently always `undefined` and every request 401s regardless of a correct `Cookie` header) are the shared fix, with each spec's `afterAll` now cleaning up via one `company.delete()` cascade instead of tracking individual row ids.
 
 
 ---
@@ -637,13 +658,13 @@ Core promise (see positioning.md for the full reasoning): *le système de factur
 
 ## Features
 
-- [ ] `docs/positioning.md` created: pitch, target audience, messaging pillars, CTA language
-- [ ] Public landing page reachable without authentication, before Phase 13's login/signup takes over
-- [ ] Hero section stating the core promise in plain language (one-click devis/factures, configured client/product/service environment, price shown on-site immediately)
-- [ ] Single, unambiguous primary CTA ("Créer mon compte" / "Essayer gratuitement") leading into Phase 13's signup flow — no competing secondary CTA above the fold
-- [ ] Visual identity decision made explicitly: extend "Atelier sobre" (design-system.md) to the public site as a new sanctioned spot, or define a distinct one — not a silent reuse of "Chantier calibré," which was built for data entry, not storytelling
-- [ ] Responsive, modern layout applying the roadmap's own "big buttons, minimum writing" spirit to marketing conventions: clear sections, no dense text walls, room for real screenshots/testimonials later
-- [ ] Basic SEO (title/meta description, semantic heading structure) — this page is now the site's actual public entry point
+- [x] `docs/positioning.md` created: pitch, target audience, messaging pillars, CTA language
+- [x] Public landing page reachable without authentication, before Phase 13's login/signup takes over
+- [x] Hero section stating the core promise in plain language (one-click devis/factures, configured client/product/service environment, price shown on-site immediately)
+- [x] Single, unambiguous primary CTA ("Créer mon compte" / "Essayer gratuitement") leading into Phase 13's signup flow — no competing secondary CTA above the fold
+- [x] Visual identity decision made explicitly: extend "Atelier sobre" (design-system.md) to the public site as a new sanctioned spot, or define a distinct one — not a silent reuse of "Chantier calibré," which was built for data entry, not storytelling
+- [x] Responsive, modern layout applying the roadmap's own "big buttons, minimum writing" spirit to marketing conventions: clear sections, no dense text walls, room for real screenshots/testimonials later
+- [x] Basic SEO (title/meta description, semantic heading structure) — this page is now the site's actual public entry point
 
 ## Non-goals
 
@@ -654,6 +675,14 @@ Core promise (see positioning.md for the full reasoning): *le système de factur
 ## Notes
 
 - Sequenced right after Phase 13 (auth) and before Phase 13.5 (quick-invoice UX overhaul): a public marketing page needs at minimum a working signup CTA to point at, which Phase 13 provides; Phase 13.5 is a working-app concern and doesn't depend on this phase at all, but keeping the numbering adjacent reflects that both are UX priorities queued back-to-back right after auth lands.
+
+## Implementation notes
+
+- **The landing page owns `/` outright**, not a segment under `protectedRoutes` — `app.routes.ts`'s old `{ path: '', redirectTo: 'factures/nouvelle' }` (which lived inside the `authGuard`-wrapped children) is gone; a new `guestGuard` (the inverse of `authGuard`) sends an already-signed-in artisan from `/` straight to `/factures/nouvelle` instead of showing them the pitch meant for strangers.
+- **`fullBleed` route data + `App.isFullBleed` (a `toSignal` over `Router.events`)** lets this one route opt out of the app shell's `max-w-3xl` content container in `app.html` — every other route is a form/list that wants that width cap, only the landing page needs full-width hero sections.
+- **"Atelier sobre" is the visual identity**, per positioning.md's call — a fourth sanctioned spot alongside the PDF header/tour/"Mon activité". `docs/design-system.md`'s Status line ("not yet implemented in frontend") was already stale before this phase — the Tailwind tokens have existed in `styles.css` since Phase 9 — corrected there.
+- **CTA buttons deliberately use `bg-primary` (the "Chantier calibré" orange), not an Atelier tone** — the one clickable element on an otherwise calm storytelling page has to pop, and matches the actual button color the artisan clicks everywhere else once signed up.
+- **The free-trial section states the trial policy honestly without claiming an enforced paywall**: "1 facture offerte, configuration illimitée, puis abonnement pour continuer" describes the intended Phase 14 pricing model, not a mechanism this phase builds — no gate is implemented yet, so nothing here can go stale-vs-reality until Phase 14 ships (decided explicitly with the user rather than half-building a block with no working payment path behind it).
 
 ---
 
@@ -680,9 +709,9 @@ Creating a new product from the invoice flow (Phase 3/11's "doesn't exist yet" c
 - A "Afficher tout / Compléter la fiche" dropdown reveals the rest of today's fields (description, fournisseur/URL, code, quantité de conditionnement) for an artisan who wants to fill them in right away.
 - Whichever path is used, the result is one ordinary, full `Product` row — nothing partial or second-class. Every field skipped at creation stays freely editable at any time from "Mes produits" (same "autofill, not a lock" rule as everywhere else).
 
-- [ ] Inline product creation defaults to essential fields only: name, unit, price
-- [ ] "Afficher tout / Compléter la fiche" toggle reveals the remaining Product fields on demand, same form, no separate screen
-- [ ] A product created via the minimal path is identical in the database to one created via the full form — always fully editable afterwards from "Mes produits"
+- [x] Inline product creation defaults to essential fields only: name, unit, price
+- [x] "Afficher tout / Compléter la fiche" toggle reveals the remaining Product fields on demand, same form, no separate screen
+- [x] A product created via the minimal path is identical in the database to one created via the full form — always fully editable afterwards from "Mes produits"
 
 ## Service Pricing Mode: Fixed Price vs Percentage Margin
 
@@ -690,21 +719,21 @@ Add a second way to price a `Service`: instead of always typing a fixed €amoun
 
 Concrete example (from the user): an artisan creates a service once, named e.g. "Marge 30%", and reuses it on every invoice to apply their markup automatically instead of recalculating it by hand each time.
 
-- [ ] "Prix fixe" / "Pourcentage" slider on the Service form
-- [ ] In percentage mode, the service stores a percentage value instead of `priceCents`; the amount it adds to a given invoice is computed at build time (percentage × base), not typed per invoice
-- [ ] Percentage services stay compatible with Phase 5's VISIBLE/REDISTRIBUTED choice and integer-cents-only rounding — implementation must define what "base" a percentage applies to (visible product/service lines total is the natural default) and a deterministic, non-compounding order when more than one percentage service is used on the same invoice
-- [ ] Onboarding tour (Phase 8) update: the artisan is guided to create this exact example — a "Marge 30%" service — as their first practical, reusable service, instead of a generic placeholder example
+- [x] "Prix fixe" / "Pourcentage" slider on the Service form
+- [x] In percentage mode, the service stores a percentage value instead of `priceCents`; the amount it adds to a given invoice is computed at build time (percentage × base), not typed per invoice
+- [x] Percentage services stay compatible with Phase 5's VISIBLE/REDISTRIBUTED choice and integer-cents-only rounding — implementation must define what "base" a percentage applies to (visible product/service lines total is the natural default) and a deterministic, non-compounding order when more than one percentage service is used on the same invoice
+- [x] Onboarding tour (Phase 8) update: the artisan is guided to create this exact example — a "Marge 30%" service — as their first practical, reusable service, instead of a generic placeholder example
 
 ## Features
 
-- [ ] Client-picker screen redesigned as a grid of compact metadata cards, replacing the current list/search-first UI — search/filter stays available for large customer bases
-- [ ] Clicking a client card advances immediately into line activation, no intermediate confirm step
-- [ ] Catalog browsing and invoice lines merged into a single screen: each product/service is togglable ("activate"), revealing an inline unit-quantity input the moment it's activated — replaces the separate catalog-picker/line-list split from Phase 11
-- [ ] Deactivating a toggled item removes its line instantly, symmetric with activation
-- [ ] Products/services/clients that don't exist yet can still be created inline without leaving the flow, same "autofill, not a lock" creation forms as today (Phases 2/3/5)
-- [ ] Running total and PDF preview (Phase 6) stay always visible/one click away, now recalculating live per keystroke on an activated line's quantity
-- [ ] "Envoyer par mail" (Phase 12) reachable directly from the line-activation screen or its preview, without a detour through the invoice list
-- [ ] Empty or sparse client/catalog data gracefully falls back to today's inline-creation flow — must never block invoicing for a new artisan with nothing saved yet (same guarantee as Phase 11)
+- [x] Client-picker screen redesigned as a grid of compact metadata cards, replacing the current list/search-first UI — search/filter stays available for large customer bases
+- [x] Clicking a client card advances immediately into line activation, no intermediate confirm step
+- [x] Catalog browsing and invoice lines merged into a single screen: each product/service is togglable ("activate"), revealing an inline unit-quantity input the moment it's activated — replaces the separate catalog-picker/line-list split from Phase 11
+- [x] Deactivating a toggled item removes its line instantly, symmetric with activation
+- [x] Products/services/clients that don't exist yet can still be created inline without leaving the flow, same "autofill, not a lock" creation forms as today (Phases 2/3/5)
+- [x] Running total and PDF preview (Phase 6) stay always visible/one click away, now recalculating live per keystroke on an activated line's quantity
+- [x] "Envoyer par mail" (Phase 12) reachable directly from the line-activation screen or its preview, without a detour through the invoice list
+- [x] Empty or sparse client/catalog data gracefully falls back to today's inline-creation flow — must never block invoicing for a new artisan with nothing saved yet (same guarantee as Phase 11)
 
 ## Non-goals
 
@@ -716,6 +745,16 @@ Concrete example (from the user): an artisan creates a service once, named e.g. 
 
 - Builds directly on Phase 6 (step-based flow, persistent total/preview), Phase 9.5 (mode rapide vs. manuel split — only mode rapide is touched here), Phase 11 (catalog-driven picker), and Phase 12 (mailing) — this phase merges and simplifies what those phases already built rather than replacing them.
 - Sequenced right after Phase 13 (auth) rather than waiting for Phase 14 (Stripe) since it doesn't depend on billing and is a UX priority — same kind of mid-sequence insertion as Phase 8.5.
+
+## Implementation notes
+
+- **A PERCENTAGE service's invoice amount is computed client-side, not in the backend/InvoiceServiceLine pipeline.** `Service.pricingMode`/`percentageBasisPoints` (basis points, same convention as `vatRateBasisPoints`) are the only backend/schema changes; `CreateInvoiceServiceLineDto`/`InvoiceMapper`/`InvoiceService.create` are untouched. This follows the codebase's existing, deliberate pattern (every service-line amount is already a client-supplied snapshot, never re-read from the `Service` row — see Phase 5's "autofill, not a lock") and reuses `calculation-preview.ts`'s already-justified "mirrors the backend for live UX" exception (`computePercentageServiceAmountCents`). `InvoiceDraftStore.resolvedServiceAmountCents`/`percentageBaseCents` compute it live and feed both the running total and the actual create/preview request, so they can never disagree.
+- **"Base" for a percentage = raw product-line total (before redistribution) + other FIXED VISIBLE service lines**, deliberately excluding every other PERCENTAGE line's own amount. This sidesteps a circular dependency (a REDISTRIBUTED line's amount is itself folded into product totals) and means several percentage lines on one invoice each compute off the same base rather than compounding — "deterministic, non-compounding" by construction, not by ordering rules.
+- **Toggle state (which catalog Product/Service currently has an active line) is tracked via a UI-only `catalogProductId`/`catalogServiceId` field on each line/service-line draft**, not a separately-maintained id→index map — avoids any bookkeeping when a line is removed and every later index shifts. Never sent to the backend (same "UI-only field" precedent as `saveAsNewProduct`).
+- **The full per-line form components (`InvoiceLineFormComponent`/`InvoiceServiceLineFormComponent` — waste surcharge, packaging, sourcing panel, redistribution weights) are unchanged and still rendered below the toggle grid.** The toggle row only adds an inline quantity (products) or amount/visibility (services) input bound to the *same* `FormControl` instance, so editing either place stays in sync with zero extra sync code. This is what keeps Phase 5/7/8.5/10's calculation machinery genuinely untouched, per this phase's own non-goal.
+- **Clicking a client card advances immediately (no per-invoice address-override step)** — a deliberate reading of "advances immediately, no confirm step." An artisan who needs to correct the client's address for one specific invoice currently has to go back and use "+ Nouveau client" instead of picking the card; flagged here rather than silently decided, since a future phase may want that override restored.
+- **Client cards show name/company/address** — no "last invoice date" indicator. `Customer` has no `city` field (just a freehand `address` string) and a real last-invoice indicator needs a new aggregate query; the roadmap listed both as optional/"only if derived," so left out rather than adding a new query or a stored field for this pass.
+- **Quick-create CTA buttons and catalog toggle switches use `bg-primary`** ("Chantier calibré," the working app's real accent) — this screen stays in "Chantier calibré," not "Atelier sobre" (Phase 13.3's landing page), since it's transactional data entry, exactly the distinction docs/design-system.md draws.
 
 ---
 
@@ -738,6 +777,89 @@ Introduce a paid tier: a 15€ premium subscription required after an artisan's 
 
 - Depends on Phase 13 (accounts must exist before subscriptions can attach to them).
 
+
+---
+
+# Phase 14.3 — Devis or Facture: Document Type Choice
+
+## Objective
+
+"Nouvelle facture" becomes **"Nouveau document"**: right at the entry point, the artisan picks — via a small slider — whether they're producing a **devis** (quote) or a **facture** (invoice). Both use the exact same creation pipeline (Phases 6/7/8.5/9.5/11/13.5); this phase is purely about letting one pipeline produce either kind of document instead of only ever producing invoices.
+
+"Nouveau document" was chosen over "Nouveau devis/facture" or "Créer un document commercial" as the shortest label that doesn't presuppose the type before the artisan has actually picked it — same "write a minimum" instinct behind every other naming choice in this app. "Mes factures" becomes **"Mes documents"** for the same reason: it now genuinely holds both.
+
+## Flow
+
+1. The existing mode-choice screen (Phase 9.5: mode rapide / mode manuel) gains a **Devis / Facture** slider right alongside it — one screen, two independent choices, not an extra step.
+2. Everything downstream behaves identically regardless of type; only the PDF's label and the number prefix differ.
+3. Finishing a **devis** ends with a prompt: *"Créer la facture aussi immédiatement ?"* — accepting converts it into a real, numbered facture on the spot, using the exact data just confirmed seconds earlier; declining leaves it as a devis, convertible later.
+4. **"Mes documents"** shows both types, filterable (Devis / Facture / Tous). Any devis row carries its own **"Créer la facture"** action, usable at any time, not only right after creation.
+
+## Data Model
+
+- `Invoice.documentType: DEVIS | FACTURE`, default `FACTURE` — every invoice created before this phase is retroactively a FACTURE, no behavior change for existing data.
+- Independent from `entryMode` (Phase 9.5): a devis can be GUIDED or MANUAL exactly like a facture — two orthogonal discriminators on the same entity, same pattern Phase 9.5 already established.
+- Devis and facture get **two separate sequential counters/prefixes** (e.g. `DEV-0001`, `FAC-0001`). French law's gapless-sequential-numbering rule only binds real factures, not devis — but there's no reason to weaken the same guarantee where it isn't legally required; one allocation mechanism, two independent counters, stays simpler than special-casing an unenforced sequence.
+- `Invoice.convertedFromDevisId` (optional self-relation): set when a facture is created from a devis, so both documents can show "facture créée depuis le devis n°X" / "converti en facture n°Y" without inferring it from timestamps.
+
+## Features
+
+- [ ] "Nouvelle facture" renamed "Nouveau document" everywhere it appears (nav, buttons, onboarding tour copy)
+- [ ] Devis / Facture slider added to the existing mode-choice screen — no new step in the pipeline
+- [ ] PDF header/label reflects the chosen type ("DEVIS" vs "FACTURE"); same PDF pipeline otherwise
+- [ ] Devis numbering is sequential and independent from facture numbering
+- [ ] End-of-pipeline prompt on a finished devis: "Créer la facture aussi immédiatement ?"
+- [ ] "Mes factures" renamed "Mes documents", filterable by type (Devis / Facture / Tous)
+- [ ] "Créer la facture" action available on any devis row in the list, at any time, not just right after creation
+- [ ] Converting a devis prefills a real facture-creation flow with the devis's client/lines/services (same "autofill, not a lock" rule as every catalog-backed field elsewhere) rather than silently mutating the devis row in place — the devis stays retrievable exactly as it was
+
+## Non-goals
+
+- No devis-specific extras (validity period / "devis valable 30 jours", client acceptance/signature flow, etc.) — this phase only adds the type discriminator and the conversion action. A richer devis-specific feature set is a natural, separate follow-on, not built here.
+- No change to the pricing/redistribution/calculation engine — a devis is priced exactly like a facture, it's just not yet a binding one.
+
+## Notes
+
+- **Phase 16's board only makes sense for FACTURE documents** — a devis has no payment state to track. Once this phase lands, Phase 16's board should filter to `documentType = FACTURE`; devis stay in a simpler, non-board list view.
+- Builds on Phase 9.5's orthogonal-discriminator pattern (`entryMode`) and Phase 6's "a real number is allocated only at real persistence" rule — a devis gets a genuine number the moment it's created, exactly like a facture always has; nothing about a devis is a draft/preview in Phase 6's sense.
+
+---
+
+# Phase 14.5 — Findable Clients: Richer Customer Search
+
+## Objective
+
+An artisan doesn't always remember a client's name — and once the customer base grows, name alone stops being enough to find them at all. This phase makes customer search/sorting surface the things an artisan actually remembers instead: roughly when they last quoted or invoiced this client, their address, or a word from a description the artisan wrote about them.
+
+## Data Model
+
+- `Customer.description` (optional, freeform text) — new field, same "autofill, not a lock" spirit as everywhere else: entirely optional, freely editable at any time from the customer form. This is the field Phase 2's Customer entity didn't have and this phase's word-matching depends on.
+- No other new persisted field. "Date du dernier devis" / "dernière facture" are derived from existing `Invoice` rows (latest per customer, split by `documentType` if Phase 14.3 has landed) at read time — same "derived data is never persisted" rule used throughout (invoice totals, Phase 5's redistribution, Phase 16's overdue column). Caching a duplicate date on `Customer` would just be a value that can silently drift from the `Invoice` table it's summarizing.
+
+## Search & Results
+
+- Search matches across name, company name, address, and description — not name alone.
+- Each result surfaces what actually helps recognition: last devis date, last facture date, city/address, and — when a match came from the description rather than the name — the matching snippet, so the artisan sees *why* a result matched, not just that it did.
+- Sort options beyond today's alphabetical: most recently invoiced, most recently quoted, most recently created — useful for the very common "who was I at two weeks ago" recall.
+
+## Features
+
+- [ ] `description` field added to `Customer` (optional, freeform), editable from the customer form like every other optional field
+- [ ] Customer search matches name, company name, address, and description — not name-only
+- [ ] Search results show last devis date and last facture date per customer, computed from `Invoice`, never stored
+- [ ] Matching description snippet shown/highlighted in results when the match came from free text
+- [ ] Sort toggle: alphabétique / dernière facture / dernier devis / date de création
+- [ ] Customers with no description or no invoice history yet degrade gracefully (blank/"—"), never an error — must not break for a brand-new customer with zero history
+
+## Non-goals
+
+- No fuzzy/typo-tolerant matching — plain substring search across the four fields, consistent with how Phase 11's catalog search already works (`code`/`name` OR clause). Revisit only if real usage shows this insufficient.
+- No customer tagging/categorization system — description is freeform text, not a structured taxonomy; that would be a bigger, separate feature.
+
+## Notes
+
+- Builds on Phase 2 (Customer entity) and reuses the plain filter pattern already established for catalog search (Phase 11's implementation notes) rather than introducing new search infrastructure.
+- If Phase 14.3 hasn't landed yet when this is built, ship with a single "dernier document" date instead of two — trivially split later once `documentType` exists.
 
 ---
 
@@ -766,5 +888,110 @@ On that preview, some pieces of information are highlighted on hover and are cli
 
 - No new data fields and no change to the pricing/redistribution engine — this phase only adds a display-visibility layer on top of what Phases 5–6 already compute.
 
+
+---
+
+# Phase 16 — Invoice Lifecycle Board (Payment Status & Follow-Up)
+
+## Objective
+
+Give the artisan a working view of "mes factures" as a lifecycle, not just a flat list: a Kanban-style board where an invoice card lives in a column reflecting whether it's been paid, and moves between columns by drag & drop. Each card also exposes the actions that actually matter for the state it's in — most importantly, re-sending the invoice email to a client who hasn't paid yet — so following up on unpaid work stops requiring the artisan to remember who owes what.
+
+This phase is a payment/status *tracker*, not a payment *collector* — see Non-goals.
+
+## Data Model
+
+- `Invoice.status: InvoiceStatus` (`NON_PAYEE | PAYEE | ANNULEE`, default `NON_PAYEE` on creation) — a real, artisan-controlled lifecycle field, changed either by dragging a card to another column or by a card's action button. Deliberately **not** four values — see below for why "en retard" isn't one of them.
+- `Invoice.dueDate` (optional) — the date the client committed to paying by. Not asked at invoice creation (the artisan rarely knows it yet at that point); instead captured lazily, the first time it's actually needed (see Board UX's drop-into-"Non payées" modal).
+- `Invoice.paidAt` (optional) — set when a card is marked/dragged to `PAYEE`; cleared if moved back out. Same "records the fact, not a log" convention as Phase 12's `sentAt`.
+- `Invoice.lastReminderAt` (optional) — overwritten on every "renvoyer un mail" click, same single-field convention as `sentAt`/`sentToEmail` (Phase 12): "was a reminder ever sent, and when most recently" is all the board needs, not a full history table.
+
+**"En retard" is a real column in the UI, but still not a fourth persisted status.** The board shows four columns (Non payées, En retard, Payées, Annulées), but the database only ever stores three status values — "en retard" is `NON_PAYEE` cards whose `dueDate` has passed, bucketed into that column at read time, the same way invoice totals and Phase 5's redistribution splits are already computed on the fly rather than stored (conventions.md's "derived data is never persisted" rule). This gets the user's idea of a real, visible column without needing a background job to flip a status overnight — a card simply renders in "En retard" the moment `dueDate` is in the past, correct on every page load with zero scheduled task. It also means there's nothing to reconcile if the artisan hasn't opened the app in days — the very next visit renders it correctly.
+
+## Board UX
+
+- Four columns: **Non payées**, **En retard**, **Payées**, **Annulées**. Cards reuse the same compact-card visual language introduced for client cards in Phase 13.5, for consistency across the two card-based screens the app will now have.
+- Drag & drop between columns updates `status` immediately (optimistic UI, reconciled against the backend response) — reuses `interactjs`, already a dependency since Phase 9.5's resize handles, rather than adding a second drag library for a second kind of drag interaction.
+- **Dropping a card into "Non payées" without a `dueDate` yet opens a small modal**: "Pour quelle date le client s'est-il engagé à payer ?" — one field, one date picker, no other input. This is the artisan recording a commitment the client already made verbally/on-site, not inventing a policy; skipping it is allowed (the invoice just stays in "Non payées" indefinitely with no overdue tracking until a date is eventually set, editable later from the card itself).
+- **"En retard" is not a manual drop target.** A card gets there on its own once `dueDate` passes while still `NON_PAYEE` — dragging *into* "en retard" isn't a meaningful artisan action, so the column only ever accepts drags back out (to "Payées" once the client finally pays, or "Annulées"). Dragging *out* of "En retard" behaves exactly like dragging out of "Non payées", since it's the same underlying status.
+- **Every drag action has an equivalent tap/click action.** The target user works from a phone, often with gloves, standing on a job site (same reasoning as Phase 7's tooltip-not-hover decision) — drag-and-drop alone would be actively hostile on that hardware. Each card carries explicit buttons ("Marquer payée", "Annuler la facture", "Remettre en non payée") that do exactly what the equivalent drag would do, including triggering the due-date modal where relevant.
+- A card in **En retard** is visually flagged (design-system.md's `danger` semantic color) and its "Renvoyer un mail" button is emphasized — the board should make "who do I need to chase this week" answerable at a glance, without opening every invoice.
+- Card actions by column:
+  - **Non payées**: "Renvoyer un mail" (reuses Phase 12's mailing pipeline as-is, prefilled recipient/template), "Marquer payée", "Annuler la facture"
+  - **En retard**: same actions as Non payées, with "Renvoyer un mail" visually emphasized
+  - **Payées**: "Télécharger le PDF" — no reminder actions, nothing left to chase
+  - **Annulées**: "Restaurer" (back to Non payées) — no permanent delete from the board itself
+- Filter/search the board by client name or date range for artisans with a large invoice history — the board must stay usable past a few dozen cards, not just in the empty-state screenshot.
+
+## Features
+
+- [ ] `InvoiceStatus` field added to `Invoice` (`NON_PAYEE | PAYEE | ANNULEE`), plus `dueDate`, `paidAt`, `lastReminderAt`
+- [ ] "Mes factures" replaced/complemented by a four-column board: Non payées, En retard, Payées, Annulées
+- [ ] Drag & drop a card between columns updates its status; every drag has an equivalent button-based action for touch/glove use
+- [ ] Dropping/moving a card into "Non payées" without a `dueDate` set opens a one-field modal asking the date the client committed to paying by; skippable, editable later from the card
+- [ ] "En retard" is computed (`NON_PAYEE` + `dueDate` passed) and rendered as its own column, never a manually-droppable target or a fourth persisted status
+- [ ] "Renvoyer un mail" button on an unpaid/overdue card, reusing Phase 12's mail-sending pipeline and template, visually emphasized once overdue
+- [ ] "Marquer payée" / "Annuler la facture" / "Restaurer" quick actions available directly from a card
+- [ ] Board is filterable/searchable by client and date, so it stays usable as invoice volume grows
+- [ ] Existing invoices (pre-Phase-16) default to `NON_PAYEE` with no `dueDate` — sit in "Non payées", never crash or misrender for lack of a due date, and only reach "En retard" once one is eventually set and passes
+
+## Non-goals
+
+- **No online payment collection, and no client-facing surface at all.** FactureLeBat's board is a tool for the artisan alone — the client never sees it, logs into it, or interacts with it. "Marquer payée" is the artisan recording a fact (they were paid by check, transfer, cash on-site), not a payment gateway charging the end client. Actually collecting money online would mean building a client-facing checkout/portal, which is a different product surface entirely and out of scope here — not to be confused with Phase 14's Stripe integration, which bills the *artisan's own* FactureLeBat subscription, not their clients.
+- **No reminder scheduling/automation.** "Renvoyer un mail" stays a manual, one-click action the artisan chooses to take — no automatic recurring dunning emails in this phase.
+- **No partial payments.** An invoice is either paid or not; splitting a paid amount across multiple installments is a different, bigger data model and isn't asked for here.
+
+## Notes
+
+- Builds on Phase 12 (reuses the mailing pipeline as-is) and borrows the card visual language from Phase 13.5, but doesn't depend on either being complete first — the board is additive to whatever "mes factures" looks like today.
+- Cross-reference: Phase 15's per-invoice PDF field visibility and this phase's status board are independent concerns (one is about what a client sees, the other is about what the artisan tracks) and don't interact.
+- If Phase 14.3 (devis/facture split) has landed by the time this is built, the board scopes to `documentType = FACTURE` only — a devis has no payment state to track, and stays in its own simpler list instead of occupying a board column.
+
+---
+
+# Phase 17 — Quarterly Reports & Activity Analytics
+
+## Objective
+
+Turn the invoice history FactureLeBat already holds into two things an artisan actually needs but currently has to reconstruct by hand: a **quarterly report** shaped for their URSSAF/tax declaration (the reality for a French *auto-entrepreneur*, who must declare turnover every quarter or month), and an **activity dashboard** — the "business insights" goal named in this roadmap's own Product Vision from day one, not yet built.
+
+## Why cash-basis, not invoicing date
+
+URSSAF/tax declarations for a micro-entrepreneur are based on *encaissements* — money actually received — not on when an invoice was issued. An invoice created in March but paid in April counts toward Q2, not Q1. This is exactly why this phase depends on Phase 16: without a real `PAYEE` status and `paidAt` date, there would be no reliable way to know when money actually came in, only when it was invoiced — and building the report on invoicing date instead would hand the artisan a number that's simply wrong for what they're required to declare. Every figure in this phase is computed off `paidAt`, never `createdAt`/invoice date.
+
+## Data Model
+
+- `Company.declarationFrequency` (`MENSUELLE | TRIMESTRIELLE`, default `TRIMESTRIELLE`) — which period the report screen defaults to; a real choice auto-entrepreneurs make at registration.
+- `Company.microEntrepreneurCeiling` (optional, integer cents) — an artisan-editable threshold for the plafond warning below, deliberately **not** a hardcoded legal constant: the actual ceiling depends on activity type and changes over time, and baking in a number the app can't guarantee is current would be worse than not showing one. Left blank, the warning simply doesn't appear.
+- `Product.activityCategory` / `Service.activityCategory` (optional: `VENTE_MARCHANDISES | PRESTATION_BIC | PRESTATION_BNC`, default unset) — artisan-set, since only they know which URSSAF category their own registration puts each item under. Report totals bucket by this field, with an explicit "non catégorisé" bucket for anything left unset, so nothing is silently mis-bucketed.
+- The report itself is **not a stored entity** — computed on demand from `PAYEE` invoices whose `paidAt` falls in the selected period, same "derived data is never persisted" convention as invoice totals, Phase 5's redistribution, and Phase 16's overdue column. Nothing to keep in sync, nothing that can drift from the underlying invoices.
+
+## Features — Quarterly Report
+
+- [ ] Report screen: pick a period (quarter or month, per `declarationFrequency`; a custom range too) and see total encaissé for that period
+- [ ] Totals broken down by `activityCategory`, plus a visible "non catégorisé" bucket when items haven't been tagged
+- [ ] List of the individual paid invoices that make up the total (client, amount, `paidAt`) — an audit trail the artisan can cross-check against, not just a bare number to trust blindly
+- [ ] Export the report as PDF (reuses the existing `PdfService` pipeline) and as CSV (for pasting into a spreadsheet or handing to an accountant)
+- [ ] Optional plafond warning: a progress indicator comparing year-to-date encaissements against `microEntrepreneurCeiling`, shown only when that field is set
+
+## Features — Activity Analytics
+
+- [ ] Revenue-over-time chart (encaissé, by month, last 12 months)
+- [ ] Top clients by revenue, top products/services by revenue and by frequency
+- [ ] Outstanding total: sum of `NON_PAYEE` + `En retard` invoices (Phase 16), so the artisan sees "billed but not yet collected" alongside what's actually been received
+- [ ] Basic activity counters: invoice count, average invoice value, count of active clients/products
+- [ ] Hosted in "Mon activité" (Phase 9's existing "Atelier sobre" section, company settings) — the sanctioned spot where the app already speaks about the artisan's business rather than asking for fast data entry, extended rather than duplicated with a new screen
+
+## Non-goals
+
+- **No e-filing / URSSAF API integration.** The artisan still enters the figure on the official portal themselves; this phase produces the correct number and a paper trail, not a submission.
+- **No tax advice, no rate computation.** The app reports categorized turnover — it does not calculate cotisations owed, apply rates, or account for ACRE/exemptions. Matches the same honesty principle already applied to Phase 10 (sourcing) and Phase 12 (mail delivery): the app states what it can verify from its own data and stops there.
+- **No expense/charge tracking.** FactureLeBat only knows the revenue side (invoices); a full accounting picture (deductible expenses, etc.) is a materially different feature and out of scope here.
+- **No automatic activity-category detection.** Guessing VENTE vs. PRESTATION from a product/service name risks being confidently wrong on exactly the field that determines a real declaration — left to explicit artisan input instead.
+
+## Notes
+
+- Depends on Phase 16 for `paidAt`/status — sequenced after it for that reason, not just numbering convenience.
+- Cross-reference: this roadmap's own Product Vision has named "business insights" as a long-term goal since the very first draft; this phase is the first concrete delivery of that promise.
 
 ---

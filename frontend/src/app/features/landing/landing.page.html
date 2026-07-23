@@ -1,0 +1,157 @@
+<div class="bg-atelier-bg text-atelier-ink font-atelier-sans">
+  <header class="flex items-center justify-between gap-4 px-4 py-4 sm:px-8">
+    <span class="font-atelier-heading text-xl font-semibold tracking-tight">FactureLeBat</span>
+    <div class="flex items-center gap-3 sm:gap-4">
+      <a routerLink="/connexion" class="text-atelier-ink-soft text-sm font-medium underline"
+        >Connexion</a
+      >
+      <a
+        routerLink="/inscription"
+        class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-fg transition hover:brightness-90"
+        >Essayer gratuitement</a
+      >
+    </div>
+  </header>
+
+  <!-- Hero: the one load-bearing promise (docs/positioning.md). The CTA
+       button below deliberately uses the app's real "Chantier calibré"
+       accent (bg-primary), not an Atelier-sobre tone — it's the one clickable
+       element on the page that has to visually pop against the calmer
+       storytelling palette and match the button the artisan will click
+       everywhere else once signed up. -->
+  <section
+    class="mx-auto flex max-w-3xl flex-col items-center gap-6 px-4 py-16 text-center sm:py-24"
+  >
+    <h1 class="font-atelier-heading text-4xl leading-tight font-semibold sm:text-5xl">
+      Le système de facturation le plus simple, le plus rapide.
+    </h1>
+    <p class="text-atelier-ink-soft max-w-xl text-lg">
+      Configurez une seule fois votre environnement de travail — clients, produits, services — puis
+      construisez vos devis et vos factures en un clic. Fini les allers-retours&nbsp;: vous êtes
+      chez le client, vous lui présentez le prix aussitôt, avec le détail de votre prestation selon
+      vos propres critères.
+    </p>
+    <a
+      routerLink="/inscription"
+      class="w-full max-w-xs rounded-xl bg-primary px-6 py-4 text-center text-lg font-semibold text-primary-fg shadow-sm transition hover:brightness-90"
+      >Créer mon compte</a
+    >
+    <p class="text-atelier-ink-soft text-sm">
+      Sans carte bancaire. Configurez votre activité et créez votre première facture gratuitement.
+    </p>
+  </section>
+
+  <!-- Messaging pillars, docs/positioning.md -->
+  <section class="mx-auto max-w-5xl px-4 py-12 sm:py-16">
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <span class="text-2xl" aria-hidden="true">⚡</span>
+        <h2 class="font-atelier-heading mt-3 text-lg font-semibold">Vitesse</h2>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Devis et factures en un clic, pas de ressaisie.
+        </p>
+      </div>
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <span class="text-2xl" aria-hidden="true">🗂️</span>
+        <h2 class="font-atelier-heading mt-3 text-lg font-semibold">Environnement configuré</h2>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Vos clients, vos produits, vos services, une bonne fois pour toutes.
+        </p>
+      </div>
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <span class="text-2xl" aria-hidden="true">🤝</span>
+        <h2 class="font-atelier-heading mt-3 text-lg font-semibold">Confiance sur le chantier</h2>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Le prix s'affiche devant le client, tout de suite, sans rendez-vous supplémentaire.
+        </p>
+      </div>
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <span class="text-2xl" aria-hidden="true">🎛️</span>
+        <h2 class="font-atelier-heading mt-3 text-lg font-semibold">Contrôle du détail</h2>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Vous choisissez ce qui apparaît sur la facture, selon vos propres critères.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works: concrete steps, not aspirational claims — every step
+       here maps to a shipped feature (Phases 2/3/5/11/13.5), never a
+       promise the product can't already back up. -->
+  <section class="mx-auto max-w-4xl px-4 py-12 sm:py-16">
+    <h2 class="font-atelier-heading text-center text-2xl font-semibold sm:text-3xl">
+      Comment ça marche
+    </h2>
+    <div class="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-3">
+      <div class="text-center">
+        <div
+          class="bg-atelier-walnut text-atelier-surface font-atelier-heading mx-auto flex h-10 w-10 items-center justify-center rounded-full text-lg font-semibold"
+        >
+          1
+        </div>
+        <h3 class="font-atelier-heading mt-3 font-semibold">Configurez une fois</h3>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Vos clients, vos produits et vos prestations, enregistrés dans votre catalogue.
+        </p>
+      </div>
+      <div class="text-center">
+        <div
+          class="bg-atelier-walnut text-atelier-surface font-atelier-heading mx-auto flex h-10 w-10 items-center justify-center rounded-full text-lg font-semibold"
+        >
+          2
+        </div>
+        <h3 class="font-atelier-heading mt-3 font-semibold">Un clic sur le chantier</h3>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Choisissez le client, activez ce que vous avez posé, la quantité suffit.
+        </p>
+      </div>
+      <div class="text-center">
+        <div
+          class="bg-atelier-walnut text-atelier-surface font-atelier-heading mx-auto flex h-10 w-10 items-center justify-center rounded-full text-lg font-semibold"
+        >
+          3
+        </div>
+        <h3 class="font-atelier-heading mt-3 font-semibold">Le prix, tout de suite</h3>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Le total s'affiche en direct, la facture part par mail depuis le même écran.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Honest free-trial framing (see conversation decision: no pricing
+       page/tiers exist yet — Phase 14 — so this states the trial policy in
+       plain terms without claiming a paywall already exists in the
+       product). -->
+  <section class="mx-auto max-w-3xl px-4 py-12 text-center sm:py-16">
+    <h2 class="font-atelier-heading text-2xl font-semibold sm:text-3xl">
+      Essayez avant de vous engager
+    </h2>
+    <p class="text-atelier-ink-soft mx-auto mt-4 max-w-xl">
+      Configurez vos clients, vos produits et vos prestations sans aucune limite, aussi longtemps
+      que vous en avez besoin. Votre première facture est offerte. Ensuite, un abonnement simple
+      vous permet de continuer à facturer sans limite.
+    </p>
+  </section>
+
+  <section class="bg-atelier-walnut px-4 py-14 text-center sm:py-20">
+    <h2 class="font-atelier-heading text-atelier-surface text-2xl font-semibold sm:text-3xl">
+      Prêt à facturer plus vite&nbsp;?
+    </h2>
+    <a
+      routerLink="/inscription"
+      class="mx-auto mt-6 block w-full max-w-xs rounded-xl bg-primary px-6 py-4 text-center text-lg font-semibold text-primary-fg shadow-sm transition hover:brightness-90"
+      >Créer mon compte</a
+    >
+  </section>
+
+  <footer
+    class="text-atelier-ink-soft flex flex-col items-center justify-between gap-2 px-4 py-8 text-sm sm:flex-row sm:px-8"
+  >
+    <span>© {{ currentYear }} FactureLeBat</span>
+    <div class="flex gap-4">
+      <a routerLink="/cgu" class="underline">CGU</a>
+      <a routerLink="/confidentialite" class="underline">Confidentialité</a>
+    </div>
+  </footer>
+</div>

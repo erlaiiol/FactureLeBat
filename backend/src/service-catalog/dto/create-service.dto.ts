@@ -8,12 +8,17 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ServiceVisibility } from '../../../generated/prisma/enums';
+import { ServicePricingMode, ServiceVisibility } from '../../../generated/prisma/enums';
+import { ServicePricingConsistency } from './service-pricing-consistency.validator';
 
 // Same finite-but-generous bound as CreateProductDto/CreateInvoiceLineDto:
 // rejects an obviously-wrong input before it reaches invoice calculation,
 // not a real business limit.
 const MAX_PRICE_CENTS = 100_000_000; // 1,000,000.00 €
+// Basis points, same convention as Company.vatRateBasisPoints — 10000 = 100%.
+// A percentage service applies to (at most) the invoice's own visible
+// subtotal, so anything above 100% would already be a nonsensical markup.
+const MAX_PERCENTAGE_BASIS_POINTS = 10_000;
 
 export class CreateServiceDto {
   @IsString()
@@ -26,10 +31,24 @@ export class CreateServiceDto {
   @MaxLength(2000)
   description?: string;
 
+  // Phase 13.5: FIXED (default) is today's typed-euro-amount behavior;
+  // PERCENTAGE stores a share of the invoice instead — see
+  // ServicePricingConsistency for the cross-field requirement below.
+  @IsEnum(ServicePricingMode)
+  @ServicePricingConsistency()
+  pricingMode: ServicePricingMode = ServicePricingMode.FIXED;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(MAX_PRICE_CENTS)
-  priceCents: number;
+  priceCents?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PERCENTAGE_BASIS_POINTS)
+  percentageBasisPoints?: number;
 
   @IsEnum(ServiceVisibility)
   defaultVisibility: ServiceVisibility = ServiceVisibility.VISIBLE;

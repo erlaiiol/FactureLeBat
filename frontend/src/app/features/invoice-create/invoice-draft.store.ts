@@ -11,13 +11,18 @@ import {
   WasteSurcharge,
 } from '../../core/models/invoice.model';
 import { ProductProfile } from '../../core/models/product.model';
-import { ServiceProfile } from '../../core/models/service.model';
+import { ServiceProfile, ServicePricingMode } from '../../core/models/service.model';
 import { isAreaUnit, Unit } from '../../core/models/unit.model';
 import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { ProductService } from '../../core/services/product.service';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
-import { computeTotalsPreview, TotalsPreview } from './calculation-preview';
+import {
+  computeLineTotalPreviewCents,
+  computePercentageServiceAmountCents,
+  computeTotalsPreview,
+  TotalsPreview,
+} from './calculation-preview';
 
 export interface InvoiceCustomerDraft {
   customerId: string | null;
@@ -43,16 +48,30 @@ export interface InvoiceLineDraft {
   // Freehand product reference (e.g. "UC204850"), never tied to a saved
   // Product — same soft-snapshot spirit as packagingQuantity above.
   productCode: string | null;
+  // Phase 13.5: which catalog Product this line was toggled on from, if any
+  // — UI-only (never sent to the backend, see buildInvoiceRequest), lets
+  // the merged catalog/lines screen know which toggle to show as "on" and
+  // which line to remove when it's toggled back off. Null for a freehand
+  // ("+ Ligne libre") line, same as productCode being unset.
+  catalogProductId: string | null;
 }
 
 export interface InvoiceServiceLineDraft {
   serviceId: string | null;
   name: string;
   description: string;
+  // Authoritative for pricingMode FIXED (freely typed/edited). Ignored for
+  // PERCENTAGE — see InvoiceDraftStore.resolvedServiceAmountCents, which
+  // recomputes that line's real amount live from percentageBasisPoints
+  // instead (Phase 13.5: "computed at build time, not typed per invoice").
   amountEuros: number;
   visibility: ServiceLineVisibility;
   redistributionStrategy: RedistributionStrategy;
   weights: number[];
+  pricingMode: ServicePricingMode;
+  percentageBasisPoints: number | null;
+  // Same UI-only toggle-tracking role as InvoiceLineDraft.catalogProductId.
+  catalogServiceId: string | null;
 }
 
 const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
@@ -73,6 +92,17 @@ const EMPTY_LINE: InvoiceLineDraft = {
   packagingQuantity: null,
   roundUpToPackaging: true,
   productCode: null,
+  catalogProductId: null,
+};
+
+// Phase 13.5: defaults for fields added after the original InvoiceServiceLineDraft
+// shape — merged under a hydrated draft the same way EMPTY_LINE is, so a
+// draft persisted before this phase still hydrates to a valid,
+// unambiguously-FIXED, non-catalog-linked service line.
+const EMPTY_SERVICE_LINE_DEFAULTS = {
+  pricingMode: 'FIXED' as ServicePricingMode,
+  percentageBasisPoints: null as number | null,
+  catalogServiceId: null as string | null,
 };
 
 const DRAFT_STORAGE_KEY = 'facturelebat.invoiceDraft.v1';
@@ -109,25 +139,64 @@ export class InvoiceDraftStore {
 
   readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
 
-  private readonly serviceAmountCents = computed(() =>
-    this.serviceLines().reduce((sum, serviceLine) => {
-      const cents = Math.round(serviceLine.amountEuros * 100);
-      return Number.isFinite(cents) && cents > 0 ? sum + cents : sum;
-    }, 0),
-  );
-
-  readonly totalsPreview = computed<TotalsPreview>(() => {
-    const company = this.company();
-    const lineInputs = this.lines().map((line) => ({
+  private readonly lineInputs = computed(() =>
+    this.lines().map((line) => ({
       unit: line.unit,
       quantity: line.quantity,
       unitPriceCents: Math.round(line.unitPriceEuros * 100),
       wasteSurcharge: line.wasteSurcharge,
       packagingQuantity: line.packagingQuantity,
       roundUpToPackaging: line.roundUpToPackaging,
-    }));
+    })),
+  );
+
+  private readonly productLinesTotalCents = computed(() =>
+    this.lineInputs().reduce((sum, line) => sum + computeLineTotalPreviewCents(line), 0),
+  );
+
+  // Phase 13.5: what a PERCENTAGE service line's percentage applies to —
+  // "visible product/service lines total" (docs/roadmap.md), taken BEFORE
+  // any redistribution folding (avoids a circular dependency: a
+  // REDISTRIBUTED line's amount is itself folded into these same product
+  // totals) and excluding every OTHER percentage line's own amount (so
+  // several percentage lines on the same invoice each compute off the same
+  // base rather than compounding on one another — deterministic regardless
+  // of how many there are or what order they're in).
+  private readonly percentageBaseCents = computed(() => {
+    const fixedVisibleServiceCents = this.serviceLines()
+      .filter((line) => line.pricingMode === 'FIXED' && line.visibility === 'VISIBLE')
+      .reduce((sum, line) => sum + Math.round(line.amountEuros * 100), 0);
+    return this.productLinesTotalCents() + fixedVisibleServiceCents;
+  });
+
+  // The one place a service line's real amount is read from — FIXED just
+  // returns the typed amount; PERCENTAGE recomputes it live from the current
+  // base (see percentageBaseCents), never the stale value it happened to
+  // have last time this ran. Used for both the running total below and the
+  // actual create/preview request (buildInvoiceRequest), so they can never
+  // disagree.
+  resolvedServiceAmountCents(serviceLine: InvoiceServiceLineDraft): number {
+    if (serviceLine.pricingMode === 'FIXED') {
+      const cents = Math.round(serviceLine.amountEuros * 100);
+      return Number.isFinite(cents) && cents > 0 ? cents : 0;
+    }
+    return computePercentageServiceAmountCents(
+      this.percentageBaseCents(),
+      serviceLine.percentageBasisPoints ?? 0,
+    );
+  }
+
+  private readonly serviceAmountCents = computed(() =>
+    this.serviceLines().reduce(
+      (sum, serviceLine) => sum + this.resolvedServiceAmountCents(serviceLine),
+      0,
+    ),
+  );
+
+  readonly totalsPreview = computed<TotalsPreview>(() => {
+    const company = this.company();
     return computeTotalsPreview(
-      lineInputs,
+      this.lineInputs(),
       this.vatApplicable(),
       company?.vatRateBasisPoints ?? 0,
       this.serviceAmountCents(),
@@ -191,6 +260,15 @@ export class InvoiceDraftStore {
     this.serviceLines.set(serviceLines);
   }
 
+  // Phase 13.5: a product created inline from the merged catalog/lines
+  // screen (see QuickProductCreateComponent) needs to show up in this
+  // screen's own catalog grid immediately, not just on the next full reload
+  // of ProductService.getAll() — same "autofill, not a lock" spirit as
+  // every other soft catalog reference, just appended client-side.
+  addProductToCatalog(product: ProductProfile): void {
+    this.products.update((products) => [...products, product]);
+  }
+
   reset(): void {
     this.customer.set(EMPTY_CUSTOMER);
     this.lines.set([{ ...EMPTY_LINE }]);
@@ -217,12 +295,13 @@ export class InvoiceDraftStore {
 
     const serviceLines: CreateInvoiceServiceLineRequest[] = this.serviceLines().map(
       (serviceLine) => {
+        const amountCents = this.resolvedServiceAmountCents(serviceLine);
         if (serviceLine.visibility === 'VISIBLE') {
           return {
             serviceId: serviceLine.serviceId ?? undefined,
             name: serviceLine.name,
             description: serviceLine.description || undefined,
-            amountCents: Math.round(serviceLine.amountEuros * 100),
+            amountCents,
             visibility: 'VISIBLE' as const,
           };
         }
@@ -230,7 +309,7 @@ export class InvoiceDraftStore {
           serviceId: serviceLine.serviceId ?? undefined,
           name: serviceLine.name,
           description: serviceLine.description || undefined,
-          amountCents: Math.round(serviceLine.amountEuros * 100),
+          amountCents,
           visibility: 'REDISTRIBUTED' as const,
           redistributionStrategy: serviceLine.redistributionStrategy,
           weights:
@@ -266,7 +345,12 @@ export class InvoiceDraftStore {
         this.lines.set(parsed.lines.map((line) => ({ ...EMPTY_LINE, ...line })));
       }
       if (Array.isArray(parsed.serviceLines)) {
-        this.serviceLines.set(parsed.serviceLines);
+        this.serviceLines.set(
+          parsed.serviceLines.map((serviceLine) => ({
+            ...EMPTY_SERVICE_LINE_DEFAULTS,
+            ...serviceLine,
+          })),
+        );
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

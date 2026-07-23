@@ -85,7 +85,7 @@
       </p>
     }
   }
-  <main class="mx-auto max-w-3xl p-4">
+  <main [class]="isFullBleed() ? '' : 'mx-auto max-w-3xl p-4'">
     <router-outlet />
   </main>
 </div>

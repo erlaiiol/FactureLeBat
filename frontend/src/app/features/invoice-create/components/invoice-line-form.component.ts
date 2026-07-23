@@ -34,6 +34,8 @@ export type InvoiceLineFormGroup = FormGroup<{
   // UI-only — never sent as part of the invoice-creation request, see
   // InvoiceCreateLinesStepPage.submit().
   saveAsNewProduct: FormControl<boolean>;
+  // Phase 13.5, UI-only: see InvoiceLineDraft.catalogProductId.
+  catalogProductId: FormControl<string | null>;
 }>;
 
 @Component({

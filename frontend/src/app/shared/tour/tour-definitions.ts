@@ -144,7 +144,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         route: '/prestations',
         anchorId: 'catalog-new-service',
         title: 'Ajoutez une prestation',
-        body: 'La main-d’œuvre et les autres prestations se gèrent ici, de la même façon.',
+        body: 'La main-d’œuvre et les autres prestations se gèrent ici, de la même façon. Essayez par exemple de créer « Marge 30% » en mode Pourcentage : elle s’appliquera ensuite automatiquement sur chaque facture, sans jamais recalculer votre marge à la main.',
       },
       {
         title: 'Catalogue prêt !',

@@ -1,11 +1,11 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { guestGuard } from './core/guards/guest.guard';
 
 // Phase 13: every feature route below needs a valid session — wrapped as
 // children of one pathless, authGuard-protected route rather than
 // repeating `canActivate: [authGuard]` on each top-level entry.
 const protectedRoutes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'factures/nouvelle' },
   {
     // Phase 9.5: "nouvelle facture" first opens a mode-choice screen, then
     // either the pre-existing rapide/ shell (unchanged, just moved one path
@@ -116,6 +116,19 @@ const protectedRoutes: Routes = [
 ];
 
 export const routes: Routes = [
+  // Phase 13.3: the public landing page owns '/' — guestGuard bounces an
+  // already-signed-in artisan straight into the app instead of showing them
+  // the pitch meant for strangers. `fullBleed` route data lets app.html
+  // opt this one page out of the app shell's `max-w-3xl` content container
+  // (see App.isFullBleed) — a marketing page needs full-width hero
+  // sections, every other route is a form/list that wants that width cap.
+  {
+    path: '',
+    pathMatch: 'full',
+    canActivate: [guestGuard],
+    data: { fullBleed: true },
+    loadComponent: () => import('./features/landing/landing.page').then((m) => m.LandingPage),
+  },
   // Public auth/legal routes — no session required, must never sit behind
   // authGuard (login/register are how a session gets established at all).
   {

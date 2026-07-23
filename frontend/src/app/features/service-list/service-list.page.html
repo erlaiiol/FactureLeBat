@@ -42,7 +42,11 @@
             </p>
           </div>
           <span class="text-lg font-semibold text-ink font-mono">
-            {{ service.priceCents | centsToEuros }}
+            @if (service.pricingMode === 'PERCENTAGE') {
+              {{ service.percentageBasisPoints! / 100 }}%
+            } @else {
+              {{ service.priceCents | centsToEuros }}
+            }
           </span>
         </a>
       </li>

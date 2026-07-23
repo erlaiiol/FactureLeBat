@@ -1,17 +1,25 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { CustomerProfile } from '../../../core/models/customer.model';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
-// Phase 6, step 1: dedicated customer picker/creation screen. Reads its
-// initial values from the shared InvoiceDraftStore (so back-navigation or a
-// localStorage-restored draft both work) and writes every change straight
-// back to it, so the shell's total/preview always reflect the latest typed
-// value — not just what was there at the last "Suivant" click.
+// Phase 6/13.5, step 1: card-based client picker. Clicking an existing
+// client's card selects it and advances straight to the lignes step — no
+// intermediate confirm step (docs/roadmap.md Phase 13.5's flow point 1).
+// "+ Nouveau client" reveals today's creation form inline instead, which
+// still ends on its own "Suivant" since there's new data to type first.
 @Component({
   selector: 'app-invoice-create-customer-step-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -28,6 +36,29 @@ export class InvoiceCreateCustomerStepPage {
     this.draftStore.customer().customerId,
   );
 
+  // Grid is skipped in favor of the create form when a draft is already
+  // mid-creation (e.g. back-navigation from the lignes step with freehand,
+  // unsaved customer data already typed) — same "never lose what's already
+  // there" principle as everywhere else this draft is restored from.
+  protected readonly mode = signal<'grid' | 'create'>(
+    this.draftStore.customer().customerName.trim().length > 0 ? 'create' : 'grid',
+  );
+
+  protected readonly search = signal('');
+
+  protected readonly filteredCustomers = computed(() => {
+    const term = this.search().trim().toLowerCase();
+    const customers = this.draftStore.customers();
+    if (!term) {
+      return customers;
+    }
+    return customers.filter(
+      (customer) =>
+        customer.name.toLowerCase().includes(term) ||
+        (customer.companyName ?? '').toLowerCase().includes(term),
+    );
+  });
+
   protected readonly customerForm = this.fb.nonNullable.group({
     customerName: [this.draftStore.customer().customerName, Validators.required],
     customerAddress: [this.draftStore.customer().customerAddress],
@@ -43,15 +74,13 @@ export class InvoiceCreateCustomerStepPage {
     });
   }
 
-  protected onCustomerSelected(customerId: string): void {
-    if (!customerId) {
-      this.selectedCustomerId.set(null);
-      return;
-    }
-    const customer = this.draftStore.customers().find((c) => c.id === customerId);
-    if (!customer) {
-      return;
-    }
+  protected onSearch(value: string): void {
+    this.search.set(value);
+  }
+
+  // Clicking a client card: select it and advance immediately, no
+  // intermediate confirm step (docs/roadmap.md Phase 13.5).
+  protected pickCustomer(customer: CustomerProfile): void {
     this.selectedCustomerId.set(customer.id);
     this.customerForm.patchValue({
       customerName: customer.name,
@@ -60,6 +89,27 @@ export class InvoiceCreateCustomerStepPage {
       customerPhone: customer.phone ?? '',
       saveAsNewCustomer: false,
     });
+    this.draftStore.setCustomer({
+      ...this.customerForm.getRawValue(),
+      customerId: customer.id,
+    });
+    this.router.navigate(['/factures/nouvelle/rapide/lignes']);
+  }
+
+  protected startNewCustomer(): void {
+    this.selectedCustomerId.set(null);
+    this.customerForm.reset({
+      customerName: '',
+      customerAddress: '',
+      customerEmail: '',
+      customerPhone: '',
+      saveAsNewCustomer: false,
+    });
+    this.mode.set('create');
+  }
+
+  protected backToGrid(): void {
+    this.mode.set('grid');
   }
 
   protected next(): void {
