@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -9,22 +11,35 @@ export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Get()
-  findAll(@Query('search') search?: string): Promise<CustomerProfile[]> {
-    return this.customerService.findAll(search);
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('search') search?: string,
+  ): Promise<CustomerProfile[]> {
+    return this.customerService.findAll(user.companyId, search);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string): Promise<CustomerProfile> {
-    return this.customerService.findById(id);
+  findById(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<CustomerProfile> {
+    return this.customerService.findById(user.companyId, id);
   }
 
   @Post()
-  create(@Body() dto: CreateCustomerDto): Promise<CustomerProfile> {
-    return this.customerService.create(dto);
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateCustomerDto,
+  ): Promise<CustomerProfile> {
+    return this.customerService.create(user.companyId, dto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateCustomerDto): Promise<CustomerProfile> {
-    return this.customerService.update(id, dto);
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateCustomerDto,
+  ): Promise<CustomerProfile> {
+    return this.customerService.update(user.companyId, id, dto);
   }
 }

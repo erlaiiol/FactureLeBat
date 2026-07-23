@@ -1,0 +1,56 @@
+<div class="mx-auto flex max-w-sm flex-col gap-6 py-12">
+  <h1 class="font-heading text-center text-2xl font-bold uppercase tracking-wide text-ink">
+    Connexion
+  </h1>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Email</span>
+      <input
+        formControlName="email"
+        type="email"
+        autocomplete="email"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+    </label>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Mot de passe</span>
+      <input
+        formControlName="password"
+        type="password"
+        autocomplete="current-password"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+    </label>
+
+    <label class="flex items-center gap-2">
+      <input formControlName="rememberMe" type="checkbox" class="h-5 w-5 rounded border-line" />
+      <span class="text-sm text-ink">Rester connecté</span>
+    </label>
+
+    <a routerLink="/mot-de-passe-oublie" class="text-right text-sm text-ink-soft underline">
+      Mot de passe oublié ?
+    </a>
+
+    @if (errorMessage(); as message) {
+      <p class="text-center font-medium text-danger">{{ message }}</p>
+    }
+
+    <app-big-button type="submit" [disabled]="saving()">
+      {{ saving() ? 'Connexion…' : 'Se connecter' }}
+    </app-big-button>
+  </form>
+
+  <a
+    [href]="googleLoginUrl"
+    class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
+  >
+    Continuer avec Google
+  </a>
+
+  <p class="text-center text-sm text-ink-soft">
+    Pas encore de compte ?
+    <a routerLink="/inscription" class="font-medium underline">Créer un compte</a>
+  </p>
+</div>

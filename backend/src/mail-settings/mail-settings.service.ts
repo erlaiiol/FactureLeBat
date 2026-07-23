@@ -27,8 +27,8 @@ export class MailSettingsService {
     this.encryptionKey = config.get<string>('APP_ENCRYPTION_KEY');
   }
 
-  async getSettings(): Promise<MailSettings> {
-    return toMailSettings(await this.repository.getRaw());
+  async getSettings(companyId: string): Promise<MailSettings> {
+    return toMailSettings(await this.repository.getRaw(companyId));
   }
 
   // Verifies the SMTP connection actually works before ever persisting it —
@@ -36,7 +36,7 @@ export class MailSettingsService {
   // configuration that silently fails the first time they try to send an
   // invoice (see docs/development-rules.md's "delivery failures surfaced
   // clearly" spirit, applied one step earlier here).
-  async updateSettings(dto: UpdateMailSettingsDto): Promise<MailSettings> {
+  async updateSettings(companyId: string, dto: UpdateMailSettingsDto): Promise<MailSettings> {
     if (!this.encryptionKey) {
       throw new ServiceUnavailableException(
         "L'envoi d'email n'est pas configuré sur ce déploiement (APP_ENCRYPTION_KEY manquant).",
@@ -58,7 +58,7 @@ export class MailSettingsService {
     }
 
     const passwordEncrypted = encryptSmtpPassword(dto.password, this.encryptionKey);
-    const row = await this.repository.save({
+    const row = await this.repository.save(companyId, {
       host: dto.host,
       port: dto.port,
       secure: dto.secure,
@@ -71,11 +71,11 @@ export class MailSettingsService {
   // Internal use only (InvoiceMailService) — never exposed on a controller.
   // Returns null when mailing isn't usable yet, for either reason: no
   // credentials saved, or no encryption key configured on this deployment.
-  async getDecryptedCredentials(): Promise<SmtpCredentials | null> {
+  async getDecryptedCredentials(companyId: string): Promise<SmtpCredentials | null> {
     if (!this.encryptionKey) {
       return null;
     }
-    const row = await this.repository.getRaw();
+    const row = await this.repository.getRaw(companyId);
     if (!row.smtpHost || !row.smtpPort || !row.smtpUser || !row.smtpPasswordEncrypted) {
       return null;
     }

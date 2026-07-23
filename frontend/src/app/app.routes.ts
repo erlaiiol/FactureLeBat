@@ -1,6 +1,10 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './core/guards/auth.guard';
 
-export const routes: Routes = [
+// Phase 13: every feature route below needs a valid session — wrapped as
+// children of one pathless, authGuard-protected route rather than
+// repeating `canActivate: [authGuard]` on each top-level entry.
+const protectedRoutes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'factures/nouvelle' },
   {
     // Phase 9.5: "nouvelle facture" first opens a mode-choice screen, then
@@ -109,4 +113,47 @@ export const routes: Routes = [
         (m) => m.CompanySettingsPage,
       ),
   },
+];
+
+export const routes: Routes = [
+  // Public auth/legal routes — no session required, must never sit behind
+  // authGuard (login/register are how a session gets established at all).
+  {
+    path: 'connexion',
+    loadComponent: () => import('./features/auth/login/login.page').then((m) => m.LoginPage),
+  },
+  {
+    path: 'inscription',
+    loadComponent: () =>
+      import('./features/auth/register/register.page').then((m) => m.RegisterPage),
+  },
+  {
+    path: 'mot-de-passe-oublie',
+    loadComponent: () =>
+      import('./features/auth/forgot-password/forgot-password.page').then(
+        (m) => m.ForgotPasswordPage,
+      ),
+  },
+  {
+    path: 'reinitialiser-mot-de-passe',
+    loadComponent: () =>
+      import('./features/auth/reset-password/reset-password.page').then((m) => m.ResetPasswordPage),
+  },
+  {
+    path: 'verifier-email',
+    loadComponent: () =>
+      import('./features/auth/verify-email/verify-email.page').then((m) => m.VerifyEmailPage),
+  },
+  {
+    path: 'cgu',
+    loadComponent: () => import('./features/legal/cgu/cgu.page').then((m) => m.CguPage),
+  },
+  {
+    path: 'confidentialite',
+    loadComponent: () =>
+      import('./features/legal/confidentialite/confidentialite.page').then(
+        (m) => m.ConfidentialitePage,
+      ),
+  },
+  { path: '', canActivate: [authGuard], children: protectedRoutes },
 ];

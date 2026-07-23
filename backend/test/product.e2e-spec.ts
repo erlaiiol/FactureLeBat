@@ -1,42 +1,33 @@
 import 'dotenv/config';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
+import { INestApplication } from '@nestjs/common';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { ProductProfile } from '../src/product/entities/product.entity';
+import { authedRequest, registerTestUser, TestSession } from './utils/auth';
+import { createTestApp } from './utils/test-app';
 
 // Runs against the local dev Postgres, same convention as customer.e2e-spec.ts.
-// There's no DELETE endpoint (not in this phase's roadmap scope), so cleanup
-// goes straight through Prisma to keep the dev database free of test rows
-// across repeated runs.
+// Every request is authenticated as a fresh test artisan (see
+// docs/roadmap.md Phase 13); afterAll cleans up via a single
+// company.delete() cascade rather than tracking individual product ids.
 describe('Product pipeline (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
-  const createdProductIds: string[] = [];
+  let session: TestSession;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
-    await app.init();
-    prisma = moduleFixture.get(PrismaService);
+    app = await createTestApp();
+    prisma = app.get(PrismaService);
+    session = await registerTestUser(app);
   });
 
   afterAll(async () => {
-    await prisma.product.deleteMany({ where: { id: { in: createdProductIds } } });
+    await prisma.company.delete({ where: { id: session.companyId } });
     await app.close();
   });
 
   it('creates, retrieves, updates, lists and searches a product', async () => {
-    const createResponse = await request(app.getHttpServer())
+    const createResponse = await authedRequest(app, session)
       .post('/api/products')
       .send({
         name: 'E2E Parquet chene massif',
@@ -49,17 +40,16 @@ describe('Product pipeline (e2e)', () => {
       .expect(201);
 
     const created = createResponse.body as ProductProfile;
-    createdProductIds.push(created.id);
     expect(created.name).toBe('E2E Parquet chene massif');
     expect(created.priceCents).toBe(4500);
     expect(created.packagingQuantity).toBe('9');
 
-    const getResponse = await request(app.getHttpServer())
+    const getResponse = await authedRequest(app, session)
       .get(`/api/products/${created.id}`)
       .expect(200);
     expect((getResponse.body as ProductProfile).id).toBe(created.id);
 
-    const updateResponse = await request(app.getHttpServer())
+    const updateResponse = await authedRequest(app, session)
       .patch(`/api/products/${created.id}`)
       .send({ name: 'E2E Parquet chene massif updated', unit: 'SQUARE_METER', priceCents: 4800 })
       .expect(200);
@@ -70,7 +60,7 @@ describe('Product pipeline (e2e)', () => {
     // packagingQuantity clears it rather than leaving the old value in place.
     expect((updateResponse.body as ProductProfile).packagingQuantity).toBeNull();
 
-    const searchResponse = await request(app.getHttpServer())
+    const searchResponse = await authedRequest(app, session)
       .get('/api/products')
       .query({ search: 'parquet chene massif updated' })
       .expect(200);
@@ -79,7 +69,7 @@ describe('Product pipeline (e2e)', () => {
   });
 
   it('rejects a product with an invalid supplier URL', () => {
-    return request(app.getHttpServer())
+    return authedRequest(app, session)
       .post('/api/products')
       .send({
         name: 'Bad Supplier Product',
@@ -91,16 +81,16 @@ describe('Product pipeline (e2e)', () => {
   });
 
   it('returns 404 for an unknown product id', () => {
-    return request(app.getHttpServer())
+    return authedRequest(app, session)
       .get('/api/products/00000000-0000-0000-0000-000000000000')
       .expect(404);
   });
 
   // Regression test for the update() TOCTOU fix: not-found is now reported
-  // by catching Prisma's own P2025 from the write itself, not a separate
-  // findById pre-check — this exercises exactly that code path.
+  // by catching the repository's NoRowsAffectedError from the write itself,
+  // not a separate findById pre-check — this exercises exactly that code path.
   it('returns 404 when patching an unknown product id, not a raw DB error', () => {
-    return request(app.getHttpServer())
+    return authedRequest(app, session)
       .patch('/api/products/00000000-0000-0000-0000-000000000000')
       .send({ name: 'Ghost Product', unit: 'UNIT', priceCents: 100 })
       .expect(404);
@@ -113,7 +103,7 @@ describe('Product pipeline (e2e)', () => {
     // resolution through the SSRF-safe lookup, real TCP connect, real
     // parsing), which no isolated unit test can exercise together.
     it('imports a draft from a reachable public URL', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await authedRequest(app, session)
         .post('/api/products/import')
         .send({ url: 'https://example.com' })
         .expect(201);
@@ -124,7 +114,7 @@ describe('Product pipeline (e2e)', () => {
     });
 
     it('rejects a malformed URL before attempting any network call', () => {
-      return request(app.getHttpServer())
+      return authedRequest(app, session)
         .post('/api/products/import')
         .send({ url: 'not-a-url' })
         .expect(400);
@@ -139,7 +129,7 @@ describe('Product pipeline (e2e)', () => {
       ['http://localhost:1/', 'localhost'],
       ['http://169.254.169.254/latest/meta-data/', 'cloud metadata address'],
     ])('rejects a request targeting a blocked address: %s (%s)', (url) => {
-      return request(app.getHttpServer()).post('/api/products/import').send({ url }).expect(400);
+      return authedRequest(app, session).post('/api/products/import').send({ url }).expect(400);
     });
   });
 });

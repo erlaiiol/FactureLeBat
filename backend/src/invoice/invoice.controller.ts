@@ -1,4 +1,6 @@
 import { Controller, Get, Header, Param, Post, Body, StreamableFile } from '@nestjs/common';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceService } from './invoice.service';
@@ -16,24 +18,33 @@ export class InvoiceController {
   ) {}
 
   @Post()
-  create(@Body() dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
-    return this.invoiceService.create(dto);
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateInvoiceDto,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.create(user.companyId, dto);
   }
 
   @Get()
-  findAll(): Promise<InvoiceWithTotals[]> {
-    return this.invoiceService.findAll();
+  findAll(@CurrentUser() user: AuthenticatedUser): Promise<InvoiceWithTotals[]> {
+    return this.invoiceService.findAll(user.companyId);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string): Promise<InvoiceWithTotals> {
-    return this.invoiceService.findById(id);
+  findById(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.findById(user.companyId, id);
   }
 
   @Get(':id/pdf')
   @Header('Content-Type', 'application/pdf')
-  async downloadPdf(@Param('id') id: string): Promise<StreamableFile> {
-    const data = await this.invoiceService.getPdfData(id);
+  async downloadPdf(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<StreamableFile> {
+    const data = await this.invoiceService.getPdfData(user.companyId, id);
     const buffer = await this.pdfService.generateInvoicePdf(data);
     return new StreamableFile(buffer, {
       disposition: `attachment; filename="facture-${data.number}.pdf"`,
@@ -45,8 +56,11 @@ export class InvoiceController {
   // anything (see InvoiceService.previewPdf).
   @Post('preview')
   @Header('Content-Type', 'application/pdf')
-  async previewPdf(@Body() dto: CreateInvoiceDto): Promise<StreamableFile> {
-    const data = await this.invoiceService.previewPdf(dto);
+  async previewPdf(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateInvoiceDto,
+  ): Promise<StreamableFile> {
+    const data = await this.invoiceService.previewPdf(user.companyId, dto);
     const buffer = await this.pdfService.generateInvoicePdf(data);
     return new StreamableFile(buffer, {
       disposition: 'inline; filename="apercu-facture.pdf"',
@@ -57,15 +71,22 @@ export class InvoiceController {
   // without touching them — lets the frontend show an editable draft
   // without duplicating the template copy client-side.
   @Get(':id/mail-template')
-  getMailTemplate(@Param('id') id: string): Promise<InvoiceMailTemplate> {
-    return this.invoiceMailService.getDefaultTemplate(id);
+  getMailTemplate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<InvoiceMailTemplate> {
+    return this.invoiceMailService.getDefaultTemplate(user.companyId, id);
   }
 
   // Phase 12: sends the already-generated PDF by email through the
   // artisan's own configured SMTP account (see InvoiceMailService) and
   // records sentAt/sentToEmail on success.
   @Post(':id/send-email')
-  sendEmail(@Param('id') id: string, @Body() dto: SendInvoiceEmailDto): Promise<InvoiceWithTotals> {
-    return this.invoiceMailService.send(id, dto);
+  sendEmail(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SendInvoiceEmailDto,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceMailService.send(user.companyId, id, dto);
   }
 }

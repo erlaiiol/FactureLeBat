@@ -31,8 +31,8 @@ export class InvoiceMailService {
   // Lets the frontend show (and let the artisan edit) the exact copy that
   // would be used if they send without touching subject/message — no
   // separate copy of the template logic duplicated client-side.
-  async getDefaultTemplate(invoiceId: string): Promise<InvoiceMailTemplate> {
-    const { raw, invoice } = await this.loadInvoice(invoiceId);
+  async getDefaultTemplate(companyId: string, invoiceId: string): Promise<InvoiceMailTemplate> {
+    const { raw, invoice } = await this.loadInvoice(companyId, invoiceId);
     return buildDefaultInvoiceMailTemplate({
       companyName: raw.company.name,
       customerName: invoice.customerName,
@@ -41,8 +41,12 @@ export class InvoiceMailService {
     });
   }
 
-  async send(invoiceId: string, dto: SendInvoiceEmailDto): Promise<InvoiceWithTotals> {
-    const { raw, invoice } = await this.loadInvoice(invoiceId);
+  async send(
+    companyId: string,
+    invoiceId: string,
+    dto: SendInvoiceEmailDto,
+  ): Promise<InvoiceWithTotals> {
+    const { raw, invoice } = await this.loadInvoice(companyId, invoiceId);
 
     const to = dto.to ?? invoice.customerEmail;
     if (!to) {
@@ -51,7 +55,7 @@ export class InvoiceMailService {
       );
     }
 
-    const smtp = await this.mailSettingsService.getDecryptedCredentials();
+    const smtp = await this.mailSettingsService.getDecryptedCredentials(companyId);
     if (!smtp) {
       throw new ServiceUnavailableException(
         "Configurez votre serveur d'envoi d'email dans les réglages avant d'envoyer une facture.",
@@ -77,14 +81,15 @@ export class InvoiceMailService {
       attachments: [{ filename: `facture-${invoice.number}.pdf`, content: pdfBuffer }],
     });
 
-    const updated = await this.invoiceRepository.markSent(invoiceId, to);
+    const updated = await this.invoiceRepository.markSent(companyId, invoiceId, to);
     return this.mapper.toInvoiceWithTotals(updated);
   }
 
   private async loadInvoice(
+    companyId: string,
     invoiceId: string,
   ): Promise<{ raw: InvoiceWithLines; invoice: InvoiceWithTotals }> {
-    const raw = await this.invoiceRepository.findById(invoiceId);
+    const raw = await this.invoiceRepository.findById(companyId, invoiceId);
     if (!raw) {
       throw new NotFoundException(`Invoice ${invoiceId} not found`);
     }

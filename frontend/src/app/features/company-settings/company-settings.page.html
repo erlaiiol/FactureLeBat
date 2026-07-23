@@ -261,3 +261,54 @@
     }
   </form>
 </section>
+
+<section class="mt-10 flex flex-col gap-4 rounded-xl border border-danger-subtle-border p-4">
+  <h2 class="font-heading text-lg font-bold uppercase tracking-wide text-danger">
+    Zone dangereuse
+  </h2>
+
+  @if (!deleteAccountRevealed()) {
+    <p class="text-sm text-ink-soft">
+      Supprimer définitivement votre compte, votre entreprise et toutes les données associées
+      (clients, produits, prestations, factures).
+    </p>
+    <app-big-button variant="danger" tone="subtle" (click)="deleteAccountRevealed.set(true)">
+      Supprimer mon compte
+    </app-big-button>
+  } @else {
+    <form
+      [formGroup]="deleteAccountForm"
+      (ngSubmit)="confirmDeleteAccount()"
+      class="flex flex-col gap-3"
+    >
+      <p class="font-medium text-danger">
+        Cette action est irréversible. Toutes vos données seront définitivement effacées.
+      </p>
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Confirmez avec votre mot de passe</span>
+        <input
+          formControlName="password"
+          type="password"
+          autocomplete="current-password"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+      </label>
+      @if (deleteAccountError(); as message) {
+        <p class="text-center font-medium text-danger">{{ message }}</p>
+      }
+      <div class="flex gap-3">
+        <app-big-button
+          type="button"
+          variant="secondary"
+          tone="subtle"
+          (click)="deleteAccountRevealed.set(false)"
+        >
+          Annuler
+        </app-big-button>
+        <app-big-button type="submit" variant="danger" [disabled]="deleteAccountSaving()">
+          {{ deleteAccountSaving() ? 'Suppression…' : 'Confirmer la suppression' }}
+        </app-big-button>
+      </div>
+    </form>
+  }
+</section>

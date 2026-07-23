@@ -1,0 +1,77 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
+import { UserModel as User } from '../../../generated/prisma/models';
+import { DEFAULT_COMPANY_PROFILE } from '../../company/company.constants';
+
+export interface CreateUserWithCompanyData {
+  email: string;
+  passwordHash?: string;
+  googleId?: string;
+  newsletterOptIn: boolean;
+  termsAcceptedAt: Date;
+  termsVersion: string;
+}
+
+@Injectable()
+export class UserRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  findByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { email } });
+  }
+
+  findById(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  findByGoogleId(googleId: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { googleId } });
+  }
+
+  // One transaction: a Company only ever comes into existence alongside its
+  // owning User (strictly 1:1, no team model — see docs/roadmap.md Phase
+  // 13). DEFAULT_COMPANY_PROFILE fills the Company's required fields (name,
+  // siret, address...) with the same placeholders CompanyRepository used to
+  // upsert on a pre-Phase-13 "first write" — the artisan fills them in for
+  // real via the company-settings screen afterward.
+  async createWithCompany(data: CreateUserWithCompanyData): Promise<User> {
+    return this.prisma.$transaction(async (tx) => {
+      const company = await tx.company.create({ data: DEFAULT_COMPANY_PROFILE });
+      return tx.user.create({
+        data: {
+          email: data.email,
+          passwordHash: data.passwordHash,
+          googleId: data.googleId,
+          companyId: company.id,
+          newsletterOptIn: data.newsletterOptIn,
+          termsAcceptedAt: data.termsAcceptedAt,
+          termsVersion: data.termsVersion,
+        },
+      });
+    });
+  }
+
+  linkGoogleId(userId: string, googleId: string): Promise<User> {
+    return this.prisma.user.update({ where: { id: userId }, data: { googleId } });
+  }
+
+  updatePasswordHash(userId: string, passwordHash: string): Promise<User> {
+    return this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  }
+
+  markEmailVerified(userId: string): Promise<User> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { emailVerifiedAt: new Date() },
+    });
+  }
+
+  // RGPD self-service deletion: deletes the Company, which cascades through
+  // every FK now pointed at it (see schema.prisma) — User, Customer,
+  // Product, Service, Invoice, SourcingSearch, RefreshToken, AuthToken all
+  // disappear in one atomic operation. See docs/roadmap.md Phase 13's
+  // documented invoice-retention-obligation limitation.
+  async deleteAccount(companyId: string): Promise<void> {
+    await this.prisma.company.delete({ where: { id: companyId } });
+  }
+}

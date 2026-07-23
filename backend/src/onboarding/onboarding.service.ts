@@ -7,19 +7,19 @@ import { TourId } from './onboarding.constants';
 export class OnboardingService {
   constructor(private readonly onboardingRepository: OnboardingRepository) {}
 
-  getState(): Promise<OnboardingState> {
-    return this.onboardingRepository.getState();
+  getState(companyId: string): Promise<OnboardingState> {
+    return this.onboardingRepository.getState(companyId);
   }
 
-  setTourEnabled(tourEnabled: boolean): Promise<OnboardingState> {
-    return this.onboardingRepository.setTourEnabled(tourEnabled);
+  setTourEnabled(companyId: string, tourEnabled: boolean): Promise<OnboardingState> {
+    return this.onboardingRepository.setTourEnabled(companyId, tourEnabled);
   }
 
-  completeTour(tourId: TourId): Promise<OnboardingState> {
-    return this.onboardingRepository.completeTour(tourId);
+  completeTour(companyId: string, tourId: TourId): Promise<OnboardingState> {
+    return this.onboardingRepository.completeTour(companyId, tourId);
   }
 
-  resetTours(): Promise<OnboardingState> {
-    return this.onboardingRepository.resetTours();
+  resetTours(companyId: string): Promise<OnboardingState> {
+    return this.onboardingRepository.resetTours(companyId);
   }
 }

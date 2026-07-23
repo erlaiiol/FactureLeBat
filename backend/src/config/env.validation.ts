@@ -1,5 +1,6 @@
-import { plainToInstance, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -92,6 +93,94 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   APP_ENCRYPTION_KEY?: string;
+
+  // Phase 13 auth. Unlike GROQ_API_KEY/APP_ENCRYPTION_KEY, this is NOT
+  // optional: auth is core to the app now (every route needs a valid
+  // access-token JWT unless @Public()), so an unset secret fails boot
+  // fast, same posture as DATABASE_URL — there is no reduced-functionality
+  // mode for "no auth secret configured".
+  @IsString()
+  JWT_ACCESS_SECRET: string;
+
+  @IsOptional()
+  @IsString()
+  JWT_ACCESS_EXPIRES_IN = '15m';
+
+  // Refresh-token lifetime when the artisan checked "rester connecté" at
+  // login (the default) vs. left it unchecked — see auth/auth.service.ts.
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  JWT_REFRESH_EXPIRES_IN_DAYS = 30;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  JWT_REFRESH_NOT_REMEMBERED_EXPIRES_IN_DAYS = 1;
+
+  // Phase 13 Google OAuth. Optional as a pair, same "boots fine without it"
+  // posture as GROQ_API_KEY: AuthModule only registers GoogleStrategy (and
+  // GET /auth/google*) when both id and secret are set.
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CALLBACK_URL = 'http://localhost:3000/api/auth/google/callback';
+
+  // Where /auth/google/callback and email-verification/password-reset links
+  // send the browser once the backend is done — the frontend's own origin.
+  @IsOptional()
+  @IsString()
+  FRONTEND_URL = 'http://localhost:4200';
+
+  // Phase 13 transactional email (account verification, password reset) —
+  // deliberately a separate credential set from Phase 12's mail-settings,
+  // which sends invoices from the *artisan's own* address to *their*
+  // clients. This is the app's own system mailbox. Optional like
+  // GROQ_API_KEY: unset means AuthService logs a warning and the
+  // verification/reset routes reply 503, everything else still works.
+  @IsOptional()
+  @IsString()
+  SYSTEM_SMTP_HOST?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  @IsOptional()
+  SYSTEM_SMTP_PORT = 587;
+
+  // Plain @Type(() => Boolean) would coerce any non-empty string (including
+  // the literal text "false") to true — env vars only ever arrive as raw
+  // strings, so this needs an explicit string->boolean transform instead.
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  @IsOptional()
+  SYSTEM_SMTP_SECURE = false;
+
+  @IsOptional()
+  @IsString()
+  SYSTEM_SMTP_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  SYSTEM_SMTP_PASSWORD?: string;
+
+  @IsOptional()
+  @IsString()
+  SYSTEM_MAIL_FROM_NAME = 'FactureLeBat';
+
+  @IsOptional()
+  @IsString()
+  SYSTEM_MAIL_FROM_ADDRESS?: string;
 }
 
 // Wired into ConfigModule.forRoot({ validate }) in AppModule — runs once at

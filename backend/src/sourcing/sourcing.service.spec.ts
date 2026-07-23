@@ -32,6 +32,7 @@ function buildService(options: {
   return { service, findFresh, countToday, save, isConfigured, complete };
 }
 
+const COMPANY_ID = 'company-1';
 function searchDto() {
   return { productName: 'Parquet chêne massif', quantity: 20, unit: Unit.SQUARE_METER };
 }
@@ -46,7 +47,7 @@ describe('SourcingService.searchSuppliers', () => {
       usedToday: 3,
     });
 
-    const result = await service.searchSuppliers(searchDto());
+    const result = await service.searchSuppliers(COMPANY_ID, searchDto());
 
     expect(result.cached).toBe(true);
     expect(result.results).toEqual(cachedCandidates);
@@ -57,7 +58,7 @@ describe('SourcingService.searchSuppliers', () => {
   it('throws ServiceUnavailableException when Groq has no API key configured', async () => {
     const { service } = buildService({ groqConfigured: false });
 
-    await expect(service.searchSuppliers(searchDto())).rejects.toBeInstanceOf(
+    await expect(service.searchSuppliers(COMPANY_ID, searchDto())).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
@@ -65,7 +66,9 @@ describe('SourcingService.searchSuppliers', () => {
   it('throws a 429 once the daily cap is reached', async () => {
     const { service } = buildService({ cap: 5, usedToday: 5 });
 
-    await expect(service.searchSuppliers(searchDto())).rejects.toMatchObject({ status: 429 });
+    await expect(service.searchSuppliers(COMPANY_ID, searchDto())).rejects.toMatchObject({
+      status: 429,
+    });
   });
 
   it('calls Groq, persists the parsed result, and reports one fewer search remaining', async () => {
@@ -74,7 +77,7 @@ describe('SourcingService.searchSuppliers', () => {
     });
     const { service, save, complete } = buildService({ cap: 20, usedToday: 4, groqResponse });
 
-    const result = await service.searchSuppliers(searchDto());
+    const result = await service.searchSuppliers(COMPANY_ID, searchDto());
 
     expect(complete).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith(
@@ -98,7 +101,7 @@ describe('SourcingService.searchSuppliers', () => {
   it('surfaces a Groq failure as a generic ServiceUnavailableException, never the raw error', async () => {
     const { service } = buildService({ groqError: new GroqUnavailableError('boom') });
 
-    await expect(service.searchSuppliers(searchDto())).rejects.toBeInstanceOf(
+    await expect(service.searchSuppliers(COMPANY_ID, searchDto())).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
@@ -112,7 +115,9 @@ describe('SourcingService.searchSuppliers', () => {
       ],
     });
 
-    await expect(service.searchSuppliers(searchDto())).resolves.toMatchObject({ cached: true });
+    await expect(service.searchSuppliers(COMPANY_ID, searchDto())).resolves.toMatchObject({
+      cached: true,
+    });
     expect(save).not.toHaveBeenCalled();
   });
 });

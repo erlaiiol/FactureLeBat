@@ -28,19 +28,21 @@ export class InvoiceService {
     private readonly mapper: InvoiceMapper,
   ) {}
 
-  async create(dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
-    const company = await this.companyService.getProfile();
+  async create(companyId: string, dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
+    const company = await this.companyService.getProfile(companyId);
 
-    // Confirms the id exists (a clean 404 instead of a raw DB foreign-key
-    // error on a stale/typo'd id) without ever overwriting the customer
-    // fields below — those stay exactly what the artisan typed/edited on
-    // the invoice, even if they diverged from the saved customer record.
+    // Confirms the id exists *for this tenant* (a clean 404 instead of a raw
+    // DB foreign-key error on a stale/typo'd id, and — since Phase 13 —
+    // instead of silently letting one company's invoice reference another
+    // company's customer) without ever overwriting the customer fields
+    // below — those stay exactly what the artisan typed/edited on the
+    // invoice, even if they diverged from the saved customer record.
     // Unlike CustomerService.update()/ProductService.update(), this
     // check-then-act pair is NOT a TOCTOU race: there is no DELETE
     // /customers endpoint, so nothing can remove the row between this
     // check and the insert below. Revisit this comment if that changes.
     if (dto.customerId) {
-      await this.customerService.findById(dto.customerId);
+      await this.customerService.findById(companyId, dto.customerId);
     }
 
     // Manual mode (Phase 9.5) has no serviceLines concept at all —
@@ -52,7 +54,7 @@ export class InvoiceService {
     // endpoint either.
     for (const serviceLine of serviceLineDtos) {
       if (serviceLine.serviceId) {
-        await this.serviceCatalogService.findById(serviceLine.serviceId);
+        await this.serviceCatalogService.findById(companyId, serviceLine.serviceId);
       }
     }
 
@@ -118,18 +120,18 @@ export class InvoiceService {
     return this.mapper.toInvoiceWithTotals(invoice);
   }
 
-  async findAll(): Promise<InvoiceWithTotals[]> {
-    const invoices = await this.invoiceRepository.findAll();
+  async findAll(companyId: string): Promise<InvoiceWithTotals[]> {
+    const invoices = await this.invoiceRepository.findAll(companyId);
     return invoices.map((invoice) => this.mapper.toInvoiceWithTotals(invoice));
   }
 
-  async findById(id: string): Promise<InvoiceWithTotals> {
-    const invoice = await this.findRawById(id);
+  async findById(companyId: string, id: string): Promise<InvoiceWithTotals> {
+    const invoice = await this.findRawById(companyId, id);
     return this.mapper.toInvoiceWithTotals(invoice);
   }
 
-  async getPdfData(id: string): Promise<InvoicePdfData> {
-    const invoice = await this.findRawById(id);
+  async getPdfData(companyId: string, id: string): Promise<InvoicePdfData> {
+    const invoice = await this.findRawById(companyId, id);
     return this.mapper.toPdfData(invoice);
   }
 
@@ -138,13 +140,13 @@ export class InvoiceService {
   // deliberately skips create()'s customerId/serviceId existence checks,
   // since nothing here is persisted and a stale/typo'd id can't corrupt any
   // stored data. Only reads the company profile; touches no other table.
-  async previewPdf(dto: CreateInvoiceDto): Promise<InvoicePdfData> {
-    const company = await this.companyService.getProfile();
+  async previewPdf(companyId: string, dto: CreateInvoiceDto): Promise<InvoicePdfData> {
+    const company = await this.companyService.getProfile(companyId);
     return this.mapper.toPreviewPdfData(dto, company);
   }
 
-  private async findRawById(id: string): Promise<InvoiceWithLines> {
-    const invoice = await this.invoiceRepository.findById(id);
+  private async findRawById(companyId: string, id: string): Promise<InvoiceWithLines> {
+    const invoice = await this.invoiceRepository.findById(companyId, id);
     if (!invoice) {
       throw new NotFoundException(`Invoice ${id} not found`);
     }

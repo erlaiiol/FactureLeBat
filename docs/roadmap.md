@@ -623,6 +623,40 @@ Turn FactureLeBat from a single-artisan tool into a real multi-user SaaS: every 
 
 ---
 
+# Phase 13.3 — Public Landing Page (Logged-Out Experience)
+
+## Objective
+
+Build the public-facing part of the site: what a visitor sees before any login or account creation. Today the app has no real front door — this phase gives it one, presenting FactureLeBat clearly, using modern web/marketing conventions and strong calls-to-action, instead of dropping a first-time visitor straight onto a login form.
+
+## Content basis
+
+The actual pitch, target audience, messaging pillars, and CTA language are decided in [positioning.md](positioning.md), a new document created alongside this phase — the same "what we decided and why, implemented here" relationship [design-system.md](design-system.md) has to Phase 9. This phase implements what that document defines; it doesn't redecide the messaging inline.
+
+Core promise (see positioning.md for the full reasoning): *le système de facturation le plus simple, le plus rapide — configurez une seule fois votre environnement de travail (clients, produits, services), puis construisez vos devis et vos factures en un clic. Fini les allers-retours : vous êtes chez le client, vous lui présentez le prix aussitôt, avec le détail de votre prestation selon vos propres critères.*
+
+## Features
+
+- [ ] `docs/positioning.md` created: pitch, target audience, messaging pillars, CTA language
+- [ ] Public landing page reachable without authentication, before Phase 13's login/signup takes over
+- [ ] Hero section stating the core promise in plain language (one-click devis/factures, configured client/product/service environment, price shown on-site immediately)
+- [ ] Single, unambiguous primary CTA ("Créer mon compte" / "Essayer gratuitement") leading into Phase 13's signup flow — no competing secondary CTA above the fold
+- [ ] Visual identity decision made explicitly: extend "Atelier sobre" (design-system.md) to the public site as a new sanctioned spot, or define a distinct one — not a silent reuse of "Chantier calibré," which was built for data entry, not storytelling
+- [ ] Responsive, modern layout applying the roadmap's own "big buttons, minimum writing" spirit to marketing conventions: clear sections, no dense text walls, room for real screenshots/testimonials later
+- [ ] Basic SEO (title/meta description, semantic heading structure) — this page is now the site's actual public entry point
+
+## Non-goals
+
+- No pricing page — no tiers exist to describe before Phase 14 (Stripe) defines them.
+- No blog/content-marketing system.
+- No change to the authenticated app's UI/UX — that's Phase 13.5's scope, not this one.
+
+## Notes
+
+- Sequenced right after Phase 13 (auth) and before Phase 13.5 (quick-invoice UX overhaul): a public marketing page needs at minimum a working signup CTA to point at, which Phase 13 provides; Phase 13.5 is a working-app concern and doesn't depend on this phase at all, but keeping the numbering adjacent reflects that both are UX priorities queued back-to-back right after auth lands.
+
+---
+
 # Phase 13.5 — Quick Invoice Redesign: Card-Based Client Picker & One-Click Line Activation
 
 ## Objective

@@ -1,33 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CompanyModel as Company } from '../../generated/prisma/models';
-import { DEFAULT_COMPANY_PROFILE, SINGLETON_COMPANY_ID } from './company.constants';
 import { UpdateCompanyDto } from './dto/update-company.dto';
-
-const DEFAULT_COMPANY = { id: SINGLETON_COMPANY_ID, ...DEFAULT_COMPANY_PROFILE } as const;
 
 @Injectable()
 export class CompanyRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  // upsert (not findUnique + create) so two concurrent "first ever" requests
-  // can't both observe no row and both try to INSERT the same fixed id —
-  // the second would otherwise fail with a unique-constraint violation.
-  findOrCreateDefault(): Promise<Company> {
-    return this.prisma.company.upsert({
-      where: { id: SINGLETON_COMPANY_ID },
-      update: {},
-      create: DEFAULT_COMPANY,
-    });
+  // Phase 13: a Company row now always exists by the time an authenticated
+  // request can reach here (it's created alongside its User at registration,
+  // see auth/repositories/user.repository.ts) — plain findUniqueOrThrow,
+  // no more upsert-on-first-write.
+  findById(companyId: string): Promise<Company> {
+    return this.prisma.company.findUniqueOrThrow({ where: { id: companyId } });
   }
 
-  // Also an upsert, for the same reason: a PATCH can legitimately be the
-  // very first write (no prior GET), so the row may not exist yet.
-  update(data: UpdateCompanyDto): Promise<Company> {
-    return this.prisma.company.upsert({
-      where: { id: SINGLETON_COMPANY_ID },
-      update: data,
-      create: { id: SINGLETON_COMPANY_ID, ...data },
-    });
+  update(companyId: string, data: UpdateCompanyDto): Promise<Company> {
+    return this.prisma.company.update({ where: { id: companyId }, data });
   }
 }

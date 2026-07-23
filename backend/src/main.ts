@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { WinstonModule } from 'nest-winston';
 import { AppModule } from './app.module';
@@ -34,6 +35,9 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   app.use(helmet());
+  // Phase 13: JwtStrategy/CsrfGuard read cookies off the request — without
+  // this middleware req.cookies is always undefined.
+  app.use(cookieParser());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -44,6 +48,12 @@ async function bootstrap() {
   );
   app.enableCors({
     origin: config.get<string>('CORS_ORIGIN')?.split(',') ?? 'http://localhost:4200',
+    // Phase 13: auth cookies must be allowed to travel cross-origin in dev
+    // (Angular on :4200, Nest on :3000 — different origins for CORS
+    // purposes even though both are "localhost", see architecture.md) —
+    // without this, the browser silently drops Set-Cookie on the response
+    // and every login appears to succeed but never actually persists.
+    credentials: true,
   });
 
   await app.listen(config.get<number>('PORT', 3000));

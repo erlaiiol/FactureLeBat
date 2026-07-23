@@ -1,6 +1,5 @@
 import { HttpException, HttpStatus, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SINGLETON_COMPANY_ID } from '../company/company.constants';
 import { UNIT_LABELS } from '../common/unit.util';
 import { SearchSuppliersDto } from './dto/search-suppliers.dto';
 import { SuggestComplementaryDto } from './dto/suggest-complementary.dto';
@@ -37,7 +36,10 @@ export class SourcingService {
     this.dailyCap = config.get<number>('SOURCING_DAILY_SEARCH_CAP', DEFAULT_DAILY_SEARCH_CAP);
   }
 
-  async searchSuppliers(dto: SearchSuppliersDto): Promise<SourcingSearchResult<SupplierCandidate>> {
+  async searchSuppliers(
+    companyId: string,
+    dto: SearchSuppliersDto,
+  ): Promise<SourcingSearchResult<SupplierCandidate>> {
     const queryHash = hashQuery({
       productName: dto.productName,
       quantity: dto.quantity,
@@ -45,28 +47,30 @@ export class SourcingService {
       customerLocation: dto.customerLocation,
       jobDate: dto.jobDate,
     });
-    return this.run(SourcingSearchKind.SUPPLIER_SEARCH, queryHash, () =>
+    return this.run(companyId, SourcingSearchKind.SUPPLIER_SEARCH, queryHash, () =>
       this.callSupplierSearch(dto),
     );
   }
 
   async suggestComplementary(
+    companyId: string,
     dto: SuggestComplementaryDto,
   ): Promise<SourcingSearchResult<ComplementarySuggestion>> {
     const queryHash = hashQuery({ productName: dto.productName, unit: dto.unit });
-    return this.run(SourcingSearchKind.COMPLEMENTARY_SUGGESTIONS, queryHash, () =>
+    return this.run(companyId, SourcingSearchKind.COMPLEMENTARY_SUGGESTIONS, queryHash, () =>
       this.callComplementarySuggestions(dto),
     );
   }
 
   private async run<T>(
+    companyId: string,
     kind: SourcingSearchKind,
     queryHash: string,
     execute: () => Promise<T[]>,
   ): Promise<SourcingSearchResult<T>> {
-    const cached = await this.repository.findFresh<T>(SINGLETON_COMPANY_ID, kind, queryHash);
+    const cached = await this.repository.findFresh<T>(companyId, kind, queryHash);
     if (cached) {
-      const usedToday = await this.repository.countToday(SINGLETON_COMPANY_ID);
+      const usedToday = await this.repository.countToday(companyId);
       return this.toResult(cached, true, usedToday);
     }
 
@@ -76,7 +80,7 @@ export class SourcingService {
       );
     }
 
-    const usedToday = await this.repository.countToday(SINGLETON_COMPANY_ID);
+    const usedToday = await this.repository.countToday(companyId);
     if (usedToday >= this.dailyCap) {
       throw new HttpException(
         'Quota quotidien de recherches atteint. Réessayez demain.',
@@ -96,7 +100,7 @@ export class SourcingService {
       throw error;
     }
 
-    await this.repository.save(SINGLETON_COMPANY_ID, kind, queryHash, results);
+    await this.repository.save(companyId, kind, queryHash, results);
     return this.toResult(results, false, usedToday + 1);
   }
 

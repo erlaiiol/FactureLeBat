@@ -2,6 +2,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
 import { CompanyService } from '../../core/services/company.service';
 import { LegalStatus } from '../../core/models/company.model';
 import { MailSettingsService } from '../../core/services/mail-settings.service';
@@ -18,9 +20,20 @@ import { TourService } from '../../shared/tour/tour.service';
 export class CompanySettingsPage {
   private readonly companyService = inject(CompanyService);
   private readonly mailSettingsService = inject(MailSettingsService);
+  private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
   protected readonly tourService = inject(TourService);
+
+  // Phase 13 RGPD self-service deletion — a two-step reveal (button ->
+  // inline confirm form) rather than a native confirm() dialog, matching
+  // this app's own custom-component style everywhere else (e.g.
+  // pdf-preview-modal) instead of a browser-native prompt.
+  protected readonly deleteAccountRevealed = signal(false);
+  protected readonly deleteAccountSaving = signal(false);
+  protected readonly deleteAccountError = signal<string | null>(null);
+  protected readonly deleteAccountForm = this.fb.nonNullable.group({ password: [''] });
 
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
@@ -200,5 +213,29 @@ export class CompanySettingsPage {
   protected replayTours(): void {
     this.tourService.replayTours();
     this.toursReplayed.set(true);
+  }
+
+  protected confirmDeleteAccount(): void {
+    if (this.deleteAccountSaving()) {
+      return;
+    }
+    this.deleteAccountSaving.set(true);
+    this.deleteAccountError.set(null);
+
+    const { password } = this.deleteAccountForm.getRawValue();
+    this.authService
+      .deleteAccount(password || undefined)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => void this.router.navigateByUrl('/connexion'),
+        error: (error: HttpErrorResponse) => {
+          this.deleteAccountSaving.set(false);
+          this.deleteAccountError.set(
+            error.status === 403
+              ? 'Mot de passe incorrect.'
+              : 'Erreur lors de la suppression. Veuillez réessayer.',
+          );
+        },
+      });
   }
 }

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import {
   InvoiceModel as Invoice,
   InvoiceLineModel as InvoiceLine,
@@ -230,8 +231,13 @@ export class InvoiceRepository {
     });
   }
 
-  findById(id: string): Promise<InvoiceWithLines | null> {
-    return this.prisma.invoice.findUnique({ where: { id }, include: INVOICE_INCLUDE });
+  // findFirst (not findUnique) so the companyId filter can be part of the
+  // same query — a cross-tenant id must read as a plain 404, never leak
+  // whether the invoice exists for someone else. This closes a gap that
+  // predated Phase 13: companyId has existed on Invoice since Phase 1's
+  // schema, but reads never actually filtered on it.
+  findById(companyId: string, id: string): Promise<InvoiceWithLines | null> {
+    return this.prisma.invoice.findFirst({ where: { id, companyId }, include: INVOICE_INCLUDE });
   }
 
   // Capped rather than paginated for now (Phase 1 has no list UI pagination
@@ -241,8 +247,9 @@ export class InvoiceRepository {
   // enough history that "most recent 200" stops being everything.
   private static readonly MAX_LISTED_INVOICES = 200;
 
-  findAll(): Promise<InvoiceWithLines[]> {
+  findAll(companyId: string): Promise<InvoiceWithLines[]> {
     return this.prisma.invoice.findMany({
+      where: { companyId },
       include: INVOICE_INCLUDE,
       orderBy: { date: 'desc' },
       take: InvoiceRepository.MAX_LISTED_INVOICES,
@@ -251,11 +258,19 @@ export class InvoiceRepository {
 
   // Phase 12: overwrites the last-send info rather than appending to a log
   // (see schema.prisma's comment on Invoice.sentAt) — a later successful
-  // send simply means "yes, and most recently to this address".
-  markSent(id: string, sentToEmail: string): Promise<InvoiceWithLines> {
-    return this.prisma.invoice.update({
-      where: { id },
+  // send simply means "yes, and most recently to this address". updateMany
+  // (not update), same cross-tenant-safety reasoning as
+  // CustomerRepository.update — see NoRowsAffectedError.
+  async markSent(companyId: string, id: string, sentToEmail: string): Promise<InvoiceWithLines> {
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id, companyId },
       data: { sentAt: new Date(), sentToEmail },
+    });
+    if (count === 0) {
+      throw new NoRowsAffectedError();
+    }
+    return this.prisma.invoice.findFirstOrThrow({
+      where: { id, companyId },
       include: INVOICE_INCLUDE,
     });
   }

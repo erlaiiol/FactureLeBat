@@ -1,48 +1,39 @@
 import 'dotenv/config';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
+import { INestApplication } from '@nestjs/common';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { InvoiceWithTotals } from '../src/invoice/entities/invoice.entity';
+import { authedRequest, registerTestUser, TestSession } from './utils/auth';
+import { createTestApp } from './utils/test-app';
 
 // Runs against the local dev Postgres (same DATABASE_URL as `npm run start:dev`):
 // this is a local sanity check for the full pipeline, not an isolated CI gate,
 // so it creates real rows rather than requiring a dedicated test database.
-// Created invoices/customers are tracked and deleted in afterAll so repeated
-// runs don't accumulate test data (invoice numbering itself is NOT rolled
-// back — Company.nextInvoiceNumber is shared, real, persistent state).
+// Every request is authenticated as a fresh test artisan (see
+// docs/roadmap.md Phase 13); afterAll cleans up via a single
+// company.delete() cascade (Invoice -> InvoiceLine and Customer both
+// cascade from Company, so this alone clears everything this suite touched
+// — invoice numbering itself is NOT rolled back, Company.nextInvoiceNumber
+// is real, persistent per-company state, but it's scoped to this suite's
+// own disposable company either way).
 describe('Invoice pipeline (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
-  const createdInvoiceIds: string[] = [];
-  const createdCustomerIds: string[] = [];
+  let session: TestSession;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
-    await app.init();
-    prisma = moduleFixture.get(PrismaService);
+    app = await createTestApp();
+    prisma = app.get(PrismaService);
+    session = await registerTestUser(app);
   });
 
   afterAll(async () => {
-    // Invoice -> InvoiceLine cascades (onDelete: Cascade in schema.prisma),
-    // so deleting the invoices is enough to also clear their lines.
-    await prisma.invoice.deleteMany({ where: { id: { in: createdInvoiceIds } } });
-    await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });
+    await prisma.company.delete({ where: { id: session.companyId } });
     await app.close();
   });
 
   it('creates an invoice, computes its totals, and generates a downloadable PDF', async () => {
-    const createResponse = await request(app.getHttpServer())
+    const createResponse = await authedRequest(app, session)
       .post('/api/invoices')
       .send({
         customerName: 'E2E Test Customer',
@@ -65,7 +56,6 @@ describe('Invoice pipeline (e2e)', () => {
       .expect(201);
 
     const created = createResponse.body as InvoiceWithTotals;
-    createdInvoiceIds.push(created.id);
     expect(created.number).toMatch(/^F-\d{6}$/);
     // 10 m2 * 1.10 waste = 11 m2 * 4500 cents = 49500; 5 * 800 = 4000
     expect(created.subtotalExclVatCents).toBe(49500 + 4000);
@@ -73,14 +63,14 @@ describe('Invoice pipeline (e2e)', () => {
 
     const invoiceId = created.id;
 
-    const getResponse = await request(app.getHttpServer())
+    const getResponse = await authedRequest(app, session)
       .get(`/api/invoices/${invoiceId}`)
       .expect(200);
     const fetched = getResponse.body as InvoiceWithTotals;
     expect(fetched.id).toBe(invoiceId);
     expect(fetched.lines).toHaveLength(2);
 
-    const pdfResponse = await request(app.getHttpServer())
+    const pdfResponse = await authedRequest(app, session)
       .get(`/api/invoices/${invoiceId}/pdf`)
       .expect(200);
     expect(pdfResponse.headers['content-type']).toBe('application/pdf');
@@ -88,7 +78,7 @@ describe('Invoice pipeline (e2e)', () => {
   });
 
   it('bills a packaged line for whole packages, rounding the site quantity up when it does not land on an exact box count', async () => {
-    const createResponse = await request(app.getHttpServer())
+    const createResponse = await authedRequest(app, session)
       .post('/api/invoices')
       .send({
         customerName: 'E2E Packaging Customer',
@@ -105,7 +95,6 @@ describe('Invoice pipeline (e2e)', () => {
       .expect(201);
 
     const created = createResponse.body as InvoiceWithTotals;
-    createdInvoiceIds.push(created.id);
     // 23 m2 needed -> rounds up to 3 boxes of 9 m2 = 27 m2 billed (roundUpToPackaging
     // defaults to true), priced at 27 * 4500 rather than the raw 23 m2 site quantity.
     expect(created.lines[0].quantity).toBe('23');
@@ -114,21 +103,20 @@ describe('Invoice pipeline (e2e)', () => {
   });
 
   it('rejects an invoice with no lines', () => {
-    return request(app.getHttpServer())
+    return authedRequest(app, session)
       .post('/api/invoices')
       .send({ customerName: 'No Lines Customer', lines: [] })
       .expect(400);
   });
 
   it('stores a valid customerId without overwriting the submitted customer text fields', async () => {
-    const customerResponse = await request(app.getHttpServer())
+    const customerResponse = await authedRequest(app, session)
       .post('/api/customers')
       .send({ name: 'Saved Customer', address: 'Saved Address' })
       .expect(201);
     const customerId = (customerResponse.body as { id: string }).id;
-    createdCustomerIds.push(customerId);
 
-    const createResponse = await request(app.getHttpServer())
+    const createResponse = await authedRequest(app, session)
       .post('/api/invoices')
       .send({
         customerName: 'Edited At Submit Time',
@@ -145,7 +133,6 @@ describe('Invoice pipeline (e2e)', () => {
       .expect(201);
 
     const created = createResponse.body as InvoiceWithTotals;
-    createdInvoiceIds.push(created.id);
     expect(created.customerId).toBe(customerId);
     // The typed value at submit time wins, even though it diverges from the
     // saved customer record — the invoice is never silently rewritten.
@@ -153,7 +140,7 @@ describe('Invoice pipeline (e2e)', () => {
   });
 
   it('rejects an invoice referencing an unknown customerId', () => {
-    return request(app.getHttpServer())
+    return authedRequest(app, session)
       .post('/api/invoices')
       .send({
         customerName: 'Unknown Customer Link',
@@ -179,7 +166,7 @@ describe('Invoice pipeline (e2e)', () => {
     const baseSubtotal = 10 * 4500 + 5 * 800;
 
     it('adds a VISIBLE service line amount to the subtotal without changing any line total', async () => {
-      const createResponse = await request(app.getHttpServer())
+      const createResponse = await authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Visible Service Customer',
@@ -189,7 +176,6 @@ describe('Invoice pipeline (e2e)', () => {
         .expect(201);
 
       const created = createResponse.body as InvoiceWithTotals;
-      createdInvoiceIds.push(created.id);
       expect(created.lines[0].lineTotalExclVatCents).toBe(10 * 4500);
       expect(created.lines[1].lineTotalExclVatCents).toBe(5 * 800);
       expect(created.serviceLines).toHaveLength(1);
@@ -199,7 +185,7 @@ describe('Invoice pipeline (e2e)', () => {
     });
 
     it('redistributes a REDISTRIBUTED + EQUAL service line evenly across the invoice lines, never losing a cent', async () => {
-      const createResponse = await request(app.getHttpServer())
+      const createResponse = await authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Equal Redistribution Customer',
@@ -216,7 +202,6 @@ describe('Invoice pipeline (e2e)', () => {
         .expect(201);
 
       const created = createResponse.body as InvoiceWithTotals;
-      createdInvoiceIds.push(created.id);
       // No service line total is shown on its own — it's folded into the lines.
       const lineTotalSum = created.lines.reduce((sum, l) => sum + l.lineTotalExclVatCents, 0);
       expect(lineTotalSum).toBe(baseSubtotal + 10001);
@@ -229,7 +214,7 @@ describe('Invoice pipeline (e2e)', () => {
     });
 
     it('redistributes a REDISTRIBUTED + WEIGHTED service line proportionally to the given weights', async () => {
-      const createResponse = await request(app.getHttpServer())
+      const createResponse = await authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Weighted Redistribution Customer',
@@ -247,14 +232,13 @@ describe('Invoice pipeline (e2e)', () => {
         .expect(201);
 
       const created = createResponse.body as InvoiceWithTotals;
-      createdInvoiceIds.push(created.id);
       expect(created.lines[0].lineTotalExclVatCents).toBe(10 * 4500 + 2500);
       expect(created.lines[1].lineTotalExclVatCents).toBe(5 * 800 + 7500);
       expect(created.subtotalExclVatCents).toBe(baseSubtotal + 10000);
     });
 
     it('rejects a REDISTRIBUTED + WEIGHTED service line whose weights do not match the line count', () => {
-      return request(app.getHttpServer())
+      return authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Bad Weights Customer',
@@ -273,7 +257,7 @@ describe('Invoice pipeline (e2e)', () => {
     });
 
     it('rejects a VISIBLE service line that also carries redistribution fields', () => {
-      return request(app.getHttpServer())
+      return authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Bad Visibility Customer',
@@ -291,7 +275,7 @@ describe('Invoice pipeline (e2e)', () => {
     });
 
     it('rejects an invoice referencing an unknown serviceId', () => {
-      return request(app.getHttpServer())
+      return authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Unknown Service Link',
@@ -319,7 +303,7 @@ describe('Invoice pipeline (e2e)', () => {
     it('renders a PDF for an unsaved draft, without persisting an invoice', async () => {
       const invoiceCountBefore = await prisma.invoice.count();
 
-      const previewResponse = await request(app.getHttpServer())
+      const previewResponse = await authedRequest(app, session)
         .post('/api/invoices/preview')
         .send({
           customerName: 'E2E Preview Customer',
@@ -335,7 +319,7 @@ describe('Invoice pipeline (e2e)', () => {
     });
 
     it('rejects a preview of a draft with no lines, same validation as a real create', () => {
-      return request(app.getHttpServer())
+      return authedRequest(app, session)
         .post('/api/invoices/preview')
         .send({ customerName: 'No Lines Customer', lines: [] })
         .expect(400);
@@ -363,7 +347,7 @@ describe('Invoice pipeline (e2e)', () => {
     };
 
     it('creates a manual invoice, prices each row like a GUIDED UNIT-mode line, and generates a PDF', async () => {
-      const createResponse = await request(app.getHttpServer())
+      const createResponse = await authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Manual Customer',
@@ -373,7 +357,6 @@ describe('Invoice pipeline (e2e)', () => {
         .expect(201);
 
       const created = createResponse.body as InvoiceWithTotals;
-      createdInvoiceIds.push(created.id);
       expect(created.number).toMatch(/^F-\d{6}$/);
       expect(created.entryMode).toBe('MANUAL');
       expect(created.lines).toEqual([]);
@@ -382,7 +365,7 @@ describe('Invoice pipeline (e2e)', () => {
       // 10 * 4500 + 5 * 800, no waste surcharge (not a manual-mode concept).
       expect(created.subtotalExclVatCents).toBe(45000 + 4000);
 
-      const getResponse = await request(app.getHttpServer())
+      const getResponse = await authedRequest(app, session)
         .get(`/api/invoices/${created.id}`)
         .expect(200);
       const fetched = getResponse.body as InvoiceWithTotals;
@@ -390,7 +373,7 @@ describe('Invoice pipeline (e2e)', () => {
         45000, 4000,
       ]);
 
-      const pdfResponse = await request(app.getHttpServer())
+      const pdfResponse = await authedRequest(app, session)
         .get(`/api/invoices/${created.id}/pdf`)
         .expect(200);
       expect(pdfResponse.headers['content-type']).toBe('application/pdf');
@@ -398,7 +381,7 @@ describe('Invoice pipeline (e2e)', () => {
     });
 
     it('rejects a manual invoice that also carries GUIDED lines', () => {
-      return request(app.getHttpServer())
+      return authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Manual Customer',
@@ -410,7 +393,7 @@ describe('Invoice pipeline (e2e)', () => {
     });
 
     it('rejects a manual table missing the required UNIT_PRICE column', () => {
-      return request(app.getHttpServer())
+      return authedRequest(app, session)
         .post('/api/invoices')
         .send({
           customerName: 'E2E Manual Customer',
@@ -426,7 +409,7 @@ describe('Invoice pipeline (e2e)', () => {
     it('previews a manual draft PDF without persisting an invoice', async () => {
       const invoiceCountBefore = await prisma.invoice.count();
 
-      const previewResponse = await request(app.getHttpServer())
+      const previewResponse = await authedRequest(app, session)
         .post('/api/invoices/preview')
         .send({
           customerName: 'E2E Manual Preview Customer',

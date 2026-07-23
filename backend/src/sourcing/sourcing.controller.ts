@@ -1,5 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { SearchSuppliersDto } from './dto/search-suppliers.dto';
 import { SuggestComplementaryDto } from './dto/suggest-complementary.dto';
 import { ComplementarySuggestion } from './entities/complementary-suggestion.entity';
@@ -18,16 +20,18 @@ export class SourcingController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('suppliers/search')
   searchSuppliers(
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: SearchSuppliersDto,
   ): Promise<SourcingSearchResult<SupplierCandidate>> {
-    return this.sourcingService.searchSuppliers(dto);
+    return this.sourcingService.searchSuppliers(user.companyId, dto);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('complementary-suggestions')
   suggestComplementary(
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: SuggestComplementaryDto,
   ): Promise<SourcingSearchResult<ComplementarySuggestion>> {
-    return this.sourcingService.suggestComplementary(dto);
+    return this.sourcingService.suggestComplementary(user.companyId, dto);
   }
 }

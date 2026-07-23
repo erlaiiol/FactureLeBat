@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { DEFAULT_COMPANY_PROFILE, SINGLETON_COMPANY_ID } from '../company/company.constants';
 
 const SMTP_SELECT = {
   smtpHost: true,
@@ -30,29 +29,26 @@ export interface SaveSmtpSettingsData {
 export class MailSettingsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Same "PATCH/GET can legitimately be the first-ever write" reasoning as
-  // CompanyRepository/OnboardingRepository — upsert, not findUnique.
-  getRaw(): Promise<SmtpRow> {
-    return this.prisma.company.upsert({
-      where: { id: SINGLETON_COMPANY_ID },
-      update: {},
-      create: { id: SINGLETON_COMPANY_ID, ...DEFAULT_COMPANY_PROFILE },
+  // Phase 13: a Company row always exists by the time an authenticated
+  // request reaches here — plain findUniqueOrThrow/update, no more
+  // upsert-on-first-write (see CompanyRepository).
+  getRaw(companyId: string): Promise<SmtpRow> {
+    return this.prisma.company.findUniqueOrThrow({
+      where: { id: companyId },
       select: SMTP_SELECT,
     });
   }
 
-  save(data: SaveSmtpSettingsData): Promise<SmtpRow> {
-    const smtpFields = {
-      smtpHost: data.host,
-      smtpPort: data.port,
-      smtpSecure: data.secure,
-      smtpUser: data.user,
-      smtpPasswordEncrypted: data.passwordEncrypted,
-    };
-    return this.prisma.company.upsert({
-      where: { id: SINGLETON_COMPANY_ID },
-      update: smtpFields,
-      create: { id: SINGLETON_COMPANY_ID, ...DEFAULT_COMPANY_PROFILE, ...smtpFields },
+  save(companyId: string, data: SaveSmtpSettingsData): Promise<SmtpRow> {
+    return this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        smtpHost: data.host,
+        smtpPort: data.port,
+        smtpSecure: data.secure,
+        smtpUser: data.user,
+        smtpPasswordEncrypted: data.passwordEncrypted,
+      },
       select: SMTP_SELECT,
     });
   }

@@ -28,6 +28,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Phase 13: unlike dev (whose backend service is bind-mounted from
+    # ../backend, so a developer's own backend/.env rides along for free —
+    # see docker-compose.yml), this prod image has no app-source bind mount
+    # at all, so app-level secrets (JWT_ACCESS_SECRET, GOOGLE_CLIENT_*,
+    # SYSTEM_SMTP_*, GROQ_API_KEY, APP_ENCRYPTION_KEY, ...) previously never
+    # reached this container through any path — a pre-existing gap this
+    # closes for all of them, not just the new Phase 13 ones.
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public

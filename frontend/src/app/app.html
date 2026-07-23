@@ -1,66 +1,90 @@
 <div class="min-h-screen bg-bg text-ink font-sans">
-  <nav class="flex items-center gap-2 border-b border-line bg-surface px-4 py-3">
-    <div class="flex flex-1 flex-wrap gap-2">
-      <a
-        routerLink="/factures/nouvelle"
-        routerLinkActive="bg-primary text-primary-fg"
-        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-        >Nouvelle facture</a
+  @if (authService.isAuthenticated()) {
+    <nav class="flex items-center gap-2 border-b border-line bg-surface px-4 py-3">
+      <div class="flex flex-1 flex-wrap gap-2">
+        <a
+          routerLink="/factures/nouvelle"
+          routerLinkActive="bg-primary text-primary-fg"
+          class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+          >Nouvelle facture</a
+        >
+        <a
+          routerLink="/factures"
+          routerLinkActive="bg-primary text-primary-fg"
+          [routerLinkActiveOptions]="{ exact: true }"
+          class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+          >Mes factures</a
+        >
+        <a
+          routerLink="/clients"
+          routerLinkActive="bg-primary text-primary-fg"
+          class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+          >Mes clients</a
+        >
+        <a
+          routerLink="/produits"
+          routerLinkActive="bg-primary text-primary-fg"
+          class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+          >Mes produits</a
+        >
+        <a
+          routerLink="/prestations"
+          routerLinkActive="bg-primary text-primary-fg"
+          class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+          >Mes prestations</a
+        >
+        <a
+          routerLink="/entreprise"
+          routerLinkActive="bg-primary text-primary-fg"
+          class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+          >Mon entreprise</a
+        >
+      </div>
+      <button
+        type="button"
+        (click)="toggleTour()"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+        [attr.aria-label]="
+          tourService.tourEnabled()
+            ? 'Désactiver les visites guidées'
+            : 'Activer les visites guidées'
+        "
+        [attr.aria-pressed]="tourService.tourEnabled()"
       >
-      <a
-        routerLink="/factures"
-        routerLinkActive="bg-primary text-primary-fg"
-        [routerLinkActiveOptions]="{ exact: true }"
-        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-        >Mes factures</a
+        {{ tourService.tourEnabled() ? '🧭 Visites guidées' : '🧭 Visites désactivées' }}
+      </button>
+      <button
+        type="button"
+        (click)="themeService.toggle()"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+        [attr.aria-label]="
+          themeService.theme() === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'
+        "
       >
-      <a
-        routerLink="/clients"
-        routerLinkActive="bg-primary text-primary-fg"
-        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-        >Mes clients</a
+        {{ themeService.theme() === 'dark' ? '☀️ Clair' : '🌙 Sombre' }}
+      </button>
+      <span class="hidden text-sm text-ink-soft sm:inline">{{
+        authService.currentUser()?.email
+      }}</span>
+      <button
+        type="button"
+        (click)="logout()"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
       >
-      <a
-        routerLink="/produits"
-        routerLinkActive="bg-primary text-primary-fg"
-        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-        >Mes produits</a
+        Déconnexion
+      </button>
+    </nav>
+    @if (authService.currentUser()?.emailVerified === false) {
+      <p
+        class="flex flex-wrap items-center justify-center gap-2 bg-warning-subtle px-4 py-2 text-center text-sm text-warning-subtle-fg"
       >
-      <a
-        routerLink="/prestations"
-        routerLinkActive="bg-primary text-primary-fg"
-        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-        >Mes prestations</a
-      >
-      <a
-        routerLink="/entreprise"
-        routerLinkActive="bg-primary text-primary-fg"
-        class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-        >Mon entreprise</a
-      >
-    </div>
-    <button
-      type="button"
-      (click)="toggleTour()"
-      class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-      [attr.aria-label]="
-        tourService.tourEnabled() ? 'Désactiver les visites guidées' : 'Activer les visites guidées'
-      "
-      [attr.aria-pressed]="tourService.tourEnabled()"
-    >
-      {{ tourService.tourEnabled() ? '🧭 Visites guidées' : '🧭 Visites désactivées' }}
-    </button>
-    <button
-      type="button"
-      (click)="themeService.toggle()"
-      class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-      [attr.aria-label]="
-        themeService.theme() === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'
-      "
-    >
-      {{ themeService.theme() === 'dark' ? '☀️ Clair' : '🌙 Sombre' }}
-    </button>
-  </nav>
+        <span>Pensez à confirmer votre adresse email.</span>
+        <button type="button" (click)="resendVerification()" class="font-semibold underline">
+          Renvoyer l'email de confirmation
+        </button>
+      </p>
+    }
+  }
   <main class="mx-auto max-w-3xl p-4">
     <router-outlet />
   </main>

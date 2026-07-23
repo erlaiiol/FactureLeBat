@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { UpdateMailSettingsDto } from './dto/update-mail-settings.dto';
 import { MailSettings } from './entities/mail-settings.entity';
 import { MailSettingsService } from './mail-settings.service';
@@ -8,12 +10,15 @@ export class MailSettingsController {
   constructor(private readonly mailSettingsService: MailSettingsService) {}
 
   @Get()
-  getSettings(): Promise<MailSettings> {
-    return this.mailSettingsService.getSettings();
+  getSettings(@CurrentUser() user: AuthenticatedUser): Promise<MailSettings> {
+    return this.mailSettingsService.getSettings(user.companyId);
   }
 
   @Patch()
-  updateSettings(@Body() dto: UpdateMailSettingsDto): Promise<MailSettings> {
-    return this.mailSettingsService.updateSettings(dto);
+  updateSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateMailSettingsDto,
+  ): Promise<MailSettings> {
+    return this.mailSettingsService.updateSettings(user.companyId, dto);
   }
 }

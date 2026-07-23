@@ -6,6 +6,7 @@ import { InvoiceRepository } from '../invoice.repository';
 import { PdfService } from '../pdf/pdf.service';
 import { InvoiceMailService } from './invoice-mail.service';
 
+const COMPANY_ID = 'company-1';
 const RAW_INVOICE = { id: 'inv-1', company: { name: 'Parquet Dupont' } } as never;
 const SMTP = {
   host: 'smtp.example.com',
@@ -62,39 +63,41 @@ describe('InvoiceMailService.send', () => {
   it('sends to the invoice customerEmail and records the send when no override is given', async () => {
     const { service, send, markSent } = buildService({});
 
-    await service.send('inv-1', {});
+    await service.send(COMPANY_ID, 'inv-1', {});
 
     const sentParams = send.mock.calls[0][0];
     expect(sentParams.to).toBe('client@exemple.fr');
     expect(sentParams.from.address).toBe('moi@exemple.fr');
-    expect(markSent).toHaveBeenCalledWith('inv-1', 'client@exemple.fr');
+    expect(markSent).toHaveBeenCalledWith(COMPANY_ID, 'inv-1', 'client@exemple.fr');
   });
 
   it('uses the dto.to override instead of the invoice customerEmail', async () => {
     const { service, send, markSent } = buildService({});
 
-    await service.send('inv-1', { to: 'autre@exemple.fr' });
+    await service.send(COMPANY_ID, 'inv-1', { to: 'autre@exemple.fr' });
 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: 'autre@exemple.fr' }));
-    expect(markSent).toHaveBeenCalledWith('inv-1', 'autre@exemple.fr');
+    expect(markSent).toHaveBeenCalledWith(COMPANY_ID, 'inv-1', 'autre@exemple.fr');
   });
 
   it('throws BadRequestException when neither dto.to nor customerEmail is set', async () => {
     const { service } = buildService({ customerEmail: null });
 
-    await expect(service.send('inv-1', {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.send(COMPANY_ID, 'inv-1', {})).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('throws ServiceUnavailableException when no SMTP is configured', async () => {
     const { service } = buildService({ smtp: null });
 
-    await expect(service.send('inv-1', {})).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.send(COMPANY_ID, 'inv-1', {})).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('propagates the delivery error and never marks the invoice as sent', async () => {
     const { service, markSent } = buildService({ sendError: new Error('SMTP refused') });
 
-    await expect(service.send('inv-1', {})).rejects.toThrow('SMTP refused');
+    await expect(service.send(COMPANY_ID, 'inv-1', {})).rejects.toThrow('SMTP refused');
     expect(markSent).not.toHaveBeenCalled();
   });
 });
@@ -103,7 +106,7 @@ describe('InvoiceMailService.getDefaultTemplate', () => {
   it('returns the same default subject/text send() would use, without requiring SMTP to be configured', async () => {
     const { service } = buildService({ smtp: null });
 
-    const template = await service.getDefaultTemplate('inv-1');
+    const template = await service.getDefaultTemplate(COMPANY_ID, 'inv-1');
 
     expect(template.subject).toContain('F-000001');
     expect(template.text).toContain('FactureLeBat');
@@ -112,6 +115,6 @@ describe('InvoiceMailService.getDefaultTemplate', () => {
   it('throws NotFoundException for an unknown invoice id', async () => {
     const { service } = buildService({ found: false });
 
-    await expect(service.getDefaultTemplate('missing')).rejects.toThrow();
+    await expect(service.getDefaultTemplate(COMPANY_ID, 'missing')).rejects.toThrow();
   });
 });

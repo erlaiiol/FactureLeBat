@@ -7,11 +7,11 @@ import { CompanyProfile } from './entities/company.entity';
 export class CompanyService {
   constructor(private readonly companyRepository: CompanyRepository) {}
 
-  getProfile(): Promise<CompanyProfile> {
-    return this.companyRepository.findOrCreateDefault();
+  getProfile(companyId: string): Promise<CompanyProfile> {
+    return this.companyRepository.findById(companyId);
   }
 
-  updateProfile(dto: UpdateCompanyDto): Promise<CompanyProfile> {
-    return this.companyRepository.update(dto);
+  updateProfile(companyId: string, dto: UpdateCompanyDto): Promise<CompanyProfile> {
+    return this.companyRepository.update(companyId, dto);
   }
 }

@@ -82,6 +82,23 @@ enum SourcingSearchKind {
   COMPLEMENTARY_SUGGESTIONS
 }
 
+// Phase 13. ARTISAN is every normal tenant owner; ADMIN is a support/ops
+// role introduced now (unused until Phase 14's admin dashboard) so granting
+// admin access later needs no further migration.
+enum UserRole {
+  ARTISAN
+  ADMIN
+}
+
+// Phase 13: which short-lived, single-use AuthToken a row represents — same
+// "one table, two kinds via a discriminator" precedent as SourcingSearchKind
+// above, since both purposes share identical create/hash/expire/consume
+// plumbing.
+enum AuthTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 model Company {
   id String @id @default(uuid())
 
@@ -103,9 +120,9 @@ model Company {
   // Phase 8 onboarding tour: tourEnabled is the master on/off switch,
   // completedTours holds the ids (see onboarding/onboarding.constants.ts)
   // of tours the artisan has finished or skipped, so they never resurface
-  // uninvited. Lives on the singleton Company row since there's no
-  // per-user account yet (pre-Phase-13) — same reasoning as every other
-  // "one implicit user" field here.
+  // uninvited. Left on Company rather than moved to User in Phase 13 since
+  // it's still meaningfully "per tenant" (1:1 with User today anyway) and
+  // moving it would have been a gratuitous churn with no behavior change.
   tourEnabled    Boolean  @default(true)
   completedTours String[] @default([])
 
@@ -115,17 +132,109 @@ model Company {
   // see smtp-password-crypto.util.ts), never the plaintext app password.
   // All nullable: mailing is opt-in, an artisan who never configures this
   // keeps downloading/emailing PDFs manually with zero behavior change.
-  smtpHost               String?
-  smtpPort               Int?
-  smtpSecure             Boolean @default(true)
-  smtpUser               String?
-  smtpPasswordEncrypted  String?
+  smtpHost              String?
+  smtpPort              Int?
+  smtpSecure            Boolean @default(true)
+  smtpUser              String?
+  smtpPasswordEncrypted String?
 
   invoices         Invoice[]
   sourcingSearches SourcingSearch[]
+  customers        Customer[]
+  products         Product[]
+  services         Service[]
+
+  // Phase 13: the single artisan account that owns this Company. Optional
+  // on this side only because Prisma requires a nullable back-relation
+  // field syntactically — in practice every Company is created together
+  // with its User (UserRepository.createWithCompany) and never orphaned.
+  user User?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Phase 13: one artisan account. Strictly 1:1 with Company (companyId is
+// unique) — no multi-user-per-company/team model. passwordHash is nullable
+// because a Google-only account never sets one; at least one of
+// passwordHash/googleId is always present (enforced in AuthService, not the
+// DB, since Prisma has no cross-column CHECK constraint support here).
+model User {
+  id String @id @default(uuid())
+
+  email        String  @unique
+  passwordHash String?
+  googleId     String? @unique
+
+  role UserRole @default(ARTISAN)
+
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // RGPD/legal consent trail — see docs/roadmap.md Phase 13. Newsletter
+  // opt-in is deliberately its own unchecked-by-default field, never
+  // bundled with the mandatory terms checkbox below.
+  newsletterOptIn Boolean  @default(false)
+  termsAcceptedAt DateTime
+  termsVersion    String
+
+  // Deliberately non-blocking: null just means the reminder banner shows,
+  // never a barrier to using the app. Set once by AuthService.verifyEmail().
+  emailVerifiedAt DateTime?
+
+  refreshTokens RefreshToken[]
+  authTokens    AuthToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// One rotated refresh-token issuance. The raw token only ever lives in the
+// httpOnly cookie handed to the browser — tokenHash (sha256 of it) is what's
+// persisted, so a DB leak alone can never be replayed. revokedAt is set both
+// on ordinary rotation (AuthService.refresh) and on logout; a refresh
+// request presenting an already-revoked token is treated as a stolen/replayed
+// token and revokes every row for that user (see AuthService.refresh).
+model RefreshToken {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  // Carries the artisan's "rester connecté" choice across rotations — each
+  // rotated token in the chain gets the same expiry length as the one it
+  // replaces (30 days) or doesn't (1 day), rather than a duration inferred
+  // from expiresAt - createdAt, which would be fragile if either constant
+  // ever changes.
+  remembered Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// A single-use, expiring, hashed token backing both email verification and
+// password reset (see AuthTokenPurpose above) — consumedAt is set the
+// moment it's used so it can never be replayed, same "hash at rest, never
+// the raw value" posture as RefreshToken.
+model AuthToken {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  purpose    AuthTokenPurpose
+  tokenHash  String           @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Invoice {
@@ -152,7 +261,11 @@ model Invoice {
   customerFields InvoiceCustomerField[]
 
   companyId String
-  company   Company @relation(fields: [companyId], references: [id])
+  // Phase 13: onDelete: Cascade so RGPD self-service account deletion
+  // (AuthService.deleteAccount -> prisma.company.delete) wipes every issued
+  // invoice for that tenant in the same atomic operation, rather than being
+  // blocked by the DB's default RESTRICT.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   // Snapshotted from Company at creation time so a later change to the
   // artisan's legal status never retroactively changes an issued invoice's
@@ -224,10 +337,16 @@ model Customer {
   phone       String?
   siret       String?
 
+  // Phase 13: every catalog/customer row belongs to exactly one tenant.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   invoices Invoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([companyId])
 }
 
 model Product {
@@ -243,8 +362,9 @@ model Product {
   // Phase 11: a short artisan-defined reference (SKU-like, e.g. "UC204850"),
   // the way professional trades already identify catalog items — makes
   // searching/scanning a large catalog faster than by name alone. Optional
-  // and freely editable, unique when set so it can double as a lookup key.
-  code String? @unique
+  // and freely editable; unique per-tenant (see @@unique below), not
+  // globally, since Phase 13 gives every artisan their own catalog.
+  code String?
 
   // Phase 8.5: how many `unit`s come in one sellable package (e.g. 9 for a
   // 9 m² box of flooring). Null means the product is sold continuously
@@ -254,8 +374,15 @@ model Product {
   // docs/roadmap.md Phase 8.5 and InvoiceLine.packagingQuantity below.
   packagingQuantity Decimal? @db.Decimal(10, 3)
 
+  // Phase 13: every catalog row belongs to exactly one tenant.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
 }
 
 // Phase 5 catalog entry for non-material work (labor, expertise, misc
@@ -272,13 +399,21 @@ model Service {
 
   // Phase 11: same short artisan-defined reference as Product.code — makes
   // searching/scanning a large service catalog faster than by name alone.
-  // Optional and freely editable, unique when set.
-  code String? @unique
+  // Optional and freely editable; unique per-tenant (see @@unique below),
+  // not globally, same Phase 13 change as Product.code.
+  code String?
+
+  // Phase 13: every catalog row belongs to exactly one tenant.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   invoiceServiceLines InvoiceServiceLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
 }
 
 model InvoiceLine {
