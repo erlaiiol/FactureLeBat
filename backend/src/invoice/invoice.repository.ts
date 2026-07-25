@@ -18,6 +18,7 @@ import {
   ServiceVisibility,
   InvoiceEntryMode,
   ManualColumnRole,
+  DocumentType,
 } from '../../generated/prisma/enums';
 
 export type InvoiceWithLines = Invoice & {
@@ -27,6 +28,9 @@ export type InvoiceWithLines = Invoice & {
   manualRows: (ManualInvoiceRow & { cells: ManualInvoiceCell[] })[];
   customerFields: InvoiceCustomerField[];
   company: Company;
+  // Phase 14.3: set on a devis once it's been converted — the facture that
+  // was created from it. Null for a facture, and for a devis never converted.
+  convertedToFacture: { id: string; number: string } | null;
 };
 
 export interface CreateInvoiceLineData {
@@ -102,6 +106,13 @@ export interface CreateInvoiceData {
   // ManualModeFieldsConsistency).
   manualColumns?: CreateManualColumnData[];
   manualRows?: CreateManualRowData[];
+  // Phase 14.3: which counter/prefix this row draws its number from — see
+  // Company.devisNumberPrefix/nextDevisNumber vs invoiceNumberPrefix/
+  // nextInvoiceNumber. Set when this facture was created by converting a
+  // devis (see InvoiceService.convertToFacture) — never set for a devis
+  // itself or a facture created from scratch.
+  documentType: DocumentType;
+  convertedFromDevisId?: string;
 }
 
 const INVOICE_INCLUDE = {
@@ -111,6 +122,7 @@ const INVOICE_INCLUDE = {
   manualRows: { orderBy: { position: 'asc' }, include: { cells: true } },
   customerFields: { orderBy: { position: 'asc' } },
   company: true,
+  convertedToFacture: { select: { id: true, number: true } },
 } as const;
 
 @Injectable()
@@ -134,16 +146,30 @@ export class InvoiceRepository {
   // returns the shape InvoiceMapper needs.
   async createWithSequentialNumber(data: CreateInvoiceData): Promise<InvoiceWithLines> {
     return this.prisma.$transaction(async (tx) => {
-      const company = await tx.company.update({
-        where: { id: data.companyId },
-        data: { nextInvoiceNumber: { increment: 1 } },
-      });
-      const usedNumber = company.nextInvoiceNumber - 1;
-      const number = `${company.invoiceNumberPrefix}-${String(usedNumber).padStart(6, '0')}`;
+      // Phase 14.3: a devis and a facture each draw from their own gapless
+      // counter (same row-lock-via-UPDATE mechanism as before) — see
+      // Company.devisNumberPrefix/nextDevisNumber vs invoiceNumberPrefix/
+      // nextInvoiceNumber.
+      const company =
+        data.documentType === DocumentType.DEVIS
+          ? await tx.company.update({
+              where: { id: data.companyId },
+              data: { nextDevisNumber: { increment: 1 } },
+            })
+          : await tx.company.update({
+              where: { id: data.companyId },
+              data: { nextInvoiceNumber: { increment: 1 } },
+            });
+      const number =
+        data.documentType === DocumentType.DEVIS
+          ? `${company.devisNumberPrefix}-${String(company.nextDevisNumber - 1).padStart(6, '0')}`
+          : `${company.invoiceNumberPrefix}-${String(company.nextInvoiceNumber - 1).padStart(6, '0')}`;
 
       const invoice = await tx.invoice.create({
         data: {
           number,
+          documentType: data.documentType,
+          convertedFromDevisId: data.convertedFromDevisId,
           companyId: data.companyId,
           customerName: data.customerName,
           customerAddress: data.customerAddress,

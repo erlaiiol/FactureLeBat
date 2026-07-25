@@ -30,6 +30,16 @@ export class InvoiceController {
     return this.invoiceService.findAll(user.companyId);
   }
 
+  // Phase 14.3: turns a devis into a real, independently-numbered facture —
+  // see InvoiceService.convertToFacture.
+  @Post(':id/convert-to-facture')
+  convertToFacture(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.convertToFacture(user.companyId, id);
+  }
+
   @Get(':id')
   findById(
     @CurrentUser() user: AuthenticatedUser,
@@ -46,8 +56,9 @@ export class InvoiceController {
   ): Promise<StreamableFile> {
     const data = await this.invoiceService.getPdfData(user.companyId, id);
     const buffer = await this.pdfService.generateInvoicePdf(data);
+    const filePrefix = data.documentType === 'DEVIS' ? 'devis' : 'facture';
     return new StreamableFile(buffer, {
-      disposition: `attachment; filename="facture-${data.number}.pdf"`,
+      disposition: `attachment; filename="${filePrefix}-${data.number}.pdf"`,
     });
   }
 

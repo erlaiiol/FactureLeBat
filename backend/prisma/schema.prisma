@@ -66,6 +66,16 @@ enum InvoiceEntryMode {
   MANUAL
 }
 
+// Phase 14.3: a devis is, mechanically, an unconsumed facture — same
+// `Invoice` row shape, same creation pipeline, same premium gate. Only the
+// document label and the numbering sequence differ (see Company.devisNumberPrefix/
+// nextDevisNumber below and Invoice.convertedFromDevisId). Default FACTURE so
+// every pre-Phase-14.3 invoice keeps behaving exactly as before.
+enum DocumentType {
+  DEVIS
+  FACTURE
+}
+
 // A column of a MANUAL invoice's free-form table. Exactly one DESCRIPTION,
 // one QUANTITY, one UNIT_PRICE, and one LINE_TOTAL column exist per manual
 // invoice (enforced by CreateManualTableDto, not the DB). Unlike a GUIDED
@@ -144,6 +154,13 @@ model Company {
 
   invoiceNumberPrefix String @default("F")
   nextInvoiceNumber   Int    @default(1)
+
+  // Phase 14.3: a devis gets its own independent sequential counter, same
+  // "gapless, per-company" mechanism as invoiceNumberPrefix/nextInvoiceNumber
+  // above — French law's numbering rule only binds real factures, but there's
+  // no reason to weaken the same guarantee where it isn't legally required.
+  devisNumberPrefix String @default("DEV")
+  nextDevisNumber   Int    @default(1)
 
   // Phase 8 onboarding tour: tourEnabled is the master on/off switch,
   // completedTours holds the ids (see onboarding/onboarding.constants.ts)
@@ -342,6 +359,19 @@ model Invoice {
   // and leave lines/serviceLines empty.
   entryMode InvoiceEntryMode @default(GUIDED)
 
+  // Phase 14.3: which kind of document this row is — see DocumentType above.
+  documentType DocumentType @default(FACTURE)
+
+  // Set on a FACTURE created by converting a DEVIS — points at the original
+  // devis, which conversion leaves untouched and independently retrievable
+  // (a new Invoice row is created, never a mutation in place). @unique
+  // since a devis converts into at most one facture; onDelete: SetNull so
+  // deleting either side never cascades into the other, same soft-reference
+  // spirit as customerId above.
+  convertedFromDevisId String?  @unique
+  convertedFromDevis   Invoice? @relation("DevisConversion", fields: [convertedFromDevisId], references: [id], onDelete: SetNull)
+  convertedToFacture   Invoice? @relation("DevisConversion")
+
   lines        InvoiceLine[]
   serviceLines InvoiceServiceLine[]
 
@@ -389,6 +419,11 @@ model Customer {
   email       String?
   phone       String?
   siret       String?
+
+  // Phase 14.5: freehand, optional — same "autofill, not a lock" spirit as
+  // every other optional field here. Feeds customer search alongside name/
+  // companyName/address (see CustomerRepository.findAll).
+  description String?
 
   // Phase 13: every catalog/customer row belongs to exactly one tenant.
   companyId String

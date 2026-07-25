@@ -1,4 +1,5 @@
 import {
+  DocumentType,
   InvoiceEntryMode,
   ManualColumnRole,
   ServiceVisibility,
@@ -108,6 +109,13 @@ export interface InvoiceWithTotals {
   customerPhone: string | null;
   customerId: string | null;
   customerFields: InvoiceCustomerFieldWithId[];
+  // Phase 14.3: a devis is mechanically a facture — see DocumentType
+  // (schema.prisma). convertedFromDevisId/convertedToFacture are the two
+  // ends of the same conversion link: set on the facture / the devis
+  // respectively, both null otherwise.
+  documentType: DocumentType;
+  convertedFromDevisId: string | null;
+  convertedToFacture: { id: string; number: string } | null;
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   // Phase 9.5: GUIDED populates lines/serviceLines below (manualTable is

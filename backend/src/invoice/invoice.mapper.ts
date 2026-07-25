@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { InvoiceEntryMode, ManualColumnRole } from '../../generated/prisma/enums';
+import { DocumentType, InvoiceEntryMode, ManualColumnRole } from '../../generated/prisma/enums';
 import { CompanyModel as Company } from '../../generated/prisma/models';
 import { isVatApplicable } from '../company/legal-status.util';
 import { UNIT_LABELS } from '../common/unit.util';
@@ -149,6 +149,9 @@ export class InvoiceMapper {
       customerPhone: invoice.customerPhone,
       customerId: invoice.customerId,
       customerFields: mapCustomerFields(invoice),
+      documentType: invoice.documentType,
+      convertedFromDevisId: invoice.convertedFromDevisId,
+      convertedToFacture: invoice.convertedToFacture,
       vatApplicable: invoice.vatApplicable,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
       entryMode: InvoiceEntryMode.GUIDED,
@@ -223,6 +226,9 @@ export class InvoiceMapper {
       customerPhone: invoice.customerPhone,
       customerId: invoice.customerId,
       customerFields: mapCustomerFields(invoice),
+      documentType: invoice.documentType,
+      convertedFromDevisId: invoice.convertedFromDevisId,
+      convertedToFacture: invoice.convertedToFacture,
       vatApplicable: invoice.vatApplicable,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
       entryMode: InvoiceEntryMode.MANUAL,
@@ -247,6 +253,7 @@ export class InvoiceMapper {
     return {
       ...this.issuerFields(invoice.company),
       number: withTotals.number,
+      documentType: withTotals.documentType,
       date: withTotals.date,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,
@@ -313,6 +320,7 @@ export class InvoiceMapper {
     return {
       ...this.issuerFields(invoice.company),
       number: withTotals.number,
+      documentType: withTotals.documentType,
       date: withTotals.date,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,
@@ -450,6 +458,9 @@ export class InvoiceMapper {
       customerPhone: dto.customerPhone ?? null,
       customerId: dto.customerId ?? null,
       customerFields: mapDtoCustomerFields(dto).map((field) => ({ id: '', ...field })),
+      documentType: dto.documentType ?? DocumentType.FACTURE,
+      convertedFromDevisId: null,
+      convertedToFacture: null,
       vatApplicable,
       vatRateBasisPoints,
       entryMode: InvoiceEntryMode.GUIDED,
@@ -512,6 +523,9 @@ export class InvoiceMapper {
       customerPhone: dto.customerPhone ?? null,
       customerId: dto.customerId ?? null,
       customerFields: mapDtoCustomerFields(dto).map((field) => ({ id: '', ...field })),
+      documentType: dto.documentType ?? DocumentType.FACTURE,
+      convertedFromDevisId: null,
+      convertedToFacture: null,
       vatApplicable,
       vatRateBasisPoints,
       entryMode: InvoiceEntryMode.MANUAL,
@@ -549,6 +563,7 @@ export class InvoiceMapper {
       return {
         ...issuer,
         number: withTotals.number,
+        documentType: withTotals.documentType,
         date: withTotals.date,
         customerName: withTotals.customerName,
         customerAddress: withTotals.customerAddress,
@@ -576,6 +591,7 @@ export class InvoiceMapper {
     return {
       ...issuer,
       number: withTotals.number,
+      documentType: withTotals.documentType,
       date: withTotals.date,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,

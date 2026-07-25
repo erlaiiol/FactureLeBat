@@ -31,4 +31,11 @@ export class CreateCustomerDto {
   @IsOptional()
   @Matches(/^\d{14}$/, { message: 'siret must be exactly 14 digits' })
   siret?: string;
+
+  // Phase 14.5: freehand, optional — feeds customer search alongside name/
+  // companyName/address (see CustomerRepository.findAll).
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
 }

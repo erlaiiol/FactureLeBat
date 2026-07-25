@@ -3,14 +3,41 @@
     class="mx-auto flex max-w-2xl flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center"
   >
     <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-success">
-      Facture {{ invoice.number }} créée !
+      {{ invoice.documentType === 'DEVIS' ? 'Devis' : 'Facture' }} {{ invoice.number }} créé{{
+        invoice.documentType === 'DEVIS' ? '' : 'e'
+      }}
+      !
     </h1>
+
+    @if (invoice.documentType === 'DEVIS' && !conversionDeclined()) {
+      <div class="w-full max-w-sm rounded-lg border border-line bg-surface p-4 text-left">
+        <p class="mb-3 text-sm text-ink">Créer la facture aussi immédiatement ?</p>
+        <div class="flex gap-2">
+          <app-big-button [disabled]="converting()" (click)="convertToFacture()">
+            {{ converting() ? 'Création…' : 'Oui' }}
+          </app-big-button>
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            [disabled]="converting()"
+            (click)="declineConversion()"
+          >
+            Plus tard
+          </app-big-button>
+        </div>
+      </div>
+    }
+
+    @if (errorMessage(); as message) {
+      <p class="font-medium text-danger">{{ message }}</p>
+    }
+
     <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
       <app-big-button>Télécharger le PDF</app-big-button>
     </a>
     <div class="w-full max-w-sm">
       <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
-        Nouvelle facture
+        Nouveau document
       </app-big-button>
     </div>
   </div>
@@ -19,7 +46,8 @@
     <div class="flex items-start justify-between gap-2">
       <div>
         <h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
-          Nouvelle facture — Mode manuel
+          {{ store.documentType() === 'DEVIS' ? 'Nouveau devis' : 'Nouvelle facture' }} — Mode
+          manuel
         </h1>
         <button
           type="button"
@@ -275,7 +303,13 @@
     }
 
     <app-big-button type="button" [disabled]="creating()" (click)="submit()">
-      {{ creating() ? 'Création…' : 'Créer la facture' }}
+      {{
+        creating()
+          ? 'Création…'
+          : store.documentType() === 'DEVIS'
+            ? 'Créer le devis'
+            : 'Créer la facture'
+      }}
     </app-big-button>
   </div>
 

@@ -21,6 +21,8 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     vatRateBasisPoints: 2000,
     invoiceNumberPrefix: 'F',
     nextInvoiceNumber: 2,
+    devisNumberPrefix: 'DEV',
+    nextDevisNumber: 1,
     tourEnabled: true,
     completedTours: [],
     smtpHost: null,
@@ -77,6 +79,9 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     entryMode: 'GUIDED',
+    documentType: 'FACTURE',
+    convertedFromDevisId: null,
+    convertedToFacture: null,
     lines: [
       {
         id: 'line-1',
@@ -113,6 +118,8 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
       vatRateBasisPoints: 2000,
       invoiceNumberPrefix: 'F',
       nextInvoiceNumber: 2,
+      devisNumberPrefix: 'DEV',
+      nextDevisNumber: 1,
       tourEnabled: true,
       completedTours: [],
       smtpHost: null,

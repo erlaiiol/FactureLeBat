@@ -1,4 +1,4 @@
-import { InvoiceEntryMode } from '../../../generated/prisma/enums';
+import { DocumentType, InvoiceEntryMode } from '../../../generated/prisma/enums';
 
 export interface InvoicePdfLine {
   description: string;
@@ -48,6 +48,10 @@ export interface InvoicePdfManualTable {
 export interface InvoicePdfData {
   number: string;
   date: Date;
+  // Phase 14.3: DEVIS/FACTURE — see DocumentType (schema.prisma). Purely a
+  // label choice for PdfService; nothing about the rest of this object
+  // differs between the two.
+  documentType: DocumentType;
 
   issuerName: string;
   issuerAddressLine1: string;

@@ -4,6 +4,7 @@ import { InvoicePdfData } from './invoice-pdf-data.interface';
 function samplePdfData(): InvoicePdfData {
   return {
     number: 'F-000001',
+    documentType: 'FACTURE',
     date: new Date('2026-01-15'),
     issuerName: 'Parquets Raillere',
     issuerAddressLine1: '1 rue des Artisans',

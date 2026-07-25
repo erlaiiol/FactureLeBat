@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
@@ -38,6 +38,7 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
 })
 export class InvoiceCreateManualPage {
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly invoiceService = inject(InvoiceService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly store = inject(ManualInvoiceDraftStore);
@@ -50,8 +51,20 @@ export class InvoiceCreateManualPage {
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
 
+  // Phase 14.3: same "Créer la facture aussi immédiatement ?" prompt as
+  // mode rapide's preview step — see InvoiceCreatePreviewStepPage.
+  protected readonly converting = signal(false);
+  protected readonly conversionDeclined = signal(false);
+
   constructor() {
     this.destroyRef.onDestroy(() => this.revokeCurrentPreviewUrl());
+
+    // Phase 14.3: only when the mode-choice slider actually sent one — see
+    // InvoiceCreateShellPage's identical guard for mode rapide.
+    const type = this.route.snapshot.queryParamMap.get('type');
+    if (type === 'DEVIS' || type === 'FACTURE') {
+      this.store.setDocumentType(type);
+    }
   }
 
   // "Compléter le prix total" (the "?" button): crosses the quantity and
@@ -130,7 +143,37 @@ export class InvoiceCreateManualPage {
   protected startNewInvoice(): void {
     this.createdInvoice.set(null);
     this.errorMessage.set(null);
+    this.conversionDeclined.set(false);
     this.store.reset();
+  }
+
+  // Phase 14.3: see InvoiceCreatePreviewStepPage.convertToFacture — same
+  // behavior, duplicated rather than shared since the two pages don't
+  // otherwise depend on each other.
+  protected convertToFacture(): void {
+    const devis = this.createdInvoice();
+    if (!devis || this.converting()) {
+      return;
+    }
+    this.converting.set(true);
+    this.errorMessage.set(null);
+    this.invoiceService
+      .convertToFacture(devis.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (facture) => {
+          this.converting.set(false);
+          this.createdInvoice.set(facture);
+        },
+        error: () => {
+          this.converting.set(false);
+          this.errorMessage.set('Impossible de créer la facture pour le moment.');
+        },
+      });
+  }
+
+  protected declineConversion(): void {
+    this.conversionDeclined.set(true);
   }
 
   // Same purpose as startNewInvoice() but reachable mid-edit, not only from

@@ -65,11 +65,15 @@ export class TourService {
   constructor() {
     // Best-effort load, same reasoning as InvoiceDraftStore's company/customers
     // loads: a failure here just means the tour never auto-launches, it never
-    // blocks the rest of the app.
+    // blocks the rest of the app. TourService is constructed app-wide (see
+    // App's root component), including on public routes where an anonymous
+    // visitor 401s on this call — an explicit no-op `error` handler is what
+    // keeps that a silent no-auto-launch rather than an unhandled rejection
+    // (see docs/roadmap.md Phase 14.7's bug #1).
     this.onboardingService
       .getState()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (state) => this.state.set(state) });
+      .subscribe({ next: (state) => this.state.set(state), error: () => {} });
 
     this.router.events
       .pipe(

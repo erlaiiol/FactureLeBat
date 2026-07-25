@@ -1,5 +1,6 @@
 <h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
-  Nouvelle facture — Lignes &amp; prestations
+  {{ draftStore.documentType() === 'DEVIS' ? 'Nouveau devis' : 'Nouvelle facture' }} — Lignes &amp;
+  prestations
 </h1>
 <button
   type="button"

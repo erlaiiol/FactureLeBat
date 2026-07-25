@@ -75,6 +75,11 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly showEmailModal = signal(false);
 
+  // Phase 14.3: the "Créer la facture aussi immédiatement ?" prompt shown
+  // after a devis is created — see convertToFacture below.
+  protected readonly converting = signal(false);
+  protected readonly conversionDeclined = signal(false);
+
   // Secondary affordance: the artisan can still open the exact, real PDF
   // (same app-pdf-preview-modal Phase 6 already used) as a fidelity check
   // alongside this HTML mirror — never the primary interaction surface.
@@ -187,8 +192,43 @@ export class InvoiceCreatePreviewStepPage {
   protected startNewInvoice(): void {
     this.createdInvoice.set(null);
     this.errorMessage.set(null);
+    this.conversionDeclined.set(false);
     this.draftStore.reset();
     void this.router.navigate(['/factures/nouvelle/rapide/client']);
+  }
+
+  // Phase 14.3: "Créer la facture aussi immédiatement ?" — accepting reuses
+  // the devis's own already-confirmed data (see InvoiceService.convertToFacture
+  // on the backend) and swaps the success screen over to the new facture,
+  // rather than leaving the artisan looking at the devis they just converted.
+  protected convertToFacture(): void {
+    const devis = this.createdInvoice();
+    if (!devis || this.converting()) {
+      return;
+    }
+    this.converting.set(true);
+    this.errorMessage.set(null);
+    this.invoiceService
+      .convertToFacture(devis.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (facture) => {
+          this.converting.set(false);
+          this.createdInvoice.set(facture);
+        },
+        error: (error: HttpErrorResponse) => {
+          this.converting.set(false);
+          if (error.status === 402) {
+            this.paywallService.show();
+            return;
+          }
+          this.errorMessage.set('Impossible de créer la facture pour le moment.');
+        },
+      });
+  }
+
+  protected declineConversion(): void {
+    this.conversionDeclined.set(true);
   }
 
   // Moved here from InvoiceCreateLinesStepPage as-is (Phase 15: "Créer la

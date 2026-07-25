@@ -79,6 +79,18 @@
     />
   </label>
 
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Notes</span>
+    <textarea
+      formControlName="description"
+      rows="3"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    ></textarea>
+    <app-field-hint
+      text="Facultatif — tout ce qui vous aide à vous souvenir de ce client (repères, contexte…) ; utilisé aussi pour le retrouver dans la recherche."
+    />
+  </label>
+
   @if (errorMessage(); as message) {
     <p class="text-center font-medium text-danger">{{ message }}</p>
   }

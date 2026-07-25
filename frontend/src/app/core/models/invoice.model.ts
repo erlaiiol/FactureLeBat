@@ -9,6 +9,10 @@ export type RedistributionStrategy = 'EQUAL' | 'WEIGHTED';
 // canvas — see the manual-* types further down.
 export type InvoiceEntryMode = 'GUIDED' | 'MANUAL';
 
+// Phase 14.3: a devis is mechanically a facture — same request/response
+// shape everywhere below, just a different label and numbering sequence.
+export type DocumentType = 'DEVIS' | 'FACTURE';
+
 // A manual invoice's column role. LINE_TOTAL is the artisan's own freehand
 // row price — never derived from QUANTITY x UNIT_PRICE, which stay purely
 // informational free text on the canvas (manual mode's whole principle:
@@ -88,6 +92,9 @@ export interface CreateInvoiceRequest {
   // Phase 9.5: defaults to GUIDED backend-side when omitted, same as before
   // this field existed.
   entryMode?: InvoiceEntryMode;
+  // Phase 14.3: defaults to FACTURE backend-side when omitted, same as
+  // every pre-Phase-14.3 request.
+  documentType?: DocumentType;
   // Required for entryMode GUIDED (the default), forbidden for MANUAL —
   // mirrors the backend's ManualModeFieldsConsistency cross-field rule.
   lines?: CreateInvoiceLineRequest[];
@@ -176,6 +183,12 @@ export interface InvoiceWithTotals {
   customerPhone: string | null;
   customerId: string | null;
   customerFields: InvoiceCustomerFieldWithId[];
+  // Phase 14.3: convertedFromDevisId is set on a facture created by
+  // converting a devis; convertedToFacture is set on that devis, pointing
+  // the other way — both null otherwise.
+  documentType: DocumentType;
+  convertedFromDevisId: string | null;
+  convertedToFacture: { id: string; number: string } | null;
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   // Phase 9.5: GUIDED populates lines/serviceLines (manualTable absent).

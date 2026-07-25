@@ -6,6 +6,7 @@ import {
   CreateInvoiceLineRequest,
   CreateInvoiceRequest,
   CreateInvoiceServiceLineRequest,
+  DocumentType,
   RedistributionStrategy,
   ServiceLineVisibility,
   WasteSurcharge,
@@ -124,6 +125,7 @@ interface PersistedDraft {
   customer: InvoiceCustomerDraft;
   lines: InvoiceLineDraft[];
   serviceLines: InvoiceServiceLineDraft[];
+  documentType: DocumentType;
 }
 
 // Shared, in-progress state for the whole "nouvelle facture" flow (Phase 6):
@@ -145,6 +147,12 @@ export class InvoiceDraftStore {
   readonly customers = signal<CustomerProfile[]>([]);
   readonly products = signal<ProductProfile[]>([]);
   readonly services = signal<ServiceProfile[]>([]);
+
+  // Phase 14.3: seeded from the mode-choice slider (via InvoiceCreateShellPage
+  // reading the `type` query param), then persisted like every other draft
+  // field — a devis is mechanically a facture, this is the only field that
+  // says which.
+  readonly documentType = signal<DocumentType>('FACTURE');
 
   readonly customer = signal<InvoiceCustomerDraft>(EMPTY_CUSTOMER);
   // Phase 13.5 gallery redesign: no default blank line — the lines step now
@@ -259,9 +267,18 @@ export class InvoiceDraftStore {
         customer: this.customer(),
         lines: this.lines(),
         serviceLines: this.serviceLines(),
+        documentType: this.documentType(),
       };
       this.writeToStorage(snapshot);
     });
+  }
+
+  // Phase 14.3: called once by InvoiceCreateShellPage when the `type` query
+  // param is present (a fresh pick from mode-choice) — left untouched
+  // otherwise, so resuming an in-progress draft (no query param) never
+  // silently flips it back to FACTURE.
+  setDocumentType(type: DocumentType): void {
+    this.documentType.set(type);
   }
 
   setCustomer(customer: InvoiceCustomerDraft): void {
@@ -306,6 +323,7 @@ export class InvoiceDraftStore {
     this.customer.set(EMPTY_CUSTOMER);
     this.lines.set([]);
     this.serviceLines.set([]);
+    this.documentType.set('FACTURE');
     this.clearStorage();
   }
 
@@ -359,6 +377,7 @@ export class InvoiceDraftStore {
       customerEmail: customer.customerEmail || undefined,
       customerPhone: customer.customerPhone || undefined,
       customerId,
+      documentType: this.documentType(),
       lines,
       serviceLines: serviceLines.length > 0 ? serviceLines : undefined,
     };
@@ -386,6 +405,9 @@ export class InvoiceDraftStore {
             ...serviceLine,
           })),
         );
+      }
+      if (parsed.documentType === 'DEVIS' || parsed.documentType === 'FACTURE') {
+        this.documentType.set(parsed.documentType);
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

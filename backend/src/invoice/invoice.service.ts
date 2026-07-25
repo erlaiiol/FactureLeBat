@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InvoiceEntryMode } from '../../generated/prisma/enums';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { DocumentType, InvoiceEntryMode } from '../../generated/prisma/enums';
 import { PremiumGateService } from '../billing/premium-gate.service';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
@@ -83,6 +83,7 @@ export class InvoiceService {
       vatOverrideCents: dto.vatOverrideCents,
       totalOverrideCents: dto.totalOverrideCents,
       entryMode,
+      documentType: dto.documentType ?? DocumentType.FACTURE,
       // ManualModeFieldsConsistency guarantees `lines` is a non-empty array
       // whenever entryMode is GUIDED (the only branch that reads it below).
       lines:
@@ -124,6 +125,94 @@ export class InvoiceService {
       manualRows:
         entryMode === InvoiceEntryMode.MANUAL
           ? dto.manualTable!.rows.map((row) => ({ heightPx: row.heightPx, cells: row.cells }))
+          : undefined,
+    });
+
+    return this.mapper.toInvoiceWithTotals(invoice);
+  }
+
+  // Phase 14.3: a devis converts into a real, independently-numbered facture
+  // — a new Invoice row (documentType FACTURE, convertedFromDevisId pointing
+  // back at the devis), never a mutation of the devis in place, so the devis
+  // stays retrievable exactly as it was. Reuses the exact lines/serviceLines/
+  // manualTable/customerFields the devis was confirmed with — nothing here is
+  // re-typed or re-validated by the artisan, unlike create()'s DTO path.
+  async convertToFacture(companyId: string, devisId: string): Promise<InvoiceWithTotals> {
+    // Gated first, same "frustrate at the last moment, but check it first"
+    // ordering as create() — this is still "creating a facture".
+    await this.premiumGate.assertCanCreateInvoice(companyId);
+
+    const devis = await this.findRawById(companyId, devisId);
+    if (devis.documentType !== DocumentType.DEVIS) {
+      throw new BadRequestException(`Invoice ${devisId} is not a devis`);
+    }
+
+    const invoice = await this.invoiceRepository.createWithSequentialNumber({
+      companyId,
+      customerName: devis.customerName,
+      customerAddress: devis.customerAddress ?? undefined,
+      customerEmail: devis.customerEmail ?? undefined,
+      customerPhone: devis.customerPhone ?? undefined,
+      customerId: devis.customerId ?? undefined,
+      customerFields: devis.customerFields.map((field) => ({
+        label: field.label,
+        value: field.value,
+      })),
+      vatApplicable: devis.vatApplicable,
+      vatRateBasisPoints: devis.vatRateBasisPoints,
+      subtotalOverrideCents: devis.subtotalOverrideCents ?? undefined,
+      vatOverrideCents: devis.vatOverrideCents ?? undefined,
+      totalOverrideCents: devis.totalOverrideCents ?? undefined,
+      entryMode: devis.entryMode,
+      documentType: DocumentType.FACTURE,
+      convertedFromDevisId: devis.id,
+      lines: devis.lines.map((line) => ({
+        description: line.description,
+        unit: line.unit,
+        quantity: line.quantity.toNumber(),
+        unitPriceCents: line.unitPriceCents,
+        wasteSurcharge: line.wasteSurcharge,
+        packagingQuantity: line.packagingQuantity?.toNumber(),
+        roundUpToPackaging: line.roundUpToPackaging,
+        productCode: line.productCode ?? undefined,
+        showUnitDetail: line.showUnitDetail,
+        showBillingDetail: line.showBillingDetail,
+      })),
+      serviceLines: devis.serviceLines.map((serviceLine): CreateInvoiceServiceLineData => ({
+        serviceId: serviceLine.serviceId ?? undefined,
+        name: serviceLine.name,
+        description: serviceLine.description ?? undefined,
+        amountCents: serviceLine.amountCents,
+        visibility: serviceLine.visibility,
+        weights:
+          serviceLine.visibility === 'REDISTRIBUTED'
+            ? devis.lines.map(
+                (line) =>
+                  serviceLine.weights.find((weight) => weight.invoiceLineId === line.id)?.weight ??
+                  0,
+              )
+            : undefined,
+      })),
+      manualColumns:
+        devis.entryMode === InvoiceEntryMode.MANUAL
+          ? devis.manualColumns.map((column) => ({
+              role: column.role,
+              label: column.label,
+              widthPx: column.widthPx ?? undefined,
+            }))
+          : undefined,
+      manualRows:
+        devis.entryMode === InvoiceEntryMode.MANUAL
+          ? devis.manualRows.map((row) => ({
+              heightPx: row.heightPx ?? undefined,
+              // Rebuilt positionally against manualColumns (not the raw
+              // `cells` array order, which INVOICE_INCLUDE doesn't sort) —
+              // same columnId-matching CreateManualRowData's cells[i]
+              // convention requires.
+              cells: devis.manualColumns.map(
+                (column) => row.cells.find((cell) => cell.columnId === column.id)?.value ?? '',
+              ),
+            }))
           : undefined,
     });
 

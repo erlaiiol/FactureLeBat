@@ -1,12 +1,36 @@
 <div class="mx-auto flex max-w-2xl flex-col gap-6 pb-12">
   <div class="text-center">
-    <h1 class="text-2xl font-semibold text-ink">Nouvelle facture</h1>
-    <p class="mt-1 text-ink-soft">Comment souhaitez-vous la créer ?</p>
+    <h1 class="text-2xl font-semibold text-ink">Nouveau document</h1>
+    <p class="mt-1 text-ink-soft">Comment souhaitez-vous le créer ?</p>
+  </div>
+
+  <div class="mx-auto flex rounded-full border border-line bg-surface p-1">
+    <button
+      type="button"
+      class="rounded-full px-6 py-2 text-sm font-semibold transition"
+      [class.bg-primary]="documentType() === 'DEVIS'"
+      [class.text-primary-fg]="documentType() === 'DEVIS'"
+      [class.text-ink-soft]="documentType() !== 'DEVIS'"
+      (click)="selectDocumentType('DEVIS')"
+    >
+      Devis
+    </button>
+    <button
+      type="button"
+      class="rounded-full px-6 py-2 text-sm font-semibold transition"
+      [class.bg-primary]="documentType() === 'FACTURE'"
+      [class.text-primary-fg]="documentType() === 'FACTURE'"
+      [class.text-ink-soft]="documentType() !== 'FACTURE'"
+      (click)="selectDocumentType('FACTURE')"
+    >
+      Facture
+    </button>
   </div>
 
   <div class="grid gap-4 sm:grid-cols-2" appTourAnchor="invoice-mode-choice">
     <a
       routerLink="rapide"
+      [queryParams]="{ type: documentType() }"
       class="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-6 text-left shadow-sm transition hover:border-primary hover:shadow-md"
     >
       <span class="text-lg font-semibold text-ink">Mode rapide</span>
@@ -18,6 +42,7 @@
 
     <a
       routerLink="manuel"
+      [queryParams]="{ type: documentType() }"
       class="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-6 text-left shadow-sm transition hover:border-primary hover:shadow-md"
     >
       <span class="text-lg font-semibold text-ink">Mode manuel</span>

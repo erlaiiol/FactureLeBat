@@ -823,14 +823,14 @@ Introduce a paid tier: a 15€ premium subscription required after an artisan's 
 
 ## Features
 
-- [ ] "Nouvelle facture" renamed "Nouveau document" everywhere it appears (nav, buttons, onboarding tour copy)
-- [ ] Devis / Facture slider added to the existing mode-choice screen — no new step in the pipeline
-- [ ] PDF header/label reflects the chosen type ("DEVIS" vs "FACTURE"); same PDF pipeline otherwise
-- [ ] Devis numbering is sequential and independent from facture numbering
-- [ ] End-of-pipeline prompt on a finished devis: "Créer la facture aussi immédiatement ?"
-- [ ] "Mes factures" renamed "Mes documents", filterable by type (Devis / Facture / Tous)
-- [ ] "Créer la facture" action available on any devis row in the list, at any time, not just right after creation
-- [ ] Converting a devis prefills a real facture-creation flow with the devis's client/lines/services (same "autofill, not a lock" rule as every catalog-backed field elsewhere) rather than silently mutating the devis row in place — the devis stays retrievable exactly as it was
+- [x] "Nouvelle facture" renamed "Nouveau document" everywhere it appears (nav, buttons, onboarding tour copy)
+- [x] Devis / Facture slider added to the existing mode-choice screen — no new step in the pipeline
+- [x] PDF header/label reflects the chosen type ("DEVIS" vs "FACTURE"); same PDF pipeline otherwise
+- [x] Devis numbering is sequential and independent from facture numbering
+- [x] End-of-pipeline prompt on a finished devis: "Créer la facture aussi immédiatement ?"
+- [x] "Mes factures" renamed "Mes documents", filterable by type (Devis / Facture / Tous)
+- [x] "Créer la facture" action available on any devis row in the list, at any time, not just right after creation
+- [x] Converting a devis prefills a real facture-creation flow with the devis's client/lines/services (same "autofill, not a lock" rule as every catalog-backed field elsewhere) rather than silently mutating the devis row in place — the devis stays retrievable exactly as it was
 
 ## Non-goals
 
@@ -841,6 +841,13 @@ Introduce a paid tier: a 15€ premium subscription required after an artisan's 
 
 - **Phase 16's board only makes sense for FACTURE documents** — a devis has no payment state to track. Once this phase lands, Phase 16's board should filter to `documentType = FACTURE`; devis stay in a simpler, non-board list view.
 - Builds on Phase 9.5's orthogonal-discriminator pattern (`entryMode`) and Phase 6's "a real number is allocated only at real persistence" rule — a devis gets a genuine number the moment it's created, exactly like a facture always has; nothing about a devis is a draft/preview in Phase 6's sense.
+
+## Implementation notes
+
+- **A devis is, mechanically, an unconsumed facture** — decided explicitly with the user: same `Invoice` row shape, same creation pipeline (`InvoiceService.create`/`previewPdf`/`previewData`), same `PremiumGateService.assertCanCreateInvoice` gate (a devis consumes the same one-invoice free trial a facture would — not a special case). The entire diff is `Invoice.documentType`, the two independent numbering counters, and swapping the handful of hardcoded "Facture" strings (PDF header, downloaded filename, mail subject/signature, a few frontend titles/buttons) for a `documentType`-conditional label — nothing else about the pipeline branches on it.
+- **Conversion creates a second `Invoice` row, never mutates the devis in place.** `InvoiceService.convertToFacture` rebuilds a `CreateInvoiceData` from the devis's already-persisted lines/serviceLines/manualTable/customerFields (not a fresh DTO — nothing is re-typed or re-validated) and calls the same `createWithSequentialNumber` create() uses, with `documentType: FACTURE` and `convertedFromDevisId` set. `Invoice.convertedFromDevisId` is `@unique` (a devis converts into at most one facture); the inverse `convertedToFacture` relation is what a devis's own view uses to show "facture créée depuis ce devis" once it has been.
+- **The Devis/Facture choice is carried from the mode-choice screen to whichever mode is picked via a `?type=` query param** (`InvoiceCreateModeChoicePage`'s `routerLink` `queryParams`), read once by `InvoiceCreateShellPage`/`InvoiceCreateManualPage` at construction and handed to `InvoiceDraftStore`/`ManualInvoiceDraftStore.setDocumentType()` — deliberately only when the param is present, so resuming an in-progress draft via a direct/bookmarked link (no query param) never silently flips it back to FACTURE.
+- Migrations for this phase and Phase 14.5 were generated non-interactively (`prisma migrate diff --from-config-datasource --to-schema` + a hand-placed `migration.sql`, then `prisma migrate deploy`) since `prisma migrate dev` refuses to run outside an interactive terminal.
 
 ---
 
@@ -863,12 +870,12 @@ An artisan doesn't always remember a client's name — and once the customer bas
 
 ## Features
 
-- [ ] `description` field added to `Customer` (optional, freeform), editable from the customer form like every other optional field
-- [ ] Customer search matches name, company name, address, and description — not name-only
-- [ ] Search results show last devis date and last facture date per customer, computed from `Invoice`, never stored
-- [ ] Matching description snippet shown/highlighted in results when the match came from free text
-- [ ] Sort toggle: alphabétique / dernière facture / dernier devis / date de création
-- [ ] Customers with no description or no invoice history yet degrade gracefully (blank/"—"), never an error — must not break for a brand-new customer with zero history
+- [x] `description` field added to `Customer` (optional, freeform), editable from the customer form like every other optional field
+- [x] Customer search matches name, company name, address, and description — not name-only
+- [x] Search results show last devis date and last facture date per customer, computed from `Invoice`, never stored
+- [x] Matching description snippet shown/highlighted in results when the match came from free text
+- [x] Sort toggle: alphabétique / dernière facture / dernier devis / date de création
+- [x] Customers with no description or no invoice history yet degrade gracefully (blank/"—"), never an error — must not break for a brand-new customer with zero history
 
 ## Non-goals
 
@@ -880,6 +887,13 @@ An artisan doesn't always remember a client's name — and once the customer bas
 - Builds on Phase 2 (Customer entity) and reuses the plain filter pattern already established for catalog search (Phase 11's implementation notes) rather than introducing new search infrastructure.
 - If Phase 14.3 hasn't landed yet when this is built, ship with a single "dernier document" date instead of two — trivially split later once `documentType` exists.
 
+## Implementation notes
+
+- **Phase 14.3 landed first (see build order), so both dates ship directly** — `CustomerRepository.findLastDocumentDatesByCustomer` groups `Invoice` by `customerId`/`documentType` in one query (`_max: { date }`) for every customer `findAll` already loaded, rather than N+1 per-customer lookups.
+- **The computed fields (`lastDevisDate`/`lastFactureDate`/`matchSnippet`) live on a new `CustomerSearchResult` type, not on `CustomerProfile` itself** — `findById`/`create`/`update` keep returning the plain `CustomerProfile` (a straight `CustomerModel` alias); only `GET /customers` needs the computed shape, so only that endpoint's return type changed.
+- **Sorting happens in application code, not SQL** — `CustomerService`'s `sortCustomers` sorts the already-fetched (≤500, per `CustomerRepository.MAX_LISTED_CUSTOMERS`) array in memory. Ordering by a computed aggregate (last invoice date) isn't expressible as a plain Prisma `orderBy`, and at this scale an in-memory sort costs nothing worth optimizing for — consistent with this module's existing "no pagination yet" simplicity.
+- **The description snippet only appears when the match didn't already come from a fixed field** — `CustomerService.findAll` checks name/companyName/address first; a snippet is built (40 chars of context each side of the match, ellipsized) only when none of those matched but `description` did, so the artisan isn't shown a redundant snippet next to a name that already visibly matched.
+
 ---
 
 # Phase 14.7 — Bug Reports (Claude)
@@ -890,8 +904,8 @@ Two bugs surfaced by Claude while working on other tasks, logged here for triage
 
 ## Bugs
 
-- [ ] **Anonymous visitor bounced off `/inscription`/`/connexion`.** Visiting either route anonymously triggers a `GET /api/onboarding` call (fired by `TourService` on app startup, regardless of route), which 401s; the refresh interceptor then redirects to `/connexion` before the form is even filled in. A visitor arriving directly on `/inscription` via a shared link gets bounced straight to the login page. Fix needed if `/inscription` should stay reachable by direct link.
-- [ ] **`POST /api/invoices/preview` 400 on manual-table validation.** Observed in production logs — request rejected with `customerName must be longer than or equal to 1 characters; manualTable.each manual row must supply exactly one cell per column, a non-empty description, and a valid non-negative unit price/line total (or a blank line total)`. Needs reproduction to confirm whether this is a frontend validation gap (bad request reaching the API) or a legitimate rejection surfaced poorly to the user.
+- [x] **Anonymous visitor bounced off `/inscription`/`/connexion` — fixed.** Root cause confirmed: `App`'s root component injects `TourService` (`providedIn: 'root'`) on every route including public ones; its constructor fires `GET /api/onboarding` unconditionally, which 401s when anonymous; `authRefreshInterceptor`'s refresh-then-retry also fails (no session to refresh) and was unconditionally navigating to `/connexion` regardless of where the visitor already was. Fix: `authRefreshInterceptor` now checks the current route against the exact list of public routes in `app.routes.ts` (outside the `authGuard`-wrapped tree) before redirecting — a failed background call on a route that never needed a session in the first place no longer forces a navigation away from it. `TourService`'s onboarding subscribe also got an explicit no-op `error` handler, so the same failure stops surfacing as an unhandled rejection for an anonymous visit.
+- [x] **`POST /api/invoices/preview` 400 on manual-table validation — triaged, not a bug.** Confirmed by reading `InvoiceCreateManualPage.preview()`: deliberately not gated on `store.canPreview()` (the comment states this explicitly) — mode manuel's whole principle is that the artisan can preview at any point, even an empty/incomplete draft, and an incomplete submission's 400 is expected, already caught, and surfaced as a generic "Impossible de générer l'aperçu pour le moment." rather than a crash. The logged 400 is that exact by-design path (an artisan clicking "Aperçu" before filling in the table), not a validation gap reaching the API unexpectedly. No code change.
 
 <details>
 <summary>Raw log excerpt</summary>

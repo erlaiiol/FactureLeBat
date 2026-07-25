@@ -1,5 +1,5 @@
 <h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
-  Nouvelle facture — Client
+  {{ draftStore.documentType() === 'DEVIS' ? 'Nouveau devis' : 'Nouvelle facture' }} — Client
 </h1>
 
 <div appTourAnchor="invoice-customer-picker" class="flex flex-col gap-4">

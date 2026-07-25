@@ -7,6 +7,7 @@ describe('buildDefaultInvoiceMailTemplate', () => {
       customerName: 'Mme Martin',
       invoiceNumber: 'F-000012',
       totalInclVatCents: 123456,
+      documentType: 'FACTURE',
     });
     expect(text).toContain('FactureLeBat');
   });
@@ -17,6 +18,7 @@ describe('buildDefaultInvoiceMailTemplate', () => {
       customerName: 'Mme Martin',
       invoiceNumber: 'F-000012',
       totalInclVatCents: 123456,
+      documentType: 'FACTURE',
     });
     expect(subject).toContain('F-000012');
     expect(text).toContain('F-000012');
@@ -29,6 +31,7 @@ describe('buildDefaultInvoiceMailTemplate', () => {
       customerName: 'Mme Martin',
       invoiceNumber: 'F-000012',
       totalInclVatCents: 123456,
+      documentType: 'FACTURE',
     });
     expect(text).toContain('Mme Martin');
   });

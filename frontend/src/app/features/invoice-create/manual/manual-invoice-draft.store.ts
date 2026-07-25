@@ -5,6 +5,7 @@ import {
   CreateInvoiceRequest,
   CreateManualColumnRequest,
   CreateManualRowRequest,
+  DocumentType,
   ManualColumnRole,
 } from '../../../core/models/invoice.model';
 import { CompanyService } from '../../../core/services/company.service';
@@ -95,6 +96,7 @@ interface PersistedManualDraft {
   subtotalOverrideText: string;
   vatOverrideText: string;
   totalOverrideText: string;
+  documentType: DocumentType;
 }
 
 // Phase 9.5 mode manuel: the free-form canvas's shared, in-progress draft
@@ -111,6 +113,9 @@ export class ManualInvoiceDraftStore {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly company = signal<CompanyProfile | null>(null);
+
+  // Phase 14.3: same seeding/persistence rule as InvoiceDraftStore.documentType.
+  readonly documentType = signal<DocumentType>('FACTURE');
 
   readonly customer = signal<ManualCustomerDraft>(EMPTY_CUSTOMER);
   readonly columns = signal<ManualColumnDraft[]>(defaultColumns());
@@ -217,9 +222,16 @@ export class ManualInvoiceDraftStore {
         subtotalOverrideText: this.subtotalOverrideText(),
         vatOverrideText: this.vatOverrideText(),
         totalOverrideText: this.totalOverrideText(),
+        documentType: this.documentType(),
       };
       this.writeToStorage(snapshot);
     });
+  }
+
+  // Phase 14.3: same "only set when the mode-choice slider actually sent
+  // one" rule as InvoiceDraftStore.setDocumentType.
+  setDocumentType(type: DocumentType): void {
+    this.documentType.set(type);
   }
 
   setCustomer(customer: ManualCustomerDraft): void {
@@ -380,6 +392,7 @@ export class ManualInvoiceDraftStore {
     this.subtotalOverrideText.set('');
     this.vatOverrideText.set('');
     this.totalOverrideText.set('');
+    this.documentType.set('FACTURE');
     this.clearStorage();
   }
 
@@ -421,6 +434,7 @@ export class ManualInvoiceDraftStore {
       customerPhone: customer.customerPhone || undefined,
       customerFields: customerFields.length > 0 ? customerFields : undefined,
       entryMode: 'MANUAL',
+      documentType: this.documentType(),
       manualTable: { columns: requestColumns, rows: requestRows },
       subtotalOverrideCents:
         subtotalOverride !== null ? Math.round(subtotalOverride * 100) : undefined,
@@ -465,6 +479,9 @@ export class ManualInvoiceDraftStore {
       }
       if (typeof parsed.totalOverrideText === 'string') {
         this.totalOverrideText.set(parsed.totalOverrideText);
+      }
+      if (parsed.documentType === 'DEVIS' || parsed.documentType === 'FACTURE') {
+        this.documentType.set(parsed.documentType);
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

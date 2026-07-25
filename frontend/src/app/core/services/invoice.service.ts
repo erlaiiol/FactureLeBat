@@ -54,4 +54,10 @@ export class InvoiceService {
   getMailTemplate(id: string): Observable<InvoiceMailTemplate> {
     return this.http.get<InvoiceMailTemplate>(`${this.baseUrl}/${id}/mail-template`);
   }
+
+  // Phase 14.3: turns a devis into a real, independently-numbered facture —
+  // see InvoiceService.convertToFacture on the backend.
+  convertToFacture(devisId: string): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${devisId}/convert-to-facture`, {});
+  }
 }

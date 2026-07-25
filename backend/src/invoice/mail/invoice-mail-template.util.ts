@@ -10,6 +10,9 @@ export interface InvoiceMailTemplateInput {
   customerName: string;
   invoiceNumber: string;
   totalInclVatCents: number;
+  // Phase 14.3: a devis is mechanically a facture — see DocumentType
+  // (schema.prisma). Only the label below changes.
+  documentType: 'DEVIS' | 'FACTURE';
 }
 
 export interface InvoiceMailTemplate {
@@ -24,16 +27,18 @@ export interface InvoiceMailTemplate {
 export function buildDefaultInvoiceMailTemplate(
   input: InvoiceMailTemplateInput,
 ): InvoiceMailTemplate {
-  const subject = `${input.companyName} — Facture ${input.invoiceNumber}`;
+  const label = input.documentType === 'DEVIS' ? 'Devis' : 'Facture';
+  const lowerLabel = input.documentType === 'DEVIS' ? 'devis' : 'facture';
+  const subject = `${input.companyName} — ${label} ${input.invoiceNumber}`;
   const text = [
     `Bonjour ${input.customerName},`,
     '',
-    `Veuillez trouver ci-joint la facture ${input.invoiceNumber} d'un montant de ${centsToEuros(input.totalInclVatCents)} TTC.`,
+    `Veuillez trouver ci-joint ${input.documentType === 'DEVIS' ? 'le' : 'la'} ${lowerLabel} ${input.invoiceNumber} d'un montant de ${centsToEuros(input.totalInclVatCents)} TTC.`,
     '',
     'Cordialement,',
     input.companyName,
     '',
-    '— Facture envoyée avec FactureLeBat',
+    `— ${label} envoyé${input.documentType === 'DEVIS' ? '' : 'e'} avec FactureLeBat`,
   ].join('\n');
   return { subject, text };
 }

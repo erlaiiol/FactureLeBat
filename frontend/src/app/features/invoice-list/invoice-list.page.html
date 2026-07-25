@@ -1,19 +1,39 @@
-<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">Mes factures</h1>
+<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">Mes documents</h1>
+
+<div class="mb-6 flex gap-1 rounded-full border border-line bg-surface p-1 w-fit">
+  @for (option of filterOptions; track option.value) {
+    <button
+      type="button"
+      class="rounded-full px-4 py-1.5 text-sm font-semibold transition"
+      [class.bg-primary]="filter() === option.value"
+      [class.text-primary-fg]="filter() === option.value"
+      [class.text-ink-soft]="filter() !== option.value"
+      (click)="setFilter(option.value)"
+    >
+      {{ option.label }}
+    </button>
+  }
+</div>
 
 @if (loading()) {
   <p class="text-ink-soft">Chargement…</p>
 } @else if (errorMessage(); as message) {
   <p class="font-medium text-danger">{{ message }}</p>
-} @else if (invoices().length === 0) {
-  <p class="text-ink-soft">Aucune facture pour le moment.</p>
+} @else if (filteredInvoices().length === 0) {
+  <p class="text-ink-soft">Aucun document pour le moment.</p>
 } @else {
   <ul class="flex flex-col gap-3">
-    @for (invoice of invoices(); track invoice.id) {
+    @for (invoice of filteredInvoices(); track invoice.id) {
       <li
         class="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4"
       >
         <div>
-          <p class="font-semibold text-ink">{{ invoice.number }}</p>
+          <p class="font-semibold text-ink">
+            <span class="text-xs font-normal uppercase text-ink-soft">{{
+              invoice.documentType === 'DEVIS' ? 'Devis' : 'Facture'
+            }}</span>
+            {{ invoice.number }}
+          </p>
           <p class="text-sm text-ink-soft">{{ invoice.customerName }}</p>
           <p class="text-sm text-ink-soft">{{ invoice.date | date: 'dd/MM/yyyy' }}</p>
           @if (invoice.sentAt) {
@@ -21,11 +41,29 @@
               Envoyée le {{ invoice.sentAt | date: 'dd/MM/yyyy' }} à {{ invoice.sentToEmail }}
             </p>
           }
+          @if (invoice.documentType === 'DEVIS' && invoice.convertedToFacture) {
+            <p class="text-xs text-ink-soft">
+              → Facture {{ invoice.convertedToFacture.number }} créée
+            </p>
+          }
+          @if (invoice.documentType === 'FACTURE' && invoice.convertedFromDevisId) {
+            <p class="text-xs text-ink-soft">Convertie depuis un devis</p>
+          }
         </div>
         <div class="flex items-center gap-4">
           <span class="text-lg font-semibold text-ink font-mono">
             {{ invoice.totalInclVatCents | centsToEuros }}
           </span>
+          @if (invoice.documentType === 'DEVIS' && !invoice.convertedToFacture) {
+            <button
+              type="button"
+              [disabled]="convertingId() === invoice.id"
+              (click)="convertToFacture(invoice)"
+              class="rounded-lg bg-primary px-4 py-2 font-medium text-primary-fg hover:brightness-90 disabled:opacity-60"
+            >
+              {{ convertingId() === invoice.id ? 'Création…' : 'Créer la facture' }}
+            </button>
+          }
           <button
             type="button"
             (click)="openEmailModal(invoice)"

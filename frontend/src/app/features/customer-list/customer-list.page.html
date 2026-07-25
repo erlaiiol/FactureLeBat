@@ -5,13 +5,20 @@
   </a>
 </div>
 
-<input
-  [formControl]="search"
-  type="text"
-  placeholder="Rechercher un client…"
-  appTourAnchor="customers-search"
-  class="mb-6 w-full rounded-lg border border-line px-4 py-3 text-lg"
-/>
+<div class="mb-6 flex flex-col gap-3 sm:flex-row">
+  <input
+    [formControl]="search"
+    type="text"
+    placeholder="Rechercher un client (nom, adresse, notes…)"
+    appTourAnchor="customers-search"
+    class="w-full flex-1 rounded-lg border border-line px-4 py-3 text-lg"
+  />
+  <select [formControl]="sortBy" class="rounded-lg border border-line px-4 py-3 text-lg text-ink">
+    @for (option of sortOptions; track option.value) {
+      <option [value]="option.value">{{ option.label }}</option>
+    }
+  </select>
+</div>
 
 @if (loading()) {
   <p class="text-ink-soft">Chargement…</p>
@@ -33,7 +40,20 @@
               <p class="text-sm text-ink-soft">{{ customer.companyName }}</p>
             }
             <p class="text-sm text-ink-soft">
-              {{ customer.phone || customer.email || '—' }}
+              {{ customer.address || customer.phone || customer.email || '—' }}
+            </p>
+            @if (customer.matchSnippet) {
+              <p class="text-xs italic text-ink-soft">…{{ customer.matchSnippet }}…</p>
+            }
+          </div>
+          <div class="shrink-0 text-right text-xs text-ink-soft">
+            <p>
+              Dernier devis&nbsp;:
+              {{ customer.lastDevisDate ? (customer.lastDevisDate | date: 'dd/MM/yyyy') : '—' }}
+            </p>
+            <p>
+              Dernière facture&nbsp;:
+              {{ customer.lastFactureDate ? (customer.lastFactureDate | date: 'dd/MM/yyyy') : '—' }}
             </p>
           </div>
         </a>

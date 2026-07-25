@@ -38,6 +38,7 @@ export class InvoiceMailService {
       customerName: invoice.customerName,
       invoiceNumber: invoice.number,
       totalInclVatCents: invoice.totalInclVatCents,
+      documentType: invoice.documentType,
     });
   }
 
@@ -67,10 +68,12 @@ export class InvoiceMailService {
       customerName: invoice.customerName,
       invoiceNumber: invoice.number,
       totalInclVatCents: invoice.totalInclVatCents,
+      documentType: invoice.documentType,
     });
 
     const pdfData = this.mapper.toPdfData(raw);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(pdfData);
+    const filePrefix = invoice.documentType === 'DEVIS' ? 'devis' : 'facture';
 
     await this.mailerService.send({
       smtp,
@@ -78,7 +81,7 @@ export class InvoiceMailService {
       to,
       subject: dto.subject ?? defaultTemplate.subject,
       text: dto.message ?? defaultTemplate.text,
-      attachments: [{ filename: `facture-${invoice.number}.pdf`, content: pdfBuffer }],
+      attachments: [{ filename: `${filePrefix}-${invoice.number}.pdf`, content: pdfBuffer }],
     });
 
     const updated = await this.invoiceRepository.markSent(companyId, invoiceId, to);

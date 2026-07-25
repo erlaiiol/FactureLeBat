@@ -14,7 +14,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { InvoiceEntryMode } from '../../../generated/prisma/enums';
+import { DocumentType, InvoiceEntryMode } from '../../../generated/prisma/enums';
 import { CreateInvoiceCustomerFieldDto } from './create-invoice-customer-field.dto';
 import { CreateInvoiceLineDto } from './create-invoice-line.dto';
 import { CreateInvoiceServiceLineDto } from './create-invoice-service-line.dto';
@@ -80,6 +80,14 @@ export class CreateInvoiceDto {
   @IsEnum(InvoiceEntryMode)
   @ManualModeFieldsConsistency()
   entryMode?: InvoiceEntryMode = InvoiceEntryMode.GUIDED;
+
+  // Phase 14.3: a devis is mechanically a facture — same pipeline, same
+  // fields below — just a different label/numbering sequence (see
+  // DocumentType, schema.prisma). Defaults to FACTURE so every
+  // pre-Phase-14.3 client keeps working unchanged.
+  @IsOptional()
+  @IsEnum(DocumentType)
+  documentType?: DocumentType = DocumentType.FACTURE;
 
   // Required (non-empty) only for entryMode GUIDED — a bare @ArrayMinSize(1)
   // would wrongly reject a legitimate MANUAL invoice, which has none. See

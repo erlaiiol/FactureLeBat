@@ -94,7 +94,7 @@ export class PdfService {
         {
           columns: [
             {
-              text: `Facture ${data.number}`,
+              text: `${data.documentType === 'DEVIS' ? 'Devis' : 'Facture'} ${data.number}`,
               font: 'ZillaSlab',
               fontSize: 20,
               bold: true,

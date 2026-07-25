@@ -1,6 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import {
+  ActivatedRoute,
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterLinkActive,
+  RouterOutlet,
+} from '@angular/router';
 import { filter } from 'rxjs';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
@@ -29,7 +36,18 @@ import { InvoiceDraftStore } from './invoice-draft.store';
 })
 export class InvoiceCreateShellPage {
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   protected readonly draftStore = inject(InvoiceDraftStore);
+
+  constructor() {
+    // Phase 14.3: only when the mode-choice slider actually sent one — a
+    // direct/bookmarked entry into `rapide` (no query param) must never
+    // silently flip an in-progress devis draft back to FACTURE.
+    const type = this.route.snapshot.queryParamMap.get('type');
+    if (type === 'DEVIS' || type === 'FACTURE') {
+      this.draftStore.setDocumentType(type);
+    }
+  }
 
   // Phase 15: hides the bottom bar's own "Aperçu" button while already on
   // the preview step — it would otherwise sit there redundantly next to

@@ -16,6 +16,9 @@ export class CustomerRepository {
   // enough that "first 500 alphabetically" stops being everything.
   private static readonly MAX_LISTED_CUSTOMERS = 500;
 
+  // Phase 14.5: matches name, companyName, address, and description — not
+  // name alone (see docs/roadmap.md Phase 14.5). Same plain substring
+  // pattern as ProductRepository's search, no fuzzy matching.
   findAll(companyId: string, search?: string): Promise<Customer[]> {
     return this.prisma.customer.findMany({
       where: {
@@ -25,6 +28,8 @@ export class CustomerRepository {
               OR: [
                 { name: { contains: search, mode: 'insensitive' } },
                 { companyName: { contains: search, mode: 'insensitive' } },
+                { address: { contains: search, mode: 'insensitive' } },
+                { description: { contains: search, mode: 'insensitive' } },
               ],
             }
           : {}),
@@ -32,6 +37,41 @@ export class CustomerRepository {
       orderBy: { name: 'asc' },
       take: CustomerRepository.MAX_LISTED_CUSTOMERS,
     });
+  }
+
+  // Phase 14.5: "date du dernier devis" / "dernière facture" per customer —
+  // derived from Invoice at read time, never persisted (same rule as
+  // invoice totals). One grouped query for every customer already loaded by
+  // findAll above, rather than N+1 per-customer queries.
+  async findLastDocumentDatesByCustomer(
+    companyId: string,
+    customerIds: string[],
+  ): Promise<Map<string, { lastDevisDate: Date | null; lastFactureDate: Date | null }>> {
+    const result = new Map<string, { lastDevisDate: Date | null; lastFactureDate: Date | null }>();
+    if (customerIds.length === 0) {
+      return result;
+    }
+
+    const groups = await this.prisma.invoice.groupBy({
+      by: ['customerId', 'documentType'],
+      where: { companyId, customerId: { in: customerIds } },
+      _max: { date: true },
+    });
+
+    for (const group of groups) {
+      if (!group.customerId) {
+        continue;
+      }
+      const entry = result.get(group.customerId) ?? { lastDevisDate: null, lastFactureDate: null };
+      if (group.documentType === 'DEVIS') {
+        entry.lastDevisDate = group._max.date;
+      } else {
+        entry.lastFactureDate = group._max.date;
+      }
+      result.set(group.customerId, entry);
+    }
+
+    return result;
   }
 
   // findFirst (not findUnique) so the companyId filter can be part of the
@@ -64,6 +104,7 @@ export class CustomerRepository {
         email: data.email ?? null,
         phone: data.phone ?? null,
         siret: data.siret ?? null,
+        description: data.description ?? null,
       },
     });
     if (count === 0) {

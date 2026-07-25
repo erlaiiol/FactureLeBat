@@ -33,6 +33,7 @@ export class CustomerFormPage {
     email: [''],
     phone: [''],
     siret: ['', Validators.pattern(/^$|^\d{14}$/)],
+    description: [''],
   });
 
   constructor() {
@@ -50,6 +51,7 @@ export class CustomerFormPage {
               email: customer.email ?? '',
               phone: customer.phone ?? '',
               siret: customer.siret ?? '',
+              description: customer.description ?? '',
             });
           },
           error: () => {
@@ -77,6 +79,7 @@ export class CustomerFormPage {
       email: value.email || undefined,
       phone: value.phone || undefined,
       siret: value.siret || undefined,
+      description: value.description || undefined,
     };
 
     this.saving.set(true);
