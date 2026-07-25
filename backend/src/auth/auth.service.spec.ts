@@ -64,11 +64,13 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
   const refreshCreate = jest.fn<Promise<unknown>, [string, string, Date, boolean]>();
   const refreshFindByHash = jest.fn();
   const refreshRevoke = jest.fn();
+  const refreshRevokeIfActiveWithReplacement = jest.fn().mockResolvedValue(1);
   const refreshRevokeAllForUser = jest.fn();
   const refreshTokenRepository = {
     create: refreshCreate,
     findByHash: refreshFindByHash,
     revoke: refreshRevoke,
+    revokeIfActiveWithReplacement: refreshRevokeIfActiveWithReplacement,
     revokeAllForUser: refreshRevokeAllForUser,
   } as unknown as RefreshTokenRepository;
 
@@ -111,6 +113,7 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
     refreshCreate,
     refreshFindByHash,
     refreshRevoke,
+    refreshRevokeIfActiveWithReplacement,
     refreshRevokeAllForUser,
     authTokenCreate,
     authTokenFindByHash,
@@ -244,13 +247,20 @@ describe('AuthService.login', () => {
 
 describe('AuthService.refresh', () => {
   it('rotates a valid token and preserves its remembered flag', async () => {
-    const { service, findById, refreshFindByHash, refreshRevoke, refreshCreate } = buildService();
+    const {
+      service,
+      findById,
+      refreshFindByHash,
+      refreshRevokeIfActiveWithReplacement,
+      refreshCreate,
+    } = buildService();
     refreshFindByHash.mockResolvedValue({
       id: 'rt-1',
       userId: 'user-1',
       tokenHash: hashToken('raw-token'),
       expiresAt: new Date(Date.now() + 60_000),
       revokedAt: null,
+      replacedByTokenHash: null,
       remembered: false,
       createdAt: new Date(),
     });
@@ -258,7 +268,7 @@ describe('AuthService.refresh', () => {
 
     await service.refresh('raw-token');
 
-    expect(refreshRevoke).toHaveBeenCalledWith('rt-1');
+    expect(refreshRevokeIfActiveWithReplacement).toHaveBeenCalledWith('rt-1', expect.any(String));
     expect(refreshCreate).toHaveBeenCalledWith(
       'user-1',
       expect.any(String),
@@ -267,14 +277,61 @@ describe('AuthService.refresh', () => {
     );
   });
 
-  it('treats a replayed (already-revoked) refresh token as a compromise signal and revokes every session', async () => {
+  it('forgives reuse of a just-rotated token within the grace period instead of nuking every session', async () => {
+    // Two tabs racing the same pre-rotation token: the loser sees it
+    // already revoked, but replacedByTokenHash proves it was a clean
+    // rotation moments ago, not a stolen/replayed token.
+    const { service, findById, refreshFindByHash, refreshRevokeAllForUser, refreshCreate } =
+      buildService();
+    refreshFindByHash.mockResolvedValue({
+      id: 'rt-1',
+      userId: 'user-1',
+      tokenHash: hashToken('raw-token'),
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: new Date(Date.now() - 1_000), // rotated 1s ago
+      replacedByTokenHash: 'some-other-hash',
+      remembered: true,
+      createdAt: new Date(),
+    });
+    findById.mockResolvedValue(buildUser());
+
+    await service.refresh('raw-token');
+
+    expect(refreshRevokeAllForUser).not.toHaveBeenCalled();
+    expect(refreshCreate).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
+      expect.any(Date),
+      true,
+    );
+  });
+
+  it('treats a replayed refresh token as a compromise signal once past the grace period and revokes every session', async () => {
     const { service, refreshFindByHash, refreshRevokeAllForUser } = buildService();
     refreshFindByHash.mockResolvedValue({
       id: 'rt-1',
       userId: 'user-1',
       tokenHash: hashToken('raw-token'),
       expiresAt: new Date(Date.now() + 60_000),
-      revokedAt: new Date(), // already rotated once — this is a replay
+      revokedAt: new Date(Date.now() - 60_000), // rotated a minute ago — well past the grace period
+      replacedByTokenHash: 'some-other-hash',
+      remembered: true,
+      createdAt: new Date(),
+    });
+
+    await expect(service.refresh('raw-token')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(refreshRevokeAllForUser).toHaveBeenCalledWith('user-1');
+  });
+
+  it('treats reuse of a token revoked without a replacement (logout, prior nuke-all) as a compromise signal', async () => {
+    const { service, refreshFindByHash, refreshRevokeAllForUser } = buildService();
+    refreshFindByHash.mockResolvedValue({
+      id: 'rt-1',
+      userId: 'user-1',
+      tokenHash: hashToken('raw-token'),
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: new Date(), // revoked moments ago, but not via a rotation
+      replacedByTokenHash: null,
       remembered: true,
       createdAt: new Date(),
     });

@@ -287,6 +287,15 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
 
+  // Set when this token is revoked *because* it was cleanly rotated forward
+  // (see AuthService.rotateFrom) — points at the tokenHash of whatever
+  // replaced it. Left null when revoked for any other reason (logout,
+  // theft-response nuke-all). AuthService.handleReuse uses "is this set" to
+  // tell a benign concurrent-rotation race (two tabs refreshing at once)
+  // apart from a genuine replay of a dead token, which only the latter
+  // should treat as a stolen refresh token.
+  replacedByTokenHash String? @unique
+
   // Carries the artisan's "rester connecté" choice across rotations — each
   // rotated token in the chain gets the same expiry length as the one it
   // replaces (30 days) or doesn't (1 day), rather than a duration inferred

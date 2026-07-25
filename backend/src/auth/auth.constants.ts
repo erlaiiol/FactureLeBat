@@ -19,3 +19,11 @@ export const BCRYPT_SALT_ROUNDS = 12;
 
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+
+// Reuse of an already-rotated refresh token is normally treated as theft
+// (see AuthService.handleReuse). Within this window of its rotation, reuse
+// is assumed to be a benign race between two requests presenting the same
+// pre-rotation token (e.g. two tabs refreshing at once) rather than an
+// attacker replaying a stolen token, and is forgiven instead of nuking every
+// session for the user.
+export const REFRESH_REUSE_GRACE_PERIOD_MS = 15_000;

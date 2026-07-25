@@ -12,7 +12,10 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import type { StringValue } from 'ms';
 import { AuthTokenPurpose } from '../../generated/prisma/enums';
-import { UserModel as User } from '../../generated/prisma/models';
+import {
+  RefreshTokenModel as RefreshToken,
+  UserModel as User,
+} from '../../generated/prisma/models';
 import { SmtpCredentials } from '../mail-settings/entities/mail-settings.entity';
 import { MailerService } from '../mailer/mailer.service';
 import {
@@ -20,6 +23,7 @@ import {
   CURRENT_TERMS_VERSION,
   EMAIL_VERIFICATION_TTL_MS,
   PASSWORD_RESET_TTL_MS,
+  REFRESH_REUSE_GRACE_PERIOD_MS,
 } from './auth.constants';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { LoginDto } from './dto/login.dto';
@@ -199,23 +203,58 @@ export class AuthService {
     if (!existing) {
       throw new UnauthorizedException();
     }
-    if (existing.revokedAt) {
-      // Replay of an already-rotated token: treated as a stolen/leaked
-      // refresh token — nuke every session for this user, not just this
-      // one (see docs/roadmap.md Phase 13).
-      await this.refreshTokenRepository.revokeAllForUser(existing.userId);
-      throw new UnauthorizedException();
-    }
     if (existing.expiresAt.getTime() < Date.now()) {
       throw new UnauthorizedException();
     }
+    if (existing.revokedAt) {
+      return this.handleReuse(existing);
+    }
+    return this.rotateFrom(existing);
+  }
 
-    await this.refreshTokenRepository.revoke(existing.id);
+  // A revoked token being presented again. If it was revoked by a clean
+  // rotation (replacedByTokenHash set — see rotateFrom) and we're still
+  // within REFRESH_REUSE_GRACE_PERIOD_MS of that, this is almost certainly
+  // the losing side of a same-instant race, not an attacker replaying a
+  // leaked token: forgive it and rotate forward again rather than nuking
+  // every session for the user. Anything else (revoked via logout, an
+  // earlier theft-response nuke-all, or reuse long after rotation) is
+  // treated as a genuinely stolen/leaked refresh token (see docs/roadmap.md
+  // Phase 13).
+  private async handleReuse(existing: RefreshToken): Promise<{
+    user: PublicUser;
+    tokens: IssuedTokens;
+  }> {
+    const withinGracePeriod =
+      Date.now() - existing.revokedAt!.getTime() <= REFRESH_REUSE_GRACE_PERIOD_MS;
+    if (existing.replacedByTokenHash && withinGracePeriod) {
+      return this.rotateFrom(existing);
+    }
+    await this.refreshTokenRepository.revokeAllForUser(existing.userId);
+    throw new UnauthorizedException();
+  }
+
+  // Always issues a fresh, persisted token pair for existing.userId — even
+  // when called from handleReuse's grace-period path, where existing is
+  // already revoked and the CAS below is a harmless no-op. The count from
+  // revokeIfActiveWithReplacement is intentionally ignored: whether or not
+  // this call is the one that flips existing.revokedAt, the caller walks
+  // away with a valid session either way, so there is nothing to branch on
+  // (see the module doc on replacedByTokenHash for why the revoke and the
+  // pointer write must land together rather than as two separate calls).
+  private async rotateFrom(existing: RefreshToken): Promise<{
+    user: PublicUser;
+    tokens: IssuedTokens;
+  }> {
     const user = await this.userRepository.findById(existing.userId);
     if (!user) {
       throw new UnauthorizedException();
     }
     const tokens = await this.issueTokens(user, existing.remembered);
+    await this.refreshTokenRepository.revokeIfActiveWithReplacement(
+      existing.id,
+      hashToken(tokens.refreshToken),
+    );
     return { user: toPublicUser(user), tokens };
   }
 
