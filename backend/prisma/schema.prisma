@@ -112,6 +112,21 @@ enum AuthTokenPurpose {
   PASSWORD_RESET
 }
 
+// Phase 14: mirrors the subset of Stripe subscription statuses this app
+// actually branches on — NONE (never subscribed, the default) vs. the two
+// states a real Stripe subscription can settle in that we care about.
+// Deliberately not a 1:1 copy of Stripe's own (much larger) status enum:
+// trialing/incomplete/incomplete_expired all collapse into NONE here since
+// none of them grant premium access, and Stripe remains the source of truth
+// for the raw state — this column is only ever written from a verified
+// webhook event (see BillingService.applySubscriptionEvent).
+enum SubscriptionStatus {
+  NONE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
 model Company {
   id String @id @default(uuid())
 
@@ -151,11 +166,36 @@ model Company {
   smtpUser              String?
   smtpPasswordEncrypted String?
 
+  // Phase 14: Stripe subscription billing. stripeCustomerId is created lazily
+  // (on the first checkout attempt), not at Company creation — most
+  // companies never subscribe, and creating a Stripe Customer for every
+  // signup would mean an API call (and an orphaned Stripe object) for
+  // artisans who never touch billing. subscriptionStatus/currentPeriodEnd/
+  // cancelAtPeriodEnd are written exclusively from a verified webhook event
+  // (see BillingService) — never optimistically set from the checkout
+  // redirect, which only proves the artisan reached Stripe, not that the
+  // payment actually completed.
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  subscriptionStatus   SubscriptionStatus @default(NONE)
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+
+  // Premium access granted outside Stripe — an admin's manual grant or a
+  // redeemed PromoCode, both funnel through the same field (see
+  // BillingService.grantPremiumDays). Independent of subscriptionStatus:
+  // an artisan can have both an active subscription AND a promo grant
+  // layered on top (e.g. a free month applied while already paying), so
+  // PremiumGateService checks "is either one currently valid", never one
+  // exclusively.
+  premiumGrantedUntil DateTime?
+
   invoices         Invoice[]
   sourcingSearches SourcingSearch[]
   customers        Customer[]
   products         Product[]
   services         Service[]
+  promoRedemptions PromoCodeRedemption[]
 
   // Phase 13: the single artisan account that owns this Company. Optional
   // on this side only because Prisma requires a nullable back-relation
@@ -627,4 +667,47 @@ model SourcingSearch {
 
   @@unique([companyId, kind, queryHash])
   @@index([companyId, createdAt])
+}
+
+// Phase 14: an admin-issued code redeemable once per company for a fixed
+// number of days of premium access (e.g. a "premium 1 month" code handed
+// out for support/marketing purposes) — a lighter-weight path than Stripe
+// checkout for granting access without payment. code is stored uppercased
+// (see PromoCodeService.normalizeCode) so redemption is case-insensitive
+// without a citext extension. redemptionsCount is a denormalized counter
+// (incremented in the same transaction as each PromoCodeRedemption insert)
+// so "is this code exhausted" is a cheap read on the row itself instead of
+// a COUNT(*) over redemptions on every redemption attempt.
+model PromoCode {
+  id String @id @default(uuid())
+
+  code             String    @unique
+  durationDays     Int
+  maxRedemptions   Int?
+  redemptionsCount Int       @default(0)
+  active           Boolean   @default(true)
+  expiresAt        DateTime?
+
+  redemptions PromoCodeRedemption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// One row per (code, company) redemption — the @@unique below is what
+// actually enforces "once per account" at the DB level, not just app-side
+// logic that a race could slip past.
+model PromoCodeRedemption {
+  id String @id @default(uuid())
+
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  redeemedAt DateTime @default(now())
+
+  @@unique([promoCodeId, companyId])
+  @@index([companyId])
 }

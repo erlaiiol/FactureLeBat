@@ -1,0 +1,116 @@
+<div class="flex flex-col gap-6">
+  <div class="flex items-center justify-between gap-2">
+    <h1 class="font-heading text-2xl font-bold tracking-wide text-ink uppercase">
+      Administration — Codes promo
+    </h1>
+    <a
+      routerLink="/admin"
+      class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+    >
+      Utilisateurs
+    </a>
+  </div>
+
+  <form
+    [formGroup]="form"
+    (ngSubmit)="create()"
+    class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5 sm:flex-row sm:flex-wrap sm:items-end"
+  >
+    <label class="flex flex-col gap-1 text-sm text-ink-soft">
+      Code (optionnel, généré si vide)
+      <input
+        formControlName="code"
+        type="text"
+        placeholder="SALON2026"
+        class="rounded-lg border border-line bg-bg px-3 py-2 uppercase text-ink"
+      />
+    </label>
+    <label class="flex flex-col gap-1 text-sm text-ink-soft">
+      Durée (jours)
+      <input
+        formControlName="durationDays"
+        type="number"
+        min="1"
+        class="w-28 rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+      />
+    </label>
+    <label class="flex flex-col gap-1 text-sm text-ink-soft">
+      Utilisations max (optionnel)
+      <input
+        formControlName="maxRedemptions"
+        type="number"
+        min="1"
+        class="w-32 rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+      />
+    </label>
+    <label class="flex flex-col gap-1 text-sm text-ink-soft">
+      Expire le (optionnel)
+      <input
+        formControlName="expiresAt"
+        type="date"
+        class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+      />
+    </label>
+    <app-big-button type="submit" variant="primary" tone="solid" [disabled]="creating()">
+      {{ creating() ? 'Création…' : 'Créer' }}
+    </app-big-button>
+  </form>
+  @if (createError(); as message) {
+    <p class="text-sm font-medium text-danger">{{ message }}</p>
+  }
+
+  @if (loading()) {
+    <p class="text-ink-soft">Chargement…</p>
+  } @else {
+    <div class="overflow-x-auto rounded-2xl border border-line">
+      <table class="w-full min-w-[720px] text-left text-sm">
+        <thead class="bg-secondary-subtle text-ink-soft">
+          <tr>
+            <th class="p-3">Code</th>
+            <th class="p-3">Durée</th>
+            <th class="p-3">Utilisations</th>
+            <th class="p-3">Expire le</th>
+            <th class="p-3">Statut</th>
+            <th class="p-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (code of codes(); track code.id) {
+            <tr class="border-t border-line">
+              <td class="p-3 font-mono">{{ code.code }}</td>
+              <td class="p-3">{{ code.durationDays }} j</td>
+              <td class="p-3">
+                {{ code.redemptionsCount
+                }}{{ code.maxRedemptions ? ' / ' + code.maxRedemptions : '' }}
+              </td>
+              <td class="p-3">{{ code.expiresAt ? (code.expiresAt | date: 'shortDate') : '—' }}</td>
+              <td class="p-3">
+                @if (code.active) {
+                  <app-badge variant="success" tone="subtle">Actif</app-badge>
+                } @else {
+                  <app-badge variant="secondary" tone="subtle">Désactivé</app-badge>
+                }
+              </td>
+              <td class="p-3 flex gap-2">
+                <button
+                  type="button"
+                  (click)="toggleActive(code)"
+                  class="rounded-lg border border-line px-3 py-1 text-sm hover:bg-secondary-subtle"
+                >
+                  {{ code.active ? 'Désactiver' : 'Activer' }}
+                </button>
+                <button
+                  type="button"
+                  (click)="remove(code)"
+                  class="rounded-lg border border-line px-3 py-1 text-sm text-danger hover:bg-danger-subtle"
+                >
+                  Supprimer
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

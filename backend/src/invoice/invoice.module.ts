@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BillingModule } from '../billing/billing.module';
 import { CompanyModule } from '../company/company.module';
 import { CustomerModule } from '../customer/customer.module';
 import { MailSettingsModule } from '../mail-settings/mail-settings.module';
@@ -20,6 +21,7 @@ import { PdfModule } from './pdf/pdf.module';
     PdfModule,
     MailSettingsModule,
     MailerModule,
+    BillingModule,
   ],
   controllers: [InvoiceController],
   providers: [

@@ -7,6 +7,13 @@ export interface TourStepDefinition {
   // previous one (e.g. the invoice-creation tour moving from the client
   // step to the lignes step).
   route?: string;
+  // When set, doing the thing the step describes — clicking the anchor, or
+  // typing into it — advances the tour by itself, same as pressing
+  // "Suivant" (see TourOverlayComponent). Only makes sense for a step whose
+  // anchor is a same-page action (a button, a search field): a step whose
+  // anchor click causes real navigation doesn't need this — TourService's
+  // own route-matching already carries the tour forward in that case.
+  advanceOn?: 'click' | 'input';
   title: string;
   body: string;
 }
@@ -41,11 +48,13 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       {
         route: '/factures/nouvelle/rapide/lignes',
         anchorId: 'invoice-add-product-button',
+        advanceOn: 'click',
         title: 'Ajoutez un matériau ou un produit',
         body: 'Cliquez sur ce bouton orange pour choisir un produit de votre catalogue, en créer un nouveau, ou ajouter une ligne ponctuelle — quantité et prix se remplissent juste après, le total se calcule automatiquement.',
       },
       {
         anchorId: 'invoice-add-service-button',
+        advanceOn: 'click',
         title: 'Et la main-d’œuvre ?',
         body: 'Ce bouton bleu fait pareil pour vos prestations — main-d’œuvre, forfait, déplacement…',
       },
@@ -56,6 +65,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         anchorId: 'invoice-preview',
+        advanceOn: 'click',
         title: 'Prévisualisez à tout moment',
         body: "Consultez l'aperçu PDF de la facture avant même de l'enregistrer.",
       },
@@ -89,16 +99,19 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         anchorId: 'manual-add-row',
+        advanceOn: 'click',
         title: 'Ajouter une ligne',
         body: 'Un clic ajoute une nouvelle ligne au tableau ; la croix à gauche de chaque ligne la supprime.',
       },
       {
         anchorId: 'manual-add-column',
+        advanceOn: 'click',
         title: 'Ajouter une colonne',
         body: 'Besoin d’une information en plus (référence chantier, remise…) ? Ajoutez votre propre colonne ici.',
       },
       {
         anchorId: 'manual-format',
+        advanceOn: 'click',
         title: 'Mettre en forme',
         body: 'Un clic aligne et formate proprement les nombres et le texte du tableau.',
       },
@@ -109,6 +122,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         anchorId: 'manual-preview',
+        advanceOn: 'click',
         title: 'Prévisualisez à tout moment',
         body: "Consultez l'aperçu PDF de la facture avant même de l'enregistrer.",
       },
@@ -127,6 +141,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         anchorId: 'catalog-search',
+        advanceOn: 'input',
         title: 'Recherchez',
         body: 'Retrouvez rapidement un produit déjà enregistré.',
       },
@@ -156,6 +171,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         anchorId: 'customers-search',
+        advanceOn: 'input',
         title: 'Recherchez',
         body: 'Retrouvez rapidement un client déjà enregistré.',
       },

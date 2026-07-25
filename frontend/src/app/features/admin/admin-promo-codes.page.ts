@@ -1,0 +1,102 @@
+import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { PromoCode } from '../../core/models/admin.model';
+import { AdminService } from '../../core/services/admin.service';
+import { BadgeComponent } from '../../shared/components/badge.component';
+import { BigButtonComponent } from '../../shared/components/big-button.component';
+
+@Component({
+  selector: 'app-admin-promo-codes-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ReactiveFormsModule, RouterLink, BadgeComponent, BigButtonComponent, DatePipe],
+  templateUrl: './admin-promo-codes.page.html',
+})
+export class AdminPromoCodesPage {
+  private readonly adminService = inject(AdminService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly fb = inject(FormBuilder);
+
+  protected readonly loading = signal(true);
+  protected readonly codes = signal<PromoCode[]>([]);
+  protected readonly creating = signal(false);
+  protected readonly createError = signal<string | null>(null);
+
+  // code is left blank by default — PromoCodeService generates one
+  // server-side when omitted, so a single click ("Créer") is enough for the
+  // common case, same "click more, type less" spirit as the rest of the app.
+  protected readonly form = this.fb.nonNullable.group({
+    code: [''],
+    durationDays: [30, [Validators.required, Validators.min(1)]],
+    maxRedemptions: [null as number | null],
+    expiresAt: [''],
+  });
+
+  constructor() {
+    this.load();
+  }
+
+  protected load(): void {
+    this.loading.set(true);
+    this.adminService
+      .listPromoCodes()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (codes) => {
+          this.codes.set(codes);
+          this.loading.set(false);
+        },
+        error: () => this.loading.set(false),
+      });
+  }
+
+  protected create(): void {
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+    const raw = this.form.getRawValue();
+    this.creating.set(true);
+    this.createError.set(null);
+    this.adminService
+      .createPromoCode({
+        code: raw.code || undefined,
+        durationDays: raw.durationDays,
+        maxRedemptions: raw.maxRedemptions ?? undefined,
+        expiresAt: raw.expiresAt || undefined,
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.creating.set(false);
+          this.form.reset({ code: '', durationDays: 30, maxRedemptions: null, expiresAt: '' });
+          this.load();
+        },
+        error: (error: HttpErrorResponse) => {
+          this.creating.set(false);
+          const body = error.error as { message?: string } | null;
+          this.createError.set(body?.message ?? 'Impossible de créer ce code promo.');
+        },
+      });
+  }
+
+  protected toggleActive(code: PromoCode): void {
+    this.adminService
+      .setPromoCodeActive(code.id, !code.active)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: () => this.load() });
+  }
+
+  protected remove(code: PromoCode): void {
+    if (!window.confirm(`Supprimer le code ${code.code} ?`)) {
+      return;
+    }
+    this.adminService
+      .deletePromoCode(code.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: () => this.load() });
+  }
+}

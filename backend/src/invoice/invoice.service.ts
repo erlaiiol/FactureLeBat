@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InvoiceEntryMode } from '../../generated/prisma/enums';
+import { PremiumGateService } from '../billing/premium-gate.service';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
@@ -26,9 +27,16 @@ export class InvoiceService {
     private readonly customerService: CustomerService,
     private readonly serviceCatalogService: ServiceCatalogService,
     private readonly mapper: InvoiceMapper,
+    private readonly premiumGate: PremiumGateService,
   ) {}
 
   async create(companyId: string, dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
+    // Phase 14: the free trial covers exactly one invoice per company —
+    // checked first, before any other work, so a company past its trial
+    // never even reaches customer/service-catalog lookups for a doomed
+    // request. See docs/roadmap.md Phase 14 and PremiumGateService.
+    await this.premiumGate.assertCanCreateInvoice(companyId);
+
     const company = await this.companyService.getProfile(companyId);
 
     // Confirms the id exists *for this tenant* (a clean 404 instead of a raw
@@ -141,6 +149,12 @@ export class InvoiceService {
   // since nothing here is persisted and a stale/typo'd id can't corrupt any
   // stored data. Only reads the company profile; touches no other table.
   async previewPdf(companyId: string, dto: CreateInvoiceDto): Promise<InvoicePdfData> {
+    // Phase 14: gated identically to create() — the roadmap's "frustrate at
+    // the last moment" call is that a 2nd invoice's preview is blocked too,
+    // not just its final persistence, since preview is reached at the same
+    // late point in the flow (see docs/roadmap.md Phase 14).
+    await this.premiumGate.assertCanCreateInvoice(companyId);
+
     const company = await this.companyService.getProfile(companyId);
     return this.mapper.toPreviewPdfData(dto, company);
   }

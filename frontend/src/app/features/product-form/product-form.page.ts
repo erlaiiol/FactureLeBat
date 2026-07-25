@@ -45,71 +45,22 @@ export class ProductFormPage {
   // picked (e.g. "Vendu par colis de ... m²").
   protected readonly unitLabels = UNIT_LABELS;
 
-  // UX follow-up: an artisan reads a packaging size off a supplier's price
-  // list as "45€/m², 405€ la boîte" — not as "9 m² par boîte" — so the
-  // artisan enters both real prices and the app deduces the packaging
-  // quantity, instead of asking them to do that division themselves. The
-  // package-price signal is local, UI-only convenience — never sent to the
-  // backend; only the deduced packagingQuantity (a real form control) is
-  // ever persisted.
-  protected readonly packagePriceEuros = signal<number | null>(null);
-
-  // Advanced escape hatch: an artisan who already knows the exact packaging
-  // content (but not, or not precisely, the box price) can still type it
-  // directly — same "autofill, not a lock" rule as every other soft
-  // catalog/snapshot field in this codebase. Off by default since the
-  // two-price flow above is the common case.
-  protected readonly manualPackaging = signal(false);
-
-  protected hasPackaging(): boolean {
-    const packagingQuantity = this.form.controls.packagingQuantity.value;
-    return packagingQuantity != null && packagingQuantity > 0;
-  }
+  // UX follow-up: an artisan describes a box the way it's physically
+  // labeled — "8 planches" — not the way pricing math would derive it. Both
+  // packaging fields are entered directly (no more deducing content from
+  // two prices, which drifted from reality whenever a supplier's prices
+  // didn't divide evenly). This item-count field is local, UI-only
+  // convenience — never sent to the backend; only packagingQuantity (the
+  // real content, in the product's own unit) is ever persisted.
+  protected readonly packagingItemCount = signal<number | null>(null);
 
   protected unitPriceButtonLabel(): string {
     return UNIT_PRICE_BUTTON_LABELS[this.form.controls.unit.value];
   }
 
-  protected enableManualPackaging(): void {
-    this.manualPackaging.set(true);
-  }
-
-  // Leaving manual mode immediately re-derives packagingQuantity from
-  // whatever the two price fields currently hold, so the two never silently
-  // disagree once the artisan switches back.
-  protected disableManualPackaging(): void {
-    this.manualPackaging.set(false);
-    this.recomputePackagingQuantity(this.form.controls.priceEuros.value, this.packagePriceEuros());
-  }
-
-  protected onUnitPriceInput(rawValue: string): void {
-    this.recomputePackagingQuantity(Number(rawValue), this.packagePriceEuros());
-  }
-
-  protected onPackagePriceInput(rawValue: string): void {
-    const packagePrice = Number(rawValue);
-    this.packagePriceEuros.set(Number.isFinite(packagePrice) ? packagePrice : null);
-    this.recomputePackagingQuantity(this.form.controls.priceEuros.value, packagePrice);
-  }
-
-  // The single place that deduces "how much is in one package" from the two
-  // real prices — never runs while the artisan is using the manual override.
-  private recomputePackagingQuantity(unitPrice: number, packagePrice: number | null): void {
-    if (this.manualPackaging()) {
-      return;
-    }
-    const packagingQuantityControl = this.form.controls.packagingQuantity;
-    if (
-      Number.isFinite(unitPrice) &&
-      unitPrice > 0 &&
-      packagePrice != null &&
-      Number.isFinite(packagePrice) &&
-      packagePrice > 0
-    ) {
-      packagingQuantityControl.setValue(Math.round((packagePrice / unitPrice) * 1000) / 1000);
-    } else {
-      packagingQuantityControl.setValue(null);
-    }
+  protected onPackagingItemCountInput(rawValue: string): void {
+    const count = Number(rawValue);
+    this.packagingItemCount.set(Number.isFinite(count) && count > 0 ? count : null);
   }
 
   protected readonly form = this.fb.nonNullable.group({

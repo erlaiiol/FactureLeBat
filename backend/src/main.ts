@@ -17,6 +17,13 @@ async function bootstrap() {
   // too, not just request-time logs.
   const app = await NestFactory.create(AppModule, {
     logger: WinstonModule.createLogger(buildWinstonOptions()),
+    // Phase 14: exposes req.rawBody (the exact, untouched request bytes)
+    // alongside Nest's normal JSON-parsed req.body — BillingController's
+    // webhook route needs the raw bytes to verify Stripe's signature
+    // (StripeClientService.constructWebhookEvent), since re-serializing the
+    // already-parsed body is not guaranteed byte-identical to what Stripe
+    // actually signed.
+    rawBody: true,
   });
   const config = app.get(ConfigService);
 

@@ -11,13 +11,20 @@ import {
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { ThemeService } from './core/services/theme.service';
+import { PaywallModalComponent } from './shared/components/paywall-modal.component';
 import { TourService } from './shared/tour/tour.service';
 import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
 
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, TourOverlayComponent],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    TourOverlayComponent,
+    PaywallModalComponent,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -46,8 +53,12 @@ export class App {
     { initialValue: false },
   );
 
-  protected toggleTour(): void {
-    this.tourService.setTourEnabled(!this.tourService.tourEnabled());
+  // Nav bar's "Aide" button: always replays whichever guided tour owns the
+  // current page, regardless of the auto-launch preference in Settings —
+  // asking for help should work even after it's been turned off there
+  // (that toggle only controls whether tours show up unprompted).
+  protected replayHelp(): void {
+    this.tourService.startTourForCurrentRoute();
   }
 
   protected logout(): void {

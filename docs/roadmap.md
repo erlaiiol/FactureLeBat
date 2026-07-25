@@ -682,7 +682,7 @@ Core promise (see positioning.md for the full reasoning): *le système de factur
 - **`fullBleed` route data + `App.isFullBleed` (a `toSignal` over `Router.events`)** lets this one route opt out of the app shell's `max-w-3xl` content container in `app.html` — every other route is a form/list that wants that width cap, only the landing page needs full-width hero sections.
 - **"Atelier sobre" is the visual identity**, per positioning.md's call — a fourth sanctioned spot alongside the PDF header/tour/"Mon activité". `docs/design-system.md`'s Status line ("not yet implemented in frontend") was already stale before this phase — the Tailwind tokens have existed in `styles.css` since Phase 9 — corrected there.
 - **CTA buttons deliberately use `bg-primary` (the "Chantier calibré" orange), not an Atelier tone** — the one clickable element on an otherwise calm storytelling page has to pop, and matches the actual button color the artisan clicks everywhere else once signed up.
-- **The free-trial section states the trial policy honestly without claiming an enforced paywall**: "1 facture offerte, configuration illimitée, puis abonnement pour continuer" describes the intended Phase 14 pricing model, not a mechanism this phase builds — no gate is implemented yet, so nothing here can go stale-vs-reality until Phase 14 ships (decided explicitly with the user rather than half-building a block with no working payment path behind it).
+- **The free-trial section states the trial policy honestly without claiming an enforced paywall**: "1 facture offerte, configuration illimitée, puis abonnement pour continuer" described the intended Phase 14 pricing model at the time this phase was built, not a mechanism this phase itself built — deliberately, rather than half-building a block with no working payment path behind it (decided explicitly with the user). **Now accurate as of Phase 14**: the gate it describes is live (`PremiumGateService`).
 
 ---
 
@@ -766,16 +766,35 @@ Introduce a paid tier: a 15€ premium subscription required after an artisan's 
 
 ## Features
 
-- [ ] Stripe integration for subscription billing (checkout, webhooks for payment/renewal/cancellation events)
-- [ ] Premium gate: free usage up to and including the first invoice, premium subscription required beyond that
-- [ ] Admin account role, separate from regular artisan accounts
-- [ ] Admin dashboard to view/search users and their subscription status
-- [ ] Admin action to grant temporary premium access (e.g. one month) to a specific user, without requiring payment
-- [ ] Promo code system (e.g. a "premium 1 month" code) redeemable by users to unlock premium temporarily
+- [x] Stripe integration for subscription billing (checkout, webhooks for payment/renewal/cancellation events)
+- [x] Premium gate: free usage up to and including the first invoice, premium subscription required beyond that
+- [x] Admin account role, separate from regular artisan accounts
+- [x] Admin dashboard to view/search users and their subscription status
+- [x] Admin action to grant temporary premium access (e.g. one month) to a specific user, without requiring payment
+- [x] Promo code system (e.g. a "premium 1 month" code) redeemable by users to unlock premium temporarily
 
 ## Notes
 
 - Depends on Phase 13 (accounts must exist before subscriptions can attach to them).
+
+## Decided with the user before implementation
+
+- **Gate mechanics: "frustrate at the last moment."** Catalog/customer/service configuration stays unlimited regardless of subscription status — the trial is exactly one *created* invoice per company (`Invoice` count, never a separate persisted counter — same "derived data is never persisted" convention as everywhere else). Past that, the paywall only ever fires at the two actions actually reached late in the flow — "Aperçu" and "Créer la facture" — never earlier by disabling the form. Both are gated identically (a 2nd invoice's *preview* is blocked too, not just its persistence).
+- **Stripe credentials are optional, like `GROQ_API_KEY`/`APP_ENCRYPTION_KEY`.** The app boots with none of `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`STRIPE_PRICE_ID` set — the free-trial gate still blocks a 2nd invoice, there's just no card-payment path to lift it yet (a promo code or admin grant still can).
+- **The first admin account is seeded from an env var (`ADMIN_SEED_EMAIL`) at every boot**, not a self-service "become admin" flow or a one-shot script — deliberately the only way in is something only whoever controls the deployment can set.
+- **Promo codes got a full admin CRUD surface**, not just a bare manual-grant action — codes are listable/creatable/deactivatable/deletable from `/admin/codes-promo`, redeemable once per company via `/abonnement`.
+
+## Implementation notes
+
+- **One mechanism, three ways to reach it.** `Company.premiumGrantedUntil` is the single field a Stripe `ACTIVE` subscription, an admin's manual grant, and a redeemed promo code all funnel through in the same way (`BillingRepository.grantPremiumDays` extends it from whichever is later — the current grant if still running, or now — so a second grant stacks instead of resetting the clock). `PremiumGateService.hasPremiumAccess` checks "is either an active Stripe subscription OR a still-valid grant true", never one exclusively — an artisan can be a paying subscriber *and* have a promo month layered on top.
+- **`PremiumGateService.assertCanCreateInvoice` is called at the very top of both `InvoiceService.create()` and `.previewPdf()`**, before any other work (customer/service-catalog lookups) — a company past its trial never reaches those for a doomed request. Throws `PremiumRequiredException`, a plain `HttpException` with status 402 and `error: 'PremiumRequired'` — the frontend's two call sites (`invoice-create-shell.page.ts`'s `preview()`, `invoice-create-lines-step.page.ts`'s `submit()`) check specifically for that status to show `PaywallModalComponent` instead of their generic error message.
+- **Stripe SDK access is isolated in `StripeClientService`** (`billing/stripe/`), same "isolate the risky external boundary" split as `GroqClientService`/`MailerService` — `BillingService` never touches the SDK directly. `subscription_data.metadata.companyId` is set on checkout so a webhook event can resolve the company even before `stripeCustomerId` would otherwise do it; `applySubscriptionEvent` still falls back to looking the company up by `stripeCustomerId` for events where metadata isn't present.
+- **Webhook signature verification needs the exact raw request bytes**, which a normally-JSON-parsed Nest request doesn't preserve byte-for-byte — `main.ts` passes `rawBody: true` to `NestFactory.create`, and `BillingController.webhook` reads `request.rawBody` (a `RawBodyRequest<Request>`) rather than `request.body`.
+- **`Stripe.Subscription.current_period_end` no longer exists on this SDK version's Subscription root** — it moved to each `SubscriptionItem`. Since this app only ever creates one line item (the 15€/month price), `applySubscriptionEvent` reads it off `subscription.items.data[0]`.
+- **A "Gérer mon abonnement" Stripe customer-portal link was added beyond the roadmap draft above** — decided while building this phase: a subscription system with no way for the artisan to view invoices/update a card/cancel would otherwise need an admin to do all three by hand. `StripeClientService.createPortalSession`/`BillingService.createPortalSession`, surfaced from `/abonnement` once a company has a `stripeCustomerId`.
+- **`Product.code`-style per-tenant uniqueness doesn't apply to `PromoCode.code`** — codes are a small, admin-only, cross-tenant catalog (one `PromoCode` table, globally unique `code`, uppercased at generation/redemption so matching is case-insensitive without a DB extension). `PromoCodeRedemption`'s `@@unique([promoCodeId, companyId])` is what actually enforces "once per company" at the DB level, not just the app-side check ahead of it.
+- **`AdminRepository`/`AdminController` are their own module, not folded into `AuthModule`** — mirrors this codebase's existing boundary style (`mail-settings/` separate from `mailer/`, `onboarding/` separate from `company/`): `AdminModule` imports `BillingModule` to reuse `BillingRepository.grantPremiumDays`/`PromoCodeService` rather than duplicating that logic. `@Roles(UserRole.ADMIN)` at the controller class level is enough — `RolesGuard` is already global (registered in Phase 13, unused until now).
+- **A pre-existing, unrelated schema quirk surfaced while writing this phase's e2e test:** `Invoice.number` is unique across the whole table, not per company (every company defaults to prefix `"F"` starting at 1) — left as-is (out of this phase's scope), the new gate test just gives its throwaway company its own prefix to avoid colliding with the suite's shared one.
 
 
 ---
@@ -862,6 +881,31 @@ An artisan doesn't always remember a client's name — and once the customer bas
 - If Phase 14.3 hasn't landed yet when this is built, ship with a single "dernier document" date instead of two — trivially split later once `documentType` exists.
 
 ---
+
+# Phase 14.7 — Bug Reports (Claude)
+
+## Objective
+
+Two bugs surfaced by Claude while working on other tasks, logged here for triage rather than fixed inline (both out of scope for the task that found them).
+
+## Bugs
+
+- [ ] **Anonymous visitor bounced off `/inscription`/`/connexion`.** Visiting either route anonymously triggers a `GET /api/onboarding` call (fired by `TourService` on app startup, regardless of route), which 401s; the refresh interceptor then redirects to `/connexion` before the form is even filled in. A visitor arriving directly on `/inscription` via a shared link gets bounced straight to the login page. Fix needed if `/inscription` should stay reachable by direct link.
+- [ ] **`POST /api/invoices/preview` 400 on manual-table validation.** Observed in production logs — request rejected with `customerName must be longer than or equal to 1 characters; manualTable.each manual row must supply exactly one cell per column, a non-empty description, and a valid non-negative unit price/line total (or a blank line total)`. Needs reproduction to confirm whether this is a frontend validation gap (bad request reaching the API) or a legitimate rejection surfaced poorly to the user.
+
+<details>
+<summary>Raw log excerpt</summary>
+
+```
+2026-07-23 13:25:18.161 INFO  [b99984c3] [HTTP] GET /api/company 304 23.4ms {"ip":"::ffff:192.168.65.1"}
+2026-07-23 13:25:26.732 DEBUG [7cb7fc33] [PrismaService] SELECT "public"."Company"."id", "public"."Company"."name", "public"."Company"."siret", "public"."Company"."addressLine1", "public"."Company"."addressLine2", "public"."Company"."postalCode", "public"."Company"."city", "public"."Company"."email", "public"."Company"."phone", "public"."Company"."legalStatus"::text, "public"."Company"."vatRateBasisPoints", "public"."Company"."invoiceNumberPrefix", "public"."Company"."nextInvoiceNumber", "public"."Company"."tourEnabled", "public"."Company"."completedTours", "public"."Company"."smtpHost", "public"."Company"."smtpPort", "public"."Company"."smtpSecure", "public"."Company"."smtpUser", "public"."Company"."smtpPasswordEncrypted", "public"."Company"."stripeCustomerId", "public"."Company"."stripeSubscriptionId", "public"."Company"."subscriptionStatus"::text, "public"."Company"."currentPeriodEnd", "public"."Company"."cancelAtPeriodEnd", "public"."Company"."premiumGrantedUntil", "public"."Company"."createdAt", "public"."Company"."updatedAt" FROM "public"."Company" WHERE ("public"."Company"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3 -- 3.60833299998194ms {"params":"[\"4abb9785-b91c-4877-a747-226dbe93df74\",\"1\",\"0\"]"}
+2026-07-23 13:25:26.735 INFO  [7cb7fc33] [HTTP] GET /api/company 304 29.1ms {"ip":"::ffff:192.168.65.1"}
+2026-07-23 13:25:31.480 INFO  [196bd87d] [HTTP] OPTIONS /api/invoices/preview 204 0.8ms {"ip":"::ffff:192.168.65.1"}
+2026-07-23 13:25:31.496 WARN  [91f51eb9] [AllExceptionsFilter] POST /api/invoices/preview -> 400 customerName must be longer than or equal to 1 characters; manualTable.each manual row must supply exactly one cell per column, a non-empty description, and a valid non-negative unit price/line total (or a blank line total)
+2026-07-23 13:25:31.497 WARN  [91f51eb9] [HTTP] POST /api/invoices/preview 400 14.6ms {"ip":"::ffff:192.168.65.1"}
+```
+
+</details>
 
 # Phase 15 — Mandatory Preview & Customizable Line Detail
 

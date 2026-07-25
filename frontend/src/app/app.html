@@ -39,20 +39,56 @@
           class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
           >Mon entreprise</a
         >
+        <a
+          routerLink="/abonnement"
+          routerLinkActive="bg-primary text-primary-fg"
+          class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+          >Mon abonnement</a
+        >
+        @if (authService.currentUser()?.role === 'ADMIN') {
+          <a
+            routerLink="/admin"
+            routerLinkActive="bg-primary text-primary-fg"
+            class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+            >Admin</a
+          >
+        }
       </div>
-      <button
-        type="button"
-        (click)="toggleTour()"
-        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-        [attr.aria-label]="
-          tourService.tourEnabled()
-            ? 'Désactiver les visites guidées'
-            : 'Activer les visites guidées'
-        "
-        [attr.aria-pressed]="tourService.tourEnabled()"
-      >
-        {{ tourService.tourEnabled() ? '🧭 Visites guidées' : '🧭 Visites désactivées' }}
-      </button>
+      <!-- One clear, always-the-same action — "show me how this page
+           works" — instead of the old on/off toggle whose label changed
+           depending on its own state (confusing for a non-technical
+           artisan: is it a button that's currently on, or one that turns
+           something on?). The auto-launch preference itself still lives in
+           Réglages ("Rejouer les visites guidées"); this only ever replays
+           the current page's tour on demand, so it works even if that
+           preference is off. Hidden on a page with no tour of its own,
+           rather than sitting there doing nothing. -->
+      @if (tourService.currentRouteTourId()) {
+        <button
+          type="button"
+          (click)="replayHelp()"
+          title="Revoir l'aide de cette page"
+          aria-label="Revoir l'aide de cette page"
+          class="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9.3a2.5 2.5 0 0 1 4.83.87c0 1.67-2.33 1.83-2.33 3.33" />
+            <circle cx="12" cy="17" r="0.25" fill="currentColor" />
+          </svg>
+          <span class="hidden sm:inline">Aide</span>
+        </button>
+      }
       <button
         type="button"
         (click)="themeService.toggle()"
@@ -91,3 +127,4 @@
 </div>
 
 <app-tour-overlay />
+<app-paywall-modal />

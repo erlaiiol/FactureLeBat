@@ -25,6 +25,16 @@ describe('Invoice pipeline (e2e)', () => {
     app = await createTestApp();
     prisma = app.get(PrismaService);
     session = await registerTestUser(app);
+    // Phase 14: this suite exercises the invoice pipeline itself across
+    // many `it` blocks sharing one company — granting premium up front
+    // (the same field an admin grant/promo-code redemption would set) opts
+    // this company out of the free-trial gate so those tests aren't
+    // coupled to it. The gate itself is covered separately, in its own
+    // fresh-company test below and in premium-gate.service.spec.ts.
+    await prisma.company.update({
+      where: { id: session.companyId },
+      data: { premiumGrantedUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) },
+    });
   });
 
   afterAll(async () => {
@@ -421,6 +431,51 @@ describe('Invoice pipeline (e2e)', () => {
       expect(previewResponse.headers['content-type']).toBe('application/pdf');
       expect((previewResponse.body as Buffer).subarray(0, 4).toString('ascii')).toBe('%PDF');
       expect(await prisma.invoice.count()).toBe(invoiceCountBefore);
+    });
+  });
+
+  describe('Phase 14 free-trial gate', () => {
+    let freeSession: TestSession;
+
+    beforeAll(async () => {
+      freeSession = await registerTestUser(app);
+      // Invoice.number is unique across the whole table, not per company —
+      // a pre-existing, unrelated schema quirk (every company defaults to
+      // prefix "F" starting at 1). Giving this company its own prefix keeps
+      // its invoice numbers from colliding with the outer describe block's
+      // shared `session` company, which already owns "F-000001".
+      await prisma.company.update({
+        where: { id: freeSession.companyId },
+        data: { invoiceNumberPrefix: 'FT' },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.company.delete({ where: { id: freeSession.companyId } });
+    });
+
+    it('allows a brand-new company its first invoice and preview for free, then blocks a 2nd with 402', async () => {
+      const body = {
+        customerName: 'Free Trial Customer',
+        lines: [{ description: 'Parquet', unit: 'UNIT', quantity: 1, unitPriceCents: 1000 }],
+      };
+
+      await authedRequest(app, freeSession).post('/api/invoices/preview').send(body).expect(201);
+      await authedRequest(app, freeSession).post('/api/invoices').send(body).expect(201);
+
+      const blockedPreview = await authedRequest(app, freeSession)
+        .post('/api/invoices/preview')
+        .send(body)
+        .expect(402);
+      expect((blockedPreview.body as { error: string }).error).toBe('PremiumRequired');
+
+      await authedRequest(app, freeSession).post('/api/invoices').send(body).expect(402);
+
+      await prisma.company.update({
+        where: { id: freeSession.companyId },
+        data: { premiumGrantedUntil: new Date(Date.now() + 60_000) },
+      });
+      await authedRequest(app, freeSession).post('/api/invoices').send(body).expect(201);
     });
   });
 });

@@ -1,0 +1,126 @@
+<div class="flex flex-col gap-6">
+  <div class="flex items-center justify-between gap-2">
+    <h1 class="font-heading text-2xl font-bold tracking-wide text-ink uppercase">
+      Administration — Utilisateurs
+    </h1>
+    <a
+      routerLink="/admin/codes-promo"
+      class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+    >
+      Codes promo
+    </a>
+  </div>
+
+  <form (ngSubmit)="search()" class="flex gap-2">
+    <input
+      [formControl]="searchControl"
+      type="text"
+      placeholder="Rechercher par email ou entreprise…"
+      class="flex-1 rounded-xl border border-line bg-bg px-4 py-3 text-ink"
+    />
+    <app-big-button type="submit" variant="secondary" tone="subtle">Rechercher</app-big-button>
+  </form>
+
+  @if (loading()) {
+    <p class="text-ink-soft">Chargement…</p>
+  } @else {
+    <div class="overflow-x-auto rounded-2xl border border-line">
+      <table class="w-full min-w-[720px] text-left text-sm">
+        <thead class="bg-secondary-subtle text-ink-soft">
+          <tr>
+            <th class="p-3">Email</th>
+            <th class="p-3">Entreprise</th>
+            <th class="p-3">Rôle</th>
+            <th class="p-3">Statut</th>
+            <th class="p-3">Factures</th>
+            <th class="p-3">Premium jusqu'au</th>
+            <th class="p-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (user of users(); track user.userId) {
+            <tr class="border-t border-line">
+              <td class="p-3">{{ user.email }}</td>
+              <td class="p-3">{{ user.companyName }}</td>
+              <td class="p-3">{{ user.role }}</td>
+              <td class="p-3">
+                @if (user.hasPremiumAccess) {
+                  <app-badge variant="success" tone="solid">Premium</app-badge>
+                } @else {
+                  <app-badge variant="secondary" tone="subtle">{{
+                    user.subscriptionStatus
+                  }}</app-badge>
+                }
+              </td>
+              <td class="p-3">{{ user.invoiceCount }}</td>
+              <td class="p-3">
+                {{
+                  user.premiumGrantedUntil ? (user.premiumGrantedUntil | date: 'shortDate') : '—'
+                }}
+              </td>
+              <td class="p-3">
+                @if (grantOpenFor() === user.companyId) {
+                  <form
+                    [formGroup]="grantForm"
+                    (ngSubmit)="submitGrant(user.companyId)"
+                    class="flex items-center gap-2"
+                  >
+                    <input
+                      formControlName="days"
+                      type="number"
+                      min="1"
+                      class="w-20 rounded-lg border border-line bg-bg px-2 py-1"
+                    />
+                    <span class="text-ink-soft">jours</span>
+                    <button
+                      type="submit"
+                      [disabled]="grantLoading()"
+                      class="rounded-lg bg-primary px-3 py-1 text-primary-fg"
+                    >
+                      OK
+                    </button>
+                    <button type="button" (click)="closeGrant()" class="text-ink-soft">✕</button>
+                  </form>
+                  @if (grantError(); as message) {
+                    <p class="text-xs font-medium text-danger">{{ message }}</p>
+                  }
+                } @else {
+                  <button
+                    type="button"
+                    (click)="openGrant(user.companyId)"
+                    class="rounded-lg border border-line px-3 py-1 text-sm hover:bg-secondary-subtle"
+                  >
+                    Accorder premium
+                  </button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex items-center justify-between text-sm text-ink-soft">
+      <span>{{ total() }} utilisateur(s)</span>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          [disabled]="page() <= 1"
+          (click)="previousPage()"
+          class="rounded-lg border border-line px-3 py-1 disabled:opacity-50"
+        >
+          Précédent
+        </button>
+        <span>Page {{ page() }}</span>
+        <button
+          type="button"
+          [disabled]="users().length === 0"
+          (click)="nextPage()"
+          class="rounded-lg border border-line px-3 py-1 disabled:opacity-50"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  }
+</div>

@@ -1,7 +1,9 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { PaywallService } from '../../core/services/paywall.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { PdfPreviewModalComponent } from '../../shared/components/pdf-preview-modal.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
@@ -30,6 +32,7 @@ export class InvoiceCreateShellPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly paywallService = inject(PaywallService);
   protected readonly draftStore = inject(InvoiceDraftStore);
 
   protected readonly previewing = signal(false);
@@ -63,8 +66,15 @@ export class InvoiceCreateShellPage {
           this.revokeCurrentPreviewUrl();
           this.previewPdfUrl.set(URL.createObjectURL(blob));
         },
-        error: () => {
+        error: (error: HttpErrorResponse) => {
           this.previewing.set(false);
+          // Phase 14: a 402 here means the free-trial invoice is already
+          // used up — the paywall modal explains that and offers a path to
+          // subscribe, so it replaces (not stacks with) the generic error.
+          if (error.status === 402) {
+            this.paywallService.show();
+            return;
+          }
           this.previewError.set("Impossible de générer l'aperçu pour le moment.");
         },
       });

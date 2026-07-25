@@ -87,89 +87,56 @@
   <div class="flex flex-col gap-3 rounded-lg border border-line p-3">
     <span class="text-sm font-semibold text-ink">Prix du matériau</span>
 
-    <div class="flex gap-3">
-      <label class="flex flex-1 flex-col gap-1">
-        <span class="text-sm font-medium text-ink">{{ unitPriceButtonLabel() }} (€)</span>
-        <input
-          formControlName="priceEuros"
-          type="number"
-          step="0.01"
-          min="0"
-          (input)="onUnitPriceInput($any($event.target).value)"
-          class="rounded-lg border border-line px-4 py-3 text-lg"
-        />
-      </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">{{ unitPriceButtonLabel() }} (€)</span>
+      <input
+        formControlName="priceEuros"
+        type="number"
+        step="0.01"
+        min="0"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+    </label>
 
-      <label class="flex flex-1 flex-col gap-1">
-        <span class="text-sm font-medium text-ink">Prix du conditionnement (ex : 1 boîte)</span>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          [value]="packagePriceEuros() ?? ''"
-          placeholder="Facultatif"
-          (input)="onPackagePriceInput($any($event.target).value)"
-          class="rounded-lg border border-line px-4 py-3 text-lg"
-        />
-      </label>
-    </div>
-    <app-field-hint
-      text="Renseignez les deux prix comme votre fournisseur les affiche — le contenu d'un conditionnement est déduit automatiquement ci-dessous."
-    />
+    <div class="flex flex-col gap-3 rounded-lg border border-line bg-bg p-3">
+      <span class="text-sm font-semibold text-ink">Vendu par conditionnement (facultatif)</span>
 
-    <div class="rounded-lg border border-line bg-bg p-3 text-sm">
-      @if (manualPackaging()) {
-        <label class="flex flex-col gap-1">
-          <span class="text-sm font-medium text-ink"
-            >Contenu d'un conditionnement (saisie manuelle)</span
-          >
+      <div class="flex gap-3">
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm font-medium text-ink">
+            Combien d'unités dans un conditionnement ?
+          </span>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            [value]="packagingItemCount() ?? ''"
+            placeholder="Ex : 8 (planches)"
+            (input)="onPackagingItemCountInput($any($event.target).value)"
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+        </label>
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm font-medium text-ink">
+            Soit combien de {{ unitLabels[form.controls.unit.value] }} au total ?
+          </span>
           <input
             formControlName="packagingQuantity"
             type="number"
             step="0.001"
             min="0"
-            [placeholder]="
-              'Ex : 9 (une boîte contient 9 ' + unitLabels[form.controls.unit.value] + ')'
-            "
+            placeholder="Ex : 2,4"
             class="rounded-lg border border-line px-4 py-3 text-lg"
           />
         </label>
-        <button
-          type="button"
-          (click)="disableManualPackaging()"
-          class="mt-2 text-sm font-medium text-primary hover:underline"
-        >
-          Revenir au calcul automatique
-        </button>
-      } @else if (hasPackaging()) {
-        <p class="text-ink">
-          → Ce conditionnement contient donc
-          <strong
-            >{{ form.controls.packagingQuantity.value }}
-            {{ unitLabels[form.controls.unit.value] }}</strong
-          >.
-        </p>
-        <button
-          type="button"
-          (click)="enableManualPackaging()"
-          class="mt-1 text-xs font-medium text-ink-soft hover:underline"
-        >
-          Je connais déjà le contenu exact
-        </button>
-      } @else {
-        <p class="text-ink-soft">
-          Facultatif — renseignez les deux prix ci-dessus pour calculer automatiquement le contenu
-          d'un conditionnement si ce produit se vend par lot fixe (boîte, sac, rouleau…). Laissez le
-          prix du conditionnement vide si ce produit se vend en continu, sans lot fixe.
-        </p>
-        <button
-          type="button"
-          (click)="enableManualPackaging()"
-          class="mt-1 text-xs font-medium text-ink-soft hover:underline"
-        >
-          Je connais déjà le contenu exact
-        </button>
-      }
+      </div>
+      <app-field-hint
+        [text]="
+          'Ex : une boîte de 8 planches, soit 2,4 ' +
+          unitLabels[form.controls.unit.value] +
+          ' au total. Le nombre d\'unités est facultatif, juste pour vérifier votre compte. Laissez les deux champs vides si ce produit se vend en continu, sans lot fixe.'
+        "
+      />
     </div>
   </div>
 

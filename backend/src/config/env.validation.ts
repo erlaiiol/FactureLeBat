@@ -181,6 +181,36 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   SYSTEM_MAIL_FROM_ADDRESS?: string;
+
+  // Phase 14 Stripe subscription billing. Optional as a trio, same "boots
+  // fine without it" posture as GROQ_API_KEY/APP_ENCRYPTION_KEY: the app
+  // starts with no Stripe key set, BillingService just reports the feature
+  // unavailable (503) on checkout/portal/webhook routes until all three are
+  // configured. STRIPE_PRICE_ID is the recurring 15€/month Price id created
+  // in the Stripe dashboard/CLI — never hardcoded, since it differs between
+  // test and live mode.
+  @IsOptional()
+  @IsString()
+  STRIPE_SECRET_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  STRIPE_WEBHOOK_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  STRIPE_PRICE_ID?: string;
+
+  // Phase 14 admin bootstrap: on every boot, AdminSeedService promotes the
+  // User with this email (if one exists) to ADMIN — see
+  // admin/admin-seed.service.ts. Deliberately not a self-service signup
+  // flow: the only way in is an env var only whoever controls the
+  // deployment can set, and it's idempotent (re-running it on an
+  // already-ADMIN user is a no-op), so it's safe to leave configured
+  // indefinitely rather than a one-shot script.
+  @IsOptional()
+  @IsString()
+  ADMIN_SEED_EMAIL?: string;
 }
 
 // Wired into ConfigModule.forRoot({ validate }) in AppModule — runs once at

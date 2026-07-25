@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   HostListener,
   computed,
   effect,
@@ -28,6 +29,11 @@ const POPOVER_ESTIMATE: TourSize = { width: 320, height: 220 };
 export class TourOverlayComponent {
   protected readonly tourService = inject(TourService);
   private readonly anchorRegistry = inject(TourAnchorRegistryService);
+  private readonly destroyRef = inject(DestroyRef);
+  // Removes the current step's advanceOn listener (see bindAdvanceListener)
+  // — re-bound on every step change so a stale listener from a previous
+  // step can never fire next() twice.
+  private advanceListenerCleanup: (() => void) | null = null;
 
   protected readonly targetRect = signal<DOMRect | null>(null);
 
@@ -82,9 +88,12 @@ export class TourOverlayComponent {
     effect(() => {
       this.tourService.currentStep();
       this.scrollToCurrentAnchorAndMeasure();
+      this.bindAdvanceListener();
       this.stepAnimating.set(false);
       queueMicrotask(() => this.stepAnimating.set(true));
     });
+
+    this.destroyRef.onDestroy(() => this.advanceListenerCleanup?.());
   }
 
   @HostListener('window:resize')
@@ -103,6 +112,34 @@ export class TourOverlayComponent {
     const element = anchorId ? this.anchorRegistry.get(anchorId)?.nativeElement : undefined;
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     this.recomputeTargetRect();
+  }
+
+  // "The tour doesn't respond when I click the highlighted thing" — a step
+  // declaring `advanceOn` (see TourStepDefinition) gets a one-shot listener
+  // on its own anchor that calls next() itself, so actually doing the thing
+  // the step describes (clicking a button, typing into a search field) is
+  // what carries the tour forward, same as it would feel to a first-time
+  // user who has no idea "Suivant" is a separate button they also need to
+  // press. Re-bound on every step change; { once: true } means a step the
+  // artisan advances via "Suivant" instead just leaves this listener
+  // unfired, harmlessly torn down on the next bindAdvanceListener() call.
+  private bindAdvanceListener(): void {
+    this.advanceListenerCleanup?.();
+    this.advanceListenerCleanup = null;
+
+    const step = this.tourService.currentStep();
+    const advanceOn = step?.advanceOn;
+    const anchorId = step?.anchorId;
+    if (!advanceOn || !anchorId) {
+      return;
+    }
+    const element = this.anchorRegistry.get(anchorId)?.nativeElement;
+    if (!element) {
+      return;
+    }
+    const handler = (): void => this.tourService.next();
+    element.addEventListener(advanceOn, handler, { once: true });
+    this.advanceListenerCleanup = () => element.removeEventListener(advanceOn, handler);
   }
 
   private recomputeTargetRect(): void {

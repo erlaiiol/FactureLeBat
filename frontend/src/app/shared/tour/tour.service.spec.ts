@@ -16,6 +16,7 @@ class BlankTestComponent {}
 const routes = [
   { path: 'clients', component: BlankTestComponent },
   { path: 'produits', component: BlankTestComponent },
+  { path: 'produits/nouveau', component: BlankTestComponent },
   { path: 'prestations', component: BlankTestComponent },
   { path: 'factures/nouvelle', component: BlankTestComponent },
   { path: 'factures/nouvelle/rapide/client', component: BlankTestComponent },
@@ -166,5 +167,46 @@ describe('TourService', () => {
     // If the abandoned tour had wrongly been marked complete, that would
     // have fired an uncompleted HTTP request here, and httpMock.verify()
     // in afterEach would fail.
+  });
+
+  it('continues the tour instead of restarting it, when a real navigation (not "Suivant") lands on an upcoming step\'s own route', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/factures/nouvelle');
+    expect(service.activeTourId()).toBe('invoice-creation');
+    expect(service.stepIndex()).toBe(0);
+
+    registerAnchor('invoice-mode-choice');
+    service.next();
+    await Promise.resolve();
+    expect(service.stepIndex()).toBe(1);
+
+    // The artisan clicks the real "mode rapide" card themselves — the app
+    // navigates for real to the client step, which happens to be exactly
+    // step 2's own route. Before the fix, this real navigation looked
+    // identical to "left the flow" and dropped the tour, which then
+    // immediately relaunched from its own welcome step on the very next
+    // tick — jarring, and it never responded to the click that was
+    // actually right.
+    registerAnchor('invoice-customer-picker');
+    await harness.navigateByUrl('/factures/nouvelle/rapide/client');
+
+    expect(service.activeTourId()).toBe('invoice-creation');
+    expect(service.stepIndex()).toBe(2);
+  });
+
+  it('quietly stops without immediately relaunching itself, when a real navigation lands on an unplanned route the tour never scripted a step for', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/produits');
+    expect(service.activeTourId()).toBe('catalog');
+
+    // The artisan clicks the real "+ Nouveau produit" button — a route
+    // (/produits/nouveau) the catalog tour has no step for, but which still
+    // matches ROUTE_TOUR_MAP's '/produits' prefix. Before the fix, dropping
+    // the tour here and then re-running the auto-start check on the same
+    // navigation immediately relaunched the very tour that was just
+    // dropped, flashing its welcome step on top of the create-product form.
+    await harness.navigateByUrl('/produits/nouveau');
+
+    expect(service.activeTourId()).toBeNull();
   });
 });

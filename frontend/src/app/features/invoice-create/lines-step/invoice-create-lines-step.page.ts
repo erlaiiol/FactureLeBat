@@ -1,4 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -22,6 +23,7 @@ import { ServicePricingMode, ServiceProfile } from '../../../core/models/service
 import { Unit } from '../../../core/models/unit.model';
 import { CustomerService } from '../../../core/services/customer.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
+import { PaywallService } from '../../../core/services/paywall.service';
 import { ProductService } from '../../../core/services/product.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
@@ -78,6 +80,7 @@ export class InvoiceCreateLinesStepPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly productService = inject(ProductService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly paywallService = inject(PaywallService);
   protected readonly draftStore = inject(InvoiceDraftStore);
 
   protected readonly creating = signal(false);
@@ -626,8 +629,16 @@ export class InvoiceCreateLinesStepPage {
         this.createdInvoice.set(invoice);
         this.draftStore.reset();
       },
-      error: () => {
+      error: (error: HttpErrorResponse) => {
         this.creating.set(false);
+        // Phase 14: same paywall as the shell's "Aperçu" — a 402 here means
+        // the free-trial invoice is already used, not a real submission
+        // error, so it replaces the generic message rather than stacking
+        // with it.
+        if (error.status === 402) {
+          this.paywallService.show();
+          return;
+        }
         this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');
       },
     });

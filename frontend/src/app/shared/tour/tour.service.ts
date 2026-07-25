@@ -47,6 +47,10 @@ export class TourService {
   readonly tourEnabled = computed(() => this.state()?.tourEnabled ?? true);
   readonly activeTourId = signal<TourId | null>(null);
   readonly stepIndex = signal(0);
+  // Which tour (if any) the CURRENT route owns, kept in sync on every
+  // navigation — lets the nav bar's help button show/hide itself and know
+  // what to replay, without duplicating ROUTE_TOUR_MAP anywhere else.
+  readonly currentRouteTourId = signal<TourId | null>(null);
 
   readonly steps = computed<TourStepDefinition[]>(() => {
     const tourId = this.activeTourId();
@@ -73,14 +77,38 @@ export class TourService {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((event) => {
-        // A navigation the tour didn't script itself (sidebar link, browser
-        // back/forward, a form redirect…) means the artisan left the flow
-        // the active step was anchored to — drop it rather than leave the
-        // overlay spotlighting an anchor that just unmounted.
+        const url = event.urlAfterRedirects;
+        this.currentRouteTourId.set(
+          ROUTE_TOUR_MAP.find((entry) => url.startsWith(entry.prefix))?.tourId ?? null,
+        );
+
+        // A real navigation the tour didn't script itself — the artisan
+        // clicked the very thing a step was pointing at (a client card, a
+        // mode-choice card…) rather than the tour's own "Suivant". If that
+        // landed exactly where an upcoming step of THIS SAME tour expects
+        // to be, that counts as having completed the step through the real
+        // UI — jump the tour there instead of dropping it and restarting
+        // from the welcome screen a beat later, which used to be the "the
+        // tour doesn't respond to my click" glitch.
+        let quietlyStoppedTourId: TourId | null = null;
         if (this.activeTourId() && !this.selfNavigating) {
-          this.abandonActiveTour();
+          const matchedIndex = this.findForwardStepIndexForRoute(url);
+          if (matchedIndex != null) {
+            void this.advanceToStep(matchedIndex);
+          } else {
+            // Genuinely left the flow (sidebar link, browser back, or a
+            // route the tour never anticipated, e.g. "+ Nouveau produit"
+            // opening the create-product form). Drop it — but remember
+            // which tour, so the auto-start check right below doesn't
+            // immediately relaunch the very tour that was just dropped:
+            // without this, clicking a real "+ Nouveau X" button flashed
+            // the whole tour back to its own welcome step on the next
+            // page, which is the other half of that same glitch.
+            quietlyStoppedTourId = this.activeTourId();
+            this.abandonActiveTour();
+          }
         }
-        this.maybeAutoStart(event.urlAfterRedirects);
+        this.maybeAutoStart(url, quietlyStoppedTourId);
       });
   }
 
@@ -119,16 +147,45 @@ export class TourService {
     this.persistCompletion();
   }
 
-  private maybeAutoStart(url: string): void {
-    if (this.activeTourId() || !this.tourEnabled()) {
-      return;
-    }
-    const tourId = ROUTE_TOUR_MAP.find((entry) => url.startsWith(entry.prefix))?.tourId ?? null;
-    if (!tourId || this.state()?.completedTours.includes(tourId)) {
+  // Backs the nav bar's "Aide" button: manually (re)launches whichever tour
+  // owns the current route, from the top, regardless of tourEnabled or
+  // completedTours — asking for help should always work, independent of
+  // the "don't auto-show this again" preference Settings controls.
+  startTourForCurrentRoute(): void {
+    const tourId = this.currentRouteTourId();
+    if (!tourId) {
       return;
     }
     this.activeTourId.set(tourId);
     void this.advanceToStep(0);
+  }
+
+  private maybeAutoStart(url: string, skipTourId: TourId | null = null): void {
+    if (this.activeTourId() || !this.tourEnabled()) {
+      return;
+    }
+    const tourId = ROUTE_TOUR_MAP.find((entry) => url.startsWith(entry.prefix))?.tourId ?? null;
+    if (!tourId || tourId === skipTourId || this.state()?.completedTours.includes(tourId)) {
+      return;
+    }
+    this.activeTourId.set(tourId);
+    void this.advanceToStep(0);
+  }
+
+  // Searches the active tour's OWN steps, forward from wherever it
+  // currently is, for one whose declared route exactly matches where a
+  // real (non-tour-driven) navigation just landed. Forward-only and
+  // exact-match on purpose: a step with no `route` of its own shares the
+  // previous step's, so this only ever matches a genuine route-transition
+  // step, and never jumps backward on a browser-back navigation.
+  private findForwardStepIndexForRoute(url: string): number | null {
+    const steps = this.steps();
+    for (let index = this.stepIndex(); index < steps.length; index++) {
+      if (steps[index].route === url) {
+        return index;
+      }
+    }
+    return null;
   }
 
   // Navigates first if the target step lives on a different route, then

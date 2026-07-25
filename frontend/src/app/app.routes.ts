@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
 
@@ -112,6 +113,31 @@ const protectedRoutes: Routes = [
       import('./features/company-settings/company-settings.page').then(
         (m) => m.CompanySettingsPage,
       ),
+  },
+  {
+    path: 'abonnement',
+    loadComponent: () => import('./features/billing/subscribe.page').then((m) => m.SubscribePage),
+  },
+  // Phase 14 admin dashboard — reachable by any authenticated user at the
+  // route level (adminGuard does the real gate), same defense-in-depth
+  // posture as the backend's RolesGuard: a non-admin hitting this URL
+  // directly is redirected, never shown an empty/broken admin shell.
+  {
+    path: 'admin',
+    canActivate: [adminGuard],
+    children: [
+      {
+        path: '',
+        pathMatch: 'full',
+        loadComponent: () =>
+          import('./features/admin/admin-users.page').then((m) => m.AdminUsersPage),
+      },
+      {
+        path: 'codes-promo',
+        loadComponent: () =>
+          import('./features/admin/admin-promo-codes.page').then((m) => m.AdminPromoCodesPage),
+      },
+    ],
   },
 ];
 

@@ -91,7 +91,6 @@
         formControlName="unitPriceEuros"
         type="number"
         step="0.01"
-        (input)="onUnitPriceInput($any($event.target).value)"
         class="rounded-lg border border-line px-4 py-3 text-lg"
       />
     </label>
@@ -109,76 +108,42 @@
           </button>
         </div>
 
-        <label class="flex flex-col gap-1">
-          <span class="text-sm font-medium text-ink">Prix du conditionnement (ex : 1 boîte)</span>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            [value]="packagePriceEuros() ?? ''"
-            placeholder="Facultatif"
-            (input)="onPackagePriceInput($any($event.target).value)"
-            class="rounded-lg border border-line px-4 py-3 text-lg"
-          />
-        </label>
-        <app-field-hint
-          text="Renseignez les deux prix comme votre fournisseur les affiche — le contenu d'un conditionnement est déduit automatiquement ci-dessous."
-        />
-
-        <div class="rounded-lg border border-line bg-surface p-3 text-sm">
-          @if (manualPackaging()) {
-            <label class="flex flex-col gap-1">
-              <span class="text-sm font-medium text-ink"
-                >Contenu d'un conditionnement (saisie manuelle)</span
-              >
-              <input
-                formControlName="packagingQuantity"
-                type="number"
-                step="0.001"
-                min="0"
-                [placeholder]="
-                  'Ex : 9 (une boîte contient 9 ' + unitLabels[group().controls.unit.value] + ')'
-                "
-                class="rounded-lg border border-line px-4 py-3 text-lg"
-              />
-            </label>
-            <button
-              type="button"
-              (click)="disableManualPackaging()"
-              class="mt-2 text-sm font-medium text-primary hover:underline"
-            >
-              Revenir au calcul automatique
-            </button>
-          } @else if (hasPackaging()) {
-            <p class="text-ink">
-              → Ce conditionnement contient donc
-              <strong
-                >{{ group().controls.packagingQuantity.value }}
-                {{ unitLabels[group().controls.unit.value] }}</strong
-              >.
-            </p>
-            <button
-              type="button"
-              (click)="enableManualPackaging()"
-              class="mt-1 text-xs font-medium text-ink-soft hover:underline"
-            >
-              Je connais déjà le contenu exact
-            </button>
-          } @else {
-            <p class="text-ink-soft">
-              Renseignez les deux prix ci-dessus pour calculer automatiquement le contenu d'un
-              conditionnement — ou laissez le prix du conditionnement vide si ce matériau se vend en
-              continu, sans lot fixe.
-            </p>
-            <button
-              type="button"
-              (click)="enableManualPackaging()"
-              class="mt-1 text-xs font-medium text-ink-soft hover:underline"
-            >
-              Je connais déjà le contenu exact
-            </button>
-          }
+        <div class="flex gap-3">
+          <label class="flex flex-1 flex-col gap-1">
+            <span class="text-sm font-medium text-ink">
+              Combien d'unités dans un conditionnement ?
+            </span>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              [value]="packagingItemCount() ?? ''"
+              placeholder="Ex : 8 (planches)"
+              (input)="onPackagingItemCountInput($any($event.target).value)"
+              class="rounded-lg border border-line px-4 py-3 text-lg"
+            />
+          </label>
+          <label class="flex flex-1 flex-col gap-1">
+            <span class="text-sm font-medium text-ink">
+              Soit combien de {{ unitLabels[group().controls.unit.value] }} au total ?
+            </span>
+            <input
+              formControlName="packagingQuantity"
+              type="number"
+              step="0.001"
+              min="0"
+              placeholder="Ex : 2,4"
+              class="rounded-lg border border-line px-4 py-3 text-lg"
+            />
+          </label>
         </div>
+        <app-field-hint
+          [text]="
+            'Ex : une boîte de 8 planches, soit 2,4 ' +
+            unitLabels[group().controls.unit.value] +
+            ' au total — cette seconde valeur sert à arrondir la facturation par lot entier ci-dessous. Le nombre d\'unités est facultatif, juste pour vérifier votre compte.'
+          "
+        />
 
         <label class="flex flex-row items-center gap-2">
           <input
