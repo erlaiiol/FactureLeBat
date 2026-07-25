@@ -43,58 +43,44 @@
       <div
         class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
       >
-        @if (showQuickProductCreate()) {
-          <app-quick-product-create
-            (created)="onProductCreated($event)"
-            (cancel)="showQuickProductCreate.set(false)"
-          />
-        } @else {
-          <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
-            Mon catalogue
-          </span>
-          @if (draftStore.products().length > 0) {
-            <ul class="flex flex-col gap-2">
-              @for (product of draftStore.products(); track product.id) {
-                @let activeIndex = activeProductLineIndex().get(product.id);
-                <li>
-                  <button
-                    type="button"
-                    (click)="toggleProduct(product)"
-                    class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-primary-subtle/30"
-                    [class.bg-primary-subtle]="activeIndex != null"
-                  >
-                    <span>
-                      <span class="block text-sm font-medium text-ink">{{ product.name }}</span>
-                      <span class="block text-xs text-ink-soft">
-                        {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
-                      </span>
+        <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+          Mon catalogue
+        </span>
+        @if (draftStore.products().length > 0) {
+          <ul class="flex flex-col gap-2">
+            @for (product of draftStore.products(); track product.id) {
+              @let activeIndex = activeProductLineIndex().get(product.id);
+              <li>
+                <button
+                  type="button"
+                  (click)="toggleProduct(product)"
+                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-primary-subtle/30"
+                  [class.bg-primary-subtle]="activeIndex != null"
+                >
+                  <span>
+                    <span class="block text-sm font-medium text-ink">{{ product.name }}</span>
+                    <span class="block text-xs text-ink-soft">
+                      {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
                     </span>
-                    @if (activeIndex != null) {
-                      <span class="text-primary">✓</span>
-                    }
-                  </button>
-                </li>
-              }
-            </ul>
-          } @else {
-            <p class="text-sm text-ink-soft">Aucun produit enregistré pour l’instant.</p>
-          }
-          <button
-            type="button"
-            appTourAnchor="catalog-new-product"
-            (click)="showQuickProductCreate.set(true)"
-            class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
-          >
-            + Nouveau produit
-          </button>
-          <button
-            type="button"
-            (click)="addFreeLine()"
-            class="w-full rounded-lg px-4 py-2 text-sm font-medium text-ink-soft hover:underline"
-          >
-            + Ligne ponctuelle (hors catalogue)
-          </button>
+                  </span>
+                  @if (activeIndex != null) {
+                    <span class="text-primary">✓</span>
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="text-sm text-ink-soft">Aucun produit enregistré pour l’instant.</p>
         }
+        <button
+          type="button"
+          appTourAnchor="catalog-new-product"
+          (click)="addFreeLine()"
+          class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
+        >
+          + Nouveau produit
+        </button>
       </div>
     }
   </div>
@@ -124,61 +110,47 @@
       <div
         class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
       >
-        @if (showQuickServiceCreate()) {
-          <app-quick-service-create
-            (created)="onServiceCreated($event)"
-            (cancel)="showQuickServiceCreate.set(false)"
-          />
-        } @else {
-          <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
-            Mes prestations
-          </span>
-          @if (draftStore.services().length > 0) {
-            <ul class="flex flex-col gap-2">
-              @for (service of draftStore.services(); track service.id) {
-                @let activeServiceIndex = activeServiceLineIndex().get(service.id);
-                <li>
-                  <button
-                    type="button"
-                    (click)="toggleService(service)"
-                    class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-info-subtle/30"
-                    [class.bg-info-subtle]="activeServiceIndex != null"
-                  >
-                    <span>
-                      <span class="block text-sm font-medium text-ink">{{ service.name }}</span>
-                      <span class="block text-xs text-ink-soft">
-                        @if (service.pricingMode === 'PERCENTAGE') {
-                          {{ service.percentageBasisPoints! / 100 }}% de la facture
-                        } @else {
-                          {{ service.priceCents | centsToEuros }}
-                        }
-                      </span>
+        <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+          Mes prestations
+        </span>
+        @if (draftStore.services().length > 0) {
+          <ul class="flex flex-col gap-2">
+            @for (service of draftStore.services(); track service.id) {
+              @let activeServiceIndex = activeServiceLineIndex().get(service.id);
+              <li>
+                <button
+                  type="button"
+                  (click)="toggleService(service)"
+                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-info-subtle/30"
+                  [class.bg-info-subtle]="activeServiceIndex != null"
+                >
+                  <span>
+                    <span class="block text-sm font-medium text-ink">{{ service.name }}</span>
+                    <span class="block text-xs text-ink-soft">
+                      @if (service.pricingMode === 'PERCENTAGE') {
+                        {{ service.percentageBasisPoints! / 100 }}% de la facture
+                      } @else {
+                        {{ service.priceCents | centsToEuros }}
+                      }
                     </span>
-                    @if (activeServiceIndex != null) {
-                      <span class="text-info">✓</span>
-                    }
-                  </button>
-                </li>
-              }
-            </ul>
-          } @else {
-            <p class="text-sm text-ink-soft">Aucune prestation enregistrée pour l’instant.</p>
-          }
-          <button
-            type="button"
-            (click)="showQuickServiceCreate.set(true)"
-            class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-info hover:bg-info-subtle/30"
-          >
-            + Nouvelle prestation
-          </button>
-          <button
-            type="button"
-            (click)="addFreeServiceLine()"
-            class="w-full rounded-lg px-4 py-2 text-sm font-medium text-ink-soft hover:underline"
-          >
-            + Prestation libre (hors catalogue)
-          </button>
+                  </span>
+                  @if (activeServiceIndex != null) {
+                    <span class="text-info">✓</span>
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="text-sm text-ink-soft">Aucune prestation enregistrée pour l’instant.</p>
         }
+        <button
+          type="button"
+          (click)="addFreeServiceLine()"
+          class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-info hover:bg-info-subtle/30"
+        >
+          + Nouvelle prestation
+        </button>
       </div>
     }
   </div>
@@ -246,58 +218,99 @@
   <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
     @for (line of lines.controls; track line; let i = $index) {
       @if (isLineCollapsed(line)) {
-        <button
-          type="button"
-          (click)="expandLine(line)"
-          class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-primary-subtle-border"
+        <div
+          class="anim-card-shrink-in flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 shadow-sm hover:border-primary-subtle-border"
         >
-          <div class="flex items-start justify-between gap-2">
-            <span class="font-medium text-ink">{{ line.controls.description.value }}</span>
-            <span
-              (click)="$event.stopPropagation(); removeLine(i)"
-              class="text-sm font-medium text-danger hover:underline"
-            >
-              ✕
+          <button
+            type="button"
+            (click)="expandLine(line)"
+            class="flex w-full flex-col gap-1 text-left"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <span class="font-medium text-ink">{{ line.controls.description.value }}</span>
+              <span
+                (click)="$event.stopPropagation(); removeLine(i)"
+                class="text-sm font-medium text-danger hover:underline"
+              >
+                ✕
+              </span>
+            </div>
+            <span class="text-sm text-ink-soft">
+              {{ line.controls.unitPriceEuros.value | number: '1.2-2' }} € /
+              {{ line.controls.unit.value | unitLabel }}
             </span>
-          </div>
-          <span class="text-sm text-ink-soft">
-            {{ line.controls.unitPriceEuros.value | number: '1.2-2' }} € /
-            {{ line.controls.unit.value | unitLabel }}
-          </span>
-          <span class="text-sm text-ink-soft">
-            {{ line.controls.quantity.value }} {{ line.controls.unit.value | unitLabel }} pour le
-            chantier
-          </span>
-          <span class="mt-1 font-mono text-lg font-semibold text-ink">
-            {{ lineTotalsCents()[i] | centsToEuros }}
-          </span>
-        </button>
+            <span class="mt-1 font-mono text-lg font-semibold text-ink">
+              {{ lineTotalsCents()[i] | centsToEuros }}
+            </span>
+          </button>
+
+          <!-- Always accessible without expanding the card — the one field
+               a catalog-picked line still needs (see addProductFromCatalog),
+               and the one thing an artisan measuring a job on-site keeps
+               coming back to adjust. Its own click doesn't bubble up into
+               the "expand" button above it. -->
+          <label
+            class="flex items-center gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm"
+            (click)="$event.stopPropagation()"
+          >
+            <span class="font-medium text-ink-soft">Surface du chantier</span>
+            <input
+              type="number"
+              step="0.01"
+              [formControl]="line.controls.quantity"
+              class="w-20 rounded border border-line px-2 py-1 text-right"
+            />
+            <span class="text-ink-soft">{{ line.controls.unit.value | unitLabel }}</span>
+          </label>
+        </div>
       }
     }
 
     @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
       @if (isServiceLineCollapsed(serviceLine)) {
-        <button
-          type="button"
-          (click)="expandServiceLine(serviceLine)"
-          class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-info-subtle-border"
+        <div
+          class="anim-card-shrink-in flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 shadow-sm hover:border-info-subtle-border"
         >
-          <div class="flex items-start justify-between gap-2">
-            <span class="font-medium text-ink">{{ serviceLine.controls.name.value }}</span>
-            <span
-              (click)="$event.stopPropagation(); removeServiceLine(i)"
-              class="text-sm font-medium text-danger hover:underline"
-            >
-              ✕
+          <button
+            type="button"
+            (click)="expandServiceLine(serviceLine)"
+            class="flex w-full flex-col gap-1 text-left"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <span class="font-medium text-ink">{{ serviceLine.controls.name.value }}</span>
+              <span
+                (click)="$event.stopPropagation(); removeServiceLine(i)"
+                class="text-sm font-medium text-danger hover:underline"
+              >
+                ✕
+              </span>
+            </div>
+            <span class="mt-1 font-mono text-lg font-semibold text-ink">
+              {{ serviceLineAmountsCents()[i] | centsToEuros }}
             </span>
-          </div>
-          <span class="text-sm text-ink-soft">
-            {{ serviceLine.controls.visibility.value === 'VISIBLE' ? 'Visible' : 'Répartie' }}
-          </span>
-          <span class="mt-1 font-mono text-lg font-semibold text-ink">
-            {{ serviceLineAmountsCents()[i] | centsToEuros }}
-          </span>
-        </button>
+          </button>
+
+          <!-- Always accessible without expanding the card — most artisans
+               use this to hide their margin from the client, on a whim,
+               often right before creating the invoice. -->
+          <button
+            type="button"
+            (click)="toggleServiceLineVisibility(serviceLine)"
+            class="rounded-lg border px-3 py-2 text-sm font-semibold"
+            [class.border-info-subtle-border]="serviceLine.controls.visibility.value === 'VISIBLE'"
+            [class.bg-info-subtle]="serviceLine.controls.visibility.value === 'VISIBLE'"
+            [class.text-info-subtle-fg]="serviceLine.controls.visibility.value === 'VISIBLE'"
+            [class.border-secondary-subtle-border]="
+              serviceLine.controls.visibility.value !== 'VISIBLE'
+            "
+            [class.bg-secondary-subtle]="serviceLine.controls.visibility.value !== 'VISIBLE'"
+            [class.text-secondary-subtle-fg]="serviceLine.controls.visibility.value !== 'VISIBLE'"
+          >
+            {{
+              serviceLine.controls.visibility.value === 'VISIBLE' ? '👁 Visible' : '🙈 Non visible'
+            }}
+          </button>
+        </div>
       }
     }
   </section>

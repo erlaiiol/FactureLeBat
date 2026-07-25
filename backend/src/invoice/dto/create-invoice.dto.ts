@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsInt,
@@ -142,4 +143,25 @@ export class CreateInvoiceDto {
   @Min(0)
   @Max(MAX_OVERRIDE_CENTS)
   totalOverrideCents?: number;
+
+  // Manual mode only (mirrors the three overrides above): the company's
+  // legal status (see isVatApplicable) only ever picks one fixed VAT
+  // treatment for every invoice, but a manual invoice is meant to be
+  // edited as freely as everything else on the canvas — an artisan doing
+  // both an énergie-renovation job (5.5%) and a standard one (20%) in the
+  // same week needs to say so per document, not per company. Forbidden for
+  // entryMode GUIDED (see ManualModeFieldsConsistency), where VAT stays
+  // purely derived from the company profile.
+  @IsOptional()
+  @IsBoolean()
+  vatApplicableOverride?: boolean;
+
+  // Basis points: 2000 = 20.00%. Same bound as Company.vatRateBasisPoints
+  // (UpdateCompanyDto) — anything above 10000 (100%) is certainly a
+  // unit-conversion mistake, not a real VAT rate.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  vatRateBasisPointsOverride?: number;
 }

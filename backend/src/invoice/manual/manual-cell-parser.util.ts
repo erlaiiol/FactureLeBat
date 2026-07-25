@@ -4,16 +4,19 @@ import { Prisma } from '../../../generated/prisma/client';
 // artisan typed directly into the canvas — this is the one place that text
 // is turned into a Decimal, so InvoiceCalculationService never has to know a
 // line came from the free-form table instead of a GUIDED form. Accepts a
-// comma or dot decimal separator; anything else (currency symbols, thousands
-// separators, stray text) is rejected rather than guessed at. The same
-// generous-but-finite bound as CreateInvoiceLineDto's quantity/price fields —
-// exists to reject an obviously-wrong value, not to model a real business
-// limit.
+// comma or dot decimal separator, and a "€" sign anywhere (that's the only
+// currency this app bills in, and formatManualPrice/format() add it back on
+// every UNIT_PRICE/LINE_TOTAL cell automatically — so an artisan typing it
+// by hand, or a value round-tripped through formatting, must still parse).
+// Anything else (thousands separators, stray text) is rejected rather than
+// guessed at. The same generous-but-finite bound as CreateInvoiceLineDto's
+// quantity/price fields — exists to reject an obviously-wrong value, not to
+// model a real business limit.
 const MAX_CELL_VALUE = 1_000_000;
 const DECIMAL_PATTERN = /^\d{1,9}(?:\.\d{1,3})?$/;
 
 export function parseManualDecimalCell(raw: string): Prisma.Decimal | null {
-  const normalized = raw.trim().replace(',', '.');
+  const normalized = raw.trim().replace(/€/g, '').trim().replace(',', '.');
   if (!DECIMAL_PATTERN.test(normalized)) {
     return null;
   }

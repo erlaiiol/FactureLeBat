@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DocumentType } from '../../../core/models/invoice.model';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 9.5: the first screen of "nouvelle facture" — picks between mode
 // rapide (today's step-based, catalog-driven flow) and mode manuel (the
@@ -21,6 +22,17 @@ import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive'
 })
 export class InvoiceCreateModeChoicePage {
   protected readonly documentType = signal<DocumentType>('FACTURE');
+
+  constructor() {
+    // Every arrival here is an explicit "nouvelle facture" entry point (nav
+    // link or back-navigation out of an abandoned draft) — never a step
+    // within the rapide/manuel flows themselves, which don't route back
+    // through this page. So this is the right, and only, place to drop a
+    // stale localStorage-persisted rapide draft (leftover client, lines)
+    // before the artisan picks a mode, instead of leaving mode rapide's
+    // client step to guess whether a persisted customer means "resume me".
+    inject(InvoiceDraftStore).reset();
+  }
 
   protected selectDocumentType(type: DocumentType): void {
     this.documentType.set(type);

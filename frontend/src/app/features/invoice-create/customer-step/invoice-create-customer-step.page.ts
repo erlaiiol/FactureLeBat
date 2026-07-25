@@ -81,6 +81,7 @@ export class InvoiceCreateCustomerStepPage {
   // Clicking a client card: select it and advance immediately, no
   // intermediate confirm step (docs/roadmap.md Phase 13.5).
   protected pickCustomer(customer: CustomerProfile): void {
+    this.resetLinesIfCustomerChanging(customer.id);
     this.selectedCustomerId.set(customer.id);
     this.customerForm.patchValue({
       customerName: customer.name,
@@ -97,6 +98,7 @@ export class InvoiceCreateCustomerStepPage {
   }
 
   protected startNewCustomer(): void {
+    this.resetLinesIfCustomerChanging(null);
     this.selectedCustomerId.set(null);
     this.customerForm.reset({
       customerName: '',
@@ -106,6 +108,24 @@ export class InvoiceCreateCustomerStepPage {
       saveAsNewCustomer: false,
     });
     this.mode.set('create');
+  }
+
+  // Lines/prestations are tied to whichever client the artisan was billing
+  // for — switching to a different client (or to a brand-new one) mid-draft
+  // means whatever was already added no longer applies, so it's cleared
+  // silently rather than carried over onto the new client's invoice. A no-op
+  // when there's nothing to lose (fresh draft) or when re-picking the same
+  // client that was already selected.
+  private resetLinesIfCustomerChanging(nextCustomerId: string | null): void {
+    const previousCustomerId = this.draftStore.customer().customerId;
+    if (previousCustomerId === nextCustomerId) {
+      return;
+    }
+    if (this.draftStore.lines().length === 0 && this.draftStore.serviceLines().length === 0) {
+      return;
+    }
+    this.draftStore.setLines([]);
+    this.draftStore.setServiceLines([]);
   }
 
   protected backToGrid(): void {

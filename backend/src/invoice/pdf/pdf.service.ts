@@ -247,7 +247,16 @@ export class PdfService {
 
   private buildFooter(data: InvoicePdfData): Content {
     const mentions = [
-      data.vatApplicable ? undefined : 'TVA non applicable, art. 293 B du CGI.',
+      // The art. 293 B citation is only accurate when the issuing company
+      // itself is under the franchise en base — a manual invoice whose
+      // vatApplicable was overridden away from that (see
+      // InvoiceMapper.issuerFields) gets the plain mention instead, never a
+      // legal basis that doesn't actually apply to that company.
+      data.vatApplicable
+        ? undefined
+        : data.companyVatExempt
+          ? 'TVA non applicable, art. 293 B du CGI.'
+          : 'TVA non applicable.',
       "En cas de retard de paiement, une indemnité forfaitaire de 40€ pour frais de recouvrement est due, ainsi qu'une pénalité de retard calculée au taux d'intérêt légal en vigueur.",
     ].filter((mention): mention is string => Boolean(mention));
 

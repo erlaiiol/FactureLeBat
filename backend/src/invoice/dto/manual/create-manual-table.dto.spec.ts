@@ -102,6 +102,20 @@ describe('CreateManualTableDto — Phase 9.5 manual invoice mode', () => {
     expect(errors).toHaveLength(0);
   });
 
+  it('accepts a blank UNIT_PRICE cell — it is purely informational, not fed into the total', async () => {
+    const errors = await validateTable(
+      tablePayload({ rows: [{ cells: ['Parquet', '10', '', '450.00'] }] }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a row whose UNIT_PRICE cell is neither blank nor a number', async () => {
+    const errors = await validateTable(
+      tablePayload({ rows: [{ cells: ['Parquet', '10', 'beaucoup', '450.00'] }] }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
   it('accepts a comma decimal separator in a unit price/line total cell', async () => {
     const errors = await validateTable(
       tablePayload({ rows: [{ cells: ['Parquet', '10,5', '45,90', '482,45'] }] }),

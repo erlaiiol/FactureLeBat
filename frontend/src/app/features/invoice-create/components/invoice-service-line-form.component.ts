@@ -23,6 +23,8 @@ export type InvoiceServiceLineFormGroup = FormGroup<{
   percentageBasisPoints: FormControl<number | null>;
   // UI-only, see InvoiceServiceLineDraft.catalogServiceId.
   catalogServiceId: FormControl<string | null>;
+  // UI-only, see InvoiceServiceLineDraft.saveAsNewService.
+  saveAsNewService: FormControl<boolean>;
 }>;
 
 @Component({
@@ -58,6 +60,22 @@ export class InvoiceServiceLineFormComponent {
 
   protected isPercentageMode(): boolean {
     return this.group().controls.pricingMode.value === 'PERCENTAGE';
+  }
+
+  // Same "can't rename what it references" rule as InvoiceLineFormComponent.
+  protected isCatalogLinked(): boolean {
+    return this.group().controls.catalogServiceId.value != null;
+  }
+
+  protected saveToCatalogLabel(): string {
+    return this.isCatalogLinked()
+      ? 'Mettre à jour cette prestation dans le catalogue'
+      : 'Enregistrer cette prestation dans mon catalogue';
+  }
+
+  protected toggleSaveToCatalog(): void {
+    const control = this.group().controls.saveAsNewService;
+    control.setValue(!control.value);
   }
 
   // Live, read-only amount for a PERCENTAGE line — "computed at build time,

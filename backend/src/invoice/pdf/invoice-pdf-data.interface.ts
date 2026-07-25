@@ -61,6 +61,10 @@ export interface InvoicePdfData {
   issuerSiret: string;
   issuerEmail: string | null;
   issuerPhone: string | null;
+  // See InvoiceMapper.issuerFields — true only when the issuing company
+  // itself is under the franchise en base de TVA, regardless of what this
+  // particular invoice's vatApplicable below ends up being.
+  companyVatExempt: boolean;
 
   customerName: string;
   customerAddress: string | null;

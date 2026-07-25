@@ -14,6 +14,7 @@ import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component
 import { InvoiceGhostCardComponent } from './invoice-ghost-card.component';
 import { isOverdue } from './invoice-status.util';
 import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
+import { BadgeComponent } from '../../shared/components/badge.component';
 
 // Phase 16: replaces the old flat "Mes factures" list entirely (decided
 // explicitly with the user — a mobile-first management board, not a
@@ -29,6 +30,7 @@ import { SendInvoiceEmailModalComponent } from '../../shared/components/send-inv
     InvoiceGhostCardComponent,
     InvoiceDueDateModalComponent,
     SendInvoiceEmailModalComponent,
+    BadgeComponent,
   ],
   templateUrl: './invoice-board.page.html',
 })
@@ -97,12 +99,17 @@ export class InvoiceBoardPage {
     ),
   );
 
-  // Mobile-first: "non payées uniquement" hides the columns with nothing
-  // left to chase, rather than just emptying them out, so there's less to
-  // scroll through on a phone.
-  protected readonly showPayeesColumn = computed(() => !this.unpaidOnly());
-  protected readonly showAnnuleesColumn = computed(() => !this.unpaidOnly());
-  protected readonly showDevisColumn = computed(() => !this.unpaidOnly());
+  // All 5 columns are always rendered (even empty, with a placeholder
+  // message) — decided explicitly with the user, who wants the whole board
+  // shape visible at a glance rather than columns popping in/out. "Non
+  // payées uniquement" instead reorders the board via CSS `order` (below)
+  // so the two "problem" columns (En retard, Non payées) lead, without
+  // hiding Devis/Payées/Annulées.
+  protected readonly devisOrder = computed(() => (this.unpaidOnly() ? 3 : 1));
+  protected readonly nonPayeeOrder = computed(() => (this.unpaidOnly() ? 2 : 2));
+  protected readonly enRetardOrder = computed(() => (this.unpaidOnly() ? 1 : 3));
+  protected readonly payeeOrder = 4;
+  protected readonly annuleeOrder = 5;
 
   constructor() {
     this.invoiceService

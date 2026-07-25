@@ -14,6 +14,7 @@ function samplePdfData(): InvoicePdfData {
     issuerSiret: '12345678900012',
     issuerEmail: null,
     issuerPhone: null,
+    companyVatExempt: true,
     customerName: 'M. Dupont',
     customerAddress: null,
     customerEmail: null,

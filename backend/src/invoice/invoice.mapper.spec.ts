@@ -399,6 +399,16 @@ describe('InvoiceMapper', () => {
       expect(preview.vatApplicable).toBe(false);
       expect(preview.vatAmountCents).toBe(0);
       expect(preview.totalInclVatCents).toBe(preview.subtotalExclVatCents);
+      // A genuine franchise-en-base company — PdfService cites art. 293 B.
+      expect(preview.companyVatExempt).toBe(true);
+    });
+
+    it("marks a COMPANY (VAT-registered) as not exempt, regardless of this invoice's own vatApplicable", () => {
+      const preview = mapper.toPreviewPdfData(
+        createInvoiceDtoFixture(),
+        companyFixture({ legalStatus: 'COMPANY' }),
+      );
+      expect(preview.companyVatExempt).toBe(false);
     });
 
     it('adds a VISIBLE service line amount to the subtotal without touching any line total', () => {
@@ -785,6 +795,75 @@ describe('InvoiceMapper', () => {
         expect(preview.subtotalExclVatCents).toBe(45000);
         expect(preview.vatAmountCents).toBe(9000);
         expect(preview.totalInclVatCents).toBe(111100);
+      });
+    });
+
+    describe('VAT applicability/rate override', () => {
+      // A manual invoice is meant to be edited as freely as everything else
+      // on the canvas — vatApplicableOverride/vatRateBasisPointsOverride let
+      // a single document diverge from the company's own default regime
+      // (see CreateInvoiceDto).
+      function manualPreviewDto(overrides: Partial<CreateInvoiceDto> = {}): CreateInvoiceDto {
+        return createInvoiceDtoFixture({
+          entryMode: 'MANUAL',
+          lines: undefined,
+          manualTable: {
+            columns: [
+              { role: 'DESCRIPTION', label: 'Désignation' },
+              { role: 'QUANTITY', label: 'Quantité' },
+              { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+              { role: 'LINE_TOTAL', label: 'Total' },
+            ],
+            rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+          },
+          ...overrides,
+        });
+      }
+
+      it('overriding vatApplicable to false zeroes VAT even for a COMPANY whose default is VAT-applicable', () => {
+        const preview = mapper.toPreviewPdfData(
+          manualPreviewDto({ vatApplicableOverride: false }),
+          companyFixture({ legalStatus: 'COMPANY', vatRateBasisPoints: 2000 }),
+        );
+
+        expect(preview.vatApplicable).toBe(false);
+        expect(preview.vatAmountCents).toBe(0);
+        expect(preview.totalInclVatCents).toBe(preview.subtotalExclVatCents);
+        // The company itself is still VAT-registered — art. 293 B would be a
+        // false citation for it, so PdfService must not print it here.
+        expect(preview.companyVatExempt).toBe(false);
+      });
+
+      it('overriding vatApplicable to true charges VAT even for a MICRO_ENTREPRENEUR whose default is exempt', () => {
+        const preview = mapper.toPreviewPdfData(
+          manualPreviewDto({ vatApplicableOverride: true, vatRateBasisPointsOverride: 1000 }),
+          companyFixture({ legalStatus: 'MICRO_ENTREPRENEUR', vatRateBasisPoints: 0 }),
+        );
+
+        expect(preview.vatApplicable).toBe(true);
+        expect(preview.vatRateBasisPoints).toBe(1000);
+        expect(preview.vatAmountCents).toBe(4500); // 10% of the 45000 subtotal
+      });
+
+      it('overriding only the rate keeps using the company default for applicability', () => {
+        const preview = mapper.toPreviewPdfData(
+          manualPreviewDto({ vatRateBasisPointsOverride: 550 }),
+          companyFixture({ legalStatus: 'COMPANY', vatRateBasisPoints: 2000 }),
+        );
+
+        expect(preview.vatApplicable).toBe(true);
+        expect(preview.vatRateBasisPoints).toBe(550);
+        expect(preview.vatAmountCents).toBe(2475); // 5.5% of 45000
+      });
+
+      it('omitting both overrides falls back to the company default, unchanged', () => {
+        const preview = mapper.toPreviewPdfData(
+          manualPreviewDto(),
+          companyFixture({ legalStatus: 'COMPANY', vatRateBasisPoints: 2000 }),
+        );
+
+        expect(preview.vatApplicable).toBe(true);
+        expect(preview.vatRateBasisPoints).toBe(2000);
       });
     });
   });

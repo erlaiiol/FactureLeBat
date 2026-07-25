@@ -1,10 +1,12 @@
 <div
   [appInvoiceCardDrag]="draggable()"
   (dropped)="dropped.emit($event)"
-  class="flex flex-col gap-2 rounded-xl border p-4 shadow-sm"
-  [class.border-line]="!overdue()"
-  [class.bg-surface]="true"
-  [class.border-danger]="overdue()"
+  class="flex flex-col gap-2 rounded-xl border-y border-r border-l-4 border-line bg-surface p-4 shadow-sm"
+  [class.border-l-info-subtle-border]="column() === 'DEVIS'"
+  [class.border-l-warning-subtle-border]="column() === 'NON_PAYEE'"
+  [class.border-l-danger-subtle-border]="column() === 'EN_RETARD'"
+  [class.border-l-success-subtle-border]="column() === 'PAYEE'"
+  [class.border-l-secondary-subtle-border]="column() === 'ANNULEE'"
   [class.cursor-grab]="draggable()"
 >
   <div class="flex items-center justify-between gap-2">

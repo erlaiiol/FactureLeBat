@@ -15,10 +15,19 @@
     <input
       formControlName="description"
       type="text"
+      [readonly]="isCatalogLinked()"
       placeholder="Ex : Parquet chêne massif posé"
       class="rounded-lg border border-line px-4 py-3 text-lg"
+      [class.bg-bg]="isCatalogLinked()"
+      [class.text-ink-soft]="isCatalogLinked()"
     />
-    <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
+    @if (isCatalogLinked()) {
+      <app-field-hint
+        text="Ce produit vient de votre catalogue — renommez-le depuis « Mes produits » si besoin."
+      />
+    } @else {
+      <app-field-hint text="Ce qui sera écrit sur la facture pour cette ligne." />
+    }
   </label>
 
   <label class="flex flex-col gap-1">
@@ -172,10 +181,6 @@
     }
   </div>
 
-  <label class="flex items-center gap-2">
-    <input formControlName="saveAsNewProduct" type="checkbox" class="h-5 w-5" />
-    <span class="text-sm font-medium text-ink">Enregistrer ce produit dans mon catalogue</span>
-  </label>
   <app-field-hint
     text="Seules les infos réutilisables (nom, unité, prix, conditionnement, code) sont enregistrées — la quantité et l'arrondi restent propres à ce chantier."
   />
@@ -184,15 +189,40 @@
     {{ quantitySummary() }}
   </div>
 
-  <app-sourcing-panel
-    [productName]="group().controls.description.value"
-    [quantity]="group().controls.quantity.value"
-    [unit]="group().controls.unit.value"
-    [customerLocation]="customerLocation()"
-  />
+  @if (showSourcingPanel()) {
+    <app-sourcing-panel
+      [productName]="group().controls.description.value"
+      [quantity]="group().controls.quantity.value"
+      [unit]="group().controls.unit.value"
+      [customerLocation]="customerLocation()"
+    />
+  }
 
   <!-- Phase 13.5 gallery redesign: lets the lines-step page put its
        "Valider" button inside this card's own border instead of floating
-       below it as a separate element. -->
-  <ng-content />
+       below it as a separate element. The catalog-save toggle sits right
+       next to it, much bigger than the checkbox it replaces, since it's the
+       one decision ("one-off line" vs "goes in my catalogue") every line
+       actually needs the artisan to make. -->
+  <div class="flex gap-3">
+    <button
+      type="button"
+      (click)="toggleSaveToCatalog()"
+      class="flex-1 rounded-xl border px-4 py-4 text-sm font-semibold shadow-sm transition"
+      [class.border-primary-subtle-border]="!group().controls.saveAsNewProduct.value"
+      [class.bg-primary-subtle]="!group().controls.saveAsNewProduct.value"
+      [class.text-primary-subtle-fg]="!group().controls.saveAsNewProduct.value"
+      [class.border-primary]="group().controls.saveAsNewProduct.value"
+      [class.bg-primary]="group().controls.saveAsNewProduct.value"
+      [class.text-primary-fg]="group().controls.saveAsNewProduct.value"
+    >
+      @if (group().controls.saveAsNewProduct.value) {
+        ✓
+      }
+      {{ saveToCatalogLabel() }}
+    </button>
+    <div class="flex-1">
+      <ng-content />
+    </div>
+  </div>
 </div>

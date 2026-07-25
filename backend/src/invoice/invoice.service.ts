@@ -78,8 +78,11 @@ export class InvoiceService {
         label: field.label,
         value: field.value,
       })),
-      vatApplicable: isVatApplicable(company.legalStatus),
-      vatRateBasisPoints: company.vatRateBasisPoints,
+      // ManualModeFieldsConsistency guarantees these two overrides are only
+      // ever present for entryMode MANUAL, so this can't misfire for a
+      // GUIDED invoice.
+      vatApplicable: dto.vatApplicableOverride ?? isVatApplicable(company.legalStatus),
+      vatRateBasisPoints: dto.vatRateBasisPointsOverride ?? company.vatRateBasisPoints,
       subtotalOverrideCents: dto.subtotalOverrideCents,
       vatOverrideCents: dto.vatOverrideCents,
       totalOverrideCents: dto.totalOverrideCents,

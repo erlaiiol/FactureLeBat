@@ -241,6 +241,7 @@
                           class="w-full min-w-0 rounded border-none bg-secondary-subtle/40 px-1 text-right font-mono text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle"
                           [value]="row.cells[column.id]"
                           (input)="onCellInput(row.id, column.id, $event)"
+                          (blur)="onPriceCellBlur(row, column)"
                         />
                         <button
                           type="button"
@@ -261,6 +262,7 @@
                         "
                         [value]="row.cells[column.id]"
                         (input)="onCellInput(row.id, column.id, $event)"
+                        (blur)="onPriceCellBlur(row, column)"
                       />
                     }
                   </td>
@@ -319,10 +321,13 @@
         appTourAnchor="manual-total"
         [totals]="store.totalsPreview()"
         [vatApplicable]="store.vatApplicable()"
+        [vatRateBasisPoints]="store.vatRateBasisPoints()"
+        [company]="store.company()"
         [editable]="true"
         (subtotalOverrideChange)="store.setSubtotalOverrideText($event)"
         (vatOverrideChange)="store.setVatOverrideText($event)"
         (totalOverrideChange)="store.setTotalOverrideText($event)"
+        (vatChoiceChange)="store.setVatChoice($event)"
       />
       <div class="w-full sm:w-64">
         @if (previewError(); as message) {

@@ -84,6 +84,35 @@ export class InvoiceLineFormComponent {
     return UNIT_PRICE_BUTTON_LABELS[this.group().controls.unit.value];
   }
 
+  // This line was toggled on from an existing catalog Product (see
+  // InvoiceCreateLinesStepPage.addProductFromCatalog) rather than typed
+  // freehand — its name identifies that stored Product, so it can't be
+  // renamed from here (that would silently desync the line from what it
+  // claims to reference; renaming the actual Product belongs in "Mes
+  // produits"). Every other field stays editable, same "autofill, not a
+  // lock" rule as elsewhere.
+  protected isCatalogLinked(): boolean {
+    return this.group().controls.catalogProductId.value != null;
+  }
+
+  protected saveToCatalogLabel(): string {
+    return this.isCatalogLinked()
+      ? 'Mettre à jour ce produit dans le catalogue'
+      : 'Enregistrer ce produit dans mon catalogue';
+  }
+
+  protected toggleSaveToCatalog(): void {
+    const control = this.group().controls.saveAsNewProduct;
+    control.setValue(!control.value);
+  }
+
+  // A price the artisan already has (typed by hand, or prefilled from the
+  // catalog) means there's nothing left to look up — the sourcing panel is
+  // for finding a price, not for browsing suppliers once one is set.
+  protected showSourcingPanel(): boolean {
+    return !(this.group().controls.unitPriceEuros.value > 0);
+  }
+
   // UX follow-up: an artisan describes a box the way it's physically
   // labeled — "8 planches" — not the way pricing math would derive it. Both
   // packaging fields are now entered directly (no more deducing content

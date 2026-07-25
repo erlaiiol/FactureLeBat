@@ -95,6 +95,21 @@ export class InvoiceCreateManualPage {
     this.store.setCellValue(rowId, columnId, value);
   }
 
+  // Auto-adds the "€" as soon as the artisan leaves a price cell, so it
+  // never has to be typed by hand and is already there — in the live
+  // preview below and in the PDF/aperçu, both of which render manual cells
+  // as typed — without waiting for an explicit "Mettre en forme" click.
+  // Only UNIT_PRICE/LINE_TOTAL are money; other columns are free text
+  // formatManualPrice would just leave untouched anyway, but this is only
+  // wired up on those two so an artisan mid-edit on a text cell never sees
+  // a surprise reformat on blur.
+  protected onPriceCellBlur(row: ManualRowDraft, column: ManualColumnDraft): void {
+    if (column.role !== 'UNIT_PRICE' && column.role !== 'LINE_TOTAL') {
+      return;
+    }
+    this.store.setCellValue(row.id, column.id, formatManualPrice(row.cells[column.id] ?? ''));
+  }
+
   protected onLabelInput(column: ManualColumnDraft, event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.store.renameColumn(column.id, value);

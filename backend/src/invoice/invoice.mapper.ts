@@ -503,8 +503,11 @@ export class InvoiceMapper {
     dto: CreateInvoiceDto,
     company: Company,
   ): InvoiceWithTotals {
-    const vatApplicable = isVatApplicable(company.legalStatus);
-    const vatRateBasisPoints = company.vatRateBasisPoints;
+    // Same override precedence as InvoiceService.create — run directly off
+    // the not-yet-persisted DTO so a draft preview/PDF aperçu can never
+    // disagree with the real created invoice on which VAT treatment applies.
+    const vatApplicable = dto.vatApplicableOverride ?? isVatApplicable(company.legalStatus);
+    const vatRateBasisPoints = dto.vatRateBasisPointsOverride ?? company.vatRateBasisPoints;
     const table = dto.manualTable!;
 
     const rows: ManualInvoiceRowWithTotal[] = table.rows.map((row, index) => ({
@@ -661,6 +664,14 @@ export class InvoiceMapper {
       issuerSiret: company.siret,
       issuerEmail: company.email,
       issuerPhone: company.phone,
+      // Whether the *company itself* benefits from the franchise en base de
+      // TVA (art. 293 B du CGI) — independent of what a given manual
+      // invoice's vatApplicable ends up being (see
+      // CreateInvoiceDto.vatApplicableOverride). PdfService only cites that
+      // article when this is true; a VAT-registered company that overrides
+      // one invoice to "TVA non applicable" gets the plain mention instead,
+      // since art. 293 B would be a false legal citation for them.
+      companyVatExempt: !isVatApplicable(company.legalStatus),
     };
   }
 }

@@ -1,7 +1,6 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CompanyProfile } from '../../core/models/company.model';
-import { CustomerProfile } from '../../core/models/customer.model';
 import {
   CreateInvoiceLineRequest,
   CreateInvoiceRequest,
@@ -11,8 +10,7 @@ import {
   ServiceLineVisibility,
   WasteSurcharge,
 } from '../../core/models/invoice.model';
-import { ProductProfile } from '../../core/models/product.model';
-import { ServiceProfile, ServicePricingMode } from '../../core/models/service.model';
+import { ServicePricingMode } from '../../core/models/service.model';
 import { isAreaUnit, Unit } from '../../core/models/unit.model';
 import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
@@ -83,6 +81,9 @@ export interface InvoiceServiceLineDraft {
   percentageBasisPoints: number | null;
   // Same UI-only toggle-tracking role as InvoiceLineDraft.catalogProductId.
   catalogServiceId: string | null;
+  // Same UI-only toggle-tracking role as InvoiceLineDraft.saveAsNewProduct —
+  // never sent as-is to the invoice-creation request (see buildInvoiceRequest).
+  saveAsNewService: boolean;
 }
 
 const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
@@ -117,6 +118,7 @@ const EMPTY_SERVICE_LINE_DEFAULTS = {
   pricingMode: 'FIXED' as ServicePricingMode,
   percentageBasisPoints: null as number | null,
   catalogServiceId: null as string | null,
+  saveAsNewService: false,
 };
 
 const DRAFT_STORAGE_KEY = 'facturelebat.invoiceDraft.v1';
@@ -144,9 +146,13 @@ export class InvoiceDraftStore {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly company = signal<CompanyProfile | null>(null);
-  readonly customers = signal<CustomerProfile[]>([]);
-  readonly products = signal<ProductProfile[]>([]);
-  readonly services = signal<ServiceProfile[]>([]);
+  // Delegate to each service's shared, app-wide cache (see
+  // CustomerService.all) rather than holding a local snapshot — a customer/
+  // product/service created or edited on any screen becomes selectable here
+  // immediately, without needing this store (or the page) to be reloaded.
+  readonly customers = computed(() => this.customerService.all() ?? []);
+  readonly products = computed(() => this.productService.all() ?? []);
+  readonly services = computed(() => this.serviceCatalogService.all() ?? []);
 
   // Phase 14.3: seeded from the mode-choice slider (via InvoiceCreateShellPage
   // reading the `type` query param), then persisted like every other draft
@@ -249,18 +255,9 @@ export class InvoiceDraftStore {
       .getProfile()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (profile) => this.company.set(profile) });
-    this.customerService
-      .getAll()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (customers) => this.customers.set(customers) });
-    this.productService
-      .getAll()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (products) => this.products.set(products) });
-    this.serviceCatalogService
-      .getAll()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (services) => this.services.set(services) });
+    this.customerService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+    this.productService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+    this.serviceCatalogService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
 
     effect(() => {
       const snapshot: PersistedDraft = {
@@ -302,21 +299,6 @@ export class InvoiceDraftStore {
     this.lines.update((lines) =>
       lines.map((line, i) => (i === index ? { ...line, [field]: !line[field] } : line)),
     );
-  }
-
-  // Phase 13.5: a product created inline from the merged catalog/lines
-  // screen (see QuickProductCreateComponent) needs to show up in this
-  // screen's own catalog grid immediately, not just on the next full reload
-  // of ProductService.getAll() — same "autofill, not a lock" spirit as
-  // every other soft catalog reference, just appended client-side.
-  addProductToCatalog(product: ProductProfile): void {
-    this.products.update((products) => [...products, product]);
-  }
-
-  // Same immediate-visibility reasoning as addProductToCatalog, for a
-  // Service created inline via QuickServiceCreateComponent.
-  addServiceToCatalog(service: ServiceProfile): void {
-    this.services.update((services) => [...services, service]);
   }
 
   reset(): void {

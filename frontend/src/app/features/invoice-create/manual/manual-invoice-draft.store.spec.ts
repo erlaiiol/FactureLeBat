@@ -213,7 +213,7 @@ describe('ManualInvoiceDraftStore', () => {
       const row = store.rows()[0];
       expect(row.cells[descriptionColumnId(store)]).toBe('Parquet chêne');
       expect(row.cells[quantityColumnId(store)]).toBe('10,5');
-      expect(row.cells[unitPriceColumnId(store)]).toBe('1500,00');
+      expect(row.cells[unitPriceColumnId(store)]).toBe('1500,00 €');
     });
   });
 
@@ -288,6 +288,61 @@ describe('ManualInvoiceDraftStore', () => {
       expect(request.subtotalOverrideCents).toBe(100000);
       expect(request.vatOverrideCents).toBeUndefined();
       expect(request.totalOverrideCents).toBeUndefined();
+    });
+  });
+
+  describe('VAT applicability/rate override', () => {
+    it('defaults to the company profile when no explicit choice has been made', () => {
+      const store = createStore(); // companyFixture: COMPANY, 2000 basis points
+      expect(store.vatApplicable()).toBe(true);
+      expect(store.vatRateBasisPoints()).toBe(2000);
+    });
+
+    it('an explicit choice overrides the company default for both applicability and rate', () => {
+      const store = createStore();
+      store.setVatChoice({ applicable: true, rateBasisPoints: 550 });
+
+      expect(store.vatApplicable()).toBe(true);
+      expect(store.vatRateBasisPoints()).toBe(550);
+    });
+
+    it('choosing "non applicable" zeroes VAT even though the company default is VAT-applicable', () => {
+      const store = createStore();
+      store.setCellValue(store.rows()[0].id, lineTotalColumnId(store), '450.00');
+      store.setVatChoice({ applicable: false, rateBasisPoints: 0 });
+
+      expect(store.vatApplicable()).toBe(false);
+      expect(store.totalsPreview().vatAmountCents).toBe(0);
+      expect(store.totalsPreview().totalInclVatCents).toBe(45000);
+    });
+
+    it('buildInvoiceRequest omits both override fields until an explicit choice is made', () => {
+      const store = createStore();
+      const request = store.buildInvoiceRequest();
+
+      expect(request.vatApplicableOverride).toBeUndefined();
+      expect(request.vatRateBasisPointsOverride).toBeUndefined();
+    });
+
+    it('buildInvoiceRequest sends both fields once a choice has been made', () => {
+      const store = createStore();
+      store.setVatChoice({ applicable: true, rateBasisPoints: 1000 });
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.vatApplicableOverride).toBe(true);
+      expect(request.vatRateBasisPointsOverride).toBe(1000);
+    });
+
+    it('reset() clears the choice, falling back to the company default again', () => {
+      const store = createStore();
+      store.setVatChoice({ applicable: false, rateBasisPoints: 0 });
+
+      store.reset();
+
+      expect(store.vatApplicable()).toBe(true);
+      expect(store.vatRateBasisPoints()).toBe(2000);
+      expect(store.buildInvoiceRequest().vatApplicableOverride).toBeUndefined();
     });
   });
 

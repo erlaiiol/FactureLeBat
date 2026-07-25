@@ -25,8 +25,12 @@ describe('parseManualDecimalCell', () => {
     expect(parseManualDecimalCell('-5')).toBeNull();
   });
 
-  it('rejects a currency symbol or thousands separator', () => {
-    expect(parseManualDecimalCell('45,90 €')).toBeNull();
+  it('accepts a trailing € sign — formatManualPrice/format() add one to every UNIT_PRICE/LINE_TOTAL cell', () => {
+    expect(parseManualDecimalCell('45,90 €')?.toString()).toBe('45.9');
+    expect(parseManualDecimalCell('45,90€')?.toString()).toBe('45.9');
+  });
+
+  it('rejects a thousands separator', () => {
     expect(parseManualDecimalCell('1 000')).toBeNull();
   });
 

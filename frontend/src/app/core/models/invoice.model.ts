@@ -114,6 +114,12 @@ export interface CreateInvoiceRequest {
   subtotalOverrideCents?: number;
   vatOverrideCents?: number;
   totalOverrideCents?: number;
+  // Manual mode only, mirrors the three overrides above: lets one document
+  // diverge from the company's own default VAT regime (see
+  // ManualInvoiceDraftStore.vatOverride). Forbidden for entryMode GUIDED —
+  // mirrors the backend's ManualModeFieldsConsistency rule.
+  vatApplicableOverride?: boolean;
+  vatRateBasisPointsOverride?: number;
 }
 
 export interface InvoiceLineWithTotal {

@@ -44,8 +44,11 @@ function rowIsValid(row: CreateManualRowDto, columns: CreateManualColumnDto[]): 
     switch (column.role) {
       case ManualColumnRole.DESCRIPTION:
         return cell.trim().length > 0;
+      // Same blank exemption as LINE_TOTAL below: unit price is never read
+      // by computeManualRowTotalCents, only displayed, so it can't block
+      // submission when the artisan hasn't filled it in.
       case ManualColumnRole.UNIT_PRICE:
-        return parseManualDecimalCell(cell) !== null;
+        return cell.trim().length === 0 || parseManualDecimalCell(cell) !== null;
       // A blank line total contributes zero to the invoice rather than
       // failing validation — manual mode's whole principle is that the
       // artisan fills this in at their own pace (see

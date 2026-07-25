@@ -15,7 +15,7 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'entryMode GUIDED requires at least one line, no manualTable, and no totals override; entryMode MANUAL requires a manualTable and no lines/serviceLines',
+          'entryMode GUIDED requires at least one line, no manualTable, and no totals/VAT override; entryMode MANUAL requires a manualTable and no lines/serviceLines',
         ...options,
       },
       validator: {
@@ -29,7 +29,9 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
               !dto.manualTable &&
               dto.subtotalOverrideCents === undefined &&
               dto.vatOverrideCents === undefined &&
-              dto.totalOverrideCents === undefined
+              dto.totalOverrideCents === undefined &&
+              dto.vatApplicableOverride === undefined &&
+              dto.vatRateBasisPointsOverride === undefined
             );
           }
 

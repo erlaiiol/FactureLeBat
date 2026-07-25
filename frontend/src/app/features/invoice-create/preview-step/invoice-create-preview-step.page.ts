@@ -16,6 +16,7 @@ import { CustomerService } from '../../../core/services/customer.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { PaywallService } from '../../../core/services/paywall.service';
 import { ProductService } from '../../../core/services/product.service';
+import { ServiceCatalogService } from '../../../core/services/service-catalog.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
@@ -52,6 +53,7 @@ export class InvoiceCreatePreviewStepPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly customerService = inject(CustomerService);
   private readonly productService = inject(ProductService);
+  private readonly serviceCatalogService = inject(ServiceCatalogService);
   private readonly paywallService = inject(PaywallService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -248,32 +250,70 @@ export class InvoiceCreatePreviewStepPage {
     // (name/unit/price/packaging/code) — never `quantity`, `wasteSurcharge`,
     // or `roundUpToPackaging`, which describe this chantier, not the
     // product itself. Best-effort: a failed catalog save (e.g. a duplicate
-    // code) must never block the invoice itself from being created.
+    // code) must never block the invoice itself from being created. A line
+    // that started from an existing catalog Product (catalogProductId set)
+    // updates that same Product instead of creating a duplicate — the name
+    // can't have changed (see InvoiceLineFormComponent.isCatalogLinked), but
+    // the price/packaging/code may well have.
     const productSaveRequests = this.draftStore
       .lines()
       .filter((line) => line.saveAsNewProduct)
-      .map((line) =>
-        this.productService
-          .create({
-            name: line.description,
-            unit: line.unit,
-            priceCents: Math.round(line.unitPriceEuros * 100),
-            code: line.productCode || undefined,
-            packagingQuantity: line.packagingQuantity ?? undefined,
-          })
-          .pipe(catchError(() => of(null))),
-      );
+      .map((line) => {
+        const payload = {
+          name: line.description,
+          unit: line.unit,
+          priceCents: Math.round(line.unitPriceEuros * 100),
+          code: line.productCode || undefined,
+          packagingQuantity: line.packagingQuantity ?? undefined,
+        };
+        const save$ = line.catalogProductId
+          ? this.productService.update(line.catalogProductId, payload)
+          : this.productService.create(payload);
+        return save$.pipe(catchError(() => of(null)));
+      });
+    // Same "update the linked entry instead of duplicating it" rule for a
+    // prestation, via saveAsNewService (see InvoiceServiceLineFormComponent).
+    const serviceSaveRequests = this.draftStore
+      .serviceLines()
+      .filter((serviceLine) => serviceLine.saveAsNewService)
+      .map((serviceLine) => {
+        const payload = {
+          name: serviceLine.name,
+          description: serviceLine.description || undefined,
+          pricingMode: serviceLine.pricingMode,
+          priceCents:
+            serviceLine.pricingMode === 'FIXED'
+              ? Math.round(serviceLine.amountEuros * 100)
+              : undefined,
+          percentageBasisPoints:
+            serviceLine.pricingMode === 'PERCENTAGE'
+              ? (serviceLine.percentageBasisPoints ?? undefined)
+              : undefined,
+          defaultVisibility: serviceLine.visibility,
+        };
+        const save$ = serviceLine.catalogServiceId
+          ? this.serviceCatalogService.update(serviceLine.catalogServiceId, payload)
+          : this.serviceCatalogService.create(payload);
+        return save$.pipe(catchError(() => of(null)));
+      });
+
     // Normalized to Observable<null> on both branches — a ternary between
     // differently-typed Observables otherwise loses its generic argument
     // when piped below (TS falls back to the no-op 0-arg pipe() overload).
-    const saveProducts$: Observable<null> =
-      productSaveRequests.length > 0
-        ? forkJoin(productSaveRequests).pipe(map(() => null))
+    // Products and services are cast to a shared Observable<unknown> here
+    // purely so they can share one forkJoin — neither result is ever read.
+    const catalogSaveRequests: Observable<unknown>[] = [
+      ...productSaveRequests,
+      ...serviceSaveRequests,
+    ];
+    const saveCatalogEntries$: Observable<null> =
+      catalogSaveRequests.length > 0
+        ? forkJoin(catalogSaveRequests).pipe(map(() => null))
         : of(null);
 
     // "Enregistrer ce client" only applies to freehand entry — if a saved
     // customer was picked, there's nothing new to save.
-    const request$ = saveProducts$.pipe(
+    const request$ = saveCatalogEntries$.pipe(
       switchMap(() =>
         customer.saveAsNewCustomer && !customer.customerId
           ? this.customerService

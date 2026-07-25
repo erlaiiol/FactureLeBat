@@ -141,6 +141,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Cross-app feedback for reactive-form fields: Angular stamps ng-invalid/
+   ng-touched onto the native element behind every formControlName, so a
+   single rule here highlights any missing/invalid required field in red the
+   moment it's been visited (or markAllAsTouched() runs on a failed submit),
+   with no per-input wiring needed in each form's own template. */
+input.ng-invalid.ng-touched,
+select.ng-invalid.ng-touched,
+textarea.ng-invalid.ng-touched {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 1px var(--color-danger);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -44,23 +44,31 @@
   }
 
   <div class="flex gap-4 overflow-x-auto pb-4">
-    @if (showDevisColumn()) {
-      <section class="flex w-72 shrink-0 flex-col gap-3">
-        <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
-          Devis ({{ devis().length }})
-        </h2>
-        @for (item of devis(); track item.id) {
-          <app-invoice-board-card [invoice]="item" column="DEVIS" />
-        }
-        @if (devis().length === 0) {
-          <p class="text-sm text-ink-soft">Aucun devis.</p>
-        }
-      </section>
-    }
+    <section class="flex w-72 shrink-0 flex-col gap-3" [style.order]="devisOrder()">
+      <h2
+        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+      >
+        Devis
+        <app-badge variant="info" tone="subtle">{{ devis().length }}</app-badge>
+      </h2>
+      @for (item of devis(); track item.id) {
+        <app-invoice-board-card [invoice]="item" column="DEVIS" />
+      }
+      @if (devis().length === 0) {
+        <p class="text-sm text-ink-soft">Aucun devis.</p>
+      }
+    </section>
 
-    <section class="flex w-72 shrink-0 flex-col gap-3" data-invoice-column="NON_PAYEE">
-      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
-        Non payées ({{ nonPayees().length }})
+    <section
+      class="flex w-72 shrink-0 flex-col gap-3"
+      data-invoice-column="NON_PAYEE"
+      [style.order]="nonPayeeOrder()"
+    >
+      <h2
+        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+      >
+        Non payées
+        <app-badge variant="warning" tone="subtle">{{ nonPayees().length }}</app-badge>
       </h2>
       @for (item of nonPayees(); track item.id) {
         <app-invoice-board-card
@@ -84,9 +92,12 @@
       }
     </section>
 
-    <section class="flex w-72 shrink-0 flex-col gap-3">
-      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-danger">
-        En retard ({{ enRetard().length }})
+    <section class="flex w-72 shrink-0 flex-col gap-3" [style.order]="enRetardOrder()">
+      <h2
+        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+      >
+        En retard
+        <app-badge variant="danger" tone="subtle">{{ enRetard().length }}</app-badge>
       </h2>
       @for (item of enRetard(); track item.id) {
         <app-invoice-board-card
@@ -103,42 +114,52 @@
       }
     </section>
 
-    @if (showPayeesColumn()) {
-      <section class="flex w-72 shrink-0 flex-col gap-3" data-invoice-column="PAYEE">
-        <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
-          Payées ({{ payees().length }})
-        </h2>
-        @for (item of payees(); track item.id) {
-          <app-invoice-board-card
-            [invoice]="item"
-            column="PAYEE"
-            (dropped)="onCardDropped(item, $event)"
-          />
-        }
-        @if (payees().length === 0) {
-          <p class="text-sm text-ink-soft">Aucune facture payée.</p>
-        }
-      </section>
-    }
+    <section
+      class="flex w-72 shrink-0 flex-col gap-3"
+      data-invoice-column="PAYEE"
+      [style.order]="payeeOrder"
+    >
+      <h2
+        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+      >
+        Payées
+        <app-badge variant="success" tone="subtle">{{ payees().length }}</app-badge>
+      </h2>
+      @for (item of payees(); track item.id) {
+        <app-invoice-board-card
+          [invoice]="item"
+          column="PAYEE"
+          (dropped)="onCardDropped(item, $event)"
+        />
+      }
+      @if (payees().length === 0) {
+        <p class="text-sm text-ink-soft">Aucune facture payée.</p>
+      }
+    </section>
 
-    @if (showAnnuleesColumn()) {
-      <section class="flex w-72 shrink-0 flex-col gap-3" data-invoice-column="ANNULEE">
-        <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
-          Annulées ({{ annulees().length }})
-        </h2>
-        @for (item of annulees(); track item.id) {
-          <app-invoice-board-card
-            [invoice]="item"
-            column="ANNULEE"
-            (restore)="moveToNonPayee(item)"
-            (dropped)="onCardDropped(item, $event)"
-          />
-        }
-        @if (annulees().length === 0) {
-          <p class="text-sm text-ink-soft">Aucune facture annulée.</p>
-        }
-      </section>
-    }
+    <section
+      class="flex w-72 shrink-0 flex-col gap-3"
+      data-invoice-column="ANNULEE"
+      [style.order]="annuleeOrder"
+    >
+      <h2
+        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+      >
+        Annulées
+        <app-badge variant="secondary" tone="subtle">{{ annulees().length }}</app-badge>
+      </h2>
+      @for (item of annulees(); track item.id) {
+        <app-invoice-board-card
+          [invoice]="item"
+          column="ANNULEE"
+          (restore)="moveToNonPayee(item)"
+          (dropped)="onCardDropped(item, $event)"
+        />
+      }
+      @if (annulees().length === 0) {
+        <p class="text-sm text-ink-soft">Aucune facture annulée.</p>
+      }
+    </section>
   </div>
 }
 

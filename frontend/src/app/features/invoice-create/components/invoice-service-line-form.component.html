@@ -30,10 +30,19 @@
     <input
       formControlName="name"
       type="text"
+      [readonly]="isCatalogLinked()"
       placeholder="Ex : Main-d’œuvre"
       class="rounded-lg border border-line px-4 py-3 text-lg"
+      [class.bg-bg]="isCatalogLinked()"
+      [class.text-ink-soft]="isCatalogLinked()"
     />
-    <app-field-hint text="Ce qui sera écrit sur la facture pour cette prestation." />
+    @if (isCatalogLinked()) {
+      <app-field-hint
+        text="Cette prestation vient de votre catalogue — renommez-la depuis « Mes prestations » si besoin."
+      />
+    } @else {
+      <app-field-hint text="Ce qui sera écrit sur la facture pour cette prestation." />
+    }
   </label>
 
   <div class="flex gap-3">
@@ -118,6 +127,26 @@
 
   <!-- Phase 13.5 gallery redesign: see InvoiceLineFormComponent's ng-content
        for why this exists — the page's "Valider" button lives inside this
-       card's own border. -->
-  <ng-content />
+       card's own border, next to the catalog-save toggle. -->
+  <div class="flex gap-3">
+    <button
+      type="button"
+      (click)="toggleSaveToCatalog()"
+      class="flex-1 rounded-xl border px-4 py-4 text-sm font-semibold shadow-sm transition"
+      [class.border-info-subtle-border]="!group().controls.saveAsNewService.value"
+      [class.bg-info-subtle]="!group().controls.saveAsNewService.value"
+      [class.text-info-subtle-fg]="!group().controls.saveAsNewService.value"
+      [class.border-info]="group().controls.saveAsNewService.value"
+      [class.bg-info]="group().controls.saveAsNewService.value"
+      [class.text-info-fg]="group().controls.saveAsNewService.value"
+    >
+      @if (group().controls.saveAsNewService.value) {
+        ✓
+      }
+      {{ saveToCatalogLabel() }}
+    </button>
+    <div class="flex-1">
+      <ng-content />
+    </div>
+  </div>
 </div>

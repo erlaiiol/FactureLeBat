@@ -17,6 +17,8 @@ The long-term goal is to provide a complete business management platform for art
 
 The product must remain simple enough for craftsmen who are not technical. The UI must be clear. The UX must be the fastest with big buttons. We must write a minimum. We must click a maximum.
 
+**Scaling beyond a small artisan app:** the product is actively being scaled past its original "flooring installer" niche toward a broader platform — small features that let a document flex to more real-world situations (e.g. per-invoice VAT treatment, not just a fixed company-wide default) are part of that push, not scope creep. Once that broadening is far enough along, the product is expected to rename from **FactureLeBat** to **FactureLe** — noted here as direction, not yet executed (no code/package/repo rename has happened).
+
 Priority order:
 
 1. Reliability
@@ -481,6 +483,12 @@ A GUIDED invoice's `lines`/`serviceLines` stay exactly as before; a MANUAL invoi
 - **Cell editing uses real `<input>`/`<textarea>` elements, not `contenteditable` + DOMPurify.** A native form control's `.value` is always plain text — pasted content can never be interpreted as HTML through it, so there is no injection surface to sanitize against in the first place. This is a stronger guarantee than sanitizing after the fact, at lower implementation cost, so the DOMPurify step originally anticipated here was unnecessary. `PdfService`'s manual-table renderer still treats every cell as plain text data (never markup), same principle as the rest of the PDF pipeline.
 - **`interactjs`** (MIT-licensed) is used for drag-to-resize, exactly as anticipated — but only for the low-level drag-delta gesture (`ManualResizeHandleDirective`, a thin reusable directive wrapping `interact(...).draggable(...)`), not to resize DOM elements directly. The emitted pixel delta is clamped and applied to `ManualInvoiceDraftStore`'s own column/row size state, which is what's actually persisted.
 - Parsing cell content into priced invoice data stays app code on both ends: `manual-cell-parser.util.ts`/`manual-table-calculation.util.ts` (backend) and `manual-cell-format.util.ts` (frontend, preview-only) — `interactjs` never touches calculation, only presentation geometry.
+
+## Later addition — VAT applicability/rate editable per manual invoice
+
+Manual mode's own principle ("nothing computed behind the artisan's back," already applied to Sous-total HT/TVA/Total TTC as freely overridable figures) extended to VAT itself: `CreateInvoiceDto.vatApplicableOverride`/`vatRateBasisPointsOverride` let a single manual invoice pick "TVA non applicable" or a specific rate (5,5 % / 10 % / 20 % — the real French rates relevant to construction work; there is no 15 % rate, and 2,1 % is irrelevant to this app's audience), overriding the company profile's own default (`Company.legalStatus`/`vatRateBasisPoints`) for that one document. Forbidden for `entryMode` GUIDED, same as the three totals overrides — VAT there stays purely derived from the company profile.
+
+**Decided during implementation, after flagging the legal nuance to the user:** the company's own default regime (derived from `legalStatus`) is not itself editable anywhere — only a manual invoice's *effective* treatment for that one document can diverge from it. Because that means a VAT-registered company can mark one invoice "TVA non applicable" (or the reverse for a franchise-en-base micro-entrepreneur), `PdfService`'s legal mention had to stop assuming the two always match: `InvoiceMapper.issuerFields` now also carries `companyVatExempt` (the company's own real status, independent of the invoice's resolved `vatApplicable`), and only cites "art. 293 B du CGI" when that's true — a company that overrides one invoice away from its own regime gets the plain "TVA non applicable" mention instead, never a false legal citation. `InvoiceTotalsSummaryComponent`'s VAT line, editable-mode only, carries a small "ⓘ" (native `<details>/<summary>`, no extra state) showing the company's real legal status and default regime, so the override is always made with that context visible.
 
 ---
 

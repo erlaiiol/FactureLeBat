@@ -316,3 +316,58 @@ describe('CreateInvoiceDto — Phase 9.5 bis totals override', () => {
     expect(errors).not.toHaveLength(0);
   });
 });
+
+describe('CreateInvoiceDto — VAT applicability/rate override', () => {
+  const manualTable = {
+    columns: [
+      { role: 'DESCRIPTION', label: 'Désignation' },
+      { role: 'QUANTITY', label: 'Quantité' },
+      { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+      { role: 'LINE_TOTAL', label: 'Total' },
+    ],
+    rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+  };
+
+  it('accepts entryMode MANUAL with both VAT overrides set', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      vatApplicableOverride: true,
+      vatRateBasisPointsOverride: 550,
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts entryMode MANUAL with vatApplicableOverride false and no rate', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      vatApplicableOverride: false,
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a rate above 10000 basis points (100%)', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      vatRateBasisPointsOverride: 10001,
+    });
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects entryMode GUIDED that carries either VAT override', async () => {
+    const errors = await validateDto(
+      basePayload({ entryMode: 'GUIDED', vatApplicableOverride: false }),
+    );
+    expect(errors).not.toHaveLength(0);
+
+    const rateErrors = await validateDto(
+      basePayload({ entryMode: 'GUIDED', vatRateBasisPointsOverride: 2000 }),
+    );
+    expect(rateErrors).not.toHaveLength(0);
+  });
+});

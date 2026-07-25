@@ -7,8 +7,12 @@
 
 const DECIMAL_PATTERN = /^\d{1,9}(?:\.\d{1,3})?$/;
 
+// Mirrors the backend's parseManualDecimalCell: a "€" sign anywhere is
+// stripped before parsing, since formatManualPrice below adds one to every
+// UNIT_PRICE/LINE_TOTAL cell automatically — an artisan typing it by hand,
+// or a value round-tripped through formatting, must still parse.
 export function parseManualNumber(raw: string): number | null {
-  const normalized = raw.trim().replace(',', '.');
+  const normalized = raw.trim().replace(/€/g, '').trim().replace(',', '.');
   if (!DECIMAL_PATTERN.test(normalized)) {
     return null;
   }
@@ -27,14 +31,18 @@ export function formatManualQuantity(raw: string): string {
   return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
 }
 
-// "Mettre en forme": normalizes a unit-price cell to two decimals, comma
-// separator, e.g. "1500" -> "1500,00".
+// "Mettre en forme": normalizes a unit-price/line-total cell to two
+// decimals, comma separator, and a trailing "€", e.g. "1500" -> "1500,00 €".
+// The artisan never has to type the € themselves — this runs on every
+// "Mettre en forme" pass and on the "?" autofill button's writeback, and
+// parseManualNumber above strips the sign back out, so it round-trips
+// cleanly through both.
 export function formatManualPrice(raw: string): string {
   const value = parseManualNumber(raw);
   if (value === null) {
     return raw.trim();
   }
-  return value.toFixed(2).replace('.', ',');
+  return `${value.toFixed(2).replace('.', ',')} €`;
 }
 
 // "Mettre en forme" on a free-text cell (description/CUSTOM column): trims

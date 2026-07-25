@@ -89,6 +89,14 @@ const EMPTY_CUSTOMER: ManualCustomerDraft = {
 
 const DRAFT_STORAGE_KEY = 'facturelebat.manualInvoiceDraft.v1';
 
+// Explicit choice of VAT treatment for this one document, overriding the
+// company's own default (see ManualInvoiceDraftStore.vatOverride) — null
+// means "no choice made yet, use the company default".
+export interface ManualVatChoice {
+  applicable: boolean;
+  rateBasisPoints: number;
+}
+
 interface PersistedManualDraft {
   customer: ManualCustomerDraft;
   columns: ManualColumnDraft[];
@@ -96,6 +104,7 @@ interface PersistedManualDraft {
   subtotalOverrideText: string;
   vatOverrideText: string;
   totalOverrideText: string;
+  vatChoice: ManualVatChoice | null;
   documentType: DocumentType;
 }
 
@@ -131,7 +140,23 @@ export class ManualInvoiceDraftStore {
   readonly vatOverrideText = signal('');
   readonly totalOverrideText = signal('');
 
-  readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
+  // Manual mode's whole principle, extended to VAT itself: the company
+  // profile's legal status only ever picks one fixed treatment for every
+  // invoice, but a single artisan can legitimately need "TVA non
+  // applicable" on one document and "TVA 5,5 %" on the next (e.g. a
+  // franchise-en-base company doing an occasional VAT-liable job, or a
+  // VAT-registered company applying a different rate per chantier — see
+  // docs/roadmap.md's VAT-override note). null means no explicit choice
+  // has been made yet, so vatApplicable/vatRateBasisPoints below fall back
+  // to the company default.
+  readonly vatChoice = signal<ManualVatChoice | null>(null);
+
+  readonly vatApplicable = computed(
+    () => this.vatChoice()?.applicable ?? this.company()?.legalStatus === 'COMPANY',
+  );
+  readonly vatRateBasisPoints = computed(
+    () => this.vatChoice()?.rateBasisPoints ?? this.company()?.vatRateBasisPoints ?? 0,
+  );
 
   // Each row's total is the artisan's own freehand LINE_TOTAL cell — never
   // derived from quantity x unit price (those stay purely informational
@@ -155,7 +180,8 @@ export class ManualInvoiceDraftStore {
   // rate stays meaningful) unless VAT is also overridden directly;
   // overriding the total skips the subtotal + VAT sum entirely.
   readonly totalsPreview = computed<TotalsPreview>(() => {
-    const company = this.company();
+    const vatApplicable = this.vatApplicable();
+    const vatRateBasisPoints = this.vatRateBasisPoints();
     const lineTotalColumnId = this.columns().find((column) => column.role === 'LINE_TOTAL')?.id;
     const lineInputs = this.rows().map((row) => ({
       unit: 'UNIT' as const,
@@ -165,11 +191,7 @@ export class ManualInvoiceDraftStore {
       ),
       wasteSurcharge: 'NONE' as const,
     }));
-    const computed = computeTotalsPreview(
-      lineInputs,
-      this.vatApplicable(),
-      company?.vatRateBasisPoints ?? 0,
-    );
+    const computed = computeTotalsPreview(lineInputs, vatApplicable, vatRateBasisPoints);
 
     const subtotalOverride = parseManualNumber(this.subtotalOverrideText());
     const subtotalExclVatCents =
@@ -179,8 +201,8 @@ export class ManualInvoiceDraftStore {
 
     const recomputedVatAmountCents =
       subtotalOverride !== null
-        ? this.vatApplicable()
-          ? Math.round((subtotalExclVatCents * (company?.vatRateBasisPoints ?? 0)) / 10000)
+        ? vatApplicable
+          ? Math.round((subtotalExclVatCents * vatRateBasisPoints) / 10000)
           : 0
         : computed.vatAmountCents;
     const vatOverride = parseManualNumber(this.vatOverrideText());
@@ -222,6 +244,7 @@ export class ManualInvoiceDraftStore {
         subtotalOverrideText: this.subtotalOverrideText(),
         vatOverrideText: this.vatOverrideText(),
         totalOverrideText: this.totalOverrideText(),
+        vatChoice: this.vatChoice(),
         documentType: this.documentType(),
       };
       this.writeToStorage(snapshot);
@@ -284,6 +307,14 @@ export class ManualInvoiceDraftStore {
 
   setTotalOverrideText(text: string): void {
     this.totalOverrideText.set(text);
+  }
+
+  // The artisan's explicit pick from the VAT selector (see
+  // InvoiceTotalsSummaryComponent) — always an explicit choice from here on,
+  // never cleared back to "use the company default" once made, same as
+  // every other manual-mode field once touched.
+  setVatChoice(choice: ManualVatChoice): void {
+    this.vatChoice.set(choice);
   }
 
   setCellValue(rowId: string, columnId: string, value: string): void {
@@ -392,6 +423,7 @@ export class ManualInvoiceDraftStore {
     this.subtotalOverrideText.set('');
     this.vatOverrideText.set('');
     this.totalOverrideText.set('');
+    this.vatChoice.set(null);
     this.documentType.set('FACTURE');
     this.clearStorage();
   }
@@ -408,10 +440,16 @@ export class ManualInvoiceDraftStore {
       label: column.label,
       widthPx: Math.round(column.widthPx),
     }));
-    const requestRows: CreateManualRowRequest[] = this.rows().map((row) => ({
-      heightPx: Math.round(row.heightPx),
-      cells: columns.map((column) => row.cells[column.id] ?? ''),
-    }));
+    // Rows the artisan never filled in (the default starter row, or one
+    // added via "+ ajouter une ligne" and left untouched) are dropped here
+    // rather than sent — same "description is what makes a row real" rule
+    // as canPreview's hasUsableRow, but applied to the actual payload.
+    const requestRows: CreateManualRowRequest[] = this.rows()
+      .filter((row) => (row.cells[DESCRIPTION_COLUMN_ID] ?? '').trim().length > 0)
+      .map((row) => ({
+        heightPx: Math.round(row.heightPx),
+        cells: columns.map((column) => row.cells[column.id] ?? ''),
+      }));
 
     // Only fields the artisan actually filled in both sides of are sent —
     // the backend requires a non-empty label and value, and a half-filled
@@ -426,6 +464,11 @@ export class ManualInvoiceDraftStore {
     const subtotalOverride = parseManualNumber(this.subtotalOverrideText());
     const vatOverride = parseManualNumber(this.vatOverrideText());
     const totalOverride = parseManualNumber(this.totalOverrideText());
+    // Only sent once the artisan has actually picked something from the VAT
+    // selector — until then, omitted entirely so the backend keeps deriving
+    // it from the company profile, same "half-filled never blocks
+    // submission" precedent as the three overrides above.
+    const vatChoice = this.vatChoice();
 
     return {
       customerName: customer.customerName,
@@ -440,6 +483,8 @@ export class ManualInvoiceDraftStore {
         subtotalOverride !== null ? Math.round(subtotalOverride * 100) : undefined,
       vatOverrideCents: vatOverride !== null ? Math.round(vatOverride * 100) : undefined,
       totalOverrideCents: totalOverride !== null ? Math.round(totalOverride * 100) : undefined,
+      vatApplicableOverride: vatChoice?.applicable,
+      vatRateBasisPointsOverride: vatChoice?.rateBasisPoints,
     };
   }
 
@@ -479,6 +524,13 @@ export class ManualInvoiceDraftStore {
       }
       if (typeof parsed.totalOverrideText === 'string') {
         this.totalOverrideText.set(parsed.totalOverrideText);
+      }
+      if (
+        parsed.vatChoice &&
+        typeof parsed.vatChoice.applicable === 'boolean' &&
+        typeof parsed.vatChoice.rateBasisPoints === 'number'
+      ) {
+        this.vatChoice.set(parsed.vatChoice);
       }
       if (parsed.documentType === 'DEVIS' || parsed.documentType === 'FACTURE') {
         this.documentType.set(parsed.documentType);

@@ -31,8 +31,6 @@ import {
   InvoiceServiceLineFormComponent,
   InvoiceServiceLineFormGroup,
 } from '../components/invoice-service-line-form.component';
-import { QuickProductCreateComponent } from '../components/quick-product-create.component';
-import { QuickServiceCreateComponent } from '../components/quick-service-create.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 6/13.5 gallery redesign, step 2: two fixed "+" buttons (product,
@@ -57,8 +55,6 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
     UnitLabelPipe,
     InvoiceLineFormComponent,
     InvoiceServiceLineFormComponent,
-    QuickProductCreateComponent,
-    QuickServiceCreateComponent,
     TourAnchorDirective,
   ],
   templateUrl: './invoice-create-lines-step.page.html',
@@ -71,12 +67,9 @@ export class InvoiceCreateLinesStepPage {
 
   protected readonly errorMessage = signal<string | null>(null);
   // Phase 13.5 gallery redesign: which of the two fixed "+" flyouts is open
-  // (mutually exclusive — opening one closes the other) and whether its
-  // "nouveau" quick-create sub-form is showing in place of the catalog list.
+  // — mutually exclusive, opening one closes the other.
   protected readonly productPanelOpen = signal(false);
   protected readonly servicePanelOpen = signal(false);
-  protected readonly showQuickProductCreate = signal(false);
-  protected readonly showQuickServiceCreate = signal(false);
 
   protected readonly lines = this.fb.array<InvoiceLineFormGroup>(
     this.draftStore.lines().map((line) => this.createLineGroup(line)),
@@ -245,21 +238,29 @@ export class InvoiceCreateLinesStepPage {
   // stays fully editable afterwards. `quantity` is left at 0 (invalid)
   // rather than defaulted to 1, so an artisan can never submit a catalog
   // line without having actually looked at the quantity field.
+  //
+  // Everything else about this line is already known — so unlike a free
+  // line, it goes straight into the compact gallery card instead of opening
+  // the full form (see the quantity mini-input on that card). quantity is
+  // marked touched right away so the global invalid-field highlight (see
+  // styles.css) turns that mini-input red immediately, rather than waiting
+  // for a blur/submit the artisan has no other reason to trigger here.
   private addProductFromCatalog(product: ProductProfile): void {
-    this.lines.push(
-      this.createLineGroup({
-        description: product.name,
-        unit: product.unit,
-        quantity: 0,
-        unitPriceEuros: product.priceCents / 100,
-        wasteSurcharge: 'NONE',
-        packagingQuantity: product.packagingQuantity ? Number(product.packagingQuantity) : null,
-        roundUpToPackaging: true,
-        productCode: product.code,
-        catalogProductId: product.id,
-      }),
-    );
+    const group = this.createLineGroup({
+      description: product.name,
+      unit: product.unit,
+      quantity: 0,
+      unitPriceEuros: product.priceCents / 100,
+      wasteSurcharge: 'NONE',
+      packagingQuantity: product.packagingQuantity ? Number(product.packagingQuantity) : null,
+      roundUpToPackaging: true,
+      productCode: product.code,
+      catalogProductId: product.id,
+    });
+    this.lines.push(group);
     this.syncAllServiceLineWeights();
+    group.controls.quantity.markAsTouched();
+    this.collapsedLines.update((set) => new Set(set).add(group));
   }
 
   protected removeLine(index: number): void {
@@ -282,17 +283,6 @@ export class InvoiceCreateLinesStepPage {
       return;
     }
     this.addProductFromCatalog(product);
-  }
-
-  // Phase 13.5: a product created via QuickProductCreateComponent's
-  // "Nouveau produit" flyout entry joins the catalog immediately and is
-  // activated right away — the artisan came here to add a line, not to
-  // create a catalog entry and then have to find and toggle it separately.
-  protected onProductCreated(product: ProductProfile): void {
-    this.draftStore.addProductToCatalog(product);
-    this.addProductFromCatalog(product);
-    this.showQuickProductCreate.set(false);
-    this.productPanelOpen.set(false);
   }
 
   private createServiceLineGroup(initial?: {
@@ -330,6 +320,10 @@ export class InvoiceCreateLinesStepPage {
       percentageBasisPoints: this.fb.control<number | null>(initial?.percentageBasisPoints ?? null),
       // Phase 13.5, UI-only: see InvoiceServiceLineDraft.catalogServiceId.
       catalogServiceId: this.fb.control<string | null>(initial?.catalogServiceId ?? null),
+      // UI-only: whether to save/update this line's catalog Service on
+      // submit — never sent as-is to the invoice-creation request, mirrors
+      // the product line's saveAsNewProduct.
+      saveAsNewService: this.fb.nonNullable.control(false),
     });
     this.syncServiceLineWeights(group);
     return group;
@@ -367,22 +361,36 @@ export class InvoiceCreateLinesStepPage {
   // PERCENTAGE service's amount is never copied here — it's recomputed live
   // from percentageBasisPoints instead (see InvoiceDraftStore.resolved
   // ServiceAmountCents), matching "computed at build time, not typed per
-  // invoice".
+  // invoice". Same "already known, straight to the card" treatment as
+  // addProductFromCatalog — a catalog Service is already valid the moment
+  // it's picked (name/amount both prefilled), so there's no reason to make
+  // the artisan open the full form just to see it.
   private addServiceFromCatalog(service: ServiceProfile): void {
-    this.serviceLines.push(
-      this.createServiceLineGroup({
-        serviceId: service.id,
-        name: service.name,
-        description: service.description ?? '',
-        amountEuros: service.pricingMode === 'FIXED' ? (service.priceCents ?? 0) / 100 : 0,
-        visibility: service.defaultVisibility,
-        redistributionStrategy: 'EQUAL',
-        weights: [],
-        pricingMode: service.pricingMode,
-        percentageBasisPoints: service.percentageBasisPoints,
-        catalogServiceId: service.id,
-      }),
-    );
+    const group = this.createServiceLineGroup({
+      serviceId: service.id,
+      name: service.name,
+      description: service.description ?? '',
+      amountEuros: service.pricingMode === 'FIXED' ? (service.priceCents ?? 0) / 100 : 0,
+      visibility: service.defaultVisibility,
+      redistributionStrategy: 'EQUAL',
+      weights: [],
+      pricingMode: service.pricingMode,
+      percentageBasisPoints: service.percentageBasisPoints,
+      catalogServiceId: service.id,
+    });
+    this.serviceLines.push(group);
+    this.collapsedServiceLines.update((set) => new Set(set).add(group));
+  }
+
+  // The gallery card's always-visible visibility toggle (see
+  // invoice-create-lines-step.page.html) — flips VISIBLE/REDISTRIBUTED
+  // directly, without expanding the card. REDISTRIBUTED always lands on
+  // EQUAL by default (already synced to one weight per line, see
+  // syncServiceLineWeights) — a WEIGHTED split is still reachable by
+  // expanding the card, but most margin-hiding needs nothing more than this.
+  protected toggleServiceLineVisibility(group: InvoiceServiceLineFormGroup): void {
+    const control = group.controls.visibility;
+    control.setValue(control.value === 'VISIBLE' ? 'REDISTRIBUTED' : 'VISIBLE');
   }
 
   protected removeServiceLine(index: number): void {
@@ -401,42 +409,21 @@ export class InvoiceCreateLinesStepPage {
     this.addServiceFromCatalog(service);
   }
 
-  // Phase 13.5 gallery redesign: a service created via QuickServiceCreate
-  // Component's "Nouvelle prestation" flyout entry, same immediate-catalog-
-  // and-activate treatment as onProductCreated.
-  protected onServiceCreated(service: ServiceProfile): void {
-    this.draftStore.addServiceToCatalog(service);
-    this.addServiceFromCatalog(service);
-    this.showQuickServiceCreate.set(false);
-    this.servicePanelOpen.set(false);
-  }
-
-  // Phase 13.5 gallery redesign: opening one flyout closes the other and
-  // resets its own quick-create sub-view, so re-opening later always starts
-  // back on the catalog list.
+  // Phase 13.5 gallery redesign: opening one flyout closes the other, so
+  // only one catalog list is ever open at a time.
   protected toggleProductPanel(): void {
     this.servicePanelOpen.set(false);
-    this.showQuickServiceCreate.set(false);
     this.productPanelOpen.update((open) => !open);
-    if (!this.productPanelOpen()) {
-      this.showQuickProductCreate.set(false);
-    }
   }
 
   protected toggleServicePanel(): void {
     this.productPanelOpen.set(false);
-    this.showQuickProductCreate.set(false);
     this.servicePanelOpen.update((open) => !open);
-    if (!this.servicePanelOpen()) {
-      this.showQuickServiceCreate.set(false);
-    }
   }
 
   protected closePanels(): void {
     this.productPanelOpen.set(false);
     this.servicePanelOpen.set(false);
-    this.showQuickProductCreate.set(false);
-    this.showQuickServiceCreate.set(false);
   }
 
   // Phase 13.5 gallery redesign: "Valider" on an expanded card — collapses

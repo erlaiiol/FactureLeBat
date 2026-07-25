@@ -90,6 +90,7 @@ describe('InvoiceDraftStore', () => {
           pricingMode: 'FIXED',
           percentageBasisPoints: null,
           catalogServiceId: null,
+          saveAsNewService: false,
         },
       ]);
 
@@ -122,6 +123,7 @@ describe('InvoiceDraftStore', () => {
           pricingMode: 'FIXED',
           percentageBasisPoints: null,
           catalogServiceId: null,
+          saveAsNewService: false,
         },
       ]);
 
@@ -150,6 +152,7 @@ describe('InvoiceDraftStore', () => {
           pricingMode: 'FIXED',
           percentageBasisPoints: null,
           catalogServiceId: null,
+          saveAsNewService: false,
         },
       ]);
 
@@ -225,6 +228,7 @@ describe('InvoiceDraftStore', () => {
         {
           serviceId: 'service-1',
           catalogServiceId: 'service-1',
+          saveAsNewService: false,
           name: 'Marge 30%',
           description: '',
           amountEuros: 0,
@@ -249,6 +253,7 @@ describe('InvoiceDraftStore', () => {
         {
           serviceId: 'service-1',
           catalogServiceId: 'service-1',
+          saveAsNewService: false,
           name: 'Marge 30%',
           description: '',
           amountEuros: 0,
@@ -261,6 +266,7 @@ describe('InvoiceDraftStore', () => {
         {
           serviceId: 'service-2',
           catalogServiceId: 'service-2',
+          saveAsNewService: false,
           name: 'Marge 10%',
           description: '',
           amountEuros: 0,

@@ -26,6 +26,11 @@ describe('parseManualNumber', () => {
   it('returns null for a negative value', () => {
     expect(parseManualNumber('-5')).toBeNull();
   });
+
+  it('strips a "€" sign — formatManualPrice adds one to every price cell automatically', () => {
+    expect(parseManualNumber('45,90 €')).toBe(45.9);
+    expect(parseManualNumber('45,90€')).toBe(45.9);
+  });
 });
 
 describe('formatManualQuantity', () => {
@@ -44,9 +49,13 @@ describe('formatManualQuantity', () => {
 });
 
 describe('formatManualPrice', () => {
-  it('formats to exactly two decimals with a comma separator', () => {
-    expect(formatManualPrice('1500')).toBe('1500,00');
-    expect(formatManualPrice('45,9')).toBe('45,90');
+  it('formats to exactly two decimals with a comma separator and a trailing €', () => {
+    expect(formatManualPrice('1500')).toBe('1500,00 €');
+    expect(formatManualPrice('45,9')).toBe('45,90 €');
+  });
+
+  it('re-formats a cell that already carries a €, instead of doubling it', () => {
+    expect(formatManualPrice('45,90 €')).toBe('45,90 €');
   });
 
   it('leaves an unparseable cell untouched (trimmed)', () => {
