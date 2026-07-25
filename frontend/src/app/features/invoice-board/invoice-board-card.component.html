@@ -1,0 +1,97 @@
+<div
+  [appInvoiceCardDrag]="draggable()"
+  (dropped)="dropped.emit($event)"
+  class="flex flex-col gap-2 rounded-xl border p-4 shadow-sm"
+  [class.border-line]="!overdue()"
+  [class.bg-surface]="true"
+  [class.border-danger]="overdue()"
+  [class.cursor-grab]="draggable()"
+>
+  <div class="flex items-center justify-between gap-2">
+    <span class="text-xs font-normal uppercase text-ink-soft">
+      {{ column() === 'DEVIS' ? 'Devis' : 'Facture' }} {{ invoice().number }}
+    </span>
+    @if (overdue()) {
+      <app-badge variant="danger" tone="solid">En retard</app-badge>
+    }
+  </div>
+
+  <p class="font-semibold text-ink">{{ invoice().customerName }}</p>
+  <p class="text-sm text-ink-soft">{{ invoice().date | date: 'dd/MM/yyyy' }}</p>
+  @if (invoice().dueDate) {
+    <p class="text-sm" [class.text-danger]="overdue()" [class.text-ink-soft]="!overdue()">
+      Échéance&nbsp;: {{ invoice().dueDate | date: 'dd/MM/yyyy' }}
+    </p>
+  }
+  @if (invoice().lastReminderAt) {
+    <p class="text-xs text-ink-soft">
+      Relancée le {{ invoice().lastReminderAt | date: 'dd/MM/yyyy' }}
+    </p>
+  }
+  @if (column() === 'DEVIS' && invoice().convertedToFacture) {
+    <p class="text-xs text-success">→ Facture {{ invoice().convertedToFacture!.number }} créée</p>
+  }
+
+  <span class="font-mono text-lg font-semibold text-ink">
+    {{ invoice().totalInclVatCents | centsToEuros }}
+  </span>
+
+  <div class="flex flex-wrap gap-2 pt-1">
+    @switch (column()) {
+      @case ('DEVIS') {
+        <a
+          [href]="pdfUrl()"
+          target="_blank"
+          class="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-fg hover:brightness-90"
+        >
+          Télécharger le PDF
+        </a>
+      }
+      @case ('PAYEE') {
+        <a
+          [href]="pdfUrl()"
+          target="_blank"
+          class="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-fg hover:brightness-90"
+        >
+          Télécharger le PDF
+        </a>
+      }
+      @case ('ANNULEE') {
+        <button
+          type="button"
+          (click)="restore.emit()"
+          class="rounded-lg bg-secondary px-3 py-2 text-sm font-medium text-secondary-fg hover:brightness-90"
+        >
+          Restaurer
+        </button>
+      }
+      @default {
+        <button
+          type="button"
+          (click)="sendEmail.emit()"
+          class="rounded-lg px-3 py-2 text-sm font-medium hover:brightness-90"
+          [class.bg-danger]="overdue()"
+          [class.text-danger-fg]="overdue()"
+          [class.bg-secondary]="!overdue()"
+          [class.text-secondary-fg]="!overdue()"
+        >
+          Renvoyer un mail
+        </button>
+        <button
+          type="button"
+          (click)="markPaid.emit()"
+          class="rounded-lg bg-success px-3 py-2 text-sm font-medium text-success-fg hover:brightness-90"
+        >
+          Marquer payée
+        </button>
+        <button
+          type="button"
+          (click)="cancel.emit()"
+          class="rounded-lg bg-danger-subtle px-3 py-2 text-sm font-medium text-danger-subtle-fg hover:brightness-95"
+        >
+          Annuler la facture
+        </button>
+      }
+    }
+  </div>
+</div>

@@ -69,7 +69,7 @@ const protectedRoutes: Routes = [
   {
     path: 'factures',
     loadComponent: () =>
-      import('./features/invoice-list/invoice-list.page').then((m) => m.InvoiceListPage),
+      import('./features/invoice-board/invoice-board.page').then((m) => m.InvoiceBoardPage),
   },
   {
     path: 'clients',

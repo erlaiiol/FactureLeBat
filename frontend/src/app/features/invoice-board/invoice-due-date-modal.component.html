@@ -1,0 +1,35 @@
+@if (invoice(); as invoice) {
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Date d'échéance"
+    (click)="skip()"
+  >
+    <div
+      class="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6 shadow-2xl"
+      (click)="$event.stopPropagation()"
+    >
+      <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
+        {{ invoice.customerName }}
+      </h2>
+      <p class="text-ink">Pour quelle date le client s'est-il engagé à payer&nbsp;?</p>
+
+      <input
+        type="date"
+        [value]="dueDate()"
+        (input)="onDateInput($any($event.target).value)"
+        class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+      />
+
+      <app-big-button [disabled]="!dueDate()" (click)="confirm()">Valider</app-big-button>
+      <button
+        type="button"
+        (click)="skip()"
+        class="text-center text-sm font-medium text-ink-soft hover:underline"
+      >
+        Passer pour l'instant
+      </button>
+    </div>
+  </div>
+}

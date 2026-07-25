@@ -989,15 +989,15 @@ This phase is a payment/status *tracker*, not a payment *collector* — see Non-
 
 ## Features
 
-- [ ] `InvoiceStatus` field added to `Invoice` (`NON_PAYEE | PAYEE | ANNULEE`), plus `dueDate`, `paidAt`, `lastReminderAt`
-- [ ] "Mes factures" replaced/complemented by a four-column board: Non payées, En retard, Payées, Annulées
-- [ ] Drag & drop a card between columns updates its status; every drag has an equivalent button-based action for touch/glove use
-- [ ] Dropping/moving a card into "Non payées" without a `dueDate` set opens a one-field modal asking the date the client committed to paying by; skippable, editable later from the card
-- [ ] "En retard" is computed (`NON_PAYEE` + `dueDate` passed) and rendered as its own column, never a manually-droppable target or a fourth persisted status
-- [ ] "Renvoyer un mail" button on an unpaid/overdue card, reusing Phase 12's mail-sending pipeline and template, visually emphasized once overdue
-- [ ] "Marquer payée" / "Annuler la facture" / "Restaurer" quick actions available directly from a card
-- [ ] Board is filterable/searchable by client and date, so it stays usable as invoice volume grows
-- [ ] Existing invoices (pre-Phase-16) default to `NON_PAYEE` with no `dueDate` — sit in "Non payées", never crash or misrender for lack of a due date, and only reach "En retard" once one is eventually set and passes
+- [x] `InvoiceStatus` field added to `Invoice` (`NON_PAYEE | PAYEE | ANNULEE`), plus `dueDate`, `paidAt`, `lastReminderAt`
+- [x] "Mes factures" replaced/complemented by a four-column board: Non payées, En retard, Payées, Annulées
+- [x] Drag & drop a card between columns updates its status; every drag has an equivalent button-based action for touch/glove use
+- [x] Dropping/moving a card into "Non payées" without a `dueDate` set opens a one-field modal asking the date the client committed to paying by; skippable, editable later from the card
+- [x] "En retard" is computed (`NON_PAYEE` + `dueDate` passed) and rendered as its own column, never a manually-droppable target or a fourth persisted status
+- [x] "Renvoyer un mail" button on an unpaid/overdue card, reusing Phase 12's mail-sending pipeline and template, visually emphasized once overdue
+- [x] "Marquer payée" / "Annuler la facture" / "Restaurer" quick actions available directly from a card
+- [x] Board is filterable/searchable by client and date, so it stays usable as invoice volume grows
+- [x] Existing invoices (pre-Phase-16) default to `NON_PAYEE` with no `dueDate` — sit in "Non payées", never crash or misrender for lack of a due date, and only reach "En retard" once one is eventually set and passes
 
 ## Non-goals
 
@@ -1010,6 +1010,16 @@ This phase is a payment/status *tracker*, not a payment *collector* — see Non-
 - Builds on Phase 12 (reuses the mailing pipeline as-is) and borrows the card visual language from Phase 13.5, but doesn't depend on either being complete first — the board is additive to whatever "mes factures" looks like today.
 - Cross-reference: Phase 15's per-invoice PDF field visibility and this phase's status board are independent concerns (one is about what a client sees, the other is about what the artisan tracks) and don't interact.
 - If Phase 14.3 (devis/facture split) has landed by the time this is built, the board scopes to `documentType = FACTURE` only — a devis has no payment state to track, and stays in its own simpler list instead of occupying a board column.
+
+## Decided during implementation
+
+- **A 5th real column, "Devis" — not "stays in its own simpler list."** Decided explicitly with the user, overriding this phase's own "Notes" draft above: Phase 14.3 had already landed, but a devis is conceptually a "pré-facture" to this artisan, so it earns a real board column (view + "Télécharger le PDF") rather than being pushed back to a separate flat list. For every devis not yet converted, a lightweight **ghost card** also appears in "Non payées" — one field, one action ("Créer la facture", reusing Phase 14.3's existing `convertToFacture` as-is) — so the eventual facture's slot is visible before the facture exists. It's replaced by the real facture card once conversion happens. Never draggable, never counted as its own status.
+- **The board replaces "Mes factures" outright, no list/board toggle** — the user's own framing: "une plateforme de gestion hyper facile... en particulier [sur] mobile", so one screen to learn, not two.
+- **Filters are client-side over the already-loaded (200-cap) list, same as the pre-existing Tous/Devis/Facture toggle** — no new query params on `GET /invoices`. Date filter is invoice **date d'émission** (`Invoice.date`), plus a one-tap "Non payées uniquement" toggle that hides the Devis/Payées/Annulées columns entirely (less to scroll through on a phone), leaving Non payées + En retard.
+- **`lastReminderAt` piggybacks on the existing mail-send call, no new endpoint.** `InvoiceMailService.send` passes `bumpReminder: raw.status === NON_PAYEE` down to `InvoiceRepository.markSent`, which stamps `lastReminderAt` in the same `updateMany` write as `sentAt` — "renvoyer un mail" on the board is exactly the same button/call as Phase 12's original send, tracking is invisible plumbing underneath it.
+- **One endpoint, `PATCH /invoices/:id/status`, covers both a real status change and a due-date-only edit** (send the unchanged `status` + a new `dueDate`) — `InvoiceService.updateStatus` rejects anything but a FACTURE (`documentType !== FACTURE` → 400), sets `paidAt` on entering `PAYEE` and clears it on leaving `PAYEE` for any other status, and never clears `dueDate` when the request omits it (a drag that isn't about the due date must not silently wipe a previously-set one).
+- **"Restaurer" (Annulées → Non payées) funnels through the exact same due-date-modal path as a drag into Non payées** — if the invoice has no `dueDate` yet, restoring asks for one too, rather than being a silent status flip with different rules than the drag equivalent.
+- **Drag & drop is a thin, hand-built `interactjs` wrapper** (`invoice-card-drag.directive.ts`), same "small owned primitive" precedent as Phase 9.5's `ManualResizeHandleDirective`: tracks a CSS transform during the drag, and on drop uses `document.elementFromPoint` to find the nearest ancestor carrying `data-invoice-column` (only Non payées/Payées/Annulées carry it — En retard and Devis don't, so a drop there just snaps back). The directive never owns the actual status; `InvoiceBoardPage` does, reconciling against the backend response same as every other write in this app.
 
 ---
 

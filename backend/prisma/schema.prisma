@@ -76,6 +76,18 @@ enum DocumentType {
   FACTURE
 }
 
+// Phase 16: an artisan-controlled payment lifecycle for a FACTURE — never
+// set/read for a DEVIS (see InvoiceService.updateStatus's documentType
+// guard). "En retard" is deliberately not a 4th value here: it's NON_PAYEE +
+// Invoice.dueDate in the past, computed at read time (see
+// InvoiceMapper/frontend invoice-status.util.ts), same "derived data is
+// never persisted" rule as invoice totals — see docs/conventions.md.
+enum InvoiceStatus {
+  NON_PAYEE
+  PAYEE
+  ANNULEE
+}
+
 // A column of a MANUAL invoice's free-form table. Exactly one DESCRIPTION,
 // one QUANTITY, one UNIT_PRICE, and one LINE_TOTAL column exist per manual
 // invoice (enforced by CreateManualTableDto, not the DB). Unlike a GUIDED
@@ -384,6 +396,23 @@ model Invoice {
   // docs/roadmap.md Phase 12).
   sentAt      DateTime?
   sentToEmail String?
+
+  // Phase 16: see InvoiceStatus above. Never touched for a DEVIS.
+  status InvoiceStatus @default(NON_PAYEE)
+
+  // The date the client committed to paying by — captured lazily, the
+  // first time it's actually needed (board's drop-into-"Non payées" modal),
+  // not at invoice creation. Optional and editable later from the card.
+  dueDate DateTime?
+
+  // Set when status becomes PAYEE, cleared if moved back out — records the
+  // fact, not a log, same single-field convention as sentAt above.
+  paidAt DateTime?
+
+  // Bumped every time a mail is sent while the invoice is still NON_PAYEE
+  // (see InvoiceMailService.send) — same "was this ever done, and when most
+  // recently" convention as sentAt/sentToEmail, not a history table.
+  lastReminderAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { DocumentType, InvoiceEntryMode, ManualColumnRole } from '../../generated/prisma/enums';
+import {
+  DocumentType,
+  InvoiceEntryMode,
+  InvoiceStatus,
+  ManualColumnRole,
+} from '../../generated/prisma/enums';
 import { CompanyModel as Company } from '../../generated/prisma/models';
 import { isVatApplicable } from '../company/legal-status.util';
 import { UNIT_LABELS } from '../common/unit.util';
@@ -162,6 +167,10 @@ export class InvoiceMapper {
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
       sentAt: invoice.sentAt,
       sentToEmail: invoice.sentToEmail,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      paidAt: invoice.paidAt,
+      lastReminderAt: invoice.lastReminderAt,
     };
   }
 
@@ -240,6 +249,10 @@ export class InvoiceMapper {
       totalInclVatCents,
       sentAt: invoice.sentAt,
       sentToEmail: invoice.sentToEmail,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      paidAt: invoice.paidAt,
+      lastReminderAt: invoice.lastReminderAt,
     };
   }
 
@@ -471,6 +484,13 @@ export class InvoiceMapper {
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
       sentAt: null,
       sentToEmail: null,
+      // Phase 16: an unsaved draft has no lifecycle yet — the board only
+      // ever sees a persisted invoice, so these are always this fixed
+      // default here, never read from anywhere else.
+      status: InvoiceStatus.NON_PAYEE,
+      dueDate: null,
+      paidAt: null,
+      lastReminderAt: null,
     };
   }
 
@@ -546,6 +566,13 @@ export class InvoiceMapper {
       totalInclVatCents,
       sentAt: null,
       sentToEmail: null,
+      // Phase 16: an unsaved draft has no lifecycle yet — the board only
+      // ever sees a persisted invoice, so these are always this fixed
+      // default here, never read from anywhere else.
+      status: InvoiceStatus.NON_PAYEE,
+      dueDate: null,
+      paidAt: null,
+      lastReminderAt: null,
     };
   }
 

@@ -1,6 +1,7 @@
 import {
   DocumentType,
   InvoiceEntryMode,
+  InvoiceStatus,
   ManualColumnRole,
   ServiceVisibility,
   Unit,
@@ -133,4 +134,11 @@ export interface InvoiceWithTotals {
   // schema.prisma's comment on Invoice.sentAt.
   sentAt: Date | null;
   sentToEmail: string | null;
+  // Phase 16: the payment lifecycle board's fields — see InvoiceStatus
+  // (schema.prisma). "En retard" is not a value here: it's status ===
+  // NON_PAYEE with dueDate in the past, computed by the caller/frontend.
+  status: InvoiceStatus;
+  dueDate: Date | null;
+  paidAt: Date | null;
+  lastReminderAt: Date | null;
 }

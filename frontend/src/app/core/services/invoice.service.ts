@@ -7,6 +7,7 @@ import {
   InvoiceMailTemplate,
   InvoiceWithTotals,
   SendInvoiceEmailRequest,
+  UpdateInvoiceStatusRequest,
 } from '../models/invoice.model';
 
 @Injectable({ providedIn: 'root' })
@@ -59,5 +60,11 @@ export class InvoiceService {
   // see InvoiceService.convertToFacture on the backend.
   convertToFacture(devisId: string): Observable<InvoiceWithTotals> {
     return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${devisId}/convert-to-facture`, {});
+  }
+
+  // Phase 16: the board's drag/button status changes, and a due-date-only
+  // edit from an existing card (same status, new dueDate).
+  updateStatus(id: string, request: UpdateInvoiceStatusRequest): Observable<InvoiceWithTotals> {
+    return this.http.patch<InvoiceWithTotals>(`${this.baseUrl}/${id}/status`, request);
   }
 }

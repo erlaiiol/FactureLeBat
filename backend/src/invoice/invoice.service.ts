@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { DocumentType, InvoiceEntryMode } from '../../generated/prisma/enums';
+import { DocumentType, InvoiceEntryMode, InvoiceStatus } from '../../generated/prisma/enums';
 import { PremiumGateService } from '../billing/premium-gate.service';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
 import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceMapper } from './invoice.mapper';
 import {
@@ -217,6 +218,44 @@ export class InvoiceService {
     });
 
     return this.mapper.toInvoiceWithTotals(invoice);
+  }
+
+  // Phase 16: the board's drag/button status changes, and a due-date-only
+  // edit from an existing card (same status, new dueDate). A devis has no
+  // payment lifecycle — see docs/roadmap.md Phase 16's cross-reference to
+  // Phase 14.3 — so this rejects anything but a FACTURE up front, same
+  // "wrong document type" guard shape as convertToFacture above.
+  async updateStatus(
+    companyId: string,
+    id: string,
+    dto: UpdateInvoiceStatusDto,
+  ): Promise<InvoiceWithTotals> {
+    const invoice = await this.findRawById(companyId, id);
+    if (invoice.documentType !== DocumentType.FACTURE) {
+      throw new BadRequestException(`Invoice ${id} is not a facture`);
+    }
+
+    // paidAt records the fact of being marked PAYEE, same "records the fact,
+    // not a log" convention as sentAt: set on entering PAYEE, cleared when
+    // dragged/moved back out to any other status, left untouched otherwise
+    // (e.g. NON_PAYEE -> NON_PAYEE with just a new dueDate).
+    const paidAt =
+      dto.status === InvoiceStatus.PAYEE
+        ? (invoice.paidAt ?? new Date())
+        : dto.status !== invoice.status
+          ? null
+          : invoice.paidAt;
+
+    const updated = await this.invoiceRepository.updateStatus(companyId, id, {
+      status: dto.status,
+      // dto.dueDate omitted means "leave it exactly as it is" (e.g. an
+      // artisan re-dragging a card that already has a due date) — never
+      // silently cleared by an update that isn't about the due date at all.
+      dueDate: dto.dueDate !== undefined ? new Date(dto.dueDate) : undefined,
+      paidAt,
+    });
+
+    return this.mapper.toInvoiceWithTotals(updated);
   }
 
   async findAll(companyId: string): Promise<InvoiceWithTotals[]> {

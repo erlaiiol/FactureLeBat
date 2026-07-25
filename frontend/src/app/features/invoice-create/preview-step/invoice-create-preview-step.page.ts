@@ -20,7 +20,7 @@ import { BigButtonComponent } from '../../../shared/components/big-button.compon
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
-import { SendInvoiceEmailModalComponent } from '../../invoice-list/send-invoice-email-modal.component';
+import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 15: the mandatory stop between "lignes" and a real, persisted

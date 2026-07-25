@@ -7,7 +7,11 @@ import { PdfService } from '../pdf/pdf.service';
 import { InvoiceMailService } from './invoice-mail.service';
 
 const COMPANY_ID = 'company-1';
-const RAW_INVOICE = { id: 'inv-1', company: { name: 'Parquet Dupont' } } as never;
+const RAW_INVOICE = {
+  id: 'inv-1',
+  status: 'NON_PAYEE',
+  company: { name: 'Parquet Dupont' },
+} as never;
 const SMTP = {
   host: 'smtp.example.com',
   port: 587,
@@ -68,7 +72,9 @@ describe('InvoiceMailService.send', () => {
     const sentParams = send.mock.calls[0][0];
     expect(sentParams.to).toBe('client@exemple.fr');
     expect(sentParams.from.address).toBe('moi@exemple.fr');
-    expect(markSent).toHaveBeenCalledWith(COMPANY_ID, 'inv-1', 'client@exemple.fr');
+    expect(markSent).toHaveBeenCalledWith(COMPANY_ID, 'inv-1', 'client@exemple.fr', {
+      bumpReminder: true,
+    });
   });
 
   it('uses the dto.to override instead of the invoice customerEmail', async () => {
@@ -77,7 +83,9 @@ describe('InvoiceMailService.send', () => {
     await service.send(COMPANY_ID, 'inv-1', { to: 'autre@exemple.fr' });
 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: 'autre@exemple.fr' }));
-    expect(markSent).toHaveBeenCalledWith(COMPANY_ID, 'inv-1', 'autre@exemple.fr');
+    expect(markSent).toHaveBeenCalledWith(COMPANY_ID, 'inv-1', 'autre@exemple.fr', {
+      bumpReminder: true,
+    });
   });
 
   it('throws BadRequestException when neither dto.to nor customerEmail is set', async () => {

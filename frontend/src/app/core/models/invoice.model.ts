@@ -13,6 +13,12 @@ export type InvoiceEntryMode = 'GUIDED' | 'MANUAL';
 // shape everywhere below, just a different label and numbering sequence.
 export type DocumentType = 'DEVIS' | 'FACTURE';
 
+// Phase 16: the invoice lifecycle board's payment status. "EN_RETARD" is
+// deliberately not a value here — it's NON_PAYEE + dueDate in the past,
+// computed client-side (see invoice-status.util.ts's isOverdue) never
+// persisted.
+export type InvoiceStatus = 'NON_PAYEE' | 'PAYEE' | 'ANNULEE';
+
 // A manual invoice's column role. LINE_TOTAL is the artisan's own freehand
 // row price — never derived from QUANTITY x UNIT_PRICE, which stay purely
 // informational free text on the canvas (manual mode's whole principle:
@@ -204,6 +210,18 @@ export interface InvoiceWithTotals {
   // Phase 12: last successful email send only, null if never sent.
   sentAt: string | null;
   sentToEmail: string | null;
+  // Phase 16: the payment lifecycle board's fields.
+  status: InvoiceStatus;
+  dueDate: string | null;
+  paidAt: string | null;
+  lastReminderAt: string | null;
+}
+
+// Phase 16: drives both the board's drag/button status changes and a
+// due-date-only edit from an existing card (same status, new dueDate).
+export interface UpdateInvoiceStatusRequest {
+  status: InvoiceStatus;
+  dueDate?: string;
 }
 
 // All optional: `to` defaults server-side to the invoice's own

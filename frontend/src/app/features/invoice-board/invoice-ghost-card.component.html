@@ -1,0 +1,19 @@
+<div
+  class="flex flex-col gap-2 rounded-xl border border-dashed border-line bg-surface/60 p-4 shadow-sm"
+>
+  <div class="flex items-center justify-between gap-2">
+    <span class="text-xs font-normal uppercase text-ink-soft">Devis {{ devis().number }}</span>
+    <span class="font-mono text-sm font-semibold text-ink">
+      {{ devis().totalInclVatCents | centsToEuros }}
+    </span>
+  </div>
+  <p class="text-sm text-ink-soft">{{ devis().customerName }}</p>
+  <button
+    type="button"
+    [disabled]="converting()"
+    (click)="createFacture.emit()"
+    class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:brightness-90 disabled:opacity-60"
+  >
+    {{ converting() ? 'Création…' : 'Créer la facture' }}
+  </button>
+</div>

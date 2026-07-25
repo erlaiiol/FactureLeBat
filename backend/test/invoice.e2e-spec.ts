@@ -508,6 +508,76 @@ describe('Invoice pipeline (e2e)', () => {
     });
   });
 
+  describe('Phase 16 invoice lifecycle status', () => {
+    async function createFacture(): Promise<InvoiceWithTotals> {
+      const response = await authedRequest(app, session)
+        .post('/api/invoices')
+        .send({
+          customerName: 'E2E Lifecycle Customer',
+          lines: [{ description: 'Parquet', unit: 'UNIT', quantity: 1, unitPriceCents: 1000 }],
+        })
+        .expect(201);
+      return response.body as InvoiceWithTotals;
+    }
+
+    it('sets paidAt when moved to PAYEE and clears it when moved back out', async () => {
+      const invoice = await createFacture();
+
+      const paid = await authedRequest(app, session)
+        .patch(`/api/invoices/${invoice.id}/status`)
+        .send({ status: 'PAYEE' })
+        .expect(200);
+      expect((paid.body as InvoiceWithTotals).status).toBe('PAYEE');
+      expect((paid.body as InvoiceWithTotals).paidAt).not.toBeNull();
+
+      const unpaid = await authedRequest(app, session)
+        .patch(`/api/invoices/${invoice.id}/status`)
+        .send({ status: 'NON_PAYEE' })
+        .expect(200);
+      expect((unpaid.body as InvoiceWithTotals).status).toBe('NON_PAYEE');
+      expect((unpaid.body as InvoiceWithTotals).paidAt).toBeNull();
+    });
+
+    it('sets dueDate only when provided, never clearing it on an unrelated status change', async () => {
+      const invoice = await createFacture();
+
+      const withDueDate = await authedRequest(app, session)
+        .patch(`/api/invoices/${invoice.id}/status`)
+        .send({ status: 'NON_PAYEE', dueDate: '2026-08-01' })
+        .expect(200);
+      expect((withDueDate.body as InvoiceWithTotals).dueDate).toContain('2026-08-01');
+
+      const cancelled = await authedRequest(app, session)
+        .patch(`/api/invoices/${invoice.id}/status`)
+        .send({ status: 'ANNULEE' })
+        .expect(200);
+      expect((cancelled.body as InvoiceWithTotals).dueDate).toContain('2026-08-01');
+
+      const restored = await authedRequest(app, session)
+        .patch(`/api/invoices/${invoice.id}/status`)
+        .send({ status: 'NON_PAYEE' })
+        .expect(200);
+      expect((restored.body as InvoiceWithTotals).dueDate).toContain('2026-08-01');
+    });
+
+    it('rejects a status change on a devis', async () => {
+      const devisResponse = await authedRequest(app, session)
+        .post('/api/invoices')
+        .send({
+          documentType: 'DEVIS',
+          customerName: 'E2E Devis Customer',
+          lines: [{ description: 'Parquet', unit: 'UNIT', quantity: 1, unitPriceCents: 1000 }],
+        })
+        .expect(201);
+      const devis = devisResponse.body as InvoiceWithTotals;
+
+      await authedRequest(app, session)
+        .patch(`/api/invoices/${devis.id}/status`)
+        .send({ status: 'PAYEE' })
+        .expect(400);
+    });
+  });
+
   describe('Phase 14 free-trial gate', () => {
     let freeSession: TestSession;
 

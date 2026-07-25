@@ -84,12 +84,16 @@ If a new screen is being designed and it's unclear which identity applies, defau
 
 ## Motion
 
-Motion exists to confirm a real action, never as decoration. Two duration bands cover almost everything:
+Motion exists to confirm a real action, never as decoration. Four duration bands cover almost everything — the two original bands stay reserved for small, frequent feedback; the two added for the UI/UX polish pass ([ux-roadmap.md](ux-roadmap.md)) are deliberately slower, reserved for moments meant to be *felt*, not just registered:
 
 | Band | Duration | Easing | Used for |
 |---|---|---|---|
 | Entrance | ~250ms | `cubic-bezier(.2,.8,.2,1)` (sharp ease-out) | A new invoice line appearing, a tour step sliding in |
 | Emphasis | ~400ms | same ease-out | The total pulsing/flashing accent color when it changes, so an increment is felt, not just read |
+| Materialize | ~500–650ms | same ease-out | Navbar/dropdown open-close, a "card with input fields" resolving into its finished card form (invoice/client cards) |
+| Contemplative reveal | ~700–1000ms | same ease-out | Scroll-triggered fade-in of cards/sections entering the viewport |
+
+A frequent, small-scale confirmation (a toggle, a line appearing) stays fast — the slower bands are for the handful of transitions per screen that are meant to read as premium and deliberate, not for everything at once. Reserving them for genuinely structural moments (a navbar opening, a form becoming a card, content entering view) is what keeps them feeling premium instead of sluggish — see ux-roadmap.md's pitfalls list for the failure mode of over-applying them.
 
 Named effects to implement (prototyped in the design-comparison artifact):
 
@@ -98,13 +102,20 @@ Named effects to implement (prototyped in the design-comparison artifact):
 - **`badgeStamp`** — scale-in from 40% with a slight overshoot and rotation settle, evoking a stamp being applied. Applied when the redistribution badge first appears on a line.
 - **Tour step transitions** — directional slide + fade between steps (forward = slide from right).
 - **Tour completion — the one deliberate "reward" moment** — a checkmark that draws itself (`stroke-dashoffset` animation) plus a brief soft glow around the card, on finishing the guided tour. This is the single place the app is allowed to feel a little celebratory; everywhere else stays calm on purpose, so this moment isn't diluted by scattered animation elsewhere.
+- **`scrollReveal`** (Materialize/Contemplative reveal bands) — fade + slight upward slide (12–16px, deliberately larger than `lineIn`'s 8px, since it's covering more distance over a longer duration) as a card/section first enters the viewport. Fires once per element (`IntersectionObserver`, unobserve after first trigger) — never on every scroll pass, never a repeating/parallax effect. This is a one-time state change ("this element has now entered view for the first time"), not idle motion, so it doesn't break the "no animation without a real state change" rule below.
+- **`asyncReveal`** (Materialize/Contemplative reveal bands) — the display treatment for any element whose content only exists after an API response: a skeleton/placeholder (a subtle, slow pulse — never a spinner icon) occupies the element's final size while the request is in flight, and the real content fades + settles into place with the same motion as `scrollReveal` the instant data arrives. This is arguably the single highest-value use of motion in the app — it turns a network wait into a deliberate pause instead of a jarring blank-then-pop, a silent `await`/`async` made invisible as anything but pacing. Unlike `scrollReveal`, the trigger is data arrival, not viewport entry — it applies even to already-visible, above-the-fold elements (invoice board columns on load, catalog/customer search results, a recalculated total, a regenerated preview). Default choice for any screen that waits on the backend, not just a decorative extra.
+- **`panelStretch`** (Materialize band) — height + opacity expand/collapse from the trigger's edge, origin-aware (grows from the navbar item or dropdown trigger, not from a fixed corner). Applied to the navbar's dropdown menus and any other expand/collapse panel. Replaces an instant `display` toggle, never a generic accordion fade.
+- **`cardMorph`** (Materialize band) — an editable "card with input fields" (an inline creation/edit row) visually resolving into its compact, finished card representation (invoice cards, client cards) on save: fields cross-fade into their display equivalents while the container's box eases to its finished size/radius, rather than the finished card abruptly replacing the form. Reserved for that one transition — not a general-purpose swap effect.
 
 Rules that apply everywhere:
 
-- Every animation is disabled (reduced to ~0) under `prefers-reduced-motion: reduce`.
-- No animation runs without a real, corresponding state change — no idle/ambient motion, no animated illustrations.
-- One easing curve, one small set of durations — not a per-component custom timing.
+- Every animation is disabled (reduced to ~0) under `prefers-reduced-motion: reduce` — including `scrollReveal`, which must resolve straight to its final, fully-visible state (no hidden-forever content) when reduced motion is on.
+- No animation runs without a real, corresponding state change — no idle/ambient motion, no animated illustrations, no looping/repeating effects. A `scrollReveal` firing the first time an element enters view counts as a real state change; the same element fading in and out repeatedly as the user scrolls past it back and forth does not, and must not be built.
+- An animation is never load-bearing: the action it's attached to (submit, navigate, save) must already be valid/complete before the animation starts, and nothing waits for the animation to finish to become usable — see ux-roadmap.md's "never block on motion" rule.
+- One easing curve across every band, and durations pulled from this table only — not a per-component custom timing.
 
 ## Status
 
 Both palettes and the type scale are implemented as Tailwind v4 `@theme` tokens in `frontend/src/styles.css`, including a dark-mode variant of "Chantier calibré" ("Atelier sobre" stays a light-only, accent-only treatment, per its own "where it's allowed to appear" list above). "Atelier sobre" has a fourth spot as of Phase 13.3: the public landing page (`features/landing/`).
+
+The Materialize/Contemplative-reveal bands and `scrollReveal`/`panelStretch`/`cardMorph` above are decisions made for the UI/UX polish initiative (see [ux-roadmap.md](ux-roadmap.md)) and are not yet implemented anywhere in the frontend as of this writing — ux-roadmap.md tracks that rollout phase by phase.

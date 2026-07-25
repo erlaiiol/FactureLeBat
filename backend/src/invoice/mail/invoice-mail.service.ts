@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { InvoiceStatus } from '../../../generated/prisma/enums';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
 import { MailerService } from '../../mailer/mailer.service';
 import { InvoiceWithTotals } from '../entities/invoice.entity';
@@ -84,7 +85,12 @@ export class InvoiceMailService {
       attachments: [{ filename: `${filePrefix}-${invoice.number}.pdf`, content: pdfBuffer }],
     });
 
-    const updated = await this.invoiceRepository.markSent(companyId, invoiceId, to);
+    // Phase 16: a send while the invoice is still unpaid counts as a
+    // "renvoyer un mail" reminder for the board — bumps lastReminderAt in
+    // the same write, reusing this exact pipeline as-is (no new endpoint).
+    const updated = await this.invoiceRepository.markSent(companyId, invoiceId, to, {
+      bumpReminder: raw.status === InvoiceStatus.NON_PAYEE,
+    });
     return this.mapper.toInvoiceWithTotals(updated);
   }
 

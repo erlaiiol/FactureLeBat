@@ -1,7 +1,8 @@
-import { Controller, Get, Header, Param, Post, Body, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Header, Param, Patch, Post, Body, StreamableFile } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceService } from './invoice.service';
 import { SendInvoiceEmailDto } from './mail/dto/send-invoice-email.dto';
@@ -38,6 +39,17 @@ export class InvoiceController {
     @Param('id') id: string,
   ): Promise<InvoiceWithTotals> {
     return this.invoiceService.convertToFacture(user.companyId, id);
+  }
+
+  // Phase 16: the board's drag/button status changes (Non payées <-> Payées
+  // <-> Annulées) and due-date-only edits — see InvoiceService.updateStatus.
+  @Patch(':id/status')
+  updateStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateInvoiceStatusDto,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.updateStatus(user.companyId, id, dto);
   }
 
   @Get(':id')

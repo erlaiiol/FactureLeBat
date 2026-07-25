@@ -13,8 +13,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
-import { BigButtonComponent } from '../../shared/components/big-button.component';
-import { FieldHintComponent } from '../../shared/components/field-hint.component';
+import { BigButtonComponent } from './big-button.component';
+import { FieldHintComponent } from './field-hint.component';
 
 // Same closable-modal shape as app-pdf-preview-modal — a self-contained
 // dialog the caller opens by setting `invoice`, closes via the `closed`

@@ -19,6 +19,7 @@ import {
   InvoiceEntryMode,
   ManualColumnRole,
   DocumentType,
+  InvoiceStatus,
 } from '../../generated/prisma/enums';
 
 export type InvoiceWithLines = Invoice & {
@@ -293,10 +294,50 @@ export class InvoiceRepository {
   // send simply means "yes, and most recently to this address". updateMany
   // (not update), same cross-tenant-safety reasoning as
   // CustomerRepository.update — see NoRowsAffectedError.
-  async markSent(companyId: string, id: string, sentToEmail: string): Promise<InvoiceWithLines> {
+  //
+  // Phase 16: `bumpReminder` also stamps lastReminderAt in the same write —
+  // set by InvoiceMailService.send whenever the invoice is still NON_PAYEE
+  // at send time, so "renvoyer un mail" tracking piggybacks on the exact
+  // same pipeline call rather than a second endpoint/round-trip.
+  async markSent(
+    companyId: string,
+    id: string,
+    sentToEmail: string,
+    { bumpReminder }: { bumpReminder: boolean },
+  ): Promise<InvoiceWithLines> {
     const { count } = await this.prisma.invoice.updateMany({
       where: { id, companyId },
-      data: { sentAt: new Date(), sentToEmail },
+      data: {
+        sentAt: new Date(),
+        sentToEmail,
+        ...(bumpReminder ? { lastReminderAt: new Date() } : {}),
+      },
+    });
+    if (count === 0) {
+      throw new NoRowsAffectedError();
+    }
+    return this.prisma.invoice.findFirstOrThrow({
+      where: { id, companyId },
+      include: INVOICE_INCLUDE,
+    });
+  }
+
+  // Phase 16: drives both the drag/button status changes and a due-date-only
+  // edit (status unchanged, new dueDate) — see InvoiceService.updateStatus
+  // for the paidAt set/clear logic this is handed. Same updateMany +
+  // NoRowsAffectedError cross-tenant pattern as markSent above.
+  async updateStatus(
+    companyId: string,
+    id: string,
+    data: { status: InvoiceStatus; dueDate?: Date | null; paidAt: Date | null },
+  ): Promise<InvoiceWithLines> {
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id, companyId },
+      data: {
+        status: data.status,
+        paidAt: data.paidAt,
+        ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
+      },
     });
     if (count === 0) {
       throw new NoRowsAffectedError();
