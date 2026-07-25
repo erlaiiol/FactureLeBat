@@ -1,19 +1,19 @@
-import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { InvoiceService } from '../../core/services/invoice.service';
-import { PaywallService } from '../../core/services/paywall.service';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
-import { PdfPreviewModalComponent } from '../../shared/components/pdf-preview-modal.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summary.component';
 import { InvoiceDraftStore } from './invoice-draft.store';
 
-// Phase 6 shell: wraps the two routed creation steps (client, lignes) with
-// what must stay visible and reachable from either one — the live running
-// total and the "Aperçu" button, both driven off the shared InvoiceDraftStore
-// rather than whichever step happens to be mounted.
+// Phase 6 shell: wraps the three routed creation steps (client, lignes,
+// apercu) with what must stay visible and reachable from any of them — the
+// live running total, both driven off the shared InvoiceDraftStore rather
+// than whichever step happens to be mounted. Phase 15: the "Aperçu" button
+// no longer fetches a PDF itself (see InvoiceCreatePreviewStepPage) — it's
+// just a routerLink into the new mandatory preview step, gated the same way
+// it always was (InvoiceDraftStore.canPreview()).
 @Component({
   selector: 'app-invoice-create-shell-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,66 +23,36 @@ import { InvoiceDraftStore } from './invoice-draft.store';
     RouterLinkActive,
     BigButtonComponent,
     InvoiceTotalsSummaryComponent,
-    PdfPreviewModalComponent,
     TourAnchorDirective,
   ],
   templateUrl: './invoice-create-shell.page.html',
 })
 export class InvoiceCreateShellPage {
-  private readonly invoiceService = inject(InvoiceService);
-  private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
-  private readonly paywallService = inject(PaywallService);
   protected readonly draftStore = inject(InvoiceDraftStore);
 
-  protected readonly previewing = signal(false);
-  protected readonly previewError = signal<string | null>(null);
-  // Owns the object URL's lifecycle: set on a successful preview, revoked
-  // (and cleared) on close or component destroy — never left dangling like
-  // the old window.open + fixed 10s timeout did.
-  protected readonly previewPdfUrl = signal<string | null>(null);
+  // Phase 15: hides the bottom bar's own "Aperçu" button while already on
+  // the preview step — it would otherwise sit there redundantly next to
+  // that screen's "Créer la facture", just re-navigating to where the
+  // artisan already is.
+  protected readonly onPreviewStep = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+    ),
+    { initialValue: null },
+  );
 
-  constructor() {
-    this.destroyRef.onDestroy(() => this.revokeCurrentPreviewUrl());
+  protected isOnPreviewStep(): boolean {
+    return (this.onPreviewStep()?.urlAfterRedirects ?? this.router.url).endsWith('/apercu');
   }
 
-  protected preview(): void {
-    if (this.previewing() || !this.draftStore.canPreview()) {
+  // Phase 15: no longer fetches anything itself — just hands off to the
+  // mandatory preview step, which does the actual (JSON) preview call.
+  protected goToPreview(): void {
+    if (!this.draftStore.canPreview()) {
       return;
     }
-    this.previewing.set(true);
-    this.previewError.set(null);
-
-    const request = this.draftStore.buildInvoiceRequest(
-      this.draftStore.customer().customerId ?? undefined,
-    );
-
-    this.invoiceService
-      .previewPdf(request)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (blob) => {
-          this.previewing.set(false);
-          this.revokeCurrentPreviewUrl();
-          this.previewPdfUrl.set(URL.createObjectURL(blob));
-        },
-        error: (error: HttpErrorResponse) => {
-          this.previewing.set(false);
-          // Phase 14: a 402 here means the free-trial invoice is already
-          // used up — the paywall modal explains that and offers a path to
-          // subscribe, so it replaces (not stacks with) the generic error.
-          if (error.status === 402) {
-            this.paywallService.show();
-            return;
-          }
-          this.previewError.set("Impossible de générer l'aperçu pour le moment.");
-        },
-      });
-  }
-
-  protected closePreview(): void {
-    this.revokeCurrentPreviewUrl();
-    this.previewPdfUrl.set(null);
+    this.router.navigate(['/factures/nouvelle/rapide/apercu']);
   }
 
   // Lets the artisan bail out of a stuck/unwanted draft instead of being
@@ -94,12 +64,5 @@ export class InvoiceCreateShellPage {
     }
     this.draftStore.reset();
     this.router.navigate(['/factures/nouvelle/rapide/client']);
-  }
-
-  private revokeCurrentPreviewUrl(): void {
-    const url = this.previewPdfUrl();
-    if (url) {
-      URL.revokeObjectURL(url);
-    }
   }
 }

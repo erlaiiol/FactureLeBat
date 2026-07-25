@@ -96,6 +96,8 @@ export class InvoiceService {
               packagingQuantity: line.packagingQuantity,
               roundUpToPackaging: line.roundUpToPackaging ?? true,
               productCode: line.productCode,
+              showUnitDetail: line.showUnitDetail ?? true,
+              showBillingDetail: line.showBillingDetail ?? true,
             }))
           : [],
       serviceLines: serviceLineDtos.map((serviceLine): CreateInvoiceServiceLineData => {
@@ -157,6 +159,19 @@ export class InvoiceService {
 
     const company = await this.companyService.getProfile(companyId);
     return this.mapper.toPreviewPdfData(dto, company);
+  }
+
+  // Phase 15: JSON counterpart of previewPdf, for the mandatory preview
+  // screen's HTML mirror — same gate, same not-yet-persisted DTO, same
+  // InvoiceWithTotals shape GET /invoices/:id already returns, so the
+  // frontend never needs its own copy of the pricing/redistribution math to
+  // render per-line figures (see docs/conventions.md's "no business-logic
+  // duplication").
+  async previewData(companyId: string, dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
+    await this.premiumGate.assertCanCreateInvoice(companyId);
+
+    const company = await this.companyService.getProfile(companyId);
+    return this.mapper.toPreviewInvoiceWithTotals(dto, company);
   }
 
   private async findRawById(companyId: string, id: string): Promise<InvoiceWithLines> {

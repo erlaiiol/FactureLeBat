@@ -54,6 +54,16 @@ export interface InvoiceLineDraft {
   // which line to remove when it's toggled back off. Null for a freehand
   // ("+ Ligne libre") line, same as productCode being unset.
   catalogProductId: string | null;
+  // UI-only: whether to save this line as a new catalog Product on submit
+  // — never sent as-is to the invoice-creation request (see
+  // buildInvoiceRequest), mirrors the customer step's saveAsNewCustomer.
+  saveAsNewProduct: boolean;
+  // Phase 15: per-line PDF rendering toggles, set from the mandatory
+  // preview screen — both default true so an artisan who never opens that
+  // screen sees no behavior change. Persisted through the same draft
+  // localStorage mechanism as every other field here.
+  showUnitDetail: boolean;
+  showBillingDetail: boolean;
 }
 
 export interface InvoiceServiceLineDraft {
@@ -93,6 +103,9 @@ const EMPTY_LINE: InvoiceLineDraft = {
   roundUpToPackaging: true,
   productCode: null,
   catalogProductId: null,
+  saveAsNewProduct: false,
+  showUnitDetail: true,
+  showBillingDetail: true,
 };
 
 // Phase 13.5: defaults for fields added after the original InvoiceServiceLineDraft
@@ -263,6 +276,17 @@ export class InvoiceDraftStore {
     this.serviceLines.set(serviceLines);
   }
 
+  // Phase 15: flips one line's PDF-detail toggle from the mandatory preview
+  // screen. A pure display choice — never touches quantity/price/totals —
+  // so it's safe to mutate directly on the store rather than round-tripping
+  // through the lines-step FormArray, which is destroyed once the artisan
+  // has navigated on to the preview step.
+  toggleLineDetail(index: number, field: 'showUnitDetail' | 'showBillingDetail'): void {
+    this.lines.update((lines) =>
+      lines.map((line, i) => (i === index ? { ...line, [field]: !line[field] } : line)),
+    );
+  }
+
   // Phase 13.5: a product created inline from the merged catalog/lines
   // screen (see QuickProductCreateComponent) needs to show up in this
   // screen's own catalog grid immediately, not just on the next full reload
@@ -300,6 +324,8 @@ export class InvoiceDraftStore {
       packagingQuantity: line.packagingQuantity ?? undefined,
       roundUpToPackaging: line.roundUpToPackaging,
       productCode: line.productCode ?? undefined,
+      showUnitDetail: line.showUnitDetail,
+      showBillingDetail: line.showBillingDetail,
     }));
 
     const serviceLines: CreateInvoiceServiceLineRequest[] = this.serviceLines().map(

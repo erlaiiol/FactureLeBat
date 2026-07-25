@@ -40,6 +40,9 @@ const lineFixture: InvoiceLineDraft = {
   roundUpToPackaging: true,
   productCode: null,
   catalogProductId: null,
+  saveAsNewProduct: false,
+  showUnitDetail: true,
+  showBillingDetail: true,
 };
 
 describe('InvoiceDraftStore', () => {
@@ -180,6 +183,36 @@ describe('InvoiceDraftStore', () => {
       expect(request.customerAddress).toBeUndefined();
       expect(request.customerEmail).toBeUndefined();
       expect(request.customerPhone).toBeUndefined();
+    });
+
+    // Phase 15: the mandatory preview screen's per-line toggles must reach
+    // the backend as-is, defaulting true, so a real invoice ends up
+    // rendered exactly as the artisan approved it in the preview.
+    it('forwards each line’s Phase 15 detail-visibility toggles', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([{ ...lineFixture, showUnitDetail: false, showBillingDetail: true }]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.lines?.[0].showUnitDetail).toBe(false);
+      expect(request.lines?.[0].showBillingDetail).toBe(true);
+    });
+  });
+
+  describe('toggleLineDetail', () => {
+    it('flips only the targeted line’s targeted field, leaving the rest untouched', () => {
+      const store = createStore();
+      store.setLines([
+        { ...lineFixture, showUnitDetail: true, showBillingDetail: true },
+        { ...lineFixture, showUnitDetail: true, showBillingDetail: true },
+      ]);
+
+      store.toggleLineDetail(0, 'showUnitDetail');
+
+      expect(store.lines()[0].showUnitDetail).toBe(false);
+      expect(store.lines()[0].showBillingDetail).toBe(true);
+      expect(store.lines()[1].showUnitDetail).toBe(true);
     });
   });
 

@@ -38,6 +38,10 @@ export interface CreateInvoiceLineData {
   packagingQuantity?: number;
   roundUpToPackaging: boolean;
   productCode?: string;
+  // Phase 15: per-line PDF rendering toggles — see schema.prisma's comment
+  // on InvoiceLine.showUnitDetail/showBillingDetail.
+  showUnitDetail: boolean;
+  showBillingDetail: boolean;
 }
 
 export interface CreateInvoiceServiceLineData {
@@ -163,6 +167,8 @@ export class InvoiceRepository {
               packagingQuantity: line.packagingQuantity,
               roundUpToPackaging: line.roundUpToPackaging,
               productCode: line.productCode,
+              showUnitDetail: line.showUnitDetail,
+              showBillingDetail: line.showBillingDetail,
             })),
           },
           manualColumns: {

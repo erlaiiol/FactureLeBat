@@ -518,6 +518,16 @@ model InvoiceLine {
   // for an ad-hoc line that isn't saved to the catalog.
   productCode String?
 
+  // Phase 15 — artisan-chosen, persisted like the vatApplicable snapshot
+  // (not derived): whether this line's technical detail renders on the
+  // generated PDF. showUnitDetail governs the "Unité" cell; showBillingDetail
+  // governs the "(facturé : X)" clarifying note (waste surcharge/packaging
+  // rounding). Purely a rendering concern — never affects computeLineTotal.
+  // Both default true so an artisan who never touches Phase 15's preview
+  // toggles sees no behavior change.
+  showUnitDetail    Boolean @default(true)
+  showBillingDetail Boolean @default(true)
+
   serviceWeights InvoiceServiceLineWeight[]
 
   createdAt DateTime @default(now())

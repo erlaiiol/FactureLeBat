@@ -46,6 +46,15 @@ const protectedRoutes: Routes = [
                 (m) => m.InvoiceCreateLinesStepPage,
               ),
           },
+          // Phase 15: mandatory preview step — "Créer la facture" only
+          // lives here now, not on the lignes step above.
+          {
+            path: 'apercu',
+            loadComponent: () =>
+              import('./features/invoice-create/preview-step/invoice-create-preview-step.page').then(
+                (m) => m.InvoiceCreatePreviewStepPage,
+              ),
+          },
         ],
       },
       {

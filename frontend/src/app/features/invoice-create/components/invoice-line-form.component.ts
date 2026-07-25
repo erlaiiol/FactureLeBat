@@ -35,6 +35,10 @@ export type InvoiceLineFormGroup = FormGroup<{
   saveAsNewProduct: FormControl<boolean>;
   // Phase 13.5, UI-only: see InvoiceLineDraft.catalogProductId.
   catalogProductId: FormControl<string | null>;
+  // Phase 15: not rendered by this form — see InvoiceCreateLinesStepPage's
+  // createLineGroup comment on why these still need to exist as controls.
+  showUnitDetail: FormControl<boolean>;
+  showBillingDetail: FormControl<boolean>;
 }>;
 
 @Component({

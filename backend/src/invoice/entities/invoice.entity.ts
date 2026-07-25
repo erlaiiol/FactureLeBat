@@ -27,6 +27,11 @@ export interface InvoiceLineWithTotal {
   packagingQuantity: string | null;
   roundUpToPackaging: boolean;
   productCode: string | null;
+  // Phase 15: per-line PDF rendering toggles, set from the mandatory
+  // preview screen — purely a display concern, never affects the totals
+  // below. See schema.prisma's comment on InvoiceLine.showUnitDetail.
+  showUnitDetail: boolean;
+  showBillingDetail: boolean;
   // Includes any amount redistributed onto this line by a REDISTRIBUTED
   // service line (Phase 5) — always recomputed, never persisted (see
   // InvoiceMapper.toInvoiceWithTotals).

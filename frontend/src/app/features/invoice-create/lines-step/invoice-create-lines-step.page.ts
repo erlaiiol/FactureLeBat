@@ -1,5 +1,4 @@
-import { DatePipe, DecimalPipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
+import { DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,9 +10,7 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
-import { Observable, catchError, forkJoin, map, of, switchMap } from 'rxjs';
 import {
-  InvoiceWithTotals,
   RedistributionStrategy,
   ServiceLineVisibility,
   WasteSurcharge,
@@ -21,10 +18,6 @@ import {
 import { ProductProfile } from '../../../core/models/product.model';
 import { ServicePricingMode, ServiceProfile } from '../../../core/models/service.model';
 import { Unit } from '../../../core/models/unit.model';
-import { CustomerService } from '../../../core/services/customer.service';
-import { InvoiceService } from '../../../core/services/invoice.service';
-import { PaywallService } from '../../../core/services/paywall.service';
-import { ProductService } from '../../../core/services/product.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
@@ -41,7 +34,6 @@ import {
 import { QuickProductCreateComponent } from '../components/quick-product-create.component';
 import { QuickServiceCreateComponent } from '../components/quick-service-create.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
-import { SendInvoiceEmailModalComponent } from '../../invoice-list/send-invoice-email-modal.component';
 
 // Phase 6/13.5 gallery redesign, step 2: two fixed "+" buttons (product,
 // service) replace the old always-visible catalog toggle grid and the
@@ -59,7 +51,6 @@ import { SendInvoiceEmailModalComponent } from '../../invoice-list/send-invoice-
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
-    DatePipe,
     DecimalPipe,
     BigButtonComponent,
     CentsToEurosPipe,
@@ -68,7 +59,6 @@ import { SendInvoiceEmailModalComponent } from '../../invoice-list/send-invoice-
     InvoiceServiceLineFormComponent,
     QuickProductCreateComponent,
     QuickServiceCreateComponent,
-    SendInvoiceEmailModalComponent,
     TourAnchorDirective,
   ],
   templateUrl: './invoice-create-lines-step.page.html',
@@ -76,16 +66,10 @@ import { SendInvoiceEmailModalComponent } from '../../invoice-list/send-invoice-
 export class InvoiceCreateLinesStepPage {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
-  private readonly customerService = inject(CustomerService);
-  private readonly invoiceService = inject(InvoiceService);
-  private readonly productService = inject(ProductService);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly paywallService = inject(PaywallService);
   protected readonly draftStore = inject(InvoiceDraftStore);
 
-  protected readonly creating = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
-  protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
   // Phase 13.5 gallery redesign: which of the two fixed "+" flyouts is open
   // (mutually exclusive — opening one closes the other) and whether its
   // "nouveau" quick-create sub-form is showing in place of the catalog list.
@@ -93,10 +77,6 @@ export class InvoiceCreateLinesStepPage {
   protected readonly servicePanelOpen = signal(false);
   protected readonly showQuickProductCreate = signal(false);
   protected readonly showQuickServiceCreate = signal(false);
-  // Phase 13.5: "Envoyer par mail" reachable right from this screen's
-  // success state, reusing invoice-list's own modal — no detour through
-  // "Mes factures" just to send the invoice just created.
-  protected readonly showEmailModal = signal(false);
 
   protected readonly lines = this.fb.array<InvoiceLineFormGroup>(
     this.draftStore.lines().map((line) => this.createLineGroup(line)),
@@ -207,6 +187,8 @@ export class InvoiceCreateLinesStepPage {
     roundUpToPackaging: boolean;
     productCode: string | null;
     catalogProductId?: string | null;
+    showUnitDetail?: boolean;
+    showBillingDetail?: boolean;
   }): InvoiceLineFormGroup {
     return this.fb.nonNullable.group({
       description: this.fb.nonNullable.control(initial?.description ?? '', Validators.required),
@@ -237,6 +219,12 @@ export class InvoiceCreateLinesStepPage {
       saveAsNewProduct: this.fb.nonNullable.control(false),
       // Phase 13.5, UI-only: see InvoiceLineDraft.catalogProductId.
       catalogProductId: this.fb.control<string | null>(initial?.catalogProductId ?? null),
+      // Phase 15: not rendered by this step's own template — set from the
+      // preview step (see InvoiceDraftStore.toggleLineDetail) and carried
+      // through here only so this step's own valueChanges->setLines() sync
+      // (see the constructor) never clobbers it back to the default.
+      showUnitDetail: this.fb.nonNullable.control(initial?.showUnitDetail ?? true),
+      showBillingDetail: this.fb.nonNullable.control(initial?.showBillingDetail ?? true),
     });
   }
 
@@ -517,38 +505,16 @@ export class InvoiceCreateLinesStepPage {
     });
   }
 
-  protected pdfUrl(invoiceId: string): string {
-    return this.invoiceService.pdfUrl(invoiceId);
-  }
-
-  protected openEmailModal(): void {
-    this.showEmailModal.set(true);
-  }
-
-  protected closeEmailModal(): void {
-    this.showEmailModal.set(false);
-  }
-
-  protected onEmailSent(updated: InvoiceWithTotals): void {
-    this.createdInvoice.set(updated);
-    this.showEmailModal.set(false);
-  }
-
   protected back(): void {
     this.router.navigate(['/factures/nouvelle/rapide/client']);
   }
 
-  protected startNewInvoice(): void {
-    this.createdInvoice.set(null);
-    this.errorMessage.set(null);
-    this.draftStore.reset();
-    this.router.navigate(['/factures/nouvelle/rapide/client']);
-  }
-
-  protected submit(): void {
-    if (this.creating()) {
-      return; // already in flight — ignore a fast double click/tap
-    }
+  // Phase 15: this step no longer creates the invoice itself — "Créer la
+  // facture" only exists on the mandatory preview screen now (see
+  // InvoiceCreatePreviewStepPage). This button's job is just to validate
+  // what's here and hand off to it, same checks submit() used to run
+  // before persisting.
+  protected goToPreview(): void {
     if (
       !this.draftStore.canPreview() ||
       this.lines.invalid ||
@@ -558,89 +524,18 @@ export class InvoiceCreateLinesStepPage {
       this.lines.markAllAsTouched();
       this.serviceLines.markAllAsTouched();
       this.errorMessage.set(
-        'Merci de renseigner un client et au moins une ligne complète avant de créer la facture.',
+        'Merci de renseigner un client et au moins une ligne complète avant de voir l’aperçu.',
       );
       return;
     }
 
     // Make sure the store has this step's very latest values before
-    // building the request — valueChanges already keeps it in sync, but
-    // this removes any doubt about subscription timing at submit time.
+    // navigating away — valueChanges already keeps it in sync, but this
+    // removes any doubt about subscription timing, and the FormArrays
+    // themselves are gone once InvoiceCreateLinesStepPage is destroyed.
     this.draftStore.setLines(this.lines.getRawValue());
     this.draftStore.setServiceLines(this.serviceLines.getRawValue());
-
-    const customer = this.draftStore.customer();
-    this.creating.set(true);
     this.errorMessage.set(null);
-
-    // "Enregistrer ce produit" only saves the catalog-appropriate fields
-    // (name/unit/price/packaging/code) — never `quantity`, `wasteSurcharge`,
-    // or `roundUpToPackaging`, which describe this chantier, not the
-    // product itself. Best-effort: a failed catalog save (e.g. a duplicate
-    // code) must never block the invoice itself from being created.
-    const productSaveRequests = this.lines
-      .getRawValue()
-      .filter((line) => line.saveAsNewProduct)
-      .map((line) =>
-        this.productService
-          .create({
-            name: line.description,
-            unit: line.unit,
-            priceCents: Math.round(line.unitPriceEuros * 100),
-            code: line.productCode || undefined,
-            packagingQuantity: line.packagingQuantity ?? undefined,
-          })
-          .pipe(catchError(() => of(null))),
-      );
-    // Normalized to Observable<null> on both branches — a ternary between
-    // differently-typed Observables otherwise loses its generic argument
-    // when piped below (TS falls back to the no-op 0-arg pipe() overload).
-    const saveProducts$: Observable<null> =
-      productSaveRequests.length > 0
-        ? forkJoin(productSaveRequests).pipe(map(() => null))
-        : of(null);
-
-    // "Enregistrer ce client" only applies to freehand entry — if a saved
-    // customer was picked, there's nothing new to save.
-    const request$ = saveProducts$.pipe(
-      switchMap(() =>
-        customer.saveAsNewCustomer && !customer.customerId
-          ? this.customerService
-              .create({
-                name: customer.customerName,
-                address: customer.customerAddress || undefined,
-                email: customer.customerEmail || undefined,
-                phone: customer.customerPhone || undefined,
-              })
-              .pipe(
-                switchMap((newCustomer) =>
-                  this.invoiceService.create(this.draftStore.buildInvoiceRequest(newCustomer.id)),
-                ),
-              )
-          : this.invoiceService.create(
-              this.draftStore.buildInvoiceRequest(customer.customerId ?? undefined),
-            ),
-      ),
-    );
-
-    request$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (invoice) => {
-        this.creating.set(false);
-        this.createdInvoice.set(invoice);
-        this.draftStore.reset();
-      },
-      error: (error: HttpErrorResponse) => {
-        this.creating.set(false);
-        // Phase 14: same paywall as the shell's "Aperçu" — a 402 here means
-        // the free-trial invoice is already used, not a real submission
-        // error, so it replaces the generic message rather than stacking
-        // with it.
-        if (error.status === 402) {
-          this.paywallService.show();
-          return;
-        }
-        this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');
-      },
-    });
+    this.router.navigate(['/factures/nouvelle/rapide/apercu']);
   }
 }

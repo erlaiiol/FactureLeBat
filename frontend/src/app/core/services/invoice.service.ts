@@ -37,6 +37,13 @@ export class InvoiceService {
     return this.http.post(`${this.baseUrl}/preview`, request, { responseType: 'blob' });
   }
 
+  // Phase 15: JSON counterpart of previewPdf — same not-yet-saved draft,
+  // but the computed figures (per-line totals, billed quantity, VAT) as
+  // structured data, for the mandatory preview screen's HTML mirror.
+  previewData(request: CreateInvoiceRequest): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/preview-data`, request);
+  }
+
   // Phase 12: sends the invoice PDF by email through the artisan's own
   // configured SMTP account — returns the invoice with sentAt/sentToEmail
   // updated on success.

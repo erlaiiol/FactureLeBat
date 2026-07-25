@@ -14,11 +14,7 @@ import {
 } from './entities/invoice.entity';
 import { InvoiceWithLines } from './invoice.repository';
 import { computeManualRowTotalCents } from './manual/manual-table-calculation.util';
-import {
-  InvoicePdfData,
-  InvoicePdfManualRow,
-  InvoicePdfServiceLine,
-} from './pdf/invoice-pdf-data.interface';
+import { InvoicePdfData, InvoicePdfManualRow } from './pdf/invoice-pdf-data.interface';
 import { expandServiceLineWeights } from './redistribution.util';
 
 // InvoiceRepository's INVOICE_INCLUDE already orders customerFields by
@@ -130,6 +126,8 @@ export class InvoiceMapper {
       packagingQuantity: line.packagingQuantity?.toString() ?? null,
       roundUpToPackaging: line.roundUpToPackaging,
       productCode: line.productCode,
+      showUnitDetail: line.showUnitDetail,
+      showBillingDetail: line.showBillingDetail,
       lineTotalExclVatCents: lineTotalsById.get(line.id)!,
     }));
 
@@ -247,16 +245,9 @@ export class InvoiceMapper {
     }
 
     return {
+      ...this.issuerFields(invoice.company),
       number: withTotals.number,
       date: withTotals.date,
-      issuerName: invoice.company.name,
-      issuerAddressLine1: invoice.company.addressLine1,
-      issuerAddressLine2: invoice.company.addressLine2,
-      issuerPostalCode: invoice.company.postalCode,
-      issuerCity: invoice.company.city,
-      issuerSiret: invoice.company.siret,
-      issuerEmail: invoice.company.email,
-      issuerPhone: invoice.company.phone,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,
       customerEmail: withTotals.customerEmail,
@@ -267,13 +258,20 @@ export class InvoiceMapper {
         description: line.description,
         // PdfService only ever renders plain text — the Unit enum -> label
         // conversion happens here, not in the PDF layer (see conventions.md's
-        // "PDF generation must be isolated from business logic").
-        unit: UNIT_LABELS[line.unit],
+        // "PDF generation must be isolated from business logic"). Phase 15:
+        // showUnitDetail is a pure rendering toggle set from the mandatory
+        // preview screen — computeLineTotal never sees it, only PdfService's
+        // output does.
+        unit: line.showUnitDetail ? UNIT_LABELS[line.unit] : '',
         quantity: line.quantity,
         // Only set when packaging rounding actually changed the priced
         // quantity — PdfService renders it as a clarifying note rather than
-        // silently hiding the difference (see docs/roadmap.md Phase 8.5).
-        billedQuantity: line.billedQuantity !== line.quantity ? line.billedQuantity : undefined,
+        // silently hiding the difference (see docs/roadmap.md Phase 8.5) —
+        // and only when Phase 15's showBillingDetail toggle is on.
+        billedQuantity:
+          line.showBillingDetail && line.billedQuantity !== line.quantity
+            ? line.billedQuantity
+            : undefined,
         unitPriceCents: line.unitPriceCents,
         totalCents: line.lineTotalExclVatCents,
       })),
@@ -313,16 +311,9 @@ export class InvoiceMapper {
     }));
 
     return {
+      ...this.issuerFields(invoice.company),
       number: withTotals.number,
       date: withTotals.date,
-      issuerName: invoice.company.name,
-      issuerAddressLine1: invoice.company.addressLine1,
-      issuerAddressLine2: invoice.company.addressLine2,
-      issuerPostalCode: invoice.company.postalCode,
-      issuerCity: invoice.company.city,
-      issuerSiret: invoice.company.siret,
-      issuerEmail: invoice.company.email,
-      issuerPhone: invoice.company.phone,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,
       customerEmail: withTotals.customerEmail,
@@ -345,18 +336,26 @@ export class InvoiceMapper {
     };
   }
 
-  // Phase 6: same math as toInvoiceWithTotals/toPdfData, but run directly
-  // off a not-yet-persisted CreateInvoiceDto — no ids exist yet, so lines
-  // and their redistribution shares are tracked positionally (by array
-  // index) instead of by persisted InvoiceLine id. This is safe because a
-  // WEIGHTED service line's weights are already positional, aligned with
-  // dto.lines (enforced by ServiceLineWeightsMatchLines at the DTO
-  // boundary), and expandServiceLineWeights is the exact same function
-  // InvoiceService.create() uses for the persisted path — the two can never
-  // compute a different split for the same input. Never touches Prisma.
-  toPreviewPdfData(dto: CreateInvoiceDto, company: Company): InvoicePdfData {
+  // Phase 6: same math as toInvoiceWithTotals, but run directly off a
+  // not-yet-persisted CreateInvoiceDto — no ids exist yet, so lines and
+  // their redistribution shares are tracked positionally (by array index,
+  // reused as the synthetic id below) instead of by persisted InvoiceLine
+  // id. This is safe because a WEIGHTED service line's weights are already
+  // positional, aligned with dto.lines (enforced by
+  // ServiceLineWeightsMatchLines at the DTO boundary), and
+  // expandServiceLineWeights is the exact same function InvoiceService.
+  // create() uses for the persisted path — the two can never compute a
+  // different split for the same input. Never touches Prisma.
+  //
+  // Phase 15: this is also what the mandatory preview screen's HTML mirror
+  // reads (via InvoiceController's preview-data route) — returning the same
+  // InvoiceWithTotals shape as the persisted path, rather than a PDF-only
+  // object, means the frontend never needs to duplicate this calculation to
+  // render its own per-line figures (see docs/conventions.md's "no
+  // business-logic duplication").
+  toPreviewInvoiceWithTotals(dto: CreateInvoiceDto, company: Company): InvoiceWithTotals {
     if ((dto.entryMode ?? InvoiceEntryMode.GUIDED) === InvoiceEntryMode.MANUAL) {
-      return this.toManualPreviewPdfData(dto, company);
+      return this.toManualPreviewInvoiceWithTotals(dto, company);
     }
 
     const vatApplicable = isVatApplicable(company.legalStatus);
@@ -375,11 +374,18 @@ export class InvoiceMapper {
     const lineTotalsCents = lineCalculations.map((c) => c.lineTotalExclVatCents);
 
     let visibleServiceAmountCents = 0;
-    const pdfServiceLines: InvoicePdfServiceLine[] = [];
+    const serviceLines: InvoiceServiceLineWithAmounts[] = [];
     for (const serviceLine of dto.serviceLines ?? []) {
       if (serviceLine.visibility === 'VISIBLE') {
         visibleServiceAmountCents += serviceLine.amountCents;
-        pdfServiceLines.push({ name: serviceLine.name, amountCents: serviceLine.amountCents });
+        serviceLines.push({
+          id: String(serviceLines.length),
+          position: serviceLines.length,
+          name: serviceLine.name,
+          description: serviceLine.description ?? null,
+          amountCents: serviceLine.amountCents,
+          visibility: serviceLine.visibility,
+        });
         continue;
       }
 
@@ -388,21 +394,38 @@ export class InvoiceMapper {
         amountCents: serviceLine.amountCents,
         weights,
       });
-      shares.forEach((share, index) => {
-        lineTotalsCents[index] += share;
+      const distribution = shares.map((amountCents, index) => {
+        lineTotalsCents[index] += amountCents;
+        return { invoiceLineId: String(index), amountCents };
+      });
+      serviceLines.push({
+        id: String(serviceLines.length),
+        position: serviceLines.length,
+        name: serviceLine.name,
+        description: serviceLine.description ?? null,
+        amountCents: serviceLine.amountCents,
+        visibility: serviceLine.visibility,
+        distribution,
       });
     }
 
-    const pdfLines = dto.lines!.map((line, index) => {
+    const lines: InvoiceLineWithTotal[] = dto.lines!.map((line, index) => {
       const quantity = line.quantity.toString();
-      const billedQuantity = lineCalculations[index].billedQuantity.toString();
       return {
+        id: String(index),
+        position: index,
         description: line.description,
-        unit: UNIT_LABELS[line.unit],
+        unit: line.unit,
         quantity,
-        billedQuantity: billedQuantity !== quantity ? billedQuantity : undefined,
         unitPriceCents: line.unitPriceCents,
-        totalCents: lineTotalsCents[index],
+        wasteSurcharge: line.wasteSurcharge,
+        billedQuantity: lineCalculations[index].billedQuantity.toString(),
+        packagingQuantity: line.packagingQuantity?.toString() ?? null,
+        roundUpToPackaging: line.roundUpToPackaging ?? true,
+        productCode: line.productCode ?? null,
+        showUnitDetail: line.showUnitDetail ?? true,
+        showBillingDetail: line.showBillingDetail ?? true,
+        lineTotalExclVatCents: lineTotalsCents[index],
       };
     });
 
@@ -415,32 +438,28 @@ export class InvoiceMapper {
     );
 
     return {
-      // Not a real invoice number — nothing is persisted, so no sequential
-      // number was ever allocated. Distinct from any real "{prefix}-NNNNNN"
-      // number, never collides.
+      // Not a real invoice: nothing is persisted, so no id/sequential
+      // number was ever allocated. 'BROUILLON' is distinct from any real
+      // "{prefix}-NNNNNN" number, never collides.
+      id: '',
       number: 'BROUILLON',
       date: new Date(),
-      issuerName: company.name,
-      issuerAddressLine1: company.addressLine1,
-      issuerAddressLine2: company.addressLine2,
-      issuerPostalCode: company.postalCode,
-      issuerCity: company.city,
-      issuerSiret: company.siret,
-      issuerEmail: company.email,
-      issuerPhone: company.phone,
       customerName: dto.customerName,
       customerAddress: dto.customerAddress ?? null,
       customerEmail: dto.customerEmail ?? null,
       customerPhone: dto.customerPhone ?? null,
-      customerFields: mapDtoCustomerFields(dto),
-      entryMode: InvoiceEntryMode.GUIDED,
-      lines: pdfLines,
-      serviceLines: pdfServiceLines,
+      customerId: dto.customerId ?? null,
+      customerFields: mapDtoCustomerFields(dto).map((field) => ({ id: '', ...field })),
       vatApplicable,
       vatRateBasisPoints,
+      entryMode: InvoiceEntryMode.GUIDED,
+      lines,
+      serviceLines,
       subtotalExclVatCents,
       vatAmountCents,
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
+      sentAt: null,
+      sentToEmail: null,
     };
   }
 
@@ -449,22 +468,31 @@ export class InvoiceMapper {
   // (the exact same function toManualInvoiceWithTotals uses for the
   // persisted path) so a draft preview and the real created invoice can
   // never disagree on a manual row's total.
-  private toManualPreviewPdfData(dto: CreateInvoiceDto, company: Company): InvoicePdfData {
+  private toManualPreviewInvoiceWithTotals(
+    dto: CreateInvoiceDto,
+    company: Company,
+  ): InvoiceWithTotals {
     const vatApplicable = isVatApplicable(company.legalStatus);
     const vatRateBasisPoints = company.vatRateBasisPoints;
     const table = dto.manualTable!;
-    const lineTotalIndex = table.columns.findIndex(
-      (column) => column.role === ManualColumnRole.LINE_TOTAL,
-    );
 
-    const rows: InvoicePdfManualRow[] = table.rows.map((row) => ({
-      cells: row.cells.filter((_, index) => index !== lineTotalIndex),
-      totalCents: computeManualRowTotalCents(table.columns, row.cells),
+    const rows: ManualInvoiceRowWithTotal[] = table.rows.map((row, index) => ({
+      id: String(index),
+      position: index,
+      heightPx: row.heightPx ?? null,
+      cells: row.cells.map((value, cellIndex) => ({
+        columnId: String(cellIndex),
+        value,
+      })),
+      lineTotalExclVatCents: computeManualRowTotalCents(table.columns, row.cells),
     }));
     // Phase 9.5 bis: same override precedence as toManualInvoiceWithTotals,
     // run directly off the not-yet-persisted DTO so a draft preview can
     // never disagree with the real created invoice.
-    const computedSubtotalExclVatCents = rows.reduce((sum, row) => sum + row.totalCents, 0);
+    const computedSubtotalExclVatCents = rows.reduce(
+      (sum, row) => sum + row.lineTotalExclVatCents,
+      0,
+    );
     const subtotalExclVatCents = dto.subtotalOverrideCents ?? computedSubtotalExclVatCents;
     const computedVatAmountCents = this.calculationService.computeVatAmountCents(
       subtotalExclVatCents,
@@ -475,8 +503,113 @@ export class InvoiceMapper {
     const totalInclVatCents = dto.totalOverrideCents ?? subtotalExclVatCents + vatAmountCents;
 
     return {
+      id: '',
       number: 'BROUILLON',
       date: new Date(),
+      customerName: dto.customerName,
+      customerAddress: dto.customerAddress ?? null,
+      customerEmail: dto.customerEmail ?? null,
+      customerPhone: dto.customerPhone ?? null,
+      customerId: dto.customerId ?? null,
+      customerFields: mapDtoCustomerFields(dto).map((field) => ({ id: '', ...field })),
+      vatApplicable,
+      vatRateBasisPoints,
+      entryMode: InvoiceEntryMode.MANUAL,
+      lines: [],
+      serviceLines: [],
+      manualTable: {
+        columns: table.columns.map((column, index) => ({
+          id: String(index),
+          position: index,
+          role: column.role,
+          label: column.label,
+          widthPx: column.widthPx ?? null,
+        })),
+        rows,
+      },
+      subtotalExclVatCents,
+      vatAmountCents,
+      totalInclVatCents,
+      sentAt: null,
+      sentToEmail: null,
+    };
+  }
+
+  // Phase 6/15: PDF rendering of the not-yet-persisted preview — built on
+  // top of toPreviewInvoiceWithTotals's already-computed figures, the exact
+  // same "compute once, reshape for PDF" pattern toPdfData applies to
+  // toInvoiceWithTotals, so the JSON preview (Phase 15's HTML mirror) and
+  // this PDF can never disagree on a number.
+  toPreviewPdfData(dto: CreateInvoiceDto, company: Company): InvoicePdfData {
+    const withTotals = this.toPreviewInvoiceWithTotals(dto, company);
+    const issuer = this.issuerFields(company);
+
+    if (withTotals.entryMode === InvoiceEntryMode.MANUAL) {
+      const table = withTotals.manualTable!;
+      return {
+        ...issuer,
+        number: withTotals.number,
+        date: withTotals.date,
+        customerName: withTotals.customerName,
+        customerAddress: withTotals.customerAddress,
+        customerEmail: withTotals.customerEmail,
+        customerPhone: withTotals.customerPhone,
+        customerFields: withTotals.customerFields,
+        entryMode: InvoiceEntryMode.MANUAL,
+        lines: [],
+        serviceLines: [],
+        manualTable: {
+          columns: table.columns.map((column) => ({ label: column.label })),
+          rows: table.rows.map((row) => ({
+            cells: row.cells.map((cell) => cell.value),
+            totalCents: row.lineTotalExclVatCents,
+          })),
+        },
+        vatApplicable: withTotals.vatApplicable,
+        vatRateBasisPoints: withTotals.vatRateBasisPoints,
+        subtotalExclVatCents: withTotals.subtotalExclVatCents,
+        vatAmountCents: withTotals.vatAmountCents,
+        totalInclVatCents: withTotals.totalInclVatCents,
+      };
+    }
+
+    return {
+      ...issuer,
+      number: withTotals.number,
+      date: withTotals.date,
+      customerName: withTotals.customerName,
+      customerAddress: withTotals.customerAddress,
+      customerEmail: withTotals.customerEmail,
+      customerPhone: withTotals.customerPhone,
+      customerFields: withTotals.customerFields,
+      entryMode: InvoiceEntryMode.GUIDED,
+      lines: withTotals.lines.map((line) => ({
+        description: line.description,
+        unit: line.showUnitDetail ? UNIT_LABELS[line.unit] : '',
+        quantity: line.quantity,
+        billedQuantity:
+          line.showBillingDetail && line.billedQuantity !== line.quantity
+            ? line.billedQuantity
+            : undefined,
+        unitPriceCents: line.unitPriceCents,
+        totalCents: line.lineTotalExclVatCents,
+      })),
+      serviceLines: withTotals.serviceLines
+        .filter((serviceLine) => serviceLine.visibility === 'VISIBLE')
+        .map((serviceLine) => ({ name: serviceLine.name, amountCents: serviceLine.amountCents })),
+      vatApplicable: withTotals.vatApplicable,
+      vatRateBasisPoints: withTotals.vatRateBasisPoints,
+      subtotalExclVatCents: withTotals.subtotalExclVatCents,
+      vatAmountCents: withTotals.vatAmountCents,
+      totalInclVatCents: withTotals.totalInclVatCents,
+    };
+  }
+
+  // Shared by every PDF-shaping method (persisted and preview alike) — the
+  // seven issuer-prefixed fields never vary with entryMode or with whether
+  // the invoice is persisted yet.
+  private issuerFields(company: Company) {
+    return {
       issuerName: company.name,
       issuerAddressLine1: company.addressLine1,
       issuerAddressLine2: company.addressLine2,
@@ -485,25 +618,6 @@ export class InvoiceMapper {
       issuerSiret: company.siret,
       issuerEmail: company.email,
       issuerPhone: company.phone,
-      customerName: dto.customerName,
-      customerAddress: dto.customerAddress ?? null,
-      customerEmail: dto.customerEmail ?? null,
-      customerPhone: dto.customerPhone ?? null,
-      customerFields: mapDtoCustomerFields(dto),
-      entryMode: InvoiceEntryMode.MANUAL,
-      lines: [],
-      serviceLines: [],
-      manualTable: {
-        columns: table.columns
-          .filter((_, index) => index !== lineTotalIndex)
-          .map((column) => ({ label: column.label })),
-        rows,
-      },
-      vatApplicable,
-      vatRateBasisPoints,
-      subtotalExclVatCents,
-      vatAmountCents,
-      totalInclVatCents,
     };
   }
 }

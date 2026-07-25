@@ -1,342 +1,309 @@
-@if (createdInvoice(); as invoice) {
-  <div class="flex flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center">
-    <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-success">
-      Facture {{ invoice.number }} créée !
-    </h1>
-    @if (invoice.sentAt) {
-      <p class="text-sm text-success">
-        Envoyée le {{ invoice.sentAt | date: 'dd/MM/yyyy' }} à {{ invoice.sentToEmail }}
-      </p>
-    }
-    <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
-      <app-big-button>Télécharger le PDF</app-big-button>
-    </a>
-    <div class="w-full max-w-sm">
-      <app-big-button variant="secondary" tone="subtle" (click)="openEmailModal()">
-        Envoyer par mail
-      </app-big-button>
-    </div>
-    <div class="w-full max-w-sm">
-      <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
-        Nouvelle facture
-      </app-big-button>
-    </div>
-  </div>
-  <app-send-invoice-email-modal
-    [invoice]="showEmailModal() ? invoice : null"
-    (closed)="closeEmailModal()"
-    (sent)="onEmailSent($event)"
-  />
-} @else {
-  <h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
-    Nouvelle facture — Lignes &amp; prestations
-  </h1>
-  <button
-    type="button"
-    (click)="back()"
-    class="mb-6 text-sm font-medium text-primary hover:underline"
-  >
-    ← Retour au client
-  </button>
+<h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
+  Nouvelle facture — Lignes &amp; prestations
+</h1>
+<button
+  type="button"
+  (click)="back()"
+  class="mb-6 text-sm font-medium text-primary hover:underline"
+>
+  ← Retour au client
+</button>
 
-  <!-- Phase 13.5 gallery redesign: two fixed "+" buttons stay reachable at
+<!-- Phase 13.5 gallery redesign: two fixed "+" buttons stay reachable at
        all times regardless of scroll — each opens a small flyout right next
        to it (catalog pick, quick create, or a one-off free line) instead of
        an always-open toggle grid taking up the page. -->
-  <!-- z-50, above the z-40 click-outside backdrops below, so clicking a
+<!-- z-50, above the z-40 click-outside backdrops below, so clicking a
        button again toggles its own panel closed instead of being swallowed
        by the backdrop that just appeared on top of the page. -->
-  <div class="fixed top-32 left-4 z-50 flex flex-col gap-4">
-    <div class="relative">
-      <button
-        type="button"
-        appTourAnchor="invoice-add-product-button"
-        (click)="toggleProductPanel()"
-        class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-primary text-primary-fg shadow-lg"
-        [class.is-open]="productPanelOpen()"
-        aria-label="Ajouter un produit"
+<div class="fixed top-32 left-4 z-50 flex flex-col gap-4">
+  <div class="relative">
+    <button
+      type="button"
+      appTourAnchor="invoice-add-product-button"
+      (click)="toggleProductPanel()"
+      class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-primary text-primary-fg shadow-lg"
+      [class.is-open]="productPanelOpen()"
+      aria-label="Ajouter un produit"
+    >
+      <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+        +
+      </span>
+      <span
+        class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+        [class.opacity-100]="productPanelOpen()"
       >
-        <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
-          +
-        </span>
-        <span
-          class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
-          [class.opacity-100]="productPanelOpen()"
-        >
-          Ajouter un produit
-        </span>
-      </button>
+        Ajouter un produit
+      </span>
+    </button>
 
-      @if (productPanelOpen()) {
-        <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
-        <div
-          class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
-        >
-          @if (showQuickProductCreate()) {
-            <app-quick-product-create
-              (created)="onProductCreated($event)"
-              (cancel)="showQuickProductCreate.set(false)"
-            />
-          } @else {
-            <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
-              Mon catalogue
-            </span>
-            @if (draftStore.products().length > 0) {
-              <ul class="flex flex-col gap-2">
-                @for (product of draftStore.products(); track product.id) {
-                  @let activeIndex = activeProductLineIndex().get(product.id);
-                  <li>
-                    <button
-                      type="button"
-                      (click)="toggleProduct(product)"
-                      class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-primary-subtle/30"
-                      [class.bg-primary-subtle]="activeIndex != null"
-                    >
-                      <span>
-                        <span class="block text-sm font-medium text-ink">{{ product.name }}</span>
-                        <span class="block text-xs text-ink-soft">
-                          {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
-                        </span>
-                      </span>
-                      @if (activeIndex != null) {
-                        <span class="text-primary">✓</span>
-                      }
-                    </button>
-                  </li>
-                }
-              </ul>
-            } @else {
-              <p class="text-sm text-ink-soft">Aucun produit enregistré pour l’instant.</p>
-            }
-            <button
-              type="button"
-              appTourAnchor="catalog-new-product"
-              (click)="showQuickProductCreate.set(true)"
-              class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
-            >
-              + Nouveau produit
-            </button>
-            <button
-              type="button"
-              (click)="addFreeLine()"
-              class="w-full rounded-lg px-4 py-2 text-sm font-medium text-ink-soft hover:underline"
-            >
-              + Ligne ponctuelle (hors catalogue)
-            </button>
-          }
-        </div>
-      }
-    </div>
-
-    <div class="relative">
-      <button
-        type="button"
-        appTourAnchor="invoice-add-service-button"
-        (click)="toggleServicePanel()"
-        class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-info text-info-fg shadow-lg"
-        [class.is-open]="servicePanelOpen()"
-        aria-label="Ajouter une prestation"
+    @if (productPanelOpen()) {
+      <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
+      <div
+        class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
       >
-        <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
-          +
-        </span>
-        <span
-          class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
-          [class.opacity-100]="servicePanelOpen()"
-        >
-          Ajouter une prestation
-        </span>
-      </button>
-
-      @if (servicePanelOpen()) {
-        <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
-        <div
-          class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
-        >
-          @if (showQuickServiceCreate()) {
-            <app-quick-service-create
-              (created)="onServiceCreated($event)"
-              (cancel)="showQuickServiceCreate.set(false)"
-            />
-          } @else {
-            <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
-              Mes prestations
-            </span>
-            @if (draftStore.services().length > 0) {
-              <ul class="flex flex-col gap-2">
-                @for (service of draftStore.services(); track service.id) {
-                  @let activeServiceIndex = activeServiceLineIndex().get(service.id);
-                  <li>
-                    <button
-                      type="button"
-                      (click)="toggleService(service)"
-                      class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-info-subtle/30"
-                      [class.bg-info-subtle]="activeServiceIndex != null"
-                    >
-                      <span>
-                        <span class="block text-sm font-medium text-ink">{{ service.name }}</span>
-                        <span class="block text-xs text-ink-soft">
-                          @if (service.pricingMode === 'PERCENTAGE') {
-                            {{ service.percentageBasisPoints! / 100 }}% de la facture
-                          } @else {
-                            {{ service.priceCents | centsToEuros }}
-                          }
-                        </span>
+        @if (showQuickProductCreate()) {
+          <app-quick-product-create
+            (created)="onProductCreated($event)"
+            (cancel)="showQuickProductCreate.set(false)"
+          />
+        } @else {
+          <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+            Mon catalogue
+          </span>
+          @if (draftStore.products().length > 0) {
+            <ul class="flex flex-col gap-2">
+              @for (product of draftStore.products(); track product.id) {
+                @let activeIndex = activeProductLineIndex().get(product.id);
+                <li>
+                  <button
+                    type="button"
+                    (click)="toggleProduct(product)"
+                    class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-primary-subtle/30"
+                    [class.bg-primary-subtle]="activeIndex != null"
+                  >
+                    <span>
+                      <span class="block text-sm font-medium text-ink">{{ product.name }}</span>
+                      <span class="block text-xs text-ink-soft">
+                        {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
                       </span>
-                      @if (activeServiceIndex != null) {
-                        <span class="text-info">✓</span>
-                      }
-                    </button>
-                  </li>
-                }
-              </ul>
-            } @else {
-              <p class="text-sm text-ink-soft">Aucune prestation enregistrée pour l’instant.</p>
-            }
-            <button
-              type="button"
-              (click)="showQuickServiceCreate.set(true)"
-              class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-info hover:bg-info-subtle/30"
-            >
-              + Nouvelle prestation
-            </button>
-            <button
-              type="button"
-              (click)="addFreeServiceLine()"
-              class="w-full rounded-lg px-4 py-2 text-sm font-medium text-ink-soft hover:underline"
-            >
-              + Prestation libre (hors catalogue)
-            </button>
+                    </span>
+                    @if (activeIndex != null) {
+                      <span class="text-primary">✓</span>
+                    }
+                  </button>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="text-sm text-ink-soft">Aucun produit enregistré pour l’instant.</p>
           }
-        </div>
-      }
-    </div>
+          <button
+            type="button"
+            appTourAnchor="catalog-new-product"
+            (click)="showQuickProductCreate.set(true)"
+            class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
+          >
+            + Nouveau produit
+          </button>
+          <button
+            type="button"
+            (click)="addFreeLine()"
+            class="w-full rounded-lg px-4 py-2 text-sm font-medium text-ink-soft hover:underline"
+          >
+            + Ligne ponctuelle (hors catalogue)
+          </button>
+        }
+      </div>
+    }
   </div>
 
-  <!-- Plain div, not <form>: lines/serviceLines are two independent
+  <div class="relative">
+    <button
+      type="button"
+      appTourAnchor="invoice-add-service-button"
+      (click)="toggleServicePanel()"
+      class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-info text-info-fg shadow-lg"
+      [class.is-open]="servicePanelOpen()"
+      aria-label="Ajouter une prestation"
+    >
+      <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+        +
+      </span>
+      <span
+        class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+        [class.opacity-100]="servicePanelOpen()"
+      >
+        Ajouter une prestation
+      </span>
+    </button>
+
+    @if (servicePanelOpen()) {
+      <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
+      <div
+        class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
+      >
+        @if (showQuickServiceCreate()) {
+          <app-quick-service-create
+            (created)="onServiceCreated($event)"
+            (cancel)="showQuickServiceCreate.set(false)"
+          />
+        } @else {
+          <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+            Mes prestations
+          </span>
+          @if (draftStore.services().length > 0) {
+            <ul class="flex flex-col gap-2">
+              @for (service of draftStore.services(); track service.id) {
+                @let activeServiceIndex = activeServiceLineIndex().get(service.id);
+                <li>
+                  <button
+                    type="button"
+                    (click)="toggleService(service)"
+                    class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-info-subtle/30"
+                    [class.bg-info-subtle]="activeServiceIndex != null"
+                  >
+                    <span>
+                      <span class="block text-sm font-medium text-ink">{{ service.name }}</span>
+                      <span class="block text-xs text-ink-soft">
+                        @if (service.pricingMode === 'PERCENTAGE') {
+                          {{ service.percentageBasisPoints! / 100 }}% de la facture
+                        } @else {
+                          {{ service.priceCents | centsToEuros }}
+                        }
+                      </span>
+                    </span>
+                    @if (activeServiceIndex != null) {
+                      <span class="text-info">✓</span>
+                    }
+                  </button>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="text-sm text-ink-soft">Aucune prestation enregistrée pour l’instant.</p>
+          }
+          <button
+            type="button"
+            (click)="showQuickServiceCreate.set(true)"
+            class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-info hover:bg-info-subtle/30"
+          >
+            + Nouvelle prestation
+          </button>
+          <button
+            type="button"
+            (click)="addFreeServiceLine()"
+            class="w-full rounded-lg px-4 py-2 text-sm font-medium text-ink-soft hover:underline"
+          >
+            + Prestation libre (hors catalogue)
+          </button>
+        }
+      </div>
+    }
+  </div>
+</div>
+
+<!-- Plain div, not <form>: lines/serviceLines are two independent
        FormArrays with no umbrella FormGroup, so there is no NgForm/
        FormGroupDirective on this element to turn a native submit event into
        Angular's ngSubmit (which is what calls preventDefault) — a <form>
        here would silently fall back to the browser's default full-page
        GET-and-reload submit. -->
-  <div class="flex flex-col gap-6 pl-16">
-    @if (lines.controls.length === 0 && serviceLines.controls.length === 0) {
-      <p class="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-soft">
-        Utilisez les boutons + à gauche pour ajouter un matériau ou une prestation à cette facture.
-      </p>
-    }
+<div class="flex flex-col gap-6 pl-16">
+  @if (lines.controls.length === 0 && serviceLines.controls.length === 0) {
+    <p class="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-soft">
+      Utilisez les boutons + à gauche pour ajouter un matériau ou une prestation à cette facture.
+    </p>
+  }
 
-    <!-- Cards currently being edited (just added, or reopened from the
+  <!-- Cards currently being edited (just added, or reopened from the
          gallery below) — full width, one after another, in the order they
          were added. Full form unchanged (waste surcharge, packaging,
          sourcing, redistribution weights); "Valider" now lives inside the
          card's own border via ng-content, and is a distinct `success`
          color from "Créer la facture" so the two are never confused. -->
-    @for (line of lines.controls; track line; let i = $index) {
-      @if (!isLineCollapsed(line)) {
-        <div class="anim-line-in">
-          <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)">
-            <app-big-button variant="success" type="button" (click)="collapseLine(line)">
-              Valider
-            </app-big-button>
-          </app-invoice-line-form>
-        </div>
-      }
+  @for (line of lines.controls; track line; let i = $index) {
+    @if (!isLineCollapsed(line)) {
+      <div class="anim-line-in">
+        <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)">
+          <app-big-button variant="success" type="button" (click)="collapseLine(line)">
+            Valider
+          </app-big-button>
+        </app-invoice-line-form>
+      </div>
     }
-    @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
-      @if (!isServiceLineCollapsed(serviceLine)) {
-        <div class="anim-line-in">
-          <app-invoice-service-line-form
-            [group]="serviceLine"
-            [index]="i"
-            [services]="draftStore.services()"
-            [lineLabels]="lineLabels()"
-            (remove)="removeServiceLine(i)"
+  }
+  @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
+    @if (!isServiceLineCollapsed(serviceLine)) {
+      <div class="anim-line-in">
+        <app-invoice-service-line-form
+          [group]="serviceLine"
+          [index]="i"
+          [services]="draftStore.services()"
+          [lineLabels]="lineLabels()"
+          (remove)="removeServiceLine(i)"
+        >
+          <app-big-button
+            variant="success"
+            type="button"
+            (click)="collapseServiceLine(serviceLine)"
           >
-            <app-big-button
-              variant="success"
-              type="button"
-              (click)="collapseServiceLine(serviceLine)"
-            >
-              Valider
-            </app-big-button>
-          </app-invoice-service-line-form>
-        </div>
-      }
+            Valider
+          </app-big-button>
+        </app-invoice-service-line-form>
+      </div>
     }
+  }
 
-    <!-- The "gallery": every validated product/service line as a compact
+  <!-- The "gallery": every validated product/service line as a compact
          card (name/prix unitaire/quantité/total) — click to reopen for
          editing. New lines are always pushed to the end of their
          FormArray, so a card validated just now naturally renders after
          every already-collapsed card here, with the shrink-in animation
          standing in for the "card just got smaller and joined the
          gallery" motion. -->
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      @for (line of lines.controls; track line; let i = $index) {
-        @if (isLineCollapsed(line)) {
-          <button
-            type="button"
-            (click)="expandLine(line)"
-            class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-primary-subtle-border"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <span class="font-medium text-ink">{{ line.controls.description.value }}</span>
-              <span
-                (click)="$event.stopPropagation(); removeLine(i)"
-                class="text-sm font-medium text-danger hover:underline"
-              >
-                ✕
-              </span>
-            </div>
-            <span class="text-sm text-ink-soft">
-              {{ line.controls.unitPriceEuros.value | number: '1.2-2' }} € /
-              {{ line.controls.unit.value | unitLabel }}
+  <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    @for (line of lines.controls; track line; let i = $index) {
+      @if (isLineCollapsed(line)) {
+        <button
+          type="button"
+          (click)="expandLine(line)"
+          class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-primary-subtle-border"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <span class="font-medium text-ink">{{ line.controls.description.value }}</span>
+            <span
+              (click)="$event.stopPropagation(); removeLine(i)"
+              class="text-sm font-medium text-danger hover:underline"
+            >
+              ✕
             </span>
-            <span class="text-sm text-ink-soft">
-              {{ line.controls.quantity.value }} {{ line.controls.unit.value | unitLabel }} pour le
-              chantier
-            </span>
-            <span class="mt-1 font-mono text-lg font-semibold text-ink">
-              {{ lineTotalsCents()[i] | centsToEuros }}
-            </span>
-          </button>
-        }
+          </div>
+          <span class="text-sm text-ink-soft">
+            {{ line.controls.unitPriceEuros.value | number: '1.2-2' }} € /
+            {{ line.controls.unit.value | unitLabel }}
+          </span>
+          <span class="text-sm text-ink-soft">
+            {{ line.controls.quantity.value }} {{ line.controls.unit.value | unitLabel }} pour le
+            chantier
+          </span>
+          <span class="mt-1 font-mono text-lg font-semibold text-ink">
+            {{ lineTotalsCents()[i] | centsToEuros }}
+          </span>
+        </button>
       }
-
-      @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
-        @if (isServiceLineCollapsed(serviceLine)) {
-          <button
-            type="button"
-            (click)="expandServiceLine(serviceLine)"
-            class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-info-subtle-border"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <span class="font-medium text-ink">{{ serviceLine.controls.name.value }}</span>
-              <span
-                (click)="$event.stopPropagation(); removeServiceLine(i)"
-                class="text-sm font-medium text-danger hover:underline"
-              >
-                ✕
-              </span>
-            </div>
-            <span class="text-sm text-ink-soft">
-              {{ serviceLine.controls.visibility.value === 'VISIBLE' ? 'Visible' : 'Répartie' }}
-            </span>
-            <span class="mt-1 font-mono text-lg font-semibold text-ink">
-              {{ serviceLineAmountsCents()[i] | centsToEuros }}
-            </span>
-          </button>
-        }
-      }
-    </section>
-
-    @if (errorMessage(); as message) {
-      <p class="text-center font-medium text-danger">{{ message }}</p>
     }
 
-    <app-big-button type="button" [disabled]="creating()" (click)="submit()">
-      {{ creating() ? 'Création…' : 'Créer la facture' }}
-    </app-big-button>
-  </div>
-}
+    @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
+      @if (isServiceLineCollapsed(serviceLine)) {
+        <button
+          type="button"
+          (click)="expandServiceLine(serviceLine)"
+          class="anim-card-shrink-in flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm hover:border-info-subtle-border"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <span class="font-medium text-ink">{{ serviceLine.controls.name.value }}</span>
+            <span
+              (click)="$event.stopPropagation(); removeServiceLine(i)"
+              class="text-sm font-medium text-danger hover:underline"
+            >
+              ✕
+            </span>
+          </div>
+          <span class="text-sm text-ink-soft">
+            {{ serviceLine.controls.visibility.value === 'VISIBLE' ? 'Visible' : 'Répartie' }}
+          </span>
+          <span class="mt-1 font-mono text-lg font-semibold text-ink">
+            {{ serviceLineAmountsCents()[i] | centsToEuros }}
+          </span>
+        </button>
+      }
+    }
+  </section>
+
+  @if (errorMessage(); as message) {
+    <p class="text-center font-medium text-danger">{{ message }}</p>
+  }
+
+  <app-big-button type="button" (click)="goToPreview()"> Voir l'aperçu → </app-big-button>
+</div>

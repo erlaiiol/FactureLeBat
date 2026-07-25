@@ -50,6 +50,11 @@ export interface CreateInvoiceLineRequest {
   // Freehand product reference (e.g. "UC204850") — never a live reference to
   // a saved Product.
   productCode?: string;
+  // Phase 15: per-line PDF rendering toggles, set from the mandatory
+  // preview screen — purely a display concern, backend defaults both to
+  // true when omitted.
+  showUnitDetail?: boolean;
+  showBillingDetail?: boolean;
 }
 
 // Phase 5: a service added to the invoice, either its own visible amount or
@@ -112,6 +117,10 @@ export interface InvoiceLineWithTotal {
   packagingQuantity: string | null;
   roundUpToPackaging: boolean;
   productCode: string | null;
+  // Phase 15: per-line PDF rendering toggles — purely a display concern,
+  // never affects lineTotalExclVatCents below.
+  showUnitDetail: boolean;
+  showBillingDetail: boolean;
   lineTotalExclVatCents: number;
 }
 

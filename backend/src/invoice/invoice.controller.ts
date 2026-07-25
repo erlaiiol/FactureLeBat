@@ -67,6 +67,17 @@ export class InvoiceController {
     });
   }
 
+  // Phase 15: same not-yet-persisted draft as previewPdf above, but as JSON
+  // — feeds the mandatory preview screen's HTML mirror (per-line technical
+  // detail is toggleable there, see InvoiceMapper.toPreviewInvoiceWithTotals).
+  @Post('preview-data')
+  previewData(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateInvoiceDto,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.previewData(user.companyId, dto);
+  }
+
   // Phase 12: the exact subject/text that will be used if the artisan sends
   // without touching them — lets the frontend show an editable draft
   // without duplicating the template copy client-side.

@@ -112,6 +112,80 @@ describe('Invoice pipeline (e2e)', () => {
     expect(created.subtotalExclVatCents).toBe(27 * 4500);
   });
 
+  it('persists Phase 15 per-line detail-visibility toggles, defaulting to shown', async () => {
+    const createResponse = await authedRequest(app, session)
+      .post('/api/invoices')
+      .send({
+        customerName: 'E2E Toggle Customer',
+        lines: [
+          {
+            description: 'Parquet (détail masqué)',
+            unit: 'SQUARE_METER',
+            quantity: 23,
+            unitPriceCents: 4500,
+            packagingQuantity: 9,
+            showUnitDetail: false,
+            showBillingDetail: false,
+          },
+          {
+            description: 'Plinthes (détail par défaut)',
+            unit: 'UNIT',
+            quantity: 5,
+            unitPriceCents: 800,
+          },
+        ],
+      })
+      .expect(201);
+
+    const created = createResponse.body as InvoiceWithTotals;
+    expect(created.lines[0].showUnitDetail).toBe(false);
+    expect(created.lines[0].showBillingDetail).toBe(false);
+    // Untouched by the artisan, so no behavior change: both default true.
+    expect(created.lines[1].showUnitDetail).toBe(true);
+    expect(created.lines[1].showBillingDetail).toBe(true);
+    // Hiding a field never changes what's actually billed.
+    expect(created.lines[0].billedQuantity).toBe('27');
+    expect(created.lines[0].lineTotalExclVatCents).toBe(27 * 4500);
+
+    const getResponse = await authedRequest(app, session)
+      .get(`/api/invoices/${created.id}`)
+      .expect(200);
+    const fetched = getResponse.body as InvoiceWithTotals;
+    expect(fetched.lines[0].showUnitDetail).toBe(false);
+    expect(fetched.lines[0].showBillingDetail).toBe(false);
+  });
+
+  it('POST /invoices/preview-data returns the same totals a real create would, without persisting anything', async () => {
+    const body = {
+      customerName: 'E2E Preview-Data Customer',
+      lines: [
+        {
+          description: 'Parquet',
+          unit: 'SQUARE_METER',
+          quantity: 10,
+          unitPriceCents: 4500,
+          wasteSurcharge: 'TEN',
+        },
+      ],
+    };
+
+    const previewResponse = await authedRequest(app, session)
+      .post('/api/invoices/preview-data')
+      .send(body)
+      .expect(201);
+    const preview = previewResponse.body as InvoiceWithTotals;
+    expect(preview.number).toBe('BROUILLON');
+    expect(preview.subtotalExclVatCents).toBe(49500);
+
+    const createResponse = await authedRequest(app, session)
+      .post('/api/invoices')
+      .send(body)
+      .expect(201);
+    const created = createResponse.body as InvoiceWithTotals;
+    expect(preview.subtotalExclVatCents).toBe(created.subtotalExclVatCents);
+    expect(preview.totalInclVatCents).toBe(created.totalInclVatCents);
+  });
+
   it('rejects an invoice with no lines', () => {
     return authedRequest(app, session)
       .post('/api/invoices')

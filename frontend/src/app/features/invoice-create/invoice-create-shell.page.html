@@ -15,6 +15,13 @@
       >
         2. Lignes &amp; prestations
       </a>
+      <a
+        routerLink="apercu"
+        routerLinkActive="bg-primary text-primary-fg"
+        class="rounded-full bg-secondary-subtle px-4 py-2 text-ink"
+      >
+        3. Aperçu
+      </a>
     </div>
     <button
       type="button"
@@ -37,21 +44,18 @@
       [totals]="draftStore.totalsPreview()"
       [vatApplicable]="draftStore.vatApplicable()"
     />
-    <div class="w-full sm:w-64">
-      @if (previewError(); as message) {
-        <p class="mb-2 text-center text-sm font-medium text-danger">{{ message }}</p>
-      }
-      <app-big-button
-        variant="secondary"
-        tone="subtle"
-        appTourAnchor="invoice-preview"
-        [disabled]="previewing() || !draftStore.canPreview()"
-        (click)="preview()"
-      >
-        {{ previewing() ? 'Génération…' : 'Aperçu de la facture' }}
-      </app-big-button>
-    </div>
+    @if (!isOnPreviewStep()) {
+      <div class="w-full sm:w-64">
+        <app-big-button
+          variant="secondary"
+          tone="subtle"
+          appTourAnchor="invoice-preview"
+          [disabled]="!draftStore.canPreview()"
+          (click)="goToPreview()"
+        >
+          Aperçu de la facture
+        </app-big-button>
+      </div>
+    }
   </div>
 </div>
-
-<app-pdf-preview-modal [pdfBlobUrl]="previewPdfUrl()" (closed)="closePreview()" />

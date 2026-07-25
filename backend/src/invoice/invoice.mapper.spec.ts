@@ -90,6 +90,8 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
         packagingQuantity: null,
         roundUpToPackaging: true,
         productCode: null,
+        showUnitDetail: true,
+        showBillingDetail: true,
         createdAt: new Date('2026-01-15'),
       },
     ],
@@ -156,6 +158,8 @@ describe('InvoiceMapper', () => {
             packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             roundUpToPackaging: true,
             productCode: null,
+            showUnitDetail: true,
+            showBillingDetail: true,
             createdAt: new Date('2026-01-15'),
           },
         ],
@@ -219,6 +223,8 @@ describe('InvoiceMapper', () => {
             packagingQuantity: null,
             roundUpToPackaging: true,
             productCode: null,
+            showUnitDetail: true,
+            showBillingDetail: true,
             createdAt: new Date('2026-01-15'),
           },
           {
@@ -233,6 +239,8 @@ describe('InvoiceMapper', () => {
             packagingQuantity: null,
             roundUpToPackaging: true,
             productCode: null,
+            showUnitDetail: true,
+            showBillingDetail: true,
             createdAt: new Date('2026-01-15'),
           },
         ],
@@ -287,6 +295,62 @@ describe('InvoiceMapper', () => {
       const withTotals = mapper.toInvoiceWithTotals(invoice);
       const pdfData = mapper.toPdfData(invoice);
       expect(pdfData.totalInclVatCents).toBe(withTotals.totalInclVatCents);
+    });
+
+    it('renders the unit and billed-quantity note by default', () => {
+      const invoice = invoiceWithLines({
+        lines: [
+          {
+            id: 'line-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            description: 'Parquet',
+            unit: 'SQUARE_METER',
+            quantity: '23' as unknown as InvoiceWithLines['lines'][number]['quantity'],
+            unitPriceCents: 4500,
+            wasteSurcharge: 'NONE',
+            packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
+            roundUpToPackaging: true,
+            productCode: null,
+            showUnitDetail: true,
+            showBillingDetail: true,
+            createdAt: new Date('2026-01-15'),
+          },
+        ],
+      });
+      const result = mapper.toPdfData(invoice);
+      expect(result.lines[0].unit).toBe('m²');
+      expect(result.lines[0].billedQuantity).toBe('27');
+    });
+
+    // Phase 15: hiding a line's technical detail is purely a rendering
+    // choice — the priced total (still 27 m² billed, not the raw 23) must
+    // stay exactly the same regardless of what's shown.
+    it('blanks the unit and omits the billed-quantity note when Phase 15 toggles are off, without changing the priced total', () => {
+      const invoice = invoiceWithLines({
+        lines: [
+          {
+            id: 'line-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            description: 'Parquet',
+            unit: 'SQUARE_METER',
+            quantity: '23' as unknown as InvoiceWithLines['lines'][number]['quantity'],
+            unitPriceCents: 4500,
+            wasteSurcharge: 'NONE',
+            packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
+            roundUpToPackaging: true,
+            productCode: null,
+            showUnitDetail: false,
+            showBillingDetail: false,
+            createdAt: new Date('2026-01-15'),
+          },
+        ],
+      });
+      const result = mapper.toPdfData(invoice);
+      expect(result.lines[0].unit).toBe('');
+      expect(result.lines[0].billedQuantity).toBeUndefined();
+      expect(result.lines[0].totalCents).toBe(27 * 4500);
     });
   });
 
@@ -416,6 +480,121 @@ describe('InvoiceMapper', () => {
       // weight 3:1 split of 10000 -> 7500 / 2500
       expect(preview.lines[0].totalCents).toBe(45000 + 7500);
       expect(preview.lines[1].totalCents).toBe(4000 + 2500);
+    });
+  });
+
+  // Phase 15: the mandatory preview screen's HTML mirror reads this JSON
+  // shape directly (via POST /invoices/preview-data) instead of a PDF blob —
+  // it must expose exactly the same figures toPreviewPdfData renders, since
+  // the two are built from the same computation (see toPreviewPdfData's
+  // "compute once, reshape for PDF" comment).
+  describe('toPreviewInvoiceWithTotals', () => {
+    it('computes the same per-line and VAT totals as toPreviewPdfData, for equivalent input', () => {
+      const dto = createInvoiceDtoFixture();
+      const withTotals = mapper.toPreviewInvoiceWithTotals(dto, companyFixture());
+      const pdfData = mapper.toPreviewPdfData(dto, companyFixture());
+
+      expect(withTotals.lines[0].lineTotalExclVatCents).toBe(pdfData.lines[0].totalCents);
+      expect(withTotals.subtotalExclVatCents).toBe(pdfData.subtotalExclVatCents);
+      expect(withTotals.vatAmountCents).toBe(pdfData.vatAmountCents);
+      expect(withTotals.totalInclVatCents).toBe(pdfData.totalInclVatCents);
+    });
+
+    it('never sets a real id or number, since nothing is persisted', () => {
+      const preview = mapper.toPreviewInvoiceWithTotals(
+        createInvoiceDtoFixture(),
+        companyFixture(),
+      );
+      expect(preview.id).toBe('');
+      expect(preview.number).toBe('BROUILLON');
+    });
+
+    it('exposes the billed (post-packaging-rounding) quantity, matching computeLineTotal', () => {
+      const dto = createInvoiceDtoFixture({
+        lines: [
+          {
+            description: 'Parquet',
+            unit: 'SQUARE_METER',
+            quantity: 23,
+            unitPriceCents: 4500,
+            wasteSurcharge: 'NONE',
+            packagingQuantity: 9,
+            roundUpToPackaging: true,
+          },
+        ],
+      });
+      const preview = mapper.toPreviewInvoiceWithTotals(dto, companyFixture());
+      expect(preview.lines[0].quantity).toBe('23');
+      expect(preview.lines[0].billedQuantity).toBe('27');
+      expect(preview.lines[0].lineTotalExclVatCents).toBe(27 * 4500);
+    });
+
+    // Phase 15: the toggle state itself is round-tripped as-is (defaulting
+    // true when omitted) — toPreviewInvoiceWithTotals never interprets it,
+    // since hiding is a PdfService/toPreviewPdfData rendering concern only.
+    it('carries showUnitDetail/showBillingDetail through unchanged, defaulting to true', () => {
+      const dto = createInvoiceDtoFixture({
+        lines: [
+          {
+            description: 'Parquet',
+            unit: 'SQUARE_METER',
+            quantity: 10,
+            unitPriceCents: 4500,
+            wasteSurcharge: 'NONE',
+            showUnitDetail: false,
+          },
+          {
+            description: 'Plinthes',
+            unit: 'UNIT',
+            quantity: 5,
+            unitPriceCents: 800,
+            wasteSurcharge: 'NONE',
+          },
+        ],
+      });
+      const preview = mapper.toPreviewInvoiceWithTotals(dto, companyFixture());
+      expect(preview.lines[0].showUnitDetail).toBe(false);
+      expect(preview.lines[0].showBillingDetail).toBe(true);
+      expect(preview.lines[1].showUnitDetail).toBe(true);
+    });
+
+    it('folds a WEIGHTED REDISTRIBUTED service line into the referenced lines, exposing its distribution', () => {
+      const dto = createInvoiceDtoFixture({
+        lines: [
+          {
+            description: 'Parquet',
+            unit: 'SQUARE_METER',
+            quantity: 10,
+            unitPriceCents: 4500,
+            wasteSurcharge: 'NONE',
+          },
+          {
+            description: 'Plinthes',
+            unit: 'UNIT',
+            quantity: 5,
+            unitPriceCents: 800,
+            wasteSurcharge: 'NONE',
+          },
+        ],
+        serviceLines: [
+          {
+            name: 'Savoir-faire',
+            amountCents: 10000,
+            visibility: 'REDISTRIBUTED',
+            redistributionStrategy: RedistributionStrategy.WEIGHTED,
+            weights: [3, 1],
+          },
+        ],
+      });
+      const preview = mapper.toPreviewInvoiceWithTotals(dto, companyFixture());
+
+      // weight 3:1 split of 10000 -> 7500 / 2500
+      expect(preview.lines[0].lineTotalExclVatCents).toBe(45000 + 7500);
+      expect(preview.lines[1].lineTotalExclVatCents).toBe(4000 + 2500);
+      expect(preview.serviceLines[0].distribution).toEqual([
+        { invoiceLineId: '0', amountCents: 7500 },
+        { invoiceLineId: '1', amountCents: 2500 },
+      ]);
     });
   });
 

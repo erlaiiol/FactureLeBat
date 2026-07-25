@@ -74,4 +74,16 @@ export class CreateInvoiceLineDto {
   @IsString()
   @MaxLength(50)
   productCode?: string;
+
+  // Phase 15: per-line PDF rendering toggles, set from the mandatory
+  // preview screen — purely a display concern, never read by
+  // InvoiceCalculationService. Both default true so an invoice created
+  // without ever visiting the toggle UI renders exactly as before.
+  @IsOptional()
+  @IsBoolean()
+  showUnitDetail?: boolean = true;
+
+  @IsOptional()
+  @IsBoolean()
+  showBillingDetail?: boolean = true;
 }
