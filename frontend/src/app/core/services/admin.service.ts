@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AdminUserList, CreatePromoCodeRequest, PromoCode } from '../models/admin.model';
+import { SiteLegalInfo, UpdateSiteLegalInfoRequest } from '../models/site-legal.model';
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
@@ -40,5 +41,11 @@ export class AdminService {
 
   deletePromoCode(id: string): Observable<{ id: string }> {
     return this.http.delete<{ id: string }>(`${this.baseUrl}/promo-codes/${id}`);
+  }
+
+  // Read side is SiteLegalPublicService.get() (GET /site-legal is public) —
+  // this service only owns the admin-only write.
+  updateSiteLegalInfo(request: UpdateSiteLegalInfoRequest): Observable<SiteLegalInfo> {
+    return this.http.patch<SiteLegalInfo>(`${this.baseUrl}/site-legal`, request);
   }
 }

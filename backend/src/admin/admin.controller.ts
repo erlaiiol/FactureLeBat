@@ -4,6 +4,9 @@ import { PromoCodeModel } from '../../generated/prisma/models';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreatePromoCodeDto } from '../billing/dto/create-promo-code.dto';
 import { PromoCodeService } from '../billing/promo-code/promo-code.service';
+import { SiteLegalService } from '../site-legal/site-legal.service';
+import { UpdateSiteLegalInfoDto } from '../site-legal/dto/update-site-legal-info.dto';
+import { SiteLegalInfo } from '../site-legal/entities/site-legal-info.entity';
 import { AdminService } from './admin.service';
 import { GrantPremiumDto } from './dto/grant-premium.dto';
 import { SetPromoCodeActiveDto } from './dto/set-promo-code-active.dto';
@@ -20,6 +23,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly promoCodeService: PromoCodeService,
+    private readonly siteLegalService: SiteLegalService,
   ) {}
 
   @Get('users')
@@ -62,5 +66,14 @@ export class AdminController {
   async deletePromoCode(@Param('id') id: string): Promise<{ id: string }> {
     await this.promoCodeService.delete(id);
     return { id };
+  }
+
+  // Read side deliberately lives at the public GET /site-legal (mentions
+  // légales are, by law, public data) — the admin "Infos légales" form
+  // reads from there too instead of a duplicate GET here. Only the write
+  // side needs the admin role.
+  @Patch('site-legal')
+  updateSiteLegalInfo(@Body() dto: UpdateSiteLegalInfoDto): Promise<SiteLegalInfo> {
+    return this.siteLegalService.updateInfo(dto);
   }
 }

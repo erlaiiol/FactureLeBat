@@ -1,0 +1,46 @@
+<div class="mx-auto flex max-w-2xl flex-col gap-4 py-12">
+  <h1 class="font-heading text-2xl font-bold uppercase tracking-wide text-ink">Mentions légales</h1>
+
+  @if (!loading()) {
+    @if (isConfigured()) {
+      <div class="flex flex-col gap-3 text-ink">
+        <section>
+          <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+            Éditeur
+          </h2>
+          <p>{{ info()?.publisherName }}</p>
+          <p>{{ info()?.address }}</p>
+          <p>SIRET : {{ info()?.siret }}</p>
+          <p>
+            Contact :
+            <a [href]="'mailto:' + info()?.contactEmail" class="underline">{{
+              info()?.contactEmail
+            }}</a>
+          </p>
+        </section>
+        <section>
+          <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+            Directeur de la publication
+          </h2>
+          <p>{{ info()?.directorOfPublication }}</p>
+        </section>
+        <section>
+          <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+            Hébergement
+          </h2>
+          <p>{{ info()?.hostingProviderName }}</p>
+          <p>{{ info()?.hostingProviderAddress }}</p>
+        </section>
+      </div>
+    } @else {
+      <p
+        class="flex items-center gap-2 rounded-lg border border-warning-subtle-border bg-warning-subtle px-4 py-3 text-sm font-medium text-warning-subtle-fg"
+      >
+        <app-icon-warning [size]="16" />
+        Ces informations n'ont pas encore été renseignées par l'administrateur.
+      </p>
+    }
+  }
+
+  <a routerLink="/" class="font-medium text-ink underline">Retour à l'accueil</a>
+</div>

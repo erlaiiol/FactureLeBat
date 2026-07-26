@@ -19,6 +19,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { ProductModule } from './product/product.module';
 import { ReportsModule } from './reports/reports.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
+import { SiteLegalModule } from './site-legal/site-legal.module';
 import { SourcingModule } from './sourcing/sourcing.module';
 
 @Module({
@@ -37,6 +38,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     OnboardingModule,
     ProductModule,
     ServiceCatalogModule,
+    SiteLegalModule,
     SourcingModule,
     BillingModule,
     AdminModule,

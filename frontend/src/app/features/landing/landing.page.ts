@@ -15,7 +15,6 @@ import { RouterLink } from '@angular/router';
 export class LandingPage {
   private readonly title = inject(Title);
   private readonly meta = inject(Meta);
-  protected readonly currentYear = new Date().getFullYear();
 
   constructor() {
     this.title.setTitle('FactureLe — Devis et factures en un clic pour les artisans du bâtiment');

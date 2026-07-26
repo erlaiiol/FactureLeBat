@@ -7,21 +7,100 @@
     class="flex items-center gap-2 rounded-lg border border-warning-subtle-border bg-warning-subtle px-4 py-3 text-sm font-medium text-warning-subtle-fg"
   >
     <app-icon-warning [size]="16" />
-    Texte provisoire — à faire valider par un professionnel du droit avant mise en production.
+    Ce texte décrit fidèlement le fonctionnement réel du service, mais reste à faire valider par un
+    professionnel du droit avant mise en production.
   </p>
 
-  <div class="flex flex-col gap-3 text-ink">
-    <p>
-      FactureLe collecte les données nécessaires à la facturation : votre profil d'entreprise, vos
-      clients, vos factures. Ces données ne sont jamais vendues ni partagées à des tiers à des fins
-      commerciales.
-    </p>
-    <p>
-      Vous pouvez à tout moment demander la suppression de votre compte et de vos données depuis les
-      réglages de votre compte, sous réserve des obligations légales de conservation des documents
-      comptables (factures).
-    </p>
-    <p>L'inscription à la newsletter est optionnelle et peut être désactivée à tout moment.</p>
+  <div class="flex flex-col gap-4 text-ink">
+    <section class="flex flex-col gap-2">
+      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+        Données collectées
+      </h2>
+      <p>
+        FactureLe collecte les données nécessaires à la facturation : votre compte (email, mot de
+        passe haché), votre profil d'entreprise, vos clients, vos produits/prestations et vos
+        factures/devis. Ces données ne sont jamais vendues ni partagées à des tiers à des fins
+        commerciales.
+      </p>
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+        Sous-traitants et services tiers
+      </h2>
+      <p>
+        Certaines données transitent par des prestataires tiers, uniquement pour rendre le service :
+      </p>
+      <ul class="flex list-disc flex-col gap-1 pl-5">
+        <li><strong>Stripe</strong> — paiement et gestion de l'abonnement premium.</li>
+        <li>
+          <strong>Resend</strong> — envoi des emails techniques du compte (confirmation d'adresse,
+          réinitialisation de mot de passe).
+        </li>
+        <li>
+          <strong>Google</strong> — uniquement si vous choisissez de vous connecter via "Se
+          connecter avec Google" (authentification).
+        </li>
+        <li>
+          <strong>Groq</strong> — uniquement si vous utilisez volontairement l'assistant de
+          recherche de fournisseurs sur une facture : le nom du produit/prestation, la quantité et
+          la ville du client concerné sont envoyés pour effectuer la recherche.
+        </li>
+        <li>
+          Votre propre compte SMTP (si vous configurez l'envoi de factures par email) — vous
+          choisissez et contrôlez ce fournisseur ; FactureLe ne fait que s'y connecter pour envoyer
+          vos factures en votre nom.
+        </li>
+      </ul>
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">Cookies</h2>
+      <p>
+        FactureLe n'utilise aucun cookie publicitaire ou de mesure d'audience. Seuls des cookies
+        strictement nécessaires au fonctionnement du service sont déposés (session de connexion,
+        protection contre la falsification de requêtes), non soumis à consentement.
+      </p>
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+        Conservation et suppression
+      </h2>
+      <p>
+        Vous pouvez à tout moment demander la suppression de votre compte depuis les réglages de
+        votre compte. Cette suppression est immédiate et supprime l'intégralité de vos données, y
+        compris vos factures.
+      </p>
+      <p>
+        <strong>Point d'attention</strong> : la loi impose de conserver les documents comptables
+        (factures) pendant 10 ans. FactureLe ne fait aujourd'hui pas encore la distinction entre
+        "vos données personnelles" et "vos obligations comptables" lors d'une suppression de compte
+        — pensez à conserver une copie de vos factures avant de supprimer votre compte si cette
+        obligation vous concerne.
+      </p>
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+        Vos droits
+      </h2>
+      <p>
+        Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement et de
+        portabilité de vos données. L'accès et la rectification se font directement depuis
+        l'application ; pour toute autre demande, contactez-nous via les coordonnées indiquées sur
+        la page
+        <a routerLink="/mentions-legales" class="underline">Mentions légales</a>. Vous pouvez
+        également introduire une réclamation auprès de la CNIL.
+      </p>
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h2 class="font-heading text-sm font-bold uppercase tracking-wide text-ink-soft">
+        Newsletter
+      </h2>
+      <p>L'inscription à la newsletter est optionnelle et peut être désactivée à tout moment.</p>
+    </section>
   </div>
 
   <a routerLink="/inscription" class="font-medium text-ink underline">Retour à l'inscription</a>

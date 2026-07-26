@@ -2,10 +2,10 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { IconWarningComponent } from '../../../shared/components/icon-warning.component';
 
-// PLACEHOLDER CONTENT — not real legal text. Must be reviewed/replaced by
-// the artisan or a legal professional before this app goes to production
-// (see docs/roadmap.md Phase 13). Only exists so the registration form's
-// mandatory consent checkbox has something real to link to.
+// Phase 20 audited this page's claims against the app's actual behavior
+// (third-party processors, cookies, retention/deletion) — content is
+// accurate as of that audit, but still needs a professional legal review
+// before production (see docs/roadmap.md Phase 20).
 @Component({
   selector: 'app-confidentialite-page',
   changeDetection: ChangeDetectionStrategy.OnPush,

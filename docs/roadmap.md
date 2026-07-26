@@ -1189,12 +1189,12 @@ Add a persistent, "classic" footer across the whole app — today a footer only 
 
 ## Features
 
-- [ ] Shared `FooterComponent`, mounted once in the app shell (`app.html`) and reused by the landing page instead of its own separate footer markup
-- [ ] New "Mentions légales" page/route (publisher identity, hosting provider, editor)
-- [ ] Footer links: Mentions légales, CGU (existing `/cgu`), Politique de confidentialité (existing `/confidentialite`), contact
-- [ ] Compliance audit: read `/confidentialite`'s actual claims (data retention, right-to-erasure, cookies, named third-party processors) and cross-check each one against what the code actually does — including every external processor the app already uses (Groq, Stripe, Resend, Google OAuth) is genuinely disclosed there
-- [ ] Any gap the audit finds gets fixed, or explicitly logged as a known limitation (same "state it, don't silently build around it" convention as Phase 13's retention-vs-erasure note)
-- [ ] FactureLe's own legal identity (name/SIRET/address/etc.) lives in exactly one place in code — editable without touching every page that cites it
+- [x] Shared `FooterComponent`, mounted once in the app shell (`app.html`) and reused by the landing page instead of its own separate footer markup
+- [x] New "Mentions légales" page/route (publisher identity, hosting provider, editor)
+- [x] Footer links: Mentions légales, CGU (existing `/cgu`), Politique de confidentialité (existing `/confidentialite`), contact
+- [x] Compliance audit: read `/confidentialite`'s actual claims (data retention, right-to-erasure, cookies, named third-party processors) and cross-check each one against what the code actually does — including every external processor the app already uses (Groq, Stripe, Resend, Google OAuth) is genuinely disclosed there
+- [x] Any gap the audit finds gets fixed, or explicitly logged as a known limitation (same "state it, don't silently build around it" convention as Phase 13's retention-vs-erasure note)
+- [x] FactureLe's own legal identity (name/SIRET/address/etc.) lives in exactly one place in code — editable without touching every page that cites it
 
 ## Non-goals
 
@@ -1204,6 +1204,19 @@ Add a persistent, "classic" footer across the whole app — today a footer only 
 ## Notes
 
 - Builds on Phase 13.3 (landing page footer/visual identity) and Phase 13 (CGU/confidentialité pages, RGPD deletion flow) — this phase's audit checks the app against mechanisms those phases already built.
+
+## Decided with the user before implementation
+
+- **The legal identity data is DB-backed and admin-editable, not a static config/env-var set.** The roadmap draft above left this open; decided explicitly before building: a new `SiteLegalInfo` singleton table, edited from a new `/admin/infos-legales` page, so the publisher name/SIRET/address/hosting provider/director-of-publication/contact email can change without a deploy — consistent with the rest of the admin dashboard (users, promo codes) being the place an admin manages cross-tenant, non-per-company data.
+- **The compliance audit is a one-time, documented pass, not a persistent admin view.** No new UI lists "declared processors and their status" — the audit's findings are fixed directly in `/confidentialite`'s copy and recorded below; revisit only if a future phase specifically wants ongoing compliance monitoring.
+
+## Implementation notes
+
+- **`SiteLegalInfo` is a single fixed-id row (`id: "singleton"`), not a real per-admin or per-deployment table.** `SiteLegalRepository` always reads/upserts `where: { id: SITE_LEGAL_INFO_ID }` — same "one row, fixed id" shape as a settings table, simpler than a `findFirst`-based singleton convention. Every field defaults to `""` on a fresh deploy: nothing is seeded with placeholder text, since fabricating a SIRET or address would be actively wrong. The admin "Infos légales" page must be filled in with real values before launch — `/mentions-legales` shows an explicit "not yet configured" notice instead of blank/fake fields until then.
+- **`GET /site-legal` is `@Public()` and shared by three readers**, rather than a separate admin-only read endpoint: the public `/mentions-legales` page, `FooterComponent`'s contact-email link, and the admin edit form's own prefill. Mentions légales are public information by law regardless of who's reading them, so there's no real read-side access control to add — only the `PATCH /admin/site-legal` write (folded into the existing `AdminController`, `@Roles(ADMIN)` already covers it at the class level) needed a guard.
+- **The footer is deliberately styled with the app's normal neutral tokens ("Chantier calibré"), not "Atelier sobre"**, even though it replaces the landing page's own footer. `docs/design-system.md` scopes "Atelier sobre" to four sanctioned, *light-only* spots (PDF header, tour, "Mon activité", landing hero) — a footer now mounted in `app.html` also renders inside the authenticated app shell in dark mode, which "Atelier sobre" was never built to support. `landing.page.html`'s own `<footer>` block (and the now-unused `currentYear` field on `LandingPage`) were removed in favor of the shared one.
+- **Compliance audit findings, fixed directly in `/confidentialite`:** the page was previously silent about every third-party processor (Stripe, Resend, Groq, Google OAuth, an artisan's own SMTP relay), said nothing about cookies, and didn't mention the 10-year invoice-retention-vs-RGPD-erasure tension already known from Phase 13. All four are now stated plainly — processors named with what they receive and when (e.g. Groq only sees a product name/quantity/customer city, only when the artisan explicitly clicks "Trouver des fournisseurs"), cookies confirmed as strictly-necessary-only (no consent banner needed, confirming this phase's non-goal), and the retention/erasure gap disclosed as a real limitation of self-service account deletion today (it deletes invoices too — an artisan under an active legal retention obligation needs to keep their own copy first) rather than silently building a partial fix into this phase.
+- **CGU's own placeholder text was left untouched** — the roadmap scoped the audit to `/confidentialite`'s claims specifically (data retention, erasure, cookies, processors); CGU makes no claims that the app's actual behavior could contradict.
 
 ---
 

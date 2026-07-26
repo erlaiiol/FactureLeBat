@@ -875,3 +875,27 @@ model PromoCodeRedemption {
   @@unique([promoCodeId, companyId])
   @@index([companyId])
 }
+
+// Phase 20: FactureLe's own legal identity as the SaaS publisher (mentions
+// légales) — distinct from Company above, which is per-tenant data an
+// artisan enters for their own invoices and can't be reused here. Single
+// row, fixed id (SITE_LEGAL_INFO_ID in site-legal.repository.ts), upserted
+// from the admin dashboard so this is editable in exactly one place without
+// a migration or hunting across pages for hardcoded copies. Every field
+// starts empty on a fresh deploy — deliberately not seeded with placeholder
+// text, since fabricating a SIRET/address would be actively wrong; the
+// admin "Infos légales" page must be filled in with real values before
+// launch.
+model SiteLegalInfo {
+  id String @id @default("singleton")
+
+  publisherName          String @default("")
+  siret                  String @default("")
+  address                String @default("")
+  directorOfPublication  String @default("")
+  hostingProviderName    String @default("")
+  hostingProviderAddress String @default("")
+  contactEmail           String @default("")
+
+  updatedAt DateTime @updatedAt
+}

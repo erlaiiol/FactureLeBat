@@ -24,6 +24,7 @@ import { AuthService } from './core/services/auth.service';
 import { BillingService } from './core/services/billing.service';
 import { ThemeService } from './core/services/theme.service';
 import { ToastService } from './core/services/toast.service';
+import { FooterComponent } from './shared/components/footer.component';
 import { PaywallModalComponent } from './shared/components/paywall-modal.component';
 import { ToastContainerComponent } from './shared/components/toast-container.component';
 import { TourAnchorDirective } from './shared/tour/tour-anchor.directive';
@@ -56,6 +57,7 @@ const DATA_SECTION_ROUTES = ['/clients', '/produits', '/prestations'];
     PaywallModalComponent,
     ToastContainerComponent,
     TourAnchorDirective,
+    FooterComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',

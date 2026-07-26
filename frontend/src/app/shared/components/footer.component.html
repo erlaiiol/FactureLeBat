@@ -1,0 +1,13 @@
+<footer
+  class="mt-8 flex flex-col items-center justify-between gap-2 border-t border-line px-4 py-6 text-sm text-ink-soft sm:flex-row sm:px-8"
+>
+  <span>© {{ currentYear }} FactureLe</span>
+  <div class="flex flex-wrap justify-center gap-4">
+    <a routerLink="/mentions-legales" class="underline">Mentions légales</a>
+    <a routerLink="/cgu" class="underline">CGU</a>
+    <a routerLink="/confidentialite" class="underline">Confidentialité</a>
+    <a [href]="contactEmail() ? 'mailto:' + contactEmail() : '/mentions-legales'" class="underline"
+      >Contact</a
+    >
+  </div>
+</footer>

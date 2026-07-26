@@ -164,6 +164,11 @@ const protectedRoutes: Routes = [
         loadComponent: () =>
           import('./features/admin/admin-promo-codes.page').then((m) => m.AdminPromoCodesPage),
       },
+      {
+        path: 'infos-legales',
+        loadComponent: () =>
+          import('./features/admin/admin-site-legal.page').then((m) => m.AdminSiteLegalPage),
+      },
     ],
   },
 ];
@@ -219,6 +224,13 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/legal/confidentialite/confidentialite.page').then(
         (m) => m.ConfidentialitePage,
+      ),
+  },
+  {
+    path: 'mentions-legales',
+    loadComponent: () =>
+      import('./features/legal/mentions-legales/mentions-legales.page').then(
+        (m) => m.MentionsLegalesPage,
       ),
   },
   { path: '', canActivate: [authGuard], children: protectedRoutes },

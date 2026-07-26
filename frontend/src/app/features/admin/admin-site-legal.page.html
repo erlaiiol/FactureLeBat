@@ -1,0 +1,99 @@
+<div class="flex flex-col gap-6">
+  <div class="flex items-center justify-between gap-2">
+    <h1 class="font-heading text-2xl font-bold tracking-wide text-ink uppercase">
+      Administration — Infos légales
+    </h1>
+    <div class="flex gap-2">
+      <a
+        routerLink="/admin"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+      >
+        Utilisateurs
+      </a>
+      <a
+        routerLink="/admin/codes-promo"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+      >
+        Codes promo
+      </a>
+    </div>
+  </div>
+
+  <p class="text-sm text-ink-soft">
+    Identité légale de FactureLe en tant qu'éditeur du service (mentions légales), affichée sur
+    <a routerLink="/mentions-legales" class="underline">/mentions-legales</a> — distincte du profil
+    d'entreprise de chaque artisan.
+  </p>
+
+  @if (!loading()) {
+    <form [formGroup]="form" (ngSubmit)="save()" class="flex flex-col gap-4">
+      <label class="flex flex-col gap-1 text-sm text-ink-soft">
+        Raison sociale / nom de l'éditeur
+        <input
+          formControlName="publisherName"
+          type="text"
+          class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm text-ink-soft">
+        SIRET
+        <input
+          formControlName="siret"
+          type="text"
+          class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm text-ink-soft">
+        Adresse du siège
+        <input
+          formControlName="address"
+          type="text"
+          class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm text-ink-soft">
+        Directeur de la publication
+        <input
+          formControlName="directorOfPublication"
+          type="text"
+          class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+        />
+        <app-field-hint
+          text="La personne responsable du contenu publié sur le site, au sens de la loi pour la confiance dans l'économie numérique."
+        />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm text-ink-soft">
+        Nom de l'hébergeur
+        <input
+          formControlName="hostingProviderName"
+          type="text"
+          class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm text-ink-soft">
+        Adresse de l'hébergeur
+        <input
+          formControlName="hostingProviderAddress"
+          type="text"
+          class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm text-ink-soft">
+        Email de contact public
+        <input
+          formControlName="contactEmail"
+          type="email"
+          class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+        />
+      </label>
+
+      <app-big-button type="submit" [disabled]="saving()">Enregistrer</app-big-button>
+    </form>
+  }
+</div>
