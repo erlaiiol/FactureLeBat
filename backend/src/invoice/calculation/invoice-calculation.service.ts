@@ -77,6 +77,23 @@ export class InvoiceCalculationService {
     return { neededQuantity, billedQuantity, lineTotalExclVatCents };
   }
 
+  // A REDISTRIBUTED service line folds its share directly into a line's
+  // lineTotalExclVatCents (see InvoiceMapper) without touching the line's
+  // own persisted unitPriceCents — so whenever that happened, the printed
+  // "prix unitaire" must be recomputed from the adjusted total, or
+  // unitPrice x billedQuantity would silently stop matching the printed
+  // line total. Division (rather than re-deriving from weights) keeps this
+  // correct for every line regardless of how many service lines targeted it.
+  computeEffectiveUnitPriceCents(totalCents: number, billedQuantity: Prisma.Decimal): number {
+    if (billedQuantity.isZero()) {
+      return 0;
+    }
+    return new Prisma.Decimal(totalCents)
+      .div(billedQuantity)
+      .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP)
+      .toNumber();
+  }
+
   // Split out so callers that already computed each line's total once (see
   // InvoiceMapper) can get the VAT/total math without re-running
   // computeLineTotal for every line a second time.

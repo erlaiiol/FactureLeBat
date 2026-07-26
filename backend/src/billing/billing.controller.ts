@@ -13,6 +13,7 @@ import type { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import { AlreadySubscribedError } from './already-subscribed.error';
 import { BillingService } from './billing.service';
 import { BillingStatus } from './entities/billing-status.entity';
 import { RedeemPromoCodeDto } from './dto/redeem-promo-code.dto';
@@ -98,6 +99,11 @@ function mapStripeError(error: unknown): unknown {
   }
   if (error instanceof NoBillingCustomerError) {
     return new BadRequestException('Aucun abonnement à gérer pour le moment.');
+  }
+  if (error instanceof AlreadySubscribedError) {
+    return new BadRequestException(
+      'Vous avez déjà un abonnement — utilisez "Gérer mon abonnement" pour le modifier.',
+    );
   }
   return error;
 }

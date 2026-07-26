@@ -54,19 +54,26 @@ export class StripeClientService {
     successUrl: string;
     cancelUrl: string;
     companyId: string;
+    idempotencyKey: string;
   }): Promise<Stripe.Checkout.Session> {
     const client = this.requireClient();
     if (!this.priceId) {
       throw new StripeUnavailableError('STRIPE_PRICE_ID is not configured');
     }
-    return client.checkout.sessions.create({
-      mode: 'subscription',
-      customer: params.customerId,
-      line_items: [{ price: this.priceId, quantity: 1 }],
-      success_url: params.successUrl,
-      cancel_url: params.cancelUrl,
-      subscription_data: { metadata: { companyId: params.companyId } },
-    });
+    return client.checkout.sessions.create(
+      {
+        mode: 'subscription',
+        customer: params.customerId,
+        line_items: [{ price: this.priceId, quantity: 1 }],
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+        subscription_data: { metadata: { companyId: params.companyId } },
+      },
+      // Same key -> Stripe returns the original Session instead of minting a
+      // second one, so a retried/duplicated request can never turn into a
+      // second subscription (see BillingService.buildCheckoutIdempotencyKey).
+      { idempotencyKey: params.idempotencyKey },
+    );
   }
 
   async createPortalSession(

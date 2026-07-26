@@ -5,6 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { BillingService } from '../../core/services/billing.service';
+import { PlatformService } from '../../core/services/platform.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
@@ -34,6 +35,7 @@ export class SubscribePage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
+  protected readonly platformService = inject(PlatformService);
 
   protected readonly loading = signal(true);
   protected readonly showSkeleton = delayedSkeleton(this.loading);

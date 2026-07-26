@@ -35,6 +35,17 @@ describe('computePopoverPosition', () => {
     const position = computePopoverPosition(target, POPOVER, VIEWPORT);
     expect(position.left).toBeLessThanOrEqual(VIEWPORT.width - POPOVER.width - 12);
   });
+
+  it('falls back to the corner when a target too tall to clear covers the popover wherever clamping puts it', () => {
+    // A target spanning almost the full viewport height (e.g. a flyout
+    // panel) leaves no "above" or "below" placement with room to clear it —
+    // clamping alone would land the popover right back on top of it, the
+    // exact bug 'add-line'/'service-margin' in tour-definitions.ts hardcode
+    // popoverPlacement: 'corner' to avoid.
+    const target = { top: 20, left: 300, width: 320, height: 740 };
+    const position = computePopoverPosition(target, POPOVER, VIEWPORT);
+    expect(position).toEqual(computeCornerPosition(POPOVER, VIEWPORT));
+  });
 });
 
 describe('computeCornerPosition', () => {

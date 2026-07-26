@@ -59,12 +59,15 @@
     </app-big-button>
   </form>
 
-  <a
-    [href]="googleLoginUrl"
-    class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
-  >
-    Continuer avec Google
-  </a>
+  @if (!platformService.isIosApp()) {
+    <!-- Apple 4.8: see login.page.html's identical note. -->
+    <a
+      [href]="googleLoginUrl"
+      class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
+    >
+      Continuer avec Google
+    </a>
+  }
 
   <p class="text-center text-sm text-ink-soft">
     Déjà un compte ?

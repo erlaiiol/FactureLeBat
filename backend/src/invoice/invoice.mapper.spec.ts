@@ -86,6 +86,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     dueDate: null,
     paidAt: null,
     lastReminderAt: null,
+    lastPushReminderAt: null,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     entryMode: 'GUIDED',
@@ -272,6 +273,64 @@ describe('InvoiceMapper', () => {
       // The invoice total increases by exactly the service amount, same
       // invariant as the VISIBLE case above.
       expect(result.subtotalExclVatCents).toBe(baseSubtotal + 10000);
+    });
+
+    it('recomputes the displayed unit price when a REDISTRIBUTED+hidden service line inflates a line total, so unitPrice x quantity keeps matching the printed line total', () => {
+      // Exact repro of the reported bug: "salzer" at 4€/m² x 25 (=100€), plus
+      // a "marge 30%" service redistributed invisibly onto that single line
+      // (+30€). The line total correctly becomes 130€, but before this fix
+      // the printed unit price stayed at 4,00€ (4 x 25 = 100 ≠ 130).
+      const invoice = invoiceWithLines({
+        lines: [
+          {
+            id: 'line-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            description: 'Salzer',
+            unit: 'SQUARE_METER',
+            quantity: '25' as unknown as InvoiceWithLines['lines'][number]['quantity'],
+            unitPriceCents: 400,
+            wasteSurcharge: 'NONE',
+            packagingQuantity: null,
+            roundUpToPackaging: true,
+            productCode: null,
+            showUnitDetail: true,
+            showBillingDetail: true,
+            activityCategory: null,
+            createdAt: new Date('2026-01-15'),
+          },
+        ],
+        serviceLines: [
+          {
+            id: 'svc-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            serviceId: null,
+            name: 'Marge 30%',
+            description: null,
+            amountCents: 3000,
+            visibility: 'REDISTRIBUTED',
+            activityCategory: null,
+            createdAt: new Date('2026-01-15'),
+            weights: [
+              { id: 'w-1', invoiceServiceLineId: 'svc-1', invoiceLineId: 'line-1', weight: 1 },
+            ],
+          },
+        ],
+      });
+
+      const result = mapper.toInvoiceWithTotals(invoice);
+
+      expect(result.lines[0].unitPriceCents).toBe(400); // raw price, unchanged
+      expect(result.lines[0].lineTotalExclVatCents).toBe(13000);
+      expect(result.lines[0].displayUnitPriceCents).toBe(520); // 4€ x 1.3
+      expect(result.lines[0].displayUnitPriceCents * Number(result.lines[0].billedQuantity)).toBe(
+        result.lines[0].lineTotalExclVatCents,
+      );
+
+      const pdf = mapper.toPdfData(invoice);
+      expect(pdf.lines[0].unitPriceCents).toBe(520);
+      expect(pdf.lines[0].totalCents).toBe(13000);
     });
   });
 
@@ -599,6 +658,36 @@ describe('InvoiceMapper', () => {
         { invoiceLineId: '0', amountCents: 7500 },
         { invoiceLineId: '1', amountCents: 2500 },
       ]);
+    });
+
+    it('recomputes the displayed unit price on the draft preview too, matching the persisted-path fix', () => {
+      const dto = createInvoiceDtoFixture({
+        lines: [
+          {
+            description: 'Salzer',
+            unit: 'SQUARE_METER',
+            quantity: 25,
+            unitPriceCents: 400,
+            wasteSurcharge: 'NONE',
+          },
+        ],
+        serviceLines: [
+          {
+            name: 'Marge 30%',
+            amountCents: 3000,
+            visibility: 'REDISTRIBUTED',
+            redistributionStrategy: RedistributionStrategy.EQUAL,
+          },
+        ],
+      });
+      const preview = mapper.toPreviewInvoiceWithTotals(dto, companyFixture());
+
+      expect(preview.lines[0].unitPriceCents).toBe(400);
+      expect(preview.lines[0].lineTotalExclVatCents).toBe(13000);
+      expect(preview.lines[0].displayUnitPriceCents).toBe(520);
+
+      const pdf = mapper.toPreviewPdfData(dto, companyFixture());
+      expect(pdf.lines[0].unitPriceCents).toBe(520);
     });
   });
 

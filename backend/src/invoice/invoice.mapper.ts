@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
 import {
   DocumentType,
   InvoiceEntryMode,
@@ -45,7 +46,35 @@ function mapDtoCustomerFields(dto: CreateInvoiceDto) {
 // calculation calls) rather than response shaping.
 @Injectable()
 export class InvoiceMapper {
+  private static readonly logger = new Logger(InvoiceMapper.name);
+
   constructor(private readonly calculationService: InvoiceCalculationService) {}
+
+  // Defensive safety net, GUIDED mode only (manual mode's totals are
+  // deliberately freehand — see toManualInvoiceWithTotals, which never
+  // calls this). Cross-checks the subtotal against an independently summed
+  // total: every line's own priced amount plus every service line's amount,
+  // regardless of visibility/redistribution. The two must always agree —
+  // this is exactly the invariant a REDISTRIBUTED+hidden service line broke
+  // once already (its share was folded into a line's total without the sum
+  // staying in sync). Logged rather than thrown: a document must never be
+  // blocked from being sent because of a bug in this check itself.
+  private logIfTotalsDoNotReconcile(params: {
+    context: string;
+    rawLineTotalsCents: number[];
+    allServiceLineAmountsCents: number[];
+    subtotalExclVatCents: number;
+  }): void {
+    const expectedSubtotalExclVatCents =
+      params.rawLineTotalsCents.reduce((sum, cents) => sum + cents, 0) +
+      params.allServiceLineAmountsCents.reduce((sum, cents) => sum + cents, 0);
+    if (expectedSubtotalExclVatCents !== params.subtotalExclVatCents) {
+      InvoiceMapper.logger.warn(
+        `Invoice totals do not reconcile for ${params.context}: sum of lines + services = ` +
+          `${expectedSubtotalExclVatCents}, but computed subtotal = ${params.subtotalExclVatCents}`,
+      );
+    }
+  }
 
   // Totals are never persisted: they are recomputed from the invoice lines
   // (and, since Phase 5, the service lines) every time an invoice is read.
@@ -57,8 +86,14 @@ export class InvoiceMapper {
     }
 
     // Base product/material line totals, before any service redistribution.
+    // rawLineTotalsById is kept alongside the mutable lineTotalsById purely
+    // to detect, per line, whether a REDISTRIBUTED service line touched it —
+    // that's what decides whether displayUnitPriceCents below needs
+    // recomputing (see InvoiceCalculationService.computeEffectiveUnitPriceCents).
     const lineTotalsById = new Map<string, number>();
+    const rawLineTotalsById = new Map<string, number>();
     const billedQuantityById = new Map<string, string>();
+    const billedQuantityDecimalById = new Map<string, Prisma.Decimal>();
     for (const line of invoice.lines) {
       const { lineTotalExclVatCents, billedQuantity } = this.calculationService.computeLineTotal({
         unit: line.unit,
@@ -69,7 +104,9 @@ export class InvoiceMapper {
         roundUpToPackaging: line.roundUpToPackaging,
       });
       lineTotalsById.set(line.id, lineTotalExclVatCents);
+      rawLineTotalsById.set(line.id, lineTotalExclVatCents);
       billedQuantityById.set(line.id, billedQuantity.toString());
+      billedQuantityDecimalById.set(line.id, billedQuantity);
     }
 
     let visibleServiceAmountCents = 0;
@@ -121,26 +158,45 @@ export class InvoiceMapper {
       },
     );
 
-    const lines: InvoiceLineWithTotal[] = invoice.lines.map((line) => ({
-      id: line.id,
-      position: line.position,
-      description: line.description,
-      unit: line.unit,
-      quantity: line.quantity.toString(),
-      unitPriceCents: line.unitPriceCents,
-      wasteSurcharge: line.wasteSurcharge,
-      billedQuantity: billedQuantityById.get(line.id)!,
-      packagingQuantity: line.packagingQuantity?.toString() ?? null,
-      roundUpToPackaging: line.roundUpToPackaging,
-      productCode: line.productCode,
-      showUnitDetail: line.showUnitDetail,
-      showBillingDetail: line.showBillingDetail,
-      activityCategory: line.activityCategory,
-      lineTotalExclVatCents: lineTotalsById.get(line.id)!,
-    }));
+    const lines: InvoiceLineWithTotal[] = invoice.lines.map((line) => {
+      const lineTotalExclVatCents = lineTotalsById.get(line.id)!;
+      const displayUnitPriceCents =
+        lineTotalExclVatCents === rawLineTotalsById.get(line.id)
+          ? line.unitPriceCents
+          : this.calculationService.computeEffectiveUnitPriceCents(
+              lineTotalExclVatCents,
+              billedQuantityDecimalById.get(line.id)!,
+            );
+      return {
+        id: line.id,
+        position: line.position,
+        description: line.description,
+        unit: line.unit,
+        quantity: line.quantity.toString(),
+        unitPriceCents: line.unitPriceCents,
+        displayUnitPriceCents,
+        wasteSurcharge: line.wasteSurcharge,
+        billedQuantity: billedQuantityById.get(line.id)!,
+        packagingQuantity: line.packagingQuantity?.toString() ?? null,
+        roundUpToPackaging: line.roundUpToPackaging,
+        productCode: line.productCode,
+        showUnitDetail: line.showUnitDetail,
+        showBillingDetail: line.showBillingDetail,
+        activityCategory: line.activityCategory,
+        lineTotalExclVatCents,
+      };
+    });
 
     const subtotalExclVatCents =
       lines.reduce((sum, line) => sum + line.lineTotalExclVatCents, 0) + visibleServiceAmountCents;
+    this.logIfTotalsDoNotReconcile({
+      context: `invoice ${invoice.id}`,
+      rawLineTotalsCents: [...rawLineTotalsById.values()],
+      allServiceLineAmountsCents: invoice.serviceLines.map(
+        (serviceLine) => serviceLine.amountCents,
+      ),
+      subtotalExclVatCents,
+    });
     const vatAmountCents = this.calculationService.computeVatAmountCents(
       subtotalExclVatCents,
       invoice.vatApplicable,
@@ -295,7 +351,7 @@ export class InvoiceMapper {
           line.showBillingDetail && line.billedQuantity !== line.quantity
             ? line.billedQuantity
             : undefined,
-        unitPriceCents: line.unitPriceCents,
+        unitPriceCents: line.displayUnitPriceCents,
         totalCents: line.lineTotalExclVatCents,
       })),
       // Only VISIBLE service lines get their own line on the PDF —
@@ -396,6 +452,10 @@ export class InvoiceMapper {
       }),
     );
     const lineTotalsCents = lineCalculations.map((c) => c.lineTotalExclVatCents);
+    // Snapshot before the redistribution loop below mutates lineTotalsCents
+    // in place — same "detect whether a REDISTRIBUTED service line touched
+    // this line" purpose as rawLineTotalsById in toInvoiceWithTotals.
+    const rawLineTotalsCents = [...lineTotalsCents];
 
     let visibleServiceAmountCents = 0;
     const serviceLines: InvoiceServiceLineWithAmounts[] = [];
@@ -437,6 +497,14 @@ export class InvoiceMapper {
 
     const lines: InvoiceLineWithTotal[] = dto.lines!.map((line, index) => {
       const quantity = line.quantity.toString();
+      const lineTotalExclVatCents = lineTotalsCents[index];
+      const displayUnitPriceCents =
+        lineTotalExclVatCents === rawLineTotalsCents[index]
+          ? line.unitPriceCents
+          : this.calculationService.computeEffectiveUnitPriceCents(
+              lineTotalExclVatCents,
+              lineCalculations[index].billedQuantity,
+            );
       return {
         id: String(index),
         position: index,
@@ -444,6 +512,7 @@ export class InvoiceMapper {
         unit: line.unit,
         quantity,
         unitPriceCents: line.unitPriceCents,
+        displayUnitPriceCents,
         wasteSurcharge: line.wasteSurcharge,
         billedQuantity: lineCalculations[index].billedQuantity.toString(),
         packagingQuantity: line.packagingQuantity?.toString() ?? null,
@@ -452,12 +521,20 @@ export class InvoiceMapper {
         showUnitDetail: line.showUnitDetail ?? true,
         showBillingDetail: line.showBillingDetail ?? true,
         activityCategory: line.activityCategory ?? null,
-        lineTotalExclVatCents: lineTotalsCents[index],
+        lineTotalExclVatCents,
       };
     });
 
     const subtotalExclVatCents =
       lineTotalsCents.reduce((sum, cents) => sum + cents, 0) + visibleServiceAmountCents;
+    this.logIfTotalsDoNotReconcile({
+      context: 'invoice preview',
+      rawLineTotalsCents,
+      allServiceLineAmountsCents: (dto.serviceLines ?? []).map(
+        (serviceLine) => serviceLine.amountCents,
+      ),
+      subtotalExclVatCents,
+    });
     const vatAmountCents = this.calculationService.computeVatAmountCents(
       subtotalExclVatCents,
       vatApplicable,
@@ -643,7 +720,7 @@ export class InvoiceMapper {
           line.showBillingDetail && line.billedQuantity !== line.quantity
             ? line.billedQuantity
             : undefined,
-        unitPriceCents: line.unitPriceCents,
+        unitPriceCents: line.displayUnitPriceCents,
         totalCents: line.lineTotalExclVatCents,
       })),
       serviceLines: withTotals.serviceLines

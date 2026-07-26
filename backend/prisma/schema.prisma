@@ -322,6 +322,7 @@ model User {
 
   refreshTokens RefreshToken[]
   authTokens    AuthToken[]
+  pushDevices   PushDevice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -380,6 +381,36 @@ model AuthToken {
   consumedAt DateTime?
 
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum PushPlatform {
+  IOS
+  ANDROID
+}
+
+// One registered mobile-app install for push notifications (Phase 22).
+// token is the FCM registration token — both platforms route through FCM
+// (iOS bridges via APNs internally through Firebase), so there is only
+// ever one token shape to store here. @unique on token, not a composite
+// (userId, token) key: the same physical device can only ever hold one
+// live token, and re-registering (reinstall, token refresh, or a different
+// artisan logging in on the same phone) must overwrite the existing row,
+// never accumulate stale duplicates for a device nobody uses anymore.
+model PushDevice {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  platform PushPlatform
+  token    String       @unique
+
+  lastActiveAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }
@@ -479,11 +510,25 @@ model Invoice {
   // recently" convention as sentAt/sentToEmail, not a history table.
   lastReminderAt DateTime?
 
+  // Bumped by ReminderCronService's daily digest push (Phase 22) — kept
+  // separate from lastReminderAt above on purpose: that field means "we
+  // emailed the *client*" (artisan-triggered "renvoyer un mail"), while this
+  // one means "the *artisan* was already push-notified about this invoice
+  // today" (system-triggered). Conflating them would change lastReminderAt's
+  // existing meaning for the one call site that already reads it. Only
+  // guards against double-notifying if the cron is ever manually re-run
+  // within the same day.
+  lastPushReminderAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([customerId])
+  // Cross-tenant sweep for ReminderCronService (Phase 22) — unlike every
+  // other index on this table, this one isn't scoped to a single company:
+  // the daily job scans NON_PAYEE invoices by dueDate across all artisans.
+  @@index([status, dueDate])
 }
 
 // A freehand extra client field on a manual-mode invoice (e.g. "SIRET" ->

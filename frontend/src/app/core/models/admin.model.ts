@@ -40,3 +40,21 @@ export interface CreatePromoCodeRequest {
   maxRedemptions?: number;
   expiresAt?: string;
 }
+
+// Mirrors the backend's PushDeviceSummary (push-notification/entities/push-device.entity.ts).
+export interface PushDeviceSummary {
+  id: string;
+  platform: 'IOS' | 'ANDROID';
+  token: string;
+  lastActiveAt: string;
+  createdAt: string;
+  userEmail: string;
+  companyName: string;
+}
+
+export interface PushDeviceList {
+  devices: PushDeviceSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

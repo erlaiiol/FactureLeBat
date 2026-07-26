@@ -235,6 +235,35 @@ describe('TourService', () => {
     expect(service.stepIndex()).toBe(2);
   });
 
+  it("continues the tour, not abandons it, when a real navigation lands on a step's route plus an extra query string", async () => {
+    const service = createService();
+    await harness.navigateByUrl('/factures/nouvelle');
+    expect(service.activeTourId()).toBe('invoice-creation');
+    seedCustomers([{ id: 'c1', name: 'Client Test' }]); // hasCustomers branch
+
+    registerAnchor('invoice-mode-choice');
+    service.next();
+    await flushAsync();
+    expect(service.stepIndex()).toBe(1);
+
+    // The real "Mode rapide" card (InvoiceCreateModeChoicePage) carries
+    // `[queryParams]="{ type: documentType() }"`, so clicking it for real —
+    // the tour's own suggested interaction — lands here with `?type=...`
+    // attached. tour-definitions.ts declares this step's route without a
+    // query string; before the fix, findForwardStepIndexForRoute's exact
+    // string match failed on this and silently abandoned the tour right as
+    // it reached the client-choice page.
+    registerAnchor('invoice-customer-picker');
+    await harness.navigateByUrl('/factures/nouvelle/rapide/client?type=FACTURE');
+    // advanceToStep recurses past both noCustomers-only steps (2, 3) before
+    // landing on 4 — several more microtask hops than navigateByUrl's own
+    // flush covers, same reasoning as the showIf-skip test above.
+    await flushAsync();
+
+    expect(service.activeTourId()).toBe('invoice-creation');
+    expect(service.stepIndex()).toBe(4);
+  });
+
   it('quietly stops without immediately relaunching itself, when a real navigation lands on an unplanned route the tour never scripted a step for', async () => {
     const service = createService();
     await harness.navigateByUrl('/produits');
@@ -332,5 +361,21 @@ describe('TourService', () => {
     await Promise.resolve();
 
     expect(service.currentStep()?.id).toBe('service-margin');
+  });
+
+  it('branches the add-line step to product-pick, not straight to product-quantity, when the product button is the one clicked', async () => {
+    const service = createService();
+
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    service.stepIndex.set(5); // 'add-line'
+    // Mirrors invoice-product-flyout in invoice-create-lines-step.page.html:
+    // the flyout panel itself, not the quantity field it doesn't have yet.
+    registerAnchor('invoice-product-flyout');
+
+    service.next('invoice-add-product-button');
+    await Promise.resolve();
+
+    expect(service.currentStep()?.id).toBe('product-pick');
   });
 });

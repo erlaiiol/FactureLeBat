@@ -10,11 +10,18 @@
     aria-live="polite"
   >
     <svg class="absolute inset-0 h-full w-full">
+      <!-- pointer-events-none while advancing(): a step transition can open
+           real UI (see 'product-pick' in tour-definitions.ts) before its own
+           anchor exists yet — until it does, this path is still punched
+           around the PREVIOUS step's (now stale) target rect, and left
+           pointer-events-auto it would block clicks on whatever just
+           appeared instead of letting them through. -->
       <path
         fill-rule="evenodd"
         [attr.d]="spotlightPathD()"
         fill="rgba(15, 23, 42, 0.65)"
-        class="pointer-events-auto"
+        [class.pointer-events-none]="tourService.advancing()"
+        [class.pointer-events-auto]="!tourService.advancing()"
       />
     </svg>
 

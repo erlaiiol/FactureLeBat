@@ -12,10 +12,49 @@
 
 encode gzip
 
+# Phase 21 hardening. CSP is deliberately hand-fitted to what this app
+# actually loads, confirmed by reading the frontend rather than assumed:
+#   - script-src 'self' only: no CDN scripts, no Stripe.js/Google Identity
+#     script (checkout/OAuth are both full-page redirects via
+#     window.location/<a href>, never an embedded SDK — see
+#     billing/subscribe.page.ts, auth.service.ts#googleLoginUrl), no inline
+#     <script> in index.html, no JIT eval in an AOT prod build.
+#   - style-src needs 'unsafe-inline': the tour overlay (tour-position.util),
+#     manual-invoice column/row resize (interactjs), and the line-marking
+#     badge all set inline `style.*` via JS at runtime — a legitimate,
+#     first-party pattern this app relies on, not third-party content. CSS
+#     injection alone can't execute script in a modern browser, so this is a
+#     much smaller concession than allowing 'unsafe-inline' on script-src
+#     would be.
+#   - frame-src 'self' blob:: the invoice PDF preview renders into an
+#     <iframe [src]> pointed at a client-generated blob: URL
+#     (pdf-preview-modal.component.html) — nothing external is ever framed.
+#   - frame-ancestors 'none' + X-Frame-Options DENY: this app is never meant
+#     to be embedded by anyone, belt-and-suspenders for older browsers that
+#     don't honor frame-ancestors.
+#   - No upgrade-insecure-requests: would force every subresource to https
+#     even when Caddy is serving the local `:80` smoke-test fallback (no TLS
+#     listener there), breaking `make prod` locally. HSTS already covers the
+#     real-domain case once a cert exists.
+#
+# This CSP was verified against a real headless-browser run of the built
+# prod image (Playwright, console `securitypolicyviolation` events), not
+# just reasoned about — that run caught a genuine break: Angular's
+# production build (via `beasties`) by default rewrites the main stylesheet
+# `<link>` into `media="print" onload="this.media='all'"` to defer non-
+# critical CSS — an inline event-handler attribute that `script-src 'self'`
+# blocks outright, which would have shipped as an unstyled page. Fixed by
+# setting `optimization.styles.inlineCritical: false` in
+# `frontend/angular.json`'s production config — don't re-enable it without
+# re-verifying against this CSP.
 header {
 	Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	X-Content-Type-Options "nosniff"
 	Referrer-Policy "strict-origin-when-cross-origin"
+	X-Frame-Options "DENY"
+	Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+	-Server
 }
 
 reverse_proxy frontend:80

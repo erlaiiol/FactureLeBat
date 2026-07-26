@@ -2,7 +2,12 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AdminUserList, CreatePromoCodeRequest, PromoCode } from '../models/admin.model';
+import {
+  AdminUserList,
+  CreatePromoCodeRequest,
+  PromoCode,
+  PushDeviceList,
+} from '../models/admin.model';
 import { SiteLegalInfo, UpdateSiteLegalInfoRequest } from '../models/site-legal.model';
 
 @Injectable({ providedIn: 'root' })
@@ -47,5 +52,17 @@ export class AdminService {
   // this service only owns the admin-only write.
   updateSiteLegalInfo(request: UpdateSiteLegalInfoRequest): Observable<SiteLegalInfo> {
     return this.http.patch<SiteLegalInfo>(`${this.baseUrl}/site-legal`, request);
+  }
+
+  listPushDevices(search: string | undefined, page: number): Observable<PushDeviceList> {
+    let params = new HttpParams().set('page', page);
+    if (search) {
+      params = params.set('search', search);
+    }
+    return this.http.get<PushDeviceList>(`${this.baseUrl}/push/devices`, { params });
+  }
+
+  sendTestPush(deviceId: string): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/push/devices/${deviceId}/test`, {});
   }
 }

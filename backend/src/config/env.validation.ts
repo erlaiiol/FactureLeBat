@@ -201,6 +201,17 @@ class EnvironmentVariables {
   @IsString()
   STRIPE_PRICE_ID?: string;
 
+  // Phase 22 push notifications (FCM, both iOS and Android — see
+  // push-notification/push-sender.service.ts for why iOS goes through FCM
+  // too rather than a separate direct-APNs credential set). Base64-encoded
+  // Firebase service-account JSON. Optional like GROQ_API_KEY: the app
+  // boots fine without it, PushSenderService just reports the feature
+  // unavailable (503) until it's set.
+  // Generate one with: base64 -i service-account.json | tr -d '\n'
+  @IsOptional()
+  @IsString()
+  FIREBASE_SERVICE_ACCOUNT_JSON?: string;
+
   // Phase 14 admin bootstrap: on every boot, AdminSeedService promotes the
   // User with this email (if one exists) to ADMIN — see
   // admin/admin-seed.service.ts. Deliberately not a self-service signup

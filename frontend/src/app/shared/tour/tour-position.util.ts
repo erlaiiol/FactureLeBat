@@ -24,6 +24,15 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function rectsOverlap(a: TourPoint & TourSize, b: TourRect): boolean {
+  return (
+    a.left < b.left + b.width &&
+    a.left + a.width > b.left &&
+    a.top < b.top + b.height &&
+    a.top + a.height > b.top
+  );
+}
+
 // Pure positioning math for the tour popover, kept dependency-free so it's
 // unit-testable without mounting any component (same spirit as
 // backend/src/invoice/redistribution.util.ts). A null target (an anchor-less
@@ -52,10 +61,24 @@ export function computePopoverPosition(
 
   const idealLeft = target.left + target.width / 2 - popover.width / 2;
 
-  return {
+  const position = {
     top: clamp(top, MARGIN, Math.max(MARGIN, viewport.height - popover.height - MARGIN)),
     left: clamp(idealLeft, MARGIN, Math.max(MARGIN, viewport.width - popover.width - MARGIN)),
   };
+
+  // Clamping to the viewport can undo the whole point of the above/below
+  // flip above — a target near the viewport edge, or simply taller than the
+  // popover has room to clear, ends up with its "positioned" popover
+  // clamped right back on top of it. That's the exact bug 'add-line' and
+  // 'service-margin' in tour-definitions.ts work around by hardcoding
+  // `popoverPlacement: 'corner'` — falling back to the same corner here
+  // whenever the generic math produces an overlap covers every OTHER step
+  // that could hit this without needing its own hardcoded escape hatch.
+  if (rectsOverlap({ ...position, ...popover }, target)) {
+    return computeCornerPosition(popover, viewport);
+  }
+
+  return position;
 }
 
 // For a step whose anchor is a small button that opens something much

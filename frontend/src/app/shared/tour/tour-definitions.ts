@@ -117,7 +117,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         altAnchorIds: ['invoice-add-service-button'],
         advanceOn: 'click',
         nextByAnchor: {
-          'invoice-add-product-button': 'product-quantity',
+          'invoice-add-product-button': 'product-pick',
           'invoice-add-service-button': 'service-margin',
         },
         // The default anchor-relative placement only knows about the small
@@ -129,12 +129,30 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         body: 'Le bouton orange ouvre votre catalogue de produits, le bleu celui de vos prestations (main-d’œuvre, forfait, déplacement…). Cliquez sur celui qu’il vous faut : vous pourrez toujours utiliser l’autre juste après.',
       },
       {
+        // Mirrors 'service-margin' below: the click that opens the flyout
+        // only reveals a catalog picker, not yet the quantity field —
+        // spotlighting the *button* for this moment (like the old single
+        // 'product-quantity' step used to) left the actual flyout (its
+        // catalog list, its "+ Nouveau produit" button) sitting outside the
+        // spotlight hole and behind the dimmed, click-blocking backdrop,
+        // dead-ending the tour right where it asked the artisan to click.
+        // Spotlighting the whole flyout panel (see invoice-product-flyout in
+        // invoice-create-lines-step.page.html) keeps every row in it
+        // reachable.
+        id: 'product-pick',
+        anchorId: 'invoice-product-flyout',
+        next: 'product-quantity',
+        popoverPlacement: 'corner',
+        title: 'Choisissez un produit',
+        body: 'Cliquez sur un produit déjà enregistré pour l’ajouter à la facture, ou choisissez « + Nouveau produit » pour en créer un. Le catalogue reste ouvert : vous pouvez en ajouter plusieurs à la suite.',
+      },
+      {
         id: 'product-quantity',
         anchorId: 'invoice-line-quantity',
         advanceOn: 'input',
         next: 'product-card',
         title: 'Indiquez le métrage du chantier',
-        body: 'Choisissez un produit déjà enregistré, ou créez-en un nouveau — puis renseignez la quantité réellement nécessaire (m², mètres, unités… selon le produit). Le prix total se calcule automatiquement.',
+        body: 'Renseignez la quantité réellement nécessaire (m², mètres, unités… selon le produit). Le prix total se calcule automatiquement.',
       },
       {
         id: 'product-card',

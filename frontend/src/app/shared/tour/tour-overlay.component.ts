@@ -17,6 +17,26 @@ import { TourService } from './tour.service';
 // few px of slack is invisible on a spotlight overlay like this one.
 const POPOVER_ESTIMATE: TourSize = { width: 320, height: 220 };
 
+// Padding around the real target rect, and a floor under its own width/
+// height — a small icon-only button (or an anchor whose rect briefly
+// measures as near-zero mid-transition) would otherwise get a highlight
+// ring too tight to read as "this thing" at a glance. Erring generous here
+// is deliberate: a spotlight a few px too big just looks like breathing
+// room, while one that's too small (or clipped) reads as flat-out wrong.
+const SPOTLIGHT_PADDING = 14;
+const SPOTLIGHT_MIN_SIZE = 48;
+
+// How long after a step change to keep re-measuring the target every frame.
+// scrollIntoView({behavior:'smooth'}) and CSS transitions (e.g. the
+// lines-step flyouts sliding open) both keep moving the target well after
+// the first synchronous measurement, and neither reliably fires a 'scroll'
+// event on window (a container scrolling internally never does — see
+// onViewportChange) — polling for a bounded window is what converges the
+// spotlight on the real, settled position regardless of which of those
+// caused the movement, instead of freezing on a stale rect that can end up
+// anywhere, including off-screen.
+const SETTLE_DURATION_MS = 600;
+
 // Phase 8 onboarding tour: the overlay itself. Renders only while
 // TourService has an active step — an SVG mask "spotlights" the current
 // anchor (or just dims the screen for a centered welcome/completion step)
@@ -34,6 +54,10 @@ export class TourOverlayComponent {
   // bindAdvanceListener) — re-bound on every step change so a stale listener
   // from a previous step can never fire next() twice.
   private advanceListenerCleanup: (() => void) | null = null;
+  // The current settle-loop's rAF handle (see keepMeasuringWhileSettling) —
+  // cancelled and restarted on every step change so two overlapping loops
+  // can never fight over targetRect.
+  private settleRafHandle: number | null = null;
 
   protected readonly targetRect = signal<DOMRect | null>(null);
 
@@ -59,10 +83,10 @@ export class TourOverlayComponent {
     if (!rect) {
       return outer;
     }
-    const x = rect.left - 8;
-    const y = rect.top - 8;
-    const width = rect.width + 16;
-    const height = rect.height + 16;
+    const width = Math.max(rect.width, SPOTLIGHT_MIN_SIZE) + SPOTLIGHT_PADDING * 2;
+    const height = Math.max(rect.height, SPOTLIGHT_MIN_SIZE) + SPOTLIGHT_PADDING * 2;
+    const x = rect.left + rect.width / 2 - width / 2;
+    const y = rect.top + rect.height / 2 - height / 2;
     const inner = `M${x},${y} H${x + width} V${y + height} H${x} Z`;
     return `${outer} ${inner}`;
   });
@@ -102,7 +126,12 @@ export class TourOverlayComponent {
       queueMicrotask(() => this.stepAnimating.set(true));
     });
 
-    this.destroyRef.onDestroy(() => this.advanceListenerCleanup?.());
+    this.destroyRef.onDestroy(() => {
+      this.advanceListenerCleanup?.();
+      if (this.settleRafHandle !== null) {
+        cancelAnimationFrame(this.settleRafHandle);
+      }
+    });
   }
 
   @HostListener('window:resize')
@@ -121,6 +150,23 @@ export class TourOverlayComponent {
     const element = anchorId ? this.anchorRegistry.get(anchorId)?.nativeElement : undefined;
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     this.recomputeTargetRect();
+    this.keepMeasuringWhileSettling();
+  }
+
+  // Re-measures every frame for SETTLE_DURATION_MS — see the constant's own
+  // comment for why neither the initial measurement nor the window scroll/
+  // resize listeners alone are enough to converge on the anchor's real,
+  // settled position.
+  private keepMeasuringWhileSettling(): void {
+    if (this.settleRafHandle !== null) {
+      cancelAnimationFrame(this.settleRafHandle);
+    }
+    const deadline = performance.now() + SETTLE_DURATION_MS;
+    const tick = (): void => {
+      this.recomputeTargetRect();
+      this.settleRafHandle = performance.now() < deadline ? requestAnimationFrame(tick) : null;
+    };
+    this.settleRafHandle = requestAnimationFrame(tick);
   }
 
   // "The tour doesn't respond when I click the highlighted thing" — a step

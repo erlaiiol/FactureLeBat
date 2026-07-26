@@ -73,6 +73,23 @@ make deploy
 
 `prisma migrate deploy` is forward-only — it never runs a "down" migration. If the version you're rolling back *to* predates a schema change the version you're rolling back *from* introduced, rolling back the code alone leaves the database schema ahead of what that code expects. That situation needs a hand-written down-migration before `make deploy`; it isn't something `entrypoint.sh` can safely automate. In practice this should be rare — check whether the commit(s) being reverted touched `backend/prisma/migrations/` before assuming a plain rollback is safe.
 
+## TLS: why there's no certbot, and how renewal is actually verified
+
+HTTPS is entirely owned by the `caddy` service (see [Topology](#topology) above) — issuance and renewal are automatic and built into Caddy itself, driven purely by `DOMAIN` in `infra/.env`. **There is deliberately no certbot container**: it would either fight Caddy for the port 80 ACME challenge or sit completely unused, since `infra/docker-compose.prod.yml` already documents Caddy as the single owner of public exposure/TLS. Don't reintroduce one — if this gets re-proposed, it's re-litigating a decision already made in Phase 21.
+
+**Security headers** (`infra/Caddyfile`): HSTS, a CSP fitted to exactly what this app's frontend loads (no CDN scripts, self-hosted fonts, Stripe/Google are full-page redirects not embedded SDKs, the PDF preview's `<iframe>` points at a client-side `blob:` URL), `X-Frame-Options`, and a `Permissions-Policy` disabling browser features the app never uses. The Caddyfile itself documents the reasoning for each CSP directive inline — read it before changing the CSP, since a directive that looks safe to tighten further (e.g. dropping `style-src`'s `'unsafe-inline'`) can silently break the tour overlay, manual-invoice column/row resize, or the line-marking badge, all of which set inline `style.*` via JS at runtime.
+
+**Verifying renewal actually works, not just "Caddy claims to auto-renew":**
+
+- Manual check any time: `echo | openssl s_client -servername <domain> -connect <domain>:443 2>/dev/null | openssl x509 -noout -enddate` — prints the live certificate's expiry. Caddy renews roughly a month before expiry, so a healthy deployment should never show less than ~30 days remaining except briefly around a renewal.
+- `docker compose -f infra/docker-compose.prod.yml logs caddy | grep -i certificate` shows Caddy's own issuance/renewal log lines.
+- **Certificate-expiry monitoring**: `infra/check-cert-expiry.sh` runs the same `openssl` check as above and emails an alert (via the Resend account already configured for Phase 17.5's system mail — `SYSTEM_SMTP_PASSWORD` doubles as a Resend API key, no new secret needed) if the live cert has fewer than `CERT_EXPIRY_WARN_DAYS` (default 14) days left, or if no certificate could be retrieved at all. Set `OPS_ALERT_EMAIL` in `infra/.env` to receive alerts; leave it unset to still get the check's finding in the cron log with no email. Schedule it on the VPS (not inside a container — it's a one-off ops probe, not part of the app):
+  ```bash
+  # crontab -e, on the VPS
+  0 8 * * * cd /path/to/FactureLe && sh infra/check-cert-expiry.sh >> /var/log/facturele-cert-check.log 2>&1
+  ```
+- The `:80`-no-domain fallback (`infra/.env.example`'s `DOMAIN=:80` default, for local `make prod` smoke-testing — see below) can't reach production by accident: `infra/deploy.sh` refuses to run if `infra/.env`'s `DOMAIN` is empty or still `:80`.
+
 ## Backups
 
 ```bash
@@ -118,9 +135,27 @@ make logs-errors-prod   # tail -f the error-only log
 
 For direct filesystem access without going through `docker compose exec` (e.g. to `scp` a log off the VPS), find the volume's real path with `docker volume inspect facturele-prod_backend_logs --format '{{ .Mountpoint }}'`. See [logging.md](logging.md) for the log format, levels, and how request ids let you trace one request across the whole log.
 
+## Mobile app builds (iOS/Android, Phase 22)
+
+Unlike everything else in this doc, building the mobile app happens on a developer's own Mac, not on the VPS — Xcode/Android Studio aren't part of the deploy pipeline, and the mobile shell has no server-side component of its own (it's the same Angular build, wrapped).
+
+```bash
+make ios       # builds the prod Angular bundle, cap syncs, opens Xcode
+make android   # same, opens Android Studio
+```
+
+Both need `frontend/ios/`/`frontend/android/` (already committed) and, for push notifications to actually work, a real Firebase project's config files dropped in by hand — `google-services.json` in `frontend/android/app/`, and the Firebase iOS SDK added as a Swift Package dependency in Xcode (see [architecture.md](architecture.md#mobile-app-shell-frontendios-frontendandroid-phase-22) and [roadmap.md](roadmap.md) Phase 22's implementation notes). Pass `LOCAL_HOST=<your-lan-ip>` to either target to point the app at a backend running on your own machine instead of the real domain, for simulator/emulator testing:
+
+```bash
+make ios LOCAL_HOST=192.168.1.23
+```
+
+Store submission itself (developer accounts, App Store Connect/Play Console listings, review) is out of scope for what's built so far — see [roadmap.md](roadmap.md) Phase 22's non-goals and its store-compliance audit notes for what's already handled in code versus what's still an operational checklist item before actually submitting.
+
 ## Secrets
 
-- `infra/.env` is gitignored and never committed — it's the only place `POSTGRES_PASSWORD`, `GROQ_API_KEY`, and `APP_ENCRYPTION_KEY` live in prod.
+- `infra/.env` is gitignored and never committed — it's the only place `POSTGRES_PASSWORD`, `GROQ_API_KEY`, `APP_ENCRYPTION_KEY`, and `FIREBASE_SERVICE_ACCOUNT_JSON` live in prod.
+- `FIREBASE_SERVICE_ACCOUNT_JSON` (Phase 22, base64-encoded Firebase service-account JSON) has the same "app boots fine without it" posture as `GROQ_API_KEY`: unset, `PushSenderService` just reports push notifications unavailable (503 on the admin test-send route; the daily reminder cron logs a warning and skips silently) until it's configured.
 - `APP_ENCRYPTION_KEY` (Phase 12, SMTP password encryption) has no rotation path today: rotating it strands any already-encrypted SMTP password stored under the old key, since nothing decrypts-and-re-encrypts on rotation. If it ever needs to change, artisans with mail settings configured will need to re-enter their SMTP password afterward.
 - Never publish `postgres` to the host in the prod Compose file — the whole point of routing everything through `caddy` is that it's the only thing an attacker on the internet can reach at all.
 

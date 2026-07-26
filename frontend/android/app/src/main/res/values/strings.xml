@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FactureLe</string>
+    <string name="title_activity_main">FactureLe</string>
+    <string name="package_name">fr.facturele.app</string>
+    <string name="custom_url_scheme">fr.facturele.app</string>
+</resources>

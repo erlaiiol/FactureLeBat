@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Phase 22 local dev only: add
+    android:networkSecurityConfig="@xml/network_security_config" as an
+    <application> attribute below (together with
+    res/xml/network_security_config.xml's own LAN IP) to allow plain-http
+    traffic to CAPACITOR_LOCAL_HOST for emulator testing against a local
+    backend. Never enable for a release build — an XML comment can't sit
+    inside a tag's own attribute list, which is why this is a to-add
+    instruction rather than a commented-out attribute. -->
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Phase 22: default channel/icon for a push notification that
+        arrives while the app is backgrounded — @capacitor/push-notifications
+        + @capacitor-community/fcm read these directly, no custom
+        FirebaseMessagingService subclass needed. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher"
+        />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="default"
+        />
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Mandatory runtime permission on API 33+ for
+    PushNotifications.requestPermissions() to have anything to grant. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+</manifest>

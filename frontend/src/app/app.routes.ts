@@ -69,6 +69,12 @@ const protectedRoutes: Routes = [
   },
   {
     path: 'factures',
+    // The 5-column Kanban (see InvoiceBoardPage's Phase 16 comment) needs
+    // more room than the app shell's max-w-3xl form/list cap — under it,
+    // "Payées" and "Annulées" (the two rightmost columns) sat permanently
+    // off-screen with no visible scroll affordance. The page supplies its
+    // own (wider) container/padding, same opt-out as the landing page.
+    data: { fullBleed: true },
     loadComponent: () =>
       import('./features/invoice-board/invoice-board.page').then((m) => m.InvoiceBoardPage),
   },
@@ -168,6 +174,11 @@ const protectedRoutes: Routes = [
         path: 'infos-legales',
         loadComponent: () =>
           import('./features/admin/admin-site-legal.page').then((m) => m.AdminSiteLegalPage),
+      },
+      {
+        path: 'appareils',
+        loadComponent: () =>
+          import('./features/admin/admin-push-devices.page').then((m) => m.AdminPushDevicesPage),
       },
     ],
   },

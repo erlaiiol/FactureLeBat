@@ -5,6 +5,19 @@
     <title>FactureLe</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Phase 22: the web deployment gets its CSP from infra/Caddyfile's
+    response header (see docs/deployment.md), but a Capacitor app's WebView
+    serves this HTML from the local bundle, which never passes through
+    Caddy — no header CSP applies there at all otherwise. A meta-tag CSP is
+    the one form that's enforced regardless of how the HTML was delivered,
+    so this is a second, portable copy of the same policy, not a
+    replacement for the header (header-only directives like
+    frame-ancestors/Permissions-Policy can't be expressed here and stay
+    server-side only). Keep the two in sync if either ever changes. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />

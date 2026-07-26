@@ -1,3 +1,4 @@
+import { Prisma } from '../../../generated/prisma/client';
 import { InvoiceCalculationService, LineCalculationInput } from './invoice-calculation.service';
 
 function areaLine(overrides: Partial<LineCalculationInput> = {}): LineCalculationInput {
@@ -185,6 +186,24 @@ describe('InvoiceCalculationService', () => {
 
     it('throws if weights sum to zero, since that means an upstream invariant was violated', () => {
       expect(() => service.computeWeightedSplit({ amountCents: 100, weights: [0, 0] })).toThrow();
+    });
+  });
+
+  describe('computeEffectiveUnitPriceCents', () => {
+    it('divides an inflated total back down to a per-unit price that reconciles exactly', () => {
+      // 100€ base + 30% margin folded in = 130€ over 25 units -> 5,20€/unit.
+      const result = service.computeEffectiveUnitPriceCents(13000, new Prisma.Decimal(25));
+      expect(result).toBe(520);
+      expect(result * 25).toBe(13000);
+    });
+
+    it('rounds to the nearest cent when the division is not exact', () => {
+      const result = service.computeEffectiveUnitPriceCents(13005, new Prisma.Decimal(25));
+      expect(result).toBe(520); // 520.2 rounds down to 520
+    });
+
+    it('returns zero rather than dividing by zero for a zero billed quantity', () => {
+      expect(service.computeEffectiveUnitPriceCents(1000, new Prisma.Decimal(0))).toBe(0);
     });
   });
 });

@@ -1,185 +1,222 @@
-<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">Mes factures</h1>
+<div class="mx-auto max-w-7xl p-4">
+  <h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
+    Mes factures
+  </h1>
 
-<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-  <input
-    [value]="search()"
-    (input)="onSearchInput($any($event.target).value)"
-    type="text"
-    placeholder="Rechercher un client…"
-    class="rounded-lg border border-line px-4 py-3 text-lg"
-  />
-  <input
-    [value]="dateFrom()"
-    (input)="onDateFromInput($any($event.target).value)"
-    type="date"
-    aria-label="Du"
-    class="rounded-lg border border-line px-4 py-3 text-ink"
-  />
-  <input
-    [value]="dateTo()"
-    (input)="onDateToInput($any($event.target).value)"
-    type="date"
-    aria-label="Au"
-    class="rounded-lg border border-line px-4 py-3 text-ink"
-  />
-  <button
-    type="button"
-    (click)="toggleUnpaidOnly()"
-    [class]="'rounded-full px-4 py-2 text-sm font-semibold transition ' + unpaidToggleClasses()"
-  >
-    Non payées uniquement
-  </button>
-</div>
+  <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+    <input
+      [value]="search()"
+      (input)="onSearchInput($any($event.target).value)"
+      type="text"
+      placeholder="Rechercher un client…"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+    <input
+      [value]="dateFrom()"
+      (input)="onDateFromInput($any($event.target).value)"
+      type="date"
+      aria-label="Du"
+      class="rounded-lg border border-line px-4 py-3 text-ink"
+    />
+    <input
+      [value]="dateTo()"
+      (input)="onDateToInput($any($event.target).value)"
+      type="date"
+      aria-label="Au"
+      class="rounded-lg border border-line px-4 py-3 text-ink"
+    />
+    @if (isNarrow()) {
+      <!-- Phase 22: below `lg`, this replaces "Non payées uniquement" —
+      narrow viewports start on a priorité view (see mobileView below)
+      rather than a reordered-but-still-5-column row. -->
+      <button
+        type="button"
+        (click)="toggleMobileView()"
+        class="rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink-soft transition hover:bg-secondary-subtle"
+      >
+        {{ mobileView() === 'priorite' ? 'Tout voir' : 'Vue priorité' }}
+      </button>
+    } @else {
+      <button
+        type="button"
+        (click)="toggleUnpaidOnly()"
+        [class]="'rounded-full px-4 py-2 text-sm font-semibold transition ' + unpaidToggleClasses()"
+      >
+        Non payées uniquement
+      </button>
+    }
+  </div>
 
-@if (loading()) {
-  @if (showSkeleton()) {
-    <div class="flex gap-4 overflow-x-auto pb-4">
-      @for (column of [0, 1, 2, 3, 4]; track column) {
-        <section class="flex w-72 shrink-0 flex-col gap-3">
-          <div class="anim-skeleton h-4 w-24 rounded"></div>
-          <div class="anim-skeleton h-28 rounded-xl"></div>
-          <div class="anim-skeleton h-28 rounded-xl"></div>
+  @if (loading()) {
+    @if (showSkeleton()) {
+      <div
+        class="flex gap-4 overflow-x-auto pb-4"
+        [class.snap-x]="isNarrow()"
+        [class.snap-mandatory]="isNarrow()"
+      >
+        @for (column of [0, 1, 2, 3, 4]; track column) {
+          <section
+            class="flex w-72 shrink-0 snap-center flex-col gap-3 lg:w-0 lg:min-w-0 lg:flex-1 lg:shrink"
+          >
+            <div class="anim-skeleton h-4 w-24 rounded"></div>
+            <div class="anim-skeleton h-28 rounded-xl"></div>
+            <div class="anim-skeleton h-28 rounded-xl"></div>
+          </section>
+        }
+      </div>
+    }
+  } @else {
+    @if (errorMessage(); as message) {
+      <p class="mb-4 font-medium text-danger">{{ message }}</p>
+    }
+
+    <div
+      class="anim-preview-in flex gap-4 overflow-x-auto pb-4"
+      [class.snap-x]="isNarrow()"
+      [class.snap-mandatory]="isNarrow()"
+    >
+      @if (!isNarrow() || mobileView() === 'tout') {
+        <section
+          class="flex w-72 shrink-0 snap-center flex-col gap-3 lg:w-0 lg:min-w-0 lg:flex-1 lg:shrink"
+          [style.order]="devisOrder()"
+        >
+          <h2
+            class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+          >
+            Devis
+            <app-badge variant="info" tone="subtle">{{ devis().length }}</app-badge>
+          </h2>
+          @for (item of devis(); track item.id) {
+            <app-invoice-board-card
+              [invoice]="item"
+              column="DEVIS"
+              [converting]="convertingDevisId() === item.id"
+              [sharing]="sharingInvoiceId() === item.id"
+              (convertToFacture)="convertDevis(item)"
+              (share)="onShare(item)"
+            />
+          }
+          @if (devis().length === 0) {
+            <p class="text-sm text-ink-soft">Aucun devis.</p>
+          }
+        </section>
+      }
+
+      <section
+        class="flex w-72 shrink-0 snap-center flex-col gap-3 lg:w-0 lg:min-w-0 lg:flex-1 lg:shrink"
+        data-invoice-column="NON_PAYEE"
+        [style.order]="nonPayeeOrder()"
+      >
+        <h2
+          class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+        >
+          Non payées
+          <app-badge variant="warning" tone="subtle">{{ nonPayees().length }}</app-badge>
+        </h2>
+        @for (item of nonPayees(); track item.id) {
+          <app-invoice-board-card
+            [invoice]="item"
+            column="NON_PAYEE"
+            [sharing]="sharingInvoiceId() === item.id"
+            (markPaid)="markPaid(item)"
+            (cancel)="cancelInvoice(item)"
+            (share)="onShare(item)"
+            (dropped)="onCardDropped(item, $event)"
+          />
+        }
+        @if (nonPayees().length === 0) {
+          <p class="text-sm text-ink-soft">Rien à facturer.</p>
+        }
+      </section>
+
+      <section
+        class="flex w-72 shrink-0 snap-center flex-col gap-3 lg:w-0 lg:min-w-0 lg:flex-1 lg:shrink"
+        [style.order]="enRetardOrder()"
+      >
+        <h2
+          class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+        >
+          En retard
+          <app-badge variant="danger" tone="subtle">{{ enRetard().length }}</app-badge>
+        </h2>
+        @for (item of enRetard(); track item.id) {
+          <app-invoice-board-card
+            [invoice]="item"
+            column="EN_RETARD"
+            [sharing]="sharingInvoiceId() === item.id"
+            (markPaid)="markPaid(item)"
+            (cancel)="cancelInvoice(item)"
+            (share)="onShare(item)"
+            (dropped)="onCardDropped(item, $event)"
+          />
+        }
+        @if (enRetard().length === 0) {
+          <p class="text-sm text-ink-soft">Aucun retard.</p>
+        }
+      </section>
+
+      @if (!isNarrow() || mobileView() === 'tout') {
+        <section
+          class="flex w-72 shrink-0 snap-center flex-col gap-3 lg:w-0 lg:min-w-0 lg:flex-1 lg:shrink"
+          data-invoice-column="PAYEE"
+          [style.order]="payeeOrder"
+        >
+          <h2
+            class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+          >
+            Payées
+            <app-badge variant="success" tone="subtle">{{ payees().length }}</app-badge>
+          </h2>
+          @for (item of payees(); track item.id) {
+            <app-invoice-board-card
+              [invoice]="item"
+              column="PAYEE"
+              [sharing]="sharingInvoiceId() === item.id"
+              (share)="onShare(item)"
+              (dropped)="onCardDropped(item, $event)"
+            />
+          }
+          @if (payees().length === 0) {
+            <p class="text-sm text-ink-soft">Aucune facture payée.</p>
+          }
+        </section>
+
+        <section
+          class="flex w-72 shrink-0 snap-center flex-col gap-3 lg:w-0 lg:min-w-0 lg:flex-1 lg:shrink"
+          data-invoice-column="ANNULEE"
+          [style.order]="annuleeOrder"
+        >
+          <h2
+            class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
+          >
+            Annulées
+            <app-badge variant="secondary" tone="subtle">{{ annulees().length }}</app-badge>
+          </h2>
+          @for (item of annulees(); track item.id) {
+            <app-invoice-board-card
+              [invoice]="item"
+              column="ANNULEE"
+              (restore)="moveToNonPayee(item)"
+              (dropped)="onCardDropped(item, $event)"
+            />
+          }
+          @if (annulees().length === 0) {
+            <p class="text-sm text-ink-soft">Aucune facture annulée.</p>
+          }
         </section>
       }
     </div>
   }
-} @else {
-  @if (errorMessage(); as message) {
-    <p class="mb-4 font-medium text-danger">{{ message }}</p>
-  }
 
-  <div class="anim-preview-in flex gap-4 overflow-x-auto pb-4">
-    <section class="flex w-72 shrink-0 flex-col gap-3" [style.order]="devisOrder()">
-      <h2
-        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
-      >
-        Devis
-        <app-badge variant="info" tone="subtle">{{ devis().length }}</app-badge>
-      </h2>
-      @for (item of devis(); track item.id) {
-        <app-invoice-board-card
-          [invoice]="item"
-          column="DEVIS"
-          [converting]="convertingDevisId() === item.id"
-          [sharing]="sharingInvoiceId() === item.id"
-          (convertToFacture)="convertDevis(item)"
-          (share)="onShare(item)"
-        />
-      }
-      @if (devis().length === 0) {
-        <p class="text-sm text-ink-soft">Aucun devis.</p>
-      }
-    </section>
+  <app-invoice-due-date-modal
+    [invoice]="dueDateModalInvoice()"
+    (confirmed)="onDueDateConfirmed($event)"
+    (skipped)="onDueDateSkipped()"
+  />
 
-    <section
-      class="flex w-72 shrink-0 flex-col gap-3"
-      data-invoice-column="NON_PAYEE"
-      [style.order]="nonPayeeOrder()"
-    >
-      <h2
-        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
-      >
-        Non payées
-        <app-badge variant="warning" tone="subtle">{{ nonPayees().length }}</app-badge>
-      </h2>
-      @for (item of nonPayees(); track item.id) {
-        <app-invoice-board-card
-          [invoice]="item"
-          column="NON_PAYEE"
-          [sharing]="sharingInvoiceId() === item.id"
-          (markPaid)="markPaid(item)"
-          (cancel)="cancelInvoice(item)"
-          (share)="onShare(item)"
-          (dropped)="onCardDropped(item, $event)"
-        />
-      }
-      @if (nonPayees().length === 0) {
-        <p class="text-sm text-ink-soft">Rien à facturer.</p>
-      }
-    </section>
-
-    <section class="flex w-72 shrink-0 flex-col gap-3" [style.order]="enRetardOrder()">
-      <h2
-        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
-      >
-        En retard
-        <app-badge variant="danger" tone="subtle">{{ enRetard().length }}</app-badge>
-      </h2>
-      @for (item of enRetard(); track item.id) {
-        <app-invoice-board-card
-          [invoice]="item"
-          column="EN_RETARD"
-          [sharing]="sharingInvoiceId() === item.id"
-          (markPaid)="markPaid(item)"
-          (cancel)="cancelInvoice(item)"
-          (share)="onShare(item)"
-          (dropped)="onCardDropped(item, $event)"
-        />
-      }
-      @if (enRetard().length === 0) {
-        <p class="text-sm text-ink-soft">Aucun retard.</p>
-      }
-    </section>
-
-    <section
-      class="flex w-72 shrink-0 flex-col gap-3"
-      data-invoice-column="PAYEE"
-      [style.order]="payeeOrder"
-    >
-      <h2
-        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
-      >
-        Payées
-        <app-badge variant="success" tone="subtle">{{ payees().length }}</app-badge>
-      </h2>
-      @for (item of payees(); track item.id) {
-        <app-invoice-board-card
-          [invoice]="item"
-          column="PAYEE"
-          [sharing]="sharingInvoiceId() === item.id"
-          (share)="onShare(item)"
-          (dropped)="onCardDropped(item, $event)"
-        />
-      }
-      @if (payees().length === 0) {
-        <p class="text-sm text-ink-soft">Aucune facture payée.</p>
-      }
-    </section>
-
-    <section
-      class="flex w-72 shrink-0 flex-col gap-3"
-      data-invoice-column="ANNULEE"
-      [style.order]="annuleeOrder"
-    >
-      <h2
-        class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
-      >
-        Annulées
-        <app-badge variant="secondary" tone="subtle">{{ annulees().length }}</app-badge>
-      </h2>
-      @for (item of annulees(); track item.id) {
-        <app-invoice-board-card
-          [invoice]="item"
-          column="ANNULEE"
-          (restore)="moveToNonPayee(item)"
-          (dropped)="onCardDropped(item, $event)"
-        />
-      }
-      @if (annulees().length === 0) {
-        <p class="text-sm text-ink-soft">Aucune facture annulée.</p>
-      }
-    </section>
-  </div>
-}
-
-<app-invoice-due-date-modal
-  [invoice]="dueDateModalInvoice()"
-  (confirmed)="onDueDateConfirmed($event)"
-  (skipped)="onDueDateSkipped()"
-/>
-
-<app-send-invoice-email-modal
-  [invoice]="emailModalInvoice()"
-  (closed)="closeEmailModal()"
-  (sent)="onEmailSent($event)"
-/>
+  <app-send-invoice-email-modal
+    [invoice]="emailModalInvoice()"
+    (closed)="closeEmailModal()"
+    (sent)="onEmailSent($event)"
+  />
+</div>

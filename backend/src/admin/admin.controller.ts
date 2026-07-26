@@ -1,9 +1,24 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { UserRole } from '../../generated/prisma/enums';
 import { PromoCodeModel } from '../../generated/prisma/models';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreatePromoCodeDto } from '../billing/dto/create-promo-code.dto';
 import { PromoCodeService } from '../billing/promo-code/promo-code.service';
+import { PushDeviceList } from '../push-notification/entities/push-device.entity';
+import { PushNotificationService } from '../push-notification/push-notification.service';
+import { PushUnavailableError } from '../push-notification/push-unavailable.error';
 import { SiteLegalService } from '../site-legal/site-legal.service';
 import { UpdateSiteLegalInfoDto } from '../site-legal/dto/update-site-legal-info.dto';
 import { SiteLegalInfo } from '../site-legal/entities/site-legal-info.entity';
@@ -24,6 +39,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly promoCodeService: PromoCodeService,
     private readonly siteLegalService: SiteLegalService,
+    private readonly pushNotificationService: PushNotificationService,
   ) {}
 
   @Get('users')
@@ -75,5 +91,32 @@ export class AdminController {
   @Patch('site-legal')
   updateSiteLegalInfo(@Body() dto: UpdateSiteLegalInfoDto): Promise<SiteLegalInfo> {
     return this.siteLegalService.updateInfo(dto);
+  }
+
+  // Phase 22: which accounts have the mobile app installed, and a manual
+  // test-send — folded in here rather than a dedicated controller, same
+  // "two routes don't warrant fragmenting the admin surface" convention as
+  // the site-legal PATCH above.
+  @Get('push/devices')
+  listPushDevices(
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+  ): Promise<PushDeviceList> {
+    return this.pushNotificationService.listForAdmin(search, page ? Number(page) : 1);
+  }
+
+  @Post('push/devices/:id/test')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async sendTestPush(@Param('id') id: string): Promise<void> {
+    try {
+      await this.pushNotificationService.sendTest(id);
+    } catch (error) {
+      if (error instanceof PushUnavailableError) {
+        throw new ServiceUnavailableException(
+          'Les notifications push ne sont pas configurées sur ce déploiement pour le moment.',
+        );
+      }
+      throw error;
+    }
   }
 }

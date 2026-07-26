@@ -136,6 +136,12 @@ export interface InvoiceLineWithTotal {
   unit: Unit;
   quantity: string;
   unitPriceCents: number;
+  // Equal to unitPriceCents, except when a REDISTRIBUTED service line
+  // folded a hidden share into this line's total — in that case this is
+  // the recomputed price so that displayUnitPriceCents x billedQuantity
+  // always reconciles with lineTotalExclVatCents. Always render this, not
+  // unitPriceCents, wherever a "prix unitaire" is shown.
+  displayUnitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
   // Phase 8.5: what's actually priced, after waste surcharge and any
   // packaging rounding — equal to `quantity` whenever no packaging applies.

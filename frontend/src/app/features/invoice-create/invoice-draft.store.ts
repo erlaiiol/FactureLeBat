@@ -1,5 +1,6 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { CompanyProfile } from '../../core/models/company.model';
 import {
   CreateInvoiceLineRequest,
@@ -380,6 +381,117 @@ export class InvoiceDraftStore {
       lines,
       serviceLines: serviceLines.length > 0 ? serviceLines : undefined,
     };
+  }
+
+  // Catalog products/services (a line's "Enregistrer dans mon catalogue"
+  // toggle) and a freehand customer ("Enregistrer ce client") describe the
+  // artisan's environment, not an invoice — they must persist regardless of
+  // premium status, only invoice creation/preview itself is gated (see
+  // PremiumGateService). Called from the preview step's submit() *and* from
+  // its previewData() 402 handler, so an artisan who has used up their free
+  // trial still gets what they explicitly asked to save instead of losing it
+  // silently behind the paywall. Returns whether anything was actually
+  // requested, so a caller can decide whether a confirmation toast is
+  // warranted. Product/service catalog CRUD has no premium gate on the
+  // backend, consistent with that rule.
+  persistFreeEntities(): Observable<boolean> {
+    const productSaves = this.lines()
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => line.saveAsNewProduct)
+      .map(({ line, index }) => {
+        const payload = {
+          name: line.description,
+          unit: line.unit,
+          priceCents: Math.round(line.unitPriceEuros * 100),
+          code: line.productCode || undefined,
+          packagingQuantity: line.packagingQuantity ?? undefined,
+        };
+        const save$ = line.catalogProductId
+          ? this.productService.update(line.catalogProductId, payload)
+          : this.productService.create(payload);
+        return save$.pipe(
+          map((product) => ({ index, id: product.id })),
+          catchError(() => of(null)),
+        );
+      });
+
+    const serviceSaves = this.serviceLines()
+      .map((serviceLine, index) => ({ serviceLine, index }))
+      .filter(({ serviceLine }) => serviceLine.saveAsNewService)
+      .map(({ serviceLine, index }) => {
+        const payload = {
+          name: serviceLine.name,
+          description: serviceLine.description || undefined,
+          pricingMode: serviceLine.pricingMode,
+          priceCents:
+            serviceLine.pricingMode === 'FIXED'
+              ? Math.round(serviceLine.amountEuros * 100)
+              : undefined,
+          percentageBasisPoints:
+            serviceLine.pricingMode === 'PERCENTAGE'
+              ? (serviceLine.percentageBasisPoints ?? undefined)
+              : undefined,
+          defaultVisibility: serviceLine.visibility,
+        };
+        const save$ = serviceLine.catalogServiceId
+          ? this.serviceCatalogService.update(serviceLine.catalogServiceId, payload)
+          : this.serviceCatalogService.create(payload);
+        return save$.pipe(
+          map((service) => ({ index, id: service.id })),
+          catchError(() => of(null)),
+        );
+      });
+
+    const customer = this.customer();
+    const savingNewCustomer = customer.saveAsNewCustomer && !customer.customerId;
+    const customerSave$ = savingNewCustomer
+      ? this.customerService
+          .create({
+            name: customer.customerName,
+            address: customer.customerAddress || undefined,
+            email: customer.customerEmail || undefined,
+            phone: customer.customerPhone || undefined,
+          })
+          .pipe(
+            map((newCustomer) => newCustomer.id),
+            catchError(() => of(null)),
+          )
+      : of(null);
+
+    const hadAnyToSave = productSaves.length > 0 || serviceSaves.length > 0 || savingNewCustomer;
+
+    return forkJoin([
+      productSaves.length > 0 ? forkJoin(productSaves) : of([]),
+      serviceSaves.length > 0 ? forkJoin(serviceSaves) : of([]),
+      customerSave$,
+    ]).pipe(
+      map(([productResults, serviceResults, customerId]) => {
+        if (productResults.length > 0) {
+          this.lines.update((currentLines) =>
+            currentLines.map((line, index) => {
+              const result = productResults.find((r) => r?.index === index);
+              return result
+                ? { ...line, catalogProductId: result.id, saveAsNewProduct: false }
+                : line;
+            }),
+          );
+        }
+        if (serviceResults.length > 0) {
+          this.serviceLines.update((currentServiceLines) =>
+            currentServiceLines.map((serviceLine, index) => {
+              const result = serviceResults.find((r) => r?.index === index);
+              return result
+                ? { ...serviceLine, catalogServiceId: result.id, saveAsNewService: false }
+                : serviceLine;
+            }),
+          );
+        }
+        if (customerId) {
+          this.customer.update((current) => ({ ...current, customerId, saveAsNewCustomer: false }));
+        }
+        return hadAnyToSave;
+      }),
+    );
   }
 
   private hydrateFromStorage(): void {

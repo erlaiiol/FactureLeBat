@@ -4,7 +4,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { InvoiceService } from '../../../core/services/invoice.service';
-import { PaywallService } from '../../../core/services/paywall.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
@@ -47,7 +46,6 @@ export class InvoiceCreateManualPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly invoiceService = inject(InvoiceService);
-  private readonly paywallService = inject(PaywallService);
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly store = inject(ManualInvoiceDraftStore);
@@ -146,8 +144,9 @@ export class InvoiceCreateManualPage {
         },
         error: (error: HttpErrorResponse) => {
           this.previewing.set(false);
+          // premiumGateInterceptor already showed the paywall modal for the
+          // 402 — this just skips the generic error message.
           if (error.status === 402) {
-            this.paywallService.show();
             return;
           }
           this.previewError.set("Impossible de générer l'aperçu pour le moment.");
@@ -196,8 +195,9 @@ export class InvoiceCreateManualPage {
         },
         error: (error: HttpErrorResponse) => {
           this.converting.set(false);
+          // premiumGateInterceptor already showed the paywall modal for the
+          // 402 — this just skips the generic error message.
           if (error.status === 402) {
-            this.paywallService.show();
             return;
           }
           this.errorMessage.set('Impossible de créer la facture pour le moment.');
@@ -246,9 +246,9 @@ export class InvoiceCreateManualPage {
         error: (error: HttpErrorResponse) => {
           this.creating.set(false);
           // Same free-trial wall as mode rapide's submit() — see
-          // InvoiceCreatePreviewStepPage.
+          // InvoiceCreatePreviewStepPage. premiumGateInterceptor already
+          // showed the paywall modal, so this just skips the generic message.
           if (error.status === 402) {
-            this.paywallService.show();
             return;
           }
           this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');

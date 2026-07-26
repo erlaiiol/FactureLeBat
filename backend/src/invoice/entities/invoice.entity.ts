@@ -21,6 +21,14 @@ export interface InvoiceLineWithTotal {
   // reintroduce exactly the precision risk Decimal exists to avoid.
   quantity: string;
   unitPriceCents: number;
+  // Equal to unitPriceCents, except when a REDISTRIBUTED service line
+  // folded a share into this line's lineTotalExclVatCents below — in that
+  // case this is recomputed from the adjusted total so that displaying
+  // displayUnitPriceCents x billedQuantity always reconciles with what's
+  // printed as the line total. This is what should be rendered everywhere
+  // a "prix unitaire" column is shown; unitPriceCents above stays the raw,
+  // unadjusted value.
+  displayUnitPriceCents: number;
   wasteSurcharge: WasteSurcharge;
   // Phase 8.5: the quantity actually priced, after waste surcharge and any
   // packaging rounding — see InvoiceCalculationService.computeLineTotal.

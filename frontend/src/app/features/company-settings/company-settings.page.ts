@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CompanyService } from '../../core/services/company.service';
 import { LegalStatus } from '../../core/models/company.model';
@@ -27,8 +27,17 @@ export class CompanySettingsPage {
   private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   protected readonly tourService = inject(TourService);
+
+  // Set by guestGuard's '?onboarding=1' when it routed a freshly
+  // registered/logged-in artisan here because their company profile was
+  // still the blank one DEFAULT_COMPANY_PROFILE creates at signup — the
+  // signal for "continue on to the invoice they were headed for in the
+  // first place" once this form is actually saved, rather than leaving them
+  // stranded on the settings page with just an inline "Enregistré !".
+  protected readonly onboarding = this.route.snapshot.queryParamMap.get('onboarding') === '1';
 
   // Phase 13 RGPD self-service deletion — a two-step reveal (button ->
   // inline confirm form) rather than a native confirm() dialog, matching
@@ -206,6 +215,11 @@ export class CompanySettingsPage {
         next: () => {
           this.saving.set(false);
           this.saved.set(true);
+          if (this.onboarding) {
+            // Same "confirm, then move on" delay as ResetPasswordPage — long
+            // enough to register the "Enregistré !" before the navigation.
+            setTimeout(() => void this.router.navigateByUrl('/factures/nouvelle'), 1200);
+          }
         },
         error: () => {
           this.saving.set(false);

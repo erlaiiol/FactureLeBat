@@ -1,0 +1,111 @@
+<div class="flex flex-col gap-6">
+  <div class="flex items-center justify-between gap-2">
+    <h1 class="font-heading text-2xl font-bold tracking-wide text-ink uppercase">
+      Administration — Appareils mobiles
+    </h1>
+    <div class="flex gap-2">
+      <a
+        routerLink="/admin"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+      >
+        Utilisateurs
+      </a>
+      <a
+        routerLink="/admin/codes-promo"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+      >
+        Codes promo
+      </a>
+      <a
+        routerLink="/admin/infos-legales"
+        class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+      >
+        Infos légales
+      </a>
+    </div>
+  </div>
+
+  <form (ngSubmit)="search()" class="flex gap-2">
+    <input
+      [formControl]="searchControl"
+      type="text"
+      placeholder="Rechercher par email ou entreprise…"
+      class="flex-1 rounded-xl border border-line bg-bg px-4 py-3 text-ink"
+    />
+    <app-big-button type="submit" variant="secondary" tone="subtle">Rechercher</app-big-button>
+  </form>
+
+  @if (loading()) {
+    @if (showSkeleton()) {
+      <app-skeleton-table />
+    }
+  } @else {
+    <div class="anim-preview-in overflow-x-auto rounded-2xl border border-line">
+      <table class="w-full min-w-[640px] text-left text-sm">
+        <thead class="bg-secondary-subtle text-ink-soft">
+          <tr>
+            <th class="p-3">Email</th>
+            <th class="p-3">Entreprise</th>
+            <th class="p-3">Plateforme</th>
+            <th class="p-3">Dernière activité</th>
+            <th class="p-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (device of devices(); track device.id) {
+            <tr class="border-t border-line">
+              <td class="p-3">{{ device.userEmail }}</td>
+              <td class="p-3">{{ device.companyName }}</td>
+              <td class="p-3">
+                @if (device.platform === 'IOS') {
+                  <app-badge variant="secondary" tone="subtle">iOS</app-badge>
+                } @else {
+                  <app-badge variant="success" tone="subtle">Android</app-badge>
+                }
+              </td>
+              <td class="p-3">{{ device.lastActiveAt | date: 'short' }}</td>
+              <td class="p-3">
+                <button
+                  type="button"
+                  [disabled]="sendingFor() === device.id"
+                  (click)="sendTest(device.id)"
+                  class="rounded-lg border border-line px-3 py-1 text-sm hover:bg-secondary-subtle disabled:opacity-50"
+                >
+                  {{ sendingFor() === device.id ? 'Envoi…' : 'Envoyer un push de test' }}
+                </button>
+              </td>
+            </tr>
+          }
+          @if (devices().length === 0) {
+            <tr>
+              <td colspan="5" class="p-3 text-center text-ink-soft">Aucun appareil enregistré.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex items-center justify-between text-sm text-ink-soft">
+      <span>{{ total() }} appareil(s)</span>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          [disabled]="page() <= 1"
+          (click)="previousPage()"
+          class="rounded-lg border border-line px-3 py-1 disabled:opacity-50"
+        >
+          Précédent
+        </button>
+        <span>Page {{ page() }}</span>
+        <button
+          type="button"
+          [disabled]="devices().length === 0"
+          (click)="nextPage()"
+          class="rounded-lg border border-line px-3 py-1 disabled:opacity-50"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  }
+</div>

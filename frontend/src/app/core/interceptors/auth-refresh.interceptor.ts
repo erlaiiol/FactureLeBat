@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../services/auth.service';
+import { ToastService } from '../services/toast.service';
 
 const EXEMPT_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
 
@@ -40,6 +41,7 @@ function isOnPublicRoute(url: string): boolean {
 export const authRefreshInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
   const router = inject(Router);
+  const toast = inject(ToastService);
 
   const isExempt =
     !req.url.startsWith(environment.apiBaseUrl) ||
@@ -65,6 +67,12 @@ export const authRefreshInterceptor: HttpInterceptorFn = (req, next) => {
         catchError((refreshError: unknown) => {
           const supersededByNewerAuth = authService.currentUser() !== userBeforeRefresh;
           if (!supersededByNewerAuth && !isOnPublicRoute(router.url)) {
+            // Without this, a component mid-request (e.g. subscribe.page.ts
+            // awaiting a Stripe checkout URL) gets torn down by the
+            // navigation and its own error handler never runs — the artisan
+            // just sees their click silently do nothing. The toast is what
+            // actually explains the disappearance.
+            toast.info('Votre session a expiré, merci de vous reconnecter.');
             void router.navigate(['/connexion']);
           }
           return throwError(() => refreshError);

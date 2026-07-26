@@ -59,12 +59,25 @@
           </p>
         }
 
-        @if (!s.stripeConfigured) {
+        @if (platformService.isIosApp()) {
+          <!-- Apple 3.1.1 "external subscription, business tool" pattern: no
+          tappable element here may start a payment flow (checkout, portal,
+          or promo redemption) from inside the iOS app — see
+          docs/roadmap.md Phase 22. Status above stays visible; only the
+          in-app initiation paths are hidden. -->
+          <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
+            Rendez-vous sur facturele.net depuis un navigateur pour gérer votre abonnement.
+          </p>
+        } @else if (!s.stripeConfigured) {
           <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
             L'abonnement par carte n'est pas encore configuré sur ce déploiement — utilisez un code
             promo ci-dessous, ou contactez le support.
           </p>
-        } @else if (s.subscriptionStatus === 'ACTIVE') {
+        } @else if (s.subscriptionStatus === 'ACTIVE' || s.subscriptionStatus === 'PAST_DUE') {
+          <!-- PAST_DUE already has a Stripe subscription (payment just
+          failed) — routes to the portal to fix the payment method, same as
+          ACTIVE, never back through subscribe()/checkout which the backend
+          now refuses for both statuses to avoid a second subscription. -->
           <app-big-button
             variant="secondary"
             tone="subtle"
@@ -83,6 +96,18 @@
             {{ checkoutLoading() ? 'Redirection…' : "S'abonner — 15 € / mois" }}
           </app-big-button>
         }
+        @if (checkoutLoading()) {
+          <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
+            Redirection vers l'espace de paiement sécurisé Stripe… Merci de patienter quelques
+            secondes et de ne pas recharger la page.
+          </p>
+        }
+        @if (portalLoading()) {
+          <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
+            Ouverture de l'espace de gestion Stripe… Merci de patienter quelques secondes et de ne
+            pas recharger la page.
+          </p>
+        }
         @if (checkoutError(); as message) {
           <p class="text-sm font-medium text-danger">{{ message }}</p>
         }
@@ -91,40 +116,42 @@
         }
       </section>
 
-      <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
-        <h2 class="font-heading text-lg font-bold text-ink uppercase">Code promo</h2>
-        <p class="text-ink-soft">
-          Vous avez reçu un code ? Saisissez-le ici pour activer votre accès.
-        </p>
-        <form
-          [formGroup]="promoForm"
-          (ngSubmit)="redeemPromo()"
-          class="flex flex-col gap-3 sm:flex-row"
-        >
-          <input
-            formControlName="code"
-            type="text"
-            placeholder="CODE-PROMO"
-            class="flex-1 rounded-xl border border-line bg-bg px-4 py-3 uppercase text-ink"
-          />
-          <app-big-button
-            type="submit"
-            variant="secondary"
-            tone="subtle"
-            [disabled]="redeemLoading()"
-          >
-            {{ redeemLoading() ? 'Validation…' : 'Activer' }}
-          </app-big-button>
-        </form>
-        @if (redeemError(); as message) {
-          <p class="text-sm font-medium text-danger">{{ message }}</p>
-        }
-        @if (redeemSuccess()) {
-          <p class="text-sm font-medium text-success">
-            Code activé, votre accès premium est à jour !
+      @if (!platformService.isIosApp()) {
+        <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
+          <h2 class="font-heading text-lg font-bold text-ink uppercase">Code promo</h2>
+          <p class="text-ink-soft">
+            Vous avez reçu un code ? Saisissez-le ici pour activer votre accès.
           </p>
-        }
-      </section>
+          <form
+            [formGroup]="promoForm"
+            (ngSubmit)="redeemPromo()"
+            class="flex flex-col gap-3 sm:flex-row"
+          >
+            <input
+              formControlName="code"
+              type="text"
+              placeholder="CODE-PROMO"
+              class="flex-1 rounded-xl border border-line bg-bg px-4 py-3 uppercase text-ink"
+            />
+            <app-big-button
+              type="submit"
+              variant="secondary"
+              tone="subtle"
+              [disabled]="redeemLoading()"
+            >
+              {{ redeemLoading() ? 'Validation…' : 'Activer' }}
+            </app-big-button>
+          </form>
+          @if (redeemError(); as message) {
+            <p class="text-sm font-medium text-danger">{{ message }}</p>
+          }
+          @if (redeemSuccess()) {
+            <p class="text-sm font-medium text-success">
+              Code activé, votre accès premium est à jour !
+            </p>
+          }
+        </section>
+      }
     </div>
   }
 </div>

@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { PlatformService } from '../../../core/services/platform.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 
 @Component({
@@ -17,6 +18,7 @@ export class RegisterPage {
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  protected readonly platformService = inject(PlatformService);
 
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);

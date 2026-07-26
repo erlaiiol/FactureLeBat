@@ -9,6 +9,20 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
+# Phase 21: DOMAIN=:80 (infra/.env.example's default) is the local/`make
+# prod` smoke-test fallback — Caddy serves plain HTTP with no ACME attempt.
+# A real redeploy running this script against a live server must have a real
+# DOMAIN set, or it silently ships with no HTTPS/HSTS/CSP at all instead of
+# failing loudly.
+if [ -f infra/.env ]; then
+	DEPLOY_DOMAIN=$(grep -E '^DOMAIN=' infra/.env | tail -n1 | cut -d= -f2-)
+	if [ -z "$DEPLOY_DOMAIN" ] || [ "$DEPLOY_DOMAIN" = ':80' ]; then
+		echo "==> Refusing to deploy: infra/.env's DOMAIN is '$DEPLOY_DOMAIN', the local smoke-test default." >&2
+		echo "    Set DOMAIN to the real domain (e.g. DOMAIN=factures.example.com) before deploying." >&2
+		exit 1
+	fi
+fi
+
 echo "==> Pulling latest code"
 git pull --ff-only
 

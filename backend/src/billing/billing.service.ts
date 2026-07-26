@@ -1,12 +1,29 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import { SubscriptionStatus } from '../../generated/prisma/enums';
+import { AlreadySubscribedError } from './already-subscribed.error';
 import { BillingRepository } from './billing.repository';
 import { BillingStatus } from './entities/billing-status.entity';
 import { NoBillingCustomerError } from './no-billing-customer.error';
 import { hasPremiumAccess } from './premium-gate.service';
 import { StripeClientService } from './stripe/stripe-client.service';
 import { mapStripeSubscriptionStatus } from './stripe/subscription-status.util';
+
+// Same idempotency key for every checkout-session request from a given
+// company within this window, so a double-click, an impatient reload+retry,
+// or two tabs open at once all collapse onto the single Stripe Checkout
+// Session Stripe creates for the first one of them — the artisan can never
+// complete two of them and end up with two subscriptions. Wide enough to
+// absorb a slow reload, short enough that a genuinely later, deliberate
+// subscribe attempt (e.g. after actually canceling first) still gets its
+// own session.
+const CHECKOUT_IDEMPOTENCY_WINDOW_MS = 5 * 60 * 1000;
+
+function buildCheckoutIdempotencyKey(companyId: string): string {
+  const windowIndex = Math.floor(Date.now() / CHECKOUT_IDEMPOTENCY_WINDOW_MS);
+  return `checkout:${companyId}:${windowIndex}`;
+}
 
 // Orchestration only, same split as InvoiceService: StripeClientService owns
 // the raw SDK calls, BillingRepository owns the Company row, this class
@@ -46,6 +63,20 @@ export class BillingService {
   // stripeCustomerId is the one this app owns and persists on first use.
   async createCheckoutSession(companyId: string, email: string): Promise<{ url: string }> {
     const fields = await this.repository.getBillingFields(companyId);
+
+    // A subscription already exists on this customer (paying fine, or
+    // paying but currently failing) — starting a second Checkout Session
+    // would risk a second, parallel Stripe subscription and a real double
+    // charge, not just a UI inconsistency. PAST_DUE is fixed through the
+    // billing portal (update payment method on the existing subscription),
+    // never by subscribing again.
+    if (
+      fields.subscriptionStatus === SubscriptionStatus.ACTIVE ||
+      fields.subscriptionStatus === SubscriptionStatus.PAST_DUE
+    ) {
+      throw new AlreadySubscribedError();
+    }
+
     let customerId = fields.stripeCustomerId;
     if (!customerId) {
       const customer = await this.stripeClient.createCustomer(email, companyId);
@@ -58,6 +89,7 @@ export class BillingService {
       companyId,
       successUrl: `${this.frontendUrl}/abonnement?success=1`,
       cancelUrl: `${this.frontendUrl}/abonnement?canceled=1`,
+      idempotencyKey: buildCheckoutIdempotencyKey(companyId),
     });
 
     if (!session.url) {

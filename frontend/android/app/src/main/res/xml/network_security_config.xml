@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Phase 22 local dev only, same purpose as Info.plist's commented iOS ATS
+exception: capacitor.config.ts's CAPACITOR_LOCAL_HOST override points the
+WebView at a plain-http LAN address for emulator testing against a local
+backend, which Android blocks by default (cleartext traffic disabled since
+targetSdkVersion 28+). This file is inert until AndroidManifest.xml's
+<application> tag adds android:networkSecurityConfig="@xml/network_security_config"
+(commented there — uncomment both together for local testing, and put the
+same LAN IP below instead of the placeholder). Remove before any store
+submission — a release build should never carry a cleartext exception.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">REPLACE_WITH_CAPACITOR_LOCAL_HOST</domain>
+    </domain-config>
+</network-security-config>

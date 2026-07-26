@@ -69,6 +69,17 @@
     le document — le calcul et le total ne changent jamais, seul l'affichage change.
   </p>
 
+  @if (missingSiret()) {
+    <p
+      class="mb-4 flex flex-wrap items-center justify-center gap-2 rounded-lg bg-warning-subtle px-4 py-2 text-center text-sm text-warning-subtle-fg"
+    >
+      <span>Votre numéro de SIRET n'est pas renseigné — c'est une mention obligatoire.</span>
+      <a routerLink="/entreprise" class="font-semibold underline hover:text-warning-subtle-fg/70">
+        Compléter mon profil
+      </a>
+    </p>
+  }
+
   @if (loading()) {
     @if (showSkeleton()) {
       <div class="rounded-xl border border-line bg-surface p-6 shadow-sm">
@@ -172,7 +183,7 @@
                     }
                   }
                 </td>
-                <td class="py-2 pr-2 text-ink">{{ line.unitPriceCents | centsToEuros }}</td>
+                <td class="py-2 pr-2 text-ink">{{ line.displayUnitPriceCents | centsToEuros }}</td>
                 <td class="py-2 pl-2 text-right font-mono text-ink">
                   {{ line.lineTotalExclVatCents | centsToEuros }}
                 </td>

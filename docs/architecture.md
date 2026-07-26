@@ -39,6 +39,12 @@ src/
                    own reading/writing two columns on the Company singleton, kept out of
                    company/ so its GET/PATCH never has to go through CompanyController's
                    full-replace UpdateCompanyDto
+  push-notification/  Phase 22 mobile push: PushDevice registration (artisan-facing),
+                   admin device list/test-send (folded into AdminController), FCM sending
+                   isolated in push-sender.service.ts (same "isolate the risky external
+                   boundary" split as stripe-client.service.ts), and the codebase's first
+                   scheduled job (ReminderCronService, @nestjs/schedule) — a daily digest
+                   push for invoices that are late or still unpaid
   invoice/         the core domain
     calculation/   pure, dependency-free pricing math (InvoiceCalculationService), including
                    Phase 5's weighted redistribution split (computeWeightedSplit)
@@ -126,6 +132,7 @@ Both modes share the same invariant: the invoice's displayed total increases by 
 - **API prefix**: everything is served under `/api` (`app.setGlobalPrefix('api')`) — this is what lets Nginx route `/api/*` to the backend and everything else to the static frontend in prod.
 - **Graceful shutdown**: `app.enableShutdownHooks()` — without it, Nest never listens for `SIGTERM`/`SIGINT`, so `OnModuleDestroy` hooks (`PrismaService` disconnecting, `SafeFetcherService` closing its pooled `undici.Agent`) would only ever run when a test calls `app.close()` directly, never on a real `docker stop`/redeploy.
 - **Logging**: Winston (`nest-winston`) replaces Nest's default console logger app-wide — colored, leveled, request-correlated (`x-request-id` via `AsyncLocalStorage`), written to both the console and rotated files under `backend/logs/`. A global exception filter (`AllExceptionsFilter`) and an HTTP request-logging middleware make sure every request and every uncaught error is logged, not just what individual services choose to log. See [logging.md](logging.md).
+- **Scheduling**: `ScheduleModule.forRoot()` (`@nestjs/schedule`), added in Phase 22 for `ReminderCronService`'s daily push digest — the first scheduled job in this codebase. Runs in-process in the single backend container; would need a distributed lock or a dedicated scheduler only if the backend is ever scaled to multiple replicas.
 
 ## Frontend (`frontend/`)
 
@@ -180,6 +187,19 @@ src/app/
 ```
 
 Each `features/*` folder is a routed, lazily-loaded page (`loadComponent` in `app.routes.ts`). Pages that call the API always guard their subscriptions with `takeUntilDestroyed()` so a slow response arriving after navigation away never touches a destroyed component's state.
+
+## Mobile app shell (`frontend/ios/`, `frontend/android/`, Phase 22)
+
+Capacitor wraps the exact same Angular build used for web — `frontend/ios/`/`frontend/android/` are native project shells around it, not a second app. `frontend/capacitor.config.ts` is the one place this diverges from the web deployment:
+
+- **`server.hostname`/`androidScheme`/`iosScheme` point at the real API domain**, not Capacitor's default `capacitor://localhost` — this makes the WebView's own origin equal the API's origin, so Phase 13's httpOnly/`sameSite: 'lax'` auth cookies (`backend/src/auth/cookie.util.ts`) keep working completely unchanged inside the native shell. No cookie flag was relaxed to make this work; see [roadmap.md](roadmap.md) Phase 22's implementation notes for the reasoning against the alternatives (`sameSite: 'none'`, Capacitor's native HTTP bridge).
+- **`CAPACITOR_LOCAL_HOST`** (an env var, read at `cap sync` time) swaps in a developer's LAN IP + plain `http` for simulator/emulator testing against a local backend instead of the real domain — wired into `make ios LOCAL_HOST=<ip>`/`make android LOCAL_HOST=<ip>` (root `Makefile`). Needs the matching dev-only ATS exception (`ios/App/App/Info.plist`) or cleartext network-security-config (`android/app/src/main/res/xml/network_security_config.xml`) uncommented — both inert by default, both flagged to remove before any store submission.
+- **A `<meta http-equiv="Content-Security-Policy">` tag in `frontend/src/index.html`** mirrors `infra/Caddyfile`'s header CSP (Phase 21) — the WebView serves this HTML from the local bundle, which never passes through Caddy, so the header alone would leave the native app with no CSP at all. Header-only directives (`frame-ancestors`, `Permissions-Policy`) can't be expressed this way and stay server-side-only.
+- **Platform-specific UI branching** goes through `PlatformService` (`core/services/platform.service.ts`, wraps `Capacitor.getPlatform()`/`isNativePlatform()`), used today to: hide any Stripe checkout-initiating CTA on iOS (Apple 3.1.1's "external subscription, business tool" pattern — `PaywallModalComponent`/`subscribe.page.ts`) and hide Google login on iOS specifically (Apple 4.8 — see roadmap notes).
+- **Push notifications**: `PushRegistrationService` (a no-op on web, `Capacitor.isNativePlatform()` guarded) registers this device's FCM token with the backend once authenticated (`app.ts`'s constructor effect, same "runs once per login" pattern as the billing-status effect) and unregisters it on logout. Both iOS and Android register an FCM token — see [architecture.md](#backend-backend) → `push-notification/` and [roadmap.md](roadmap.md) Phase 22 for why iOS doesn't need a separate direct-APNs credential.
+- **Icons/splash**: generated via `@capacitor/assets` from `frontend/assets/icon.png`/`splash.png` (source art — regenerate with `npx capacitor-assets generate` if that art changes) into each platform's native asset catalog; store *listing* assets (screenshots, descriptions) are a separate, later step, not part of this pipeline.
+
+See the root `Makefile`'s `mobile-build`/`ios`/`android` targets for the day-to-day build/open commands, and [roadmap.md](roadmap.md) Phase 22 for the full set of decisions (domain, bundle id, board redesign, store-compliance audit) behind this shell.
 
 ## Docker (`infra/`)
 

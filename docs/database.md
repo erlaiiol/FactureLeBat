@@ -123,6 +123,12 @@ afterward.
   them from the stored weights on every read and folds them into the
   targeted `InvoiceLine`'s displayed total.
 
+### `PushDevice` (Phase 22)
+
+One registered mobile-app install for push notifications — `userId` (indexed, `onDelete: Cascade`, same shape as `RefreshToken`), `platform` (`IOS` | `ANDROID`), `token` (`@unique`, not a composite key: the same physical device can only ever hold one live token, so re-registering — reinstall, token refresh, a different artisan logging into the same phone — must overwrite the existing row via upsert, never accumulate a stale duplicate), and `lastActiveAt`. Both platforms store an **FCM** token, never a raw APNs token — see [architecture.md](architecture.md#mobile-app-shell-frontendios-frontendandroid-phase-22) for why iOS registers one too.
+
+`Invoice.lastPushReminderAt` (alongside the existing `lastReminderAt`) is bumped by `ReminderCronService`'s daily digest — kept as a separate field on purpose: `lastReminderAt` means "the *client* was emailed" (artisan-triggered), this one means "the *artisan* was already push-notified about this invoice today" (system-triggered); conflating them would change `lastReminderAt`'s existing meaning for the one call site that already reads it. A composite `@@index([status, dueDate])` backs the cron's cross-tenant sweep — unlike every other index on `Invoice`, this one isn't scoped to a single company.
+
 ## Money rules (enforced throughout, not just in the schema)
 
 - All monetary amounts are **integer cents** (`Int` columns, `number` in TypeScript representing whole cents). `39.90 €` is `3990`.

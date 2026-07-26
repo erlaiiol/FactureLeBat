@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
@@ -17,6 +18,7 @@ import { InvoiceModule } from './invoice/invoice.module';
 import { MailSettingsModule } from './mail-settings/mail-settings.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ProductModule } from './product/product.module';
+import { PushNotificationModule } from './push-notification/push-notification.module';
 import { ReportsModule } from './reports/reports.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 import { SiteLegalModule } from './site-legal/site-legal.module';
@@ -29,6 +31,9 @@ import { SourcingModule } from './sourcing/sourcing.module';
     // normal use (a live total-preview does not hit the API), tight enough
     // to blunt scripted abuse against the app.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // Phase 22: powers ReminderCronService's daily push-notification digest
+    // — the first scheduled job in this codebase.
+    ScheduleModule.forRoot(),
     DatabaseModule,
     AuthModule,
     CompanyModule,
@@ -37,6 +42,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     MailSettingsModule,
     OnboardingModule,
     ProductModule,
+    PushNotificationModule,
     ServiceCatalogModule,
     SiteLegalModule,
     SourcingModule,

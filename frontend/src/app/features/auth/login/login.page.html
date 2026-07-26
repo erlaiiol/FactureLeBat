@@ -46,12 +46,19 @@
     </app-big-button>
   </form>
 
-  <a
-    [href]="googleLoginUrl"
-    class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
-  >
-    Continuer avec Google
-  </a>
+  @if (!platformService.isIosApp()) {
+    <!-- Apple 4.8: an app offering a third-party sign-in must also offer
+    Sign in with Apple, unless it offers no third-party sign-in at all —
+    hiding Google here on iOS (email/password stays available) keeps this
+    app out of that requirement instead of building Sign in with Apple.
+    See docs/roadmap.md Phase 22. -->
+    <a
+      [href]="googleLoginUrl"
+      class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
+    >
+      Continuer avec Google
+    </a>
+  }
 
   <p class="text-center text-sm text-ink-soft">
     Pas encore de compte ?

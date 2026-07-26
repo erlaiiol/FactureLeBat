@@ -27,9 +27,18 @@
         Vous avez pu essayer FactureLe et configurer librement votre environnement (clients,
         produits, prestations). Pour créer de nouvelles factures, un abonnement est nécessaire.
       </p>
-      <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
-        Voir les offres
-      </app-big-button>
+      @if (platformService.isIosApp()) {
+        <!-- Apple 3.1.1 "external subscription, business tool" pattern: no
+        tappable element here may start a payment flow, not even a link to
+        /abonnement — see docs/roadmap.md Phase 22. -->
+        <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
+          Rendez-vous sur facturele.net depuis un navigateur pour vous abonner.
+        </p>
+      } @else {
+        <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
+          Voir les offres
+        </app-big-button>
+      }
       <button
         type="button"
         (click)="paywallService.dismiss()"

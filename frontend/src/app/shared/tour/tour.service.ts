@@ -219,15 +219,32 @@ export class TourService {
   }
 
   // Searches the active tour's OWN steps, forward from wherever it
-  // currently is, for one whose declared route exactly matches where a
-  // real (non-tour-driven) navigation just landed. Forward-only and
-  // exact-match on purpose: a step with no `route` of its own shares the
-  // previous step's, so this only ever matches a genuine route-transition
-  // step, and never jumps backward on a browser-back navigation.
+  // currently is, for one whose declared route matches where a real
+  // (non-tour-driven) navigation just landed. Forward-only on purpose: a
+  // step with no `route` of its own shares the previous step's, so this
+  // only ever matches a genuine route-transition step, and never jumps
+  // backward on a browser-back navigation.
+  //
+  // A step whose declared route carries its own query string (e.g.
+  // 'stats-reports''s '/statistiques?vue=rapport') is matched exactly,
+  // since that query string is the whole point of that step. Every other
+  // step is matched on pathname alone, ignoring the incoming URL's query —
+  // real links the artisan can click mid-tour legitimately carry query
+  // params no step declares (e.g. the mode-choice page's "Mode rapide"/
+  // "Mode manuel" cards append `?type=FACTURE|DEVIS`, read once by the
+  // draft store). Requiring an exact string match here used to treat that
+  // as "left the flow" and silently abandon the tour the instant it landed
+  // on the very page the tour was pointing at — the "tour stops on the
+  // client-choice page" bug.
   private findForwardStepIndexForRoute(url: string): number | null {
     const steps = this.steps();
+    const pathname = url.split('?')[0];
     for (let index = this.stepIndex(); index < steps.length; index++) {
-      if (steps[index].route === url) {
+      const route = steps[index].route;
+      if (!route) {
+        continue;
+      }
+      if (route.includes('?') ? route === url : route === pathname) {
         return index;
       }
     }

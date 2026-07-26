@@ -9,15 +9,12 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
-import { Observable, catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { Router, RouterLink } from '@angular/router';
+import { switchMap } from 'rxjs';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
-import { CustomerService } from '../../../core/services/customer.service';
+import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
-import { PaywallService } from '../../../core/services/paywall.service';
-import { ProductService } from '../../../core/services/product.service';
-import { ServiceCatalogService } from '../../../core/services/service-catalog.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
@@ -47,6 +44,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DatePipe,
+    RouterLink,
     BigButtonComponent,
     IconEyeComponent,
     IconEyeOffComponent,
@@ -61,10 +59,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
 export class InvoiceCreatePreviewStepPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly invoiceShareService = inject(InvoiceShareService);
-  private readonly customerService = inject(CustomerService);
-  private readonly productService = inject(ProductService);
-  private readonly serviceCatalogService = inject(ServiceCatalogService);
-  private readonly paywallService = inject(PaywallService);
+  private readonly companyService = inject(CompanyService);
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -76,6 +71,18 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly loadError = signal<string | null>(null);
   protected readonly previewData = signal<InvoiceWithTotals | null>(null);
+
+  // Best-effort, non-blocking: a company profile fetch failure must never
+  // stop the artisan from previewing/sending their document — it only ever
+  // suppresses this warning. A French SIRET is mandatory on any invoice/devis
+  // (legal requirement); the default profile created at signup starts with
+  // an empty one (see backend's DEFAULT_COMPANY_PROFILE), so nothing else in
+  // the app forces it to be filled in before this screen is reached.
+  private readonly companySiret = signal<string | null>(null);
+  protected readonly missingSiret = computed(() => {
+    const siret = this.companySiret();
+    return siret !== null && !/^\d{14}$/.test(siret);
+  });
 
   protected readonly previewLines = computed(() => this.previewData()?.lines ?? []);
   // Mirrors PdfService's own rule: only VISIBLE service lines get their own
@@ -112,6 +119,14 @@ export class InvoiceCreatePreviewStepPage {
       return;
     }
     this.loadPreview();
+    this.companyService
+      .getProfile()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (profile) => this.companySiret.set(profile.siret),
+        // Silent: see companySiret's comment above.
+        error: () => undefined,
+      });
   }
 
   protected loadPreview(): void {
@@ -132,7 +147,21 @@ export class InvoiceCreatePreviewStepPage {
         error: (error: HttpErrorResponse) => {
           this.loading.set(false);
           if (error.status === 402) {
-            this.paywallService.show();
+            // The priced preview/invoice creation is blocked (free trial
+            // used up — premiumGateInterceptor already showed the paywall
+            // modal), but a "enregistrer dans mon catalogue"/"enregistrer
+            // ce client" toggle checked back on the lines/customer step is a
+            // free-tier request that must still go through — otherwise it's
+            // silently lost the moment this screen can't be reached (see
+            // InvoiceDraftStore.persistFreeEntities).
+            this.draftStore
+              .persistFreeEntities()
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe((hadAnyToSave) => {
+                if (hadAnyToSave) {
+                  this.toastService.success('Votre catalogue a été mis à jour.');
+                }
+              });
             return;
           }
           this.loadError.set("Impossible de calculer l'aperçu pour le moment.");
@@ -171,8 +200,9 @@ export class InvoiceCreatePreviewStepPage {
         },
         error: (error: HttpErrorResponse) => {
           this.downloadingPdf.set(false);
+          // premiumGateInterceptor already showed the paywall modal for the
+          // 402 — this just skips the generic error toast.
           if (error.status === 402) {
-            this.paywallService.show();
             return;
           }
           this.toastService.error("Impossible de générer l'aperçu PDF pour le moment.");
@@ -258,8 +288,9 @@ export class InvoiceCreatePreviewStepPage {
         },
         error: (error: HttpErrorResponse) => {
           this.converting.set(false);
+          // premiumGateInterceptor already showed the paywall modal for the
+          // 402 — this just skips the generic error message.
           if (error.status === 402) {
-            this.paywallService.show();
             return;
           }
           this.errorMessage.set('Impossible de créer la facture pour le moment.');
@@ -275,120 +306,48 @@ export class InvoiceCreatePreviewStepPage {
   // facture" only exists on this screen now) — reads exclusively off
   // InvoiceDraftStore rather than a FormArray, since the lines step's forms
   // no longer exist by the time the artisan reaches this page.
+  //
+  // Catalog/customer persistence itself lives on
+  // InvoiceDraftStore.persistFreeEntities (also called from loadPreview()'s
+  // 402 handler below) — it's free-tier config, not part of what the
+  // premium gate blocks, so it isn't only reachable from here anymore. It
+  // updates the draft's customerId/catalogProductId/catalogServiceId in
+  // place, which is why buildInvoiceRequest below is read fresh afterwards
+  // rather than off a `customer` snapshot taken before it ran.
   protected submit(): void {
     if (this.creating() || !this.draftStore.canPreview()) {
       return;
     }
 
-    const customer = this.draftStore.customer();
     this.creating.set(true);
     this.errorMessage.set(null);
 
-    // "Enregistrer ce produit" only saves the catalog-appropriate fields
-    // (name/unit/price/packaging/code) — never `quantity`, `wasteSurcharge`,
-    // or `roundUpToPackaging`, which describe this chantier, not the
-    // product itself. Best-effort: a failed catalog save (e.g. a duplicate
-    // code) must never block the invoice itself from being created. A line
-    // that started from an existing catalog Product (catalogProductId set)
-    // updates that same Product instead of creating a duplicate — the name
-    // can't have changed (see InvoiceLineFormComponent.isCatalogLinked), but
-    // the price/packaging/code may well have.
-    const productSaveRequests = this.draftStore
-      .lines()
-      .filter((line) => line.saveAsNewProduct)
-      .map((line) => {
-        const payload = {
-          name: line.description,
-          unit: line.unit,
-          priceCents: Math.round(line.unitPriceEuros * 100),
-          code: line.productCode || undefined,
-          packagingQuantity: line.packagingQuantity ?? undefined,
-        };
-        const save$ = line.catalogProductId
-          ? this.productService.update(line.catalogProductId, payload)
-          : this.productService.create(payload);
-        return save$.pipe(catchError(() => of(null)));
+    this.draftStore
+      .persistFreeEntities()
+      .pipe(
+        switchMap(() =>
+          this.invoiceService.create(
+            this.draftStore.buildInvoiceRequest(this.draftStore.customer().customerId ?? undefined),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (invoice) => {
+          this.creating.set(false);
+          this.createdInvoice.set(invoice);
+          this.draftStore.reset();
+        },
+        error: (error: HttpErrorResponse) => {
+          this.creating.set(false);
+          // Phase 14: a 402 here means the free-trial invoice is already
+          // used up — premiumGateInterceptor already showed the paywall
+          // modal, so this just skips the generic message.
+          if (error.status === 402) {
+            return;
+          }
+          this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');
+        },
       });
-    // Same "update the linked entry instead of duplicating it" rule for a
-    // prestation, via saveAsNewService (see InvoiceServiceLineFormComponent).
-    const serviceSaveRequests = this.draftStore
-      .serviceLines()
-      .filter((serviceLine) => serviceLine.saveAsNewService)
-      .map((serviceLine) => {
-        const payload = {
-          name: serviceLine.name,
-          description: serviceLine.description || undefined,
-          pricingMode: serviceLine.pricingMode,
-          priceCents:
-            serviceLine.pricingMode === 'FIXED'
-              ? Math.round(serviceLine.amountEuros * 100)
-              : undefined,
-          percentageBasisPoints:
-            serviceLine.pricingMode === 'PERCENTAGE'
-              ? (serviceLine.percentageBasisPoints ?? undefined)
-              : undefined,
-          defaultVisibility: serviceLine.visibility,
-        };
-        const save$ = serviceLine.catalogServiceId
-          ? this.serviceCatalogService.update(serviceLine.catalogServiceId, payload)
-          : this.serviceCatalogService.create(payload);
-        return save$.pipe(catchError(() => of(null)));
-      });
-
-    // Normalized to Observable<null> on both branches — a ternary between
-    // differently-typed Observables otherwise loses its generic argument
-    // when piped below (TS falls back to the no-op 0-arg pipe() overload).
-    // Products and services are cast to a shared Observable<unknown> here
-    // purely so they can share one forkJoin — neither result is ever read.
-    const catalogSaveRequests: Observable<unknown>[] = [
-      ...productSaveRequests,
-      ...serviceSaveRequests,
-    ];
-    const saveCatalogEntries$: Observable<null> =
-      catalogSaveRequests.length > 0
-        ? forkJoin(catalogSaveRequests).pipe(map(() => null))
-        : of(null);
-
-    // "Enregistrer ce client" only applies to freehand entry — if a saved
-    // customer was picked, there's nothing new to save.
-    const request$ = saveCatalogEntries$.pipe(
-      switchMap(() =>
-        customer.saveAsNewCustomer && !customer.customerId
-          ? this.customerService
-              .create({
-                name: customer.customerName,
-                address: customer.customerAddress || undefined,
-                email: customer.customerEmail || undefined,
-                phone: customer.customerPhone || undefined,
-              })
-              .pipe(
-                switchMap((newCustomer) =>
-                  this.invoiceService.create(this.draftStore.buildInvoiceRequest(newCustomer.id)),
-                ),
-              )
-          : this.invoiceService.create(
-              this.draftStore.buildInvoiceRequest(customer.customerId ?? undefined),
-            ),
-      ),
-    );
-
-    request$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (invoice) => {
-        this.creating.set(false);
-        this.createdInvoice.set(invoice);
-        this.draftStore.reset();
-      },
-      error: (error: HttpErrorResponse) => {
-        this.creating.set(false);
-        // Phase 14: a 402 here means the free-trial invoice is already
-        // used up — the paywall modal explains that and offers a path to
-        // subscribe, so it replaces (not stacks with) the generic message.
-        if (error.status === 402) {
-          this.paywallService.show();
-          return;
-        }
-        this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');
-      },
-    });
   }
 }

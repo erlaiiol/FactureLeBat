@@ -47,6 +47,7 @@
     @if (productPanelOpen()) {
       <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
       <div
+        appTourAnchor="invoice-product-flyout"
         class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
       >
         <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">

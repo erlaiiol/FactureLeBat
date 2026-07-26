@@ -17,6 +17,12 @@ import { isOverdue } from './invoice-status.util';
 import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
+import { createNarrowViewportSignal } from '../../shared/utils/narrow-viewport.util';
+
+// Matches Tailwind v4's default `lg` breakpoint (min-width: 1024px) — the
+// same threshold invoice-board.page.html already uses for its
+// flex-row-of-fixed-columns -> equal-width-flex-columns switch.
+const NARROW_VIEWPORT_MAX_PX = 1023;
 
 // Phase 16: replaces the old flat "Mes factures" list entirely (decided
 // explicitly with the user — a mobile-first management board, not a
@@ -51,6 +57,14 @@ export class InvoiceBoardPage {
   protected readonly dateFrom = signal('');
   protected readonly dateTo = signal('');
   protected readonly unpaidOnly = signal(false);
+
+  // Phase 22: below `lg`, the board opens on a "priorité" view (En retard +
+  // Non payées only) instead of all 5 columns — the desktop "always render
+  // all 5" decision above stays true at `lg`+, this is a narrow-viewport-only
+  // exception, not a reversal of it. The artisan can still reach the other 3
+  // columns with one tap ("Tout voir").
+  protected readonly isNarrow = createNarrowViewportSignal(NARROW_VIEWPORT_MAX_PX);
+  protected readonly mobileView = signal<'priorite' | 'tout'>('priorite');
 
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly sharingInvoiceId = signal<string | null>(null);
@@ -144,6 +158,10 @@ export class InvoiceBoardPage {
 
   protected toggleUnpaidOnly(): void {
     this.unpaidOnly.update((value) => !value);
+  }
+
+  protected toggleMobileView(): void {
+    this.mobileView.update((value) => (value === 'priorite' ? 'tout' : 'priorite'));
   }
 
   protected unpaidToggleClasses(): string {

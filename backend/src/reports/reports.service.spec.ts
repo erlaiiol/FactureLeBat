@@ -69,6 +69,7 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
     dueDate: null,
     paidAt: new Date('2026-04-12'),
     lastReminderAt: null,
+    lastPushReminderAt: null,
     createdAt: new Date('2026-04-10'),
     updatedAt: new Date('2026-04-10'),
     entryMode: 'GUIDED',

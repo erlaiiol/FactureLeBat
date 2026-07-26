@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { PaywallService } from '../../core/services/paywall.service';
+import { PlatformService } from '../../core/services/platform.service';
 import { BigButtonComponent } from './big-button.component';
 import { IconCloseComponent } from './icon-close.component';
 
@@ -17,6 +18,7 @@ import { IconCloseComponent } from './icon-close.component';
 })
 export class PaywallModalComponent {
   protected readonly paywallService = inject(PaywallService);
+  protected readonly platformService = inject(PlatformService);
   private readonly router = inject(Router);
 
   @HostListener('document:keydown.escape')

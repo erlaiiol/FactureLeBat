@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { authRefreshInterceptor } from './core/interceptors/auth-refresh.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
+import { premiumGateInterceptor } from './core/interceptors/premium-gate.interceptor';
 import { timeoutInterceptor } from './core/interceptors/timeout.interceptor';
 import { xsrfInterceptor } from './core/interceptors/xsrf.interceptor';
 
@@ -27,6 +28,7 @@ export const appConfig: ApplicationConfig = {
         credentialsInterceptor,
         xsrfInterceptor,
         authRefreshInterceptor,
+        premiumGateInterceptor,
       ]),
     ),
   ],

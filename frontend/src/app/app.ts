@@ -22,6 +22,7 @@ import {
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { BillingService } from './core/services/billing.service';
+import { PushRegistrationService } from './core/services/push-registration.service';
 import { ThemeService } from './core/services/theme.service';
 import { ToastService } from './core/services/toast.service';
 import { FooterComponent } from './shared/components/footer.component';
@@ -67,6 +68,7 @@ export class App {
   protected readonly tourService = inject(TourService);
   protected readonly authService = inject(AuthService);
   protected readonly billingService = inject(BillingService);
+  private readonly pushRegistrationService = inject(PushRegistrationService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
   private readonly activatedRoute = inject(ActivatedRoute);
@@ -141,6 +143,15 @@ export class App {
         untracked(() => this.billingService.refreshStatus().subscribe());
       } else {
         this.billingService.status.set(null);
+      }
+    });
+
+    // Phase 22: registers this device's push token once per login, same
+    // "isAuthenticated only flips on log in/out" reasoning as the billing
+    // effect above — a no-op on web, see PushRegistrationService.
+    effect(() => {
+      if (this.authService.isAuthenticated()) {
+        untracked(() => void this.pushRegistrationService.registerDevice());
       }
     });
 
@@ -259,6 +270,10 @@ export class App {
   }
 
   protected logout(): void {
+    // Best-effort, before the session cookie is actually cleared below —
+    // a shared/reset device should stop receiving pushes for the departed
+    // account even if this specific call fails (see PushRegistrationService).
+    void this.pushRegistrationService.unregisterDevice();
     this.authService
       .logout()
       .pipe(takeUntilDestroyed(this.destroyRef))
