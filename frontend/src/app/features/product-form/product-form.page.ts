@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ACTIVITY_CATEGORY_OPTIONS, ActivityCategory } from '../../core/models/report.model';
 import {
   Unit,
   UNIT_LABELS,
@@ -10,6 +11,7 @@ import {
   UNIT_PRICE_BUTTON_LABELS,
 } from '../../core/models/unit.model';
 import { ProductService } from '../../core/services/product.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 
@@ -21,8 +23,10 @@ import { FieldHintComponent } from '../../shared/components/field-hint.component
 })
 export class ProductFormPage {
   protected readonly unitOptions = UNIT_OPTIONS;
+  protected readonly activityCategoryOptions = ACTIVITY_CATEGORY_OPTIONS;
 
   private readonly productService = inject(ProductService);
+  private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
@@ -79,6 +83,9 @@ export class ProductFormPage {
     // products. `null` (not 0) is the "not set" value here, unlike
     // priceEuros, since a packaging quantity of 0 would be meaningless.
     packagingQuantity: this.fb.control<number | null>(null, Validators.min(0.001)),
+    // Phase 17: artisan-set, left unset by default — no automatic detection
+    // (see docs/roadmap.md Phase 17's non-goals).
+    activityCategory: this.fb.control<ActivityCategory | null>(null),
   });
 
   constructor() {
@@ -100,6 +107,7 @@ export class ProductFormPage {
               packagingQuantity: product.packagingQuantity
                 ? Number(product.packagingQuantity)
                 : null,
+              activityCategory: product.activityCategory,
             });
           },
           error: () => {
@@ -169,6 +177,7 @@ export class ProductFormPage {
       supplierUrl: value.supplierUrl || undefined,
       code: value.code || undefined,
       packagingQuantity: value.packagingQuantity ?? undefined,
+      activityCategory: value.activityCategory ?? undefined,
     };
 
     this.saving.set(true);
@@ -181,6 +190,7 @@ export class ProductFormPage {
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.saving.set(false);
+        this.toastService.success(this.isEditing ? 'Produit modifié.' : 'Produit enregistré.');
         void this.router.navigate(['/produits']);
       },
       error: (error: HttpErrorResponse) => {

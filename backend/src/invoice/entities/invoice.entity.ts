@@ -1,4 +1,5 @@
 import {
+  ActivityCategory,
   DocumentType,
   InvoiceEntryMode,
   InvoiceStatus,
@@ -34,6 +35,10 @@ export interface InvoiceLineWithTotal {
   // below. See schema.prisma's comment on InvoiceLine.showUnitDetail.
   showUnitDetail: boolean;
   showBillingDetail: boolean;
+  // Phase 17: snapshotted at creation from the picked catalog Product — see
+  // schema.prisma's comment on InvoiceLine.activityCategory. Null for a
+  // freehand line or an uncategorized product.
+  activityCategory: ActivityCategory | null;
   // Includes any amount redistributed onto this line by a REDISTRIBUTED
   // service line (Phase 5) — always recomputed, never persisted (see
   // InvoiceMapper.toInvoiceWithTotals).
@@ -56,6 +61,9 @@ export interface InvoiceServiceLineWithAmounts {
   description: string | null;
   amountCents: number;
   visibility: ServiceVisibility;
+  // Phase 17: snapshotted at creation from the picked catalog Service —
+  // see schema.prisma's comment on InvoiceServiceLine.activityCategory.
+  activityCategory: ActivityCategory | null;
   // Only present for REDISTRIBUTED lines.
   distribution?: ServiceLineDistributionEntry[];
 }

@@ -15,7 +15,7 @@ set +a
 mkdir -p infra/backups
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-file="infra/backups/facturelebat_${timestamp}.sql.gz"
+file="infra/backups/facturele_${timestamp}.sql.gz"
 
 docker compose -f infra/docker-compose.prod.yml exec -T postgres \
   pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "$file"
@@ -23,4 +23,4 @@ docker compose -f infra/docker-compose.prod.yml exec -T postgres \
 echo "Backup written to $file"
 
 # Keep the last 14 days of daily backups, discard older ones.
-find infra/backups -name 'facturelebat_*.sql.gz' -mtime +14 -delete
+find infra/backups -name 'facturele_*.sql.gz' -mtime +14 -delete

@@ -1,6 +1,6 @@
 # Design System
 
-This document records the visual identity decisions for FactureLeBat: palette, typography, the line-badge motif, and the motion principles. It is the "what we chose and why" companion to the roadmap — see [roadmap.md](roadmap.md) for the features these choices apply to (Phases 5–9 in particular).
+This document records the visual identity decisions for FactureLe: palette, typography, the line-badge motif, and the motion principles. It is the "what we chose and why" companion to the roadmap — see [roadmap.md](roadmap.md) for the features these choices apply to (Phases 5–9 in particular).
 
 These decisions came out of a visual comparison of four candidate directions ("Au carré", "Bleu de travail", "Chantier net", "Atelier sobre"). "Chantier calibré" below is a deliberate hybrid of two of them, not one of the four as originally proposed.
 
@@ -118,4 +118,6 @@ Rules that apply everywhere:
 
 Both palettes and the type scale are implemented as Tailwind v4 `@theme` tokens in `frontend/src/styles.css`, including a dark-mode variant of "Chantier calibré" ("Atelier sobre" stays a light-only, accent-only treatment, per its own "where it's allowed to appear" list above). "Atelier sobre" has a fourth spot as of Phase 13.3: the public landing page (`features/landing/`).
 
-The Materialize/Contemplative-reveal bands and `scrollReveal`/`panelStretch`/`cardMorph` above are decisions made for the UI/UX polish initiative (see [ux-roadmap.md](ux-roadmap.md)) and are not yet implemented anywhere in the frontend as of this writing — ux-roadmap.md tracks that rollout phase by phase.
+The Materialize/Contemplative-reveal bands above are decisions made for the UI/UX polish initiative (see [ux-roadmap.md](ux-roadmap.md)); rollout is tracked phase by phase there. `asyncReveal` is implemented app-wide: `.anim-skeleton` (styles.css) is the shared pulsing placeholder, `delayedSkeleton()` (`shared/utils/delayed-skeleton.ts`) gates it behind the ~180ms grace period, and `.anim-preview-in` (styles.css, originally written for the invoice preview mirror) is the one shared "content just arrived" reveal reused across every loading screen rather than duplicated per page. `scrollReveal`/`panelStretch`/`cardMorph` remain not yet implemented.
+
+Every routed page also fades up on arrival (App's `replayPageEnterAnimation`, `.anim-page-in` in styles.css) — an Entrance-band effect that isn't one of the named Materialize/Contemplative effects above, but the same "no raw pop-in" principle applied to route changes themselves.

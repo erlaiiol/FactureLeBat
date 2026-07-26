@@ -15,6 +15,7 @@ import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from './big-button.component';
 import { FieldHintComponent } from './field-hint.component';
+import { IconCloseComponent } from './icon-close.component';
 
 // Same closable-modal shape as app-pdf-preview-modal — a self-contained
 // dialog the caller opens by setting `invoice`, closes via the `closed`
@@ -24,7 +25,7 @@ import { FieldHintComponent } from './field-hint.component';
 @Component({
   selector: 'app-send-invoice-email-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
+  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent, IconCloseComponent],
   templateUrl: './send-invoice-email-modal.component.html',
 })
 export class SendInvoiceEmailModalComponent {

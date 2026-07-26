@@ -31,5 +31,10 @@ import { PdfModule } from './pdf/pdf.module';
     InvoiceMapper,
     InvoiceMailService,
   ],
+  // Phase 17: ReportsModule reuses the exact same repository queries +
+  // totals-computation pipeline the invoice API itself uses (see
+  // docs/conventions.md's "no business-logic duplication") rather than
+  // re-deriving per-line totals/redistribution math from scratch.
+  exports: [InvoiceRepository, InvoiceMapper],
 })
 export class InvoiceModule {}

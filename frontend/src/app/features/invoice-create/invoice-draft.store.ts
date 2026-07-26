@@ -10,6 +10,7 @@ import {
   ServiceLineVisibility,
   WasteSurcharge,
 } from '../../core/models/invoice.model';
+import { ActivityCategory } from '../../core/models/report.model';
 import { ServicePricingMode } from '../../core/models/service.model';
 import { isAreaUnit, Unit } from '../../core/models/unit.model';
 import { CompanyService } from '../../core/services/company.service';
@@ -57,6 +58,10 @@ export interface InvoiceLineDraft {
   // — never sent as-is to the invoice-creation request (see
   // buildInvoiceRequest), mirrors the customer step's saveAsNewCustomer.
   saveAsNewProduct: boolean;
+  // Phase 17: snapshotted from the picked catalog Product at the moment
+  // this line was added — see CreateInvoiceLineRequest.activityCategory.
+  // Not a form field the artisan edits directly, just carried through.
+  activityCategory: ActivityCategory | null;
   // Phase 15: per-line PDF rendering toggles, set from the mandatory
   // preview screen — both default true so an artisan who never opens that
   // screen sees no behavior change. Persisted through the same draft
@@ -84,6 +89,8 @@ export interface InvoiceServiceLineDraft {
   // Same UI-only toggle-tracking role as InvoiceLineDraft.saveAsNewProduct —
   // never sent as-is to the invoice-creation request (see buildInvoiceRequest).
   saveAsNewService: boolean;
+  // Phase 17: same soft-snapshot rule as InvoiceLineDraft.activityCategory.
+  activityCategory: ActivityCategory | null;
 }
 
 const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
@@ -108,6 +115,7 @@ const EMPTY_LINE: InvoiceLineDraft = {
   saveAsNewProduct: false,
   showUnitDetail: true,
   showBillingDetail: true,
+  activityCategory: null,
 };
 
 // Phase 13.5: defaults for fields added after the original InvoiceServiceLineDraft
@@ -119,9 +127,10 @@ const EMPTY_SERVICE_LINE_DEFAULTS = {
   percentageBasisPoints: null as number | null,
   catalogServiceId: null as string | null,
   saveAsNewService: false,
+  activityCategory: null as ActivityCategory | null,
 };
 
-const DRAFT_STORAGE_KEY = 'facturelebat.invoiceDraft.v1';
+const DRAFT_STORAGE_KEY = 'facturele.invoiceDraft.v1';
 
 interface PersistedDraft {
   customer: InvoiceCustomerDraft;
@@ -153,6 +162,11 @@ export class InvoiceDraftStore {
   readonly customers = computed(() => this.customerService.all() ?? []);
   readonly products = computed(() => this.productService.all() ?? []);
   readonly services = computed(() => this.serviceCatalogService.all() ?? []);
+  // The customer-step grid needs to tell "still loading" apart from
+  // "loaded, zero customers" (an empty grid is a valid, non-transient state
+  // that shouldn't show a skeleton) — `all()` is only ever null before the
+  // constructor's getAllCached() call below resolves.
+  readonly customersLoaded = computed(() => this.customerService.all() !== null);
 
   // Phase 14.3: seeded from the mode-choice slider (via InvoiceCreateShellPage
   // reading the `type` query param), then persisted like every other draft
@@ -326,6 +340,7 @@ export class InvoiceDraftStore {
       productCode: line.productCode ?? undefined,
       showUnitDetail: line.showUnitDetail,
       showBillingDetail: line.showBillingDetail,
+      activityCategory: line.activityCategory ?? undefined,
     }));
 
     const serviceLines: CreateInvoiceServiceLineRequest[] = this.serviceLines().map(
@@ -338,6 +353,7 @@ export class InvoiceDraftStore {
             description: serviceLine.description || undefined,
             amountCents,
             visibility: 'VISIBLE' as const,
+            activityCategory: serviceLine.activityCategory ?? undefined,
           };
         }
         return {
@@ -349,6 +365,7 @@ export class InvoiceDraftStore {
           redistributionStrategy: serviceLine.redistributionStrategy,
           weights:
             serviceLine.redistributionStrategy === 'WEIGHTED' ? serviceLine.weights : undefined,
+          activityCategory: serviceLine.activityCategory ?? undefined,
         };
       },
     );

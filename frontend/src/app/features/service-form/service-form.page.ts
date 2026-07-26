@@ -3,8 +3,10 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ACTIVITY_CATEGORY_OPTIONS, ActivityCategory } from '../../core/models/report.model';
 import { ServicePricingMode, ServiceVisibility } from '../../core/models/service.model';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 
@@ -15,7 +17,10 @@ import { FieldHintComponent } from '../../shared/components/field-hint.component
   templateUrl: './service-form.page.html',
 })
 export class ServiceFormPage {
+  protected readonly activityCategoryOptions = ACTIVITY_CATEGORY_OPTIONS;
+
   private readonly serviceCatalogService = inject(ServiceCatalogService);
+  private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
@@ -47,6 +52,8 @@ export class ServiceFormPage {
     percentage: [0, [Validators.min(0.01), Validators.max(100)]],
     defaultVisibility: this.fb.nonNullable.control<ServiceVisibility>('VISIBLE'),
     code: [''],
+    // Phase 17: artisan-set, left unset by default.
+    activityCategory: this.fb.control<ActivityCategory | null>(null),
   });
 
   protected isPercentageMode(): boolean {
@@ -74,6 +81,7 @@ export class ServiceFormPage {
                 service.percentageBasisPoints != null ? service.percentageBasisPoints / 100 : 0,
               defaultVisibility: service.defaultVisibility,
               code: service.code ?? '',
+              activityCategory: service.activityCategory,
             });
           },
           error: () => {
@@ -107,6 +115,7 @@ export class ServiceFormPage {
         value.pricingMode === 'PERCENTAGE' ? Math.round(value.percentage * 100) : undefined,
       defaultVisibility: value.defaultVisibility,
       code: value.code || undefined,
+      activityCategory: value.activityCategory ?? undefined,
     };
 
     this.saving.set(true);
@@ -119,6 +128,9 @@ export class ServiceFormPage {
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.saving.set(false);
+        this.toastService.success(
+          this.isEditing ? 'Prestation modifiée.' : 'Prestation enregistrée.',
+        );
         void this.router.navigate(['/prestations']);
       },
       error: (error: HttpErrorResponse) => {

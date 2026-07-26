@@ -15,7 +15,35 @@ export class CompanyRepository {
     return this.prisma.company.findUniqueOrThrow({ where: { id: companyId } });
   }
 
+  // Built explicitly (not `data: data`) so an omitted optional field clears
+  // to null instead of leaving the previous value in place — same reasoning
+  // as ProductRepository.update/ServiceCatalogRepository.update: PATCH here
+  // is a full replace of the editable fields, not a partial patch. This
+  // matters most for microEntrepreneurCeiling (Phase 17): an artisan must be
+  // able to clear a previously-set plafond back to "no warning shown", not
+  // just change it to a different number.
   update(companyId: string, data: UpdateCompanyDto): Promise<Company> {
-    return this.prisma.company.update({ where: { id: companyId }, data });
+    return this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        name: data.name,
+        siret: data.siret,
+        addressLine1: data.addressLine1,
+        addressLine2: data.addressLine2 ?? null,
+        postalCode: data.postalCode,
+        city: data.city,
+        email: data.email ?? null,
+        phone: data.phone ?? null,
+        legalStatus: data.legalStatus,
+        vatRateBasisPoints: data.vatRateBasisPoints,
+        invoiceNumberPrefix: data.invoiceNumberPrefix,
+        declarationFrequency: data.declarationFrequency,
+        microEntrepreneurCeiling: data.microEntrepreneurCeiling ?? null,
+        cotisationVenteBasisPoints: data.cotisationVenteBasisPoints,
+        cotisationPrestationBicBasisPoints: data.cotisationPrestationBicBasisPoints,
+        cotisationPrestationBncBasisPoints: data.cotisationPrestationBncBasisPoints,
+        versementLiberatoireOptIn: data.versementLiberatoireOptIn,
+      },
+    });
   }
 }

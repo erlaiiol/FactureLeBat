@@ -21,13 +21,15 @@
 </div>
 
 @if (loading()) {
-  <p class="text-ink-soft">Chargement…</p>
+  @if (showSkeleton()) {
+    <app-skeleton-rows />
+  }
 } @else if (errorMessage(); as message) {
   <p class="font-medium text-danger">{{ message }}</p>
 } @else if (customers().length === 0) {
   <p class="text-ink-soft">Aucun client pour le moment.</p>
 } @else {
-  <ul class="flex flex-col gap-3">
+  <ul class="anim-preview-in flex flex-col gap-3">
     @for (customer of customers(); track customer.id) {
       <li>
         <a

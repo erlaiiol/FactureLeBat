@@ -16,7 +16,7 @@ const CONFIG_DEFAULTS: Record<string, unknown> = {
   JWT_REFRESH_EXPIRES_IN_DAYS: 30,
   JWT_REFRESH_NOT_REMEMBERED_EXPIRES_IN_DAYS: 1,
   FRONTEND_URL: 'http://localhost:4200',
-  SYSTEM_MAIL_FROM_NAME: 'FactureLeBat',
+  SYSTEM_MAIL_FROM_NAME: 'FactureLe',
 };
 
 function buildUser(overrides: Partial<User> = {}): User {

@@ -1,12 +1,12 @@
-# FactureLeBat Roadmap
+# FactureLe Roadmap
 
 ## Product Vision
 
-FactureLeBat is a SaaS application designed for construction artisans and independent contractors.
+FactureLe is a SaaS application designed for small businesses that need to manage quotes and invoices. Construction artisans and independent contractors are the primary, most obvious target — but not the only one the product is built for.
 
-The initial goal is to help flooring installers create professional invoices quickly.
+The initial goal was to help flooring installers create professional invoices quickly.
 
-The long-term goal is to provide a complete business management platform for artisans:
+The long-term goal is to provide a complete business management platform, starting from artisans' needs but growing beyond that niche:
 
 - product catalog management
 - supplier data extraction
@@ -15,9 +15,9 @@ The long-term goal is to provide a complete business management platform for art
 - project tracking
 - business insights
 
-The product must remain simple enough for craftsmen who are not technical. The UI must be clear. The UX must be the fastest with big buttons. We must write a minimum. We must click a maximum.
+The product must remain simple enough for non-technical users. The UI must be clear. The UX must be the fastest with big buttons. We must write a minimum. We must click a maximum.
 
-**Scaling beyond a small artisan app:** the product is actively being scaled past its original "flooring installer" niche toward a broader platform — small features that let a document flex to more real-world situations (e.g. per-invoice VAT treatment, not just a fixed company-wide default) are part of that push, not scope creep. Once that broadening is far enough along, the product is expected to rename from **FactureLeBat** to **FactureLe** — noted here as direction, not yet executed (no code/package/repo rename has happened).
+**Scaling beyond a small artisan app:** the product is actively being scaled past its original "flooring installer" niche toward a broader platform — small features that let a document flex to more real-world situations (e.g. per-invoice VAT treatment, not just a fixed company-wide default) are part of that push, not scope creep. Artisans stay the default persona for UX decisions (simple, fast, big buttons, minimal typing), but features shouldn't be scoped as if they were the only user. The product renamed from **FactureLeBat** to **FactureLe** on 2026-07-26 to reflect this broader scope.
 
 Priority order:
 
@@ -210,7 +210,7 @@ A craftsman can paste a supplier URL.
 Example:
 https://supplier.com/product/parquet-oak
 
-FactureLeBat extracts:
+FactureLe extracts:
 
 - product name
 - price
@@ -586,7 +586,7 @@ Let the artisan send a generated invoice by email directly from the app, using t
 ## Features
 
 - [x] Send an invoice PDF by email from the invoice list screen, using the artisan's own email address as the sender
-- [x] Default message template that mentions FactureLeBat (product visibility for the artisan's own clients seeing where the invoice came from), editable before sending
+- [x] Default message template that mentions FactureLe (product visibility for the artisan's own clients seeing where the invoice came from), editable before sending
 - [x] Recipient prefilled from the customer's saved email (Phase 2), editable per send
 - [x] Sent status and timestamp recorded on the invoice
 - [x] Delivery failures surfaced clearly to the artisan (bounced/invalid address, provider error) rather than silently swallowed
@@ -612,7 +612,7 @@ Let the artisan send a generated invoice by email directly from the app, using t
 
 ## Objective
 
-Turn FactureLeBat from a single-artisan tool into a real multi-user SaaS: every artisan gets their own isolated customers/invoices/products/services, behind secure login.
+Turn FactureLe from a single-artisan tool into a real multi-user SaaS: every artisan gets their own isolated customers/invoices/products/services, behind secure login.
 
 ## Features
 
@@ -656,7 +656,7 @@ Beyond the roadmap draft above, this phase also shipped the full practical/legal
 
 ## Objective
 
-Build the public-facing part of the site: what a visitor sees before any login or account creation. Today the app has no real front door — this phase gives it one, presenting FactureLeBat clearly, using modern web/marketing conventions and strong calls-to-action, instead of dropping a first-time visitor straight onto a login form.
+Build the public-facing part of the site: what a visitor sees before any login or account creation. Today the app has no real front door — this phase gives it one, presenting FactureLe clearly, using modern web/marketing conventions and strong calls-to-action, instead of dropping a first-time visitor straight onto a login form.
 
 ## Content basis
 
@@ -1009,7 +1009,7 @@ This phase is a payment/status *tracker*, not a payment *collector* — see Non-
 
 ## Non-goals
 
-- **No online payment collection, and no client-facing surface at all.** FactureLeBat's board is a tool for the artisan alone — the client never sees it, logs into it, or interacts with it. "Marquer payée" is the artisan recording a fact (they were paid by check, transfer, cash on-site), not a payment gateway charging the end client. Actually collecting money online would mean building a client-facing checkout/portal, which is a different product surface entirely and out of scope here — not to be confused with Phase 14's Stripe integration, which bills the *artisan's own* FactureLeBat subscription, not their clients.
+- **No online payment collection, and no client-facing surface at all.** FactureLe's board is a tool for the artisan alone — the client never sees it, logs into it, or interacts with it. "Marquer payée" is the artisan recording a fact (they were paid by check, transfer, cash on-site), not a payment gateway charging the end client. Actually collecting money online would mean building a client-facing checkout/portal, which is a different product surface entirely and out of scope here — not to be confused with Phase 14's Stripe integration, which bills the *artisan's own* FactureLe subscription, not their clients.
 - **No reminder scheduling/automation.** "Renvoyer un mail" stays a manual, one-click action the artisan chooses to take — no automatic recurring dunning emails in this phase.
 - **No partial payments.** An invoice is either paid or not; splitting a paid amount across multiple installments is a different, bigger data model and isn't asked for here.
 
@@ -1035,7 +1035,7 @@ This phase is a payment/status *tracker*, not a payment *collector* — see Non-
 
 ## Objective
 
-Turn the invoice history FactureLeBat already holds into two things an artisan actually needs but currently has to reconstruct by hand: a **quarterly report** shaped for their URSSAF/tax declaration (the reality for a French *auto-entrepreneur*, who must declare turnover every quarter or month), and an **activity dashboard** — the "business insights" goal named in this roadmap's own Product Vision from day one, not yet built.
+Turn the invoice history FactureLe already holds into two things an artisan actually needs but currently has to reconstruct by hand: a **quarterly report** shaped for their URSSAF/tax declaration (the reality for a French *auto-entrepreneur*, who must declare turnover every quarter or month), and an **activity dashboard** — the "business insights" goal named in this roadmap's own Product Vision from day one, not yet built.
 
 ## Why cash-basis, not invoicing date
 
@@ -1050,30 +1050,252 @@ URSSAF/tax declarations for a micro-entrepreneur are based on *encaissements* �
 
 ## Features — Quarterly Report
 
-- [ ] Report screen: pick a period (quarter or month, per `declarationFrequency`; a custom range too) and see total encaissé for that period
-- [ ] Totals broken down by `activityCategory`, plus a visible "non catégorisé" bucket when items haven't been tagged
-- [ ] List of the individual paid invoices that make up the total (client, amount, `paidAt`) — an audit trail the artisan can cross-check against, not just a bare number to trust blindly
-- [ ] Export the report as PDF (reuses the existing `PdfService` pipeline) and as CSV (for pasting into a spreadsheet or handing to an accountant)
-- [ ] Optional plafond warning: a progress indicator comparing year-to-date encaissements against `microEntrepreneurCeiling`, shown only when that field is set
+- [x] Report screen: pick a period (quarter or month, per `declarationFrequency`; a custom range too) and see total encaissé for that period
+- [x] Totals broken down by `activityCategory`, plus a visible "non catégorisé" bucket when items haven't been tagged
+- [x] List of the individual paid invoices that make up the total (client, amount, `paidAt`) — an audit trail the artisan can cross-check against, not just a bare number to trust blindly
+- [x] Export the report as PDF (reuses the existing `PdfService` pipeline) and as CSV (for pasting into a spreadsheet or handing to an accountant)
+- [x] Optional plafond warning: a progress indicator comparing year-to-date encaissements against `microEntrepreneurCeiling`, shown only when that field is set
+
+## Features — Estimated Charges (added after initial delivery)
+
+Requested by the user after the rest of Phase 17 shipped: an estimate of what's owed on the period's encaissements, not just the categorized turnover itself — genuinely useful even as an estimate. This **reverses** this phase's original "No tax advice, no rate computation" non-goal below for the one case where a reliable estimate is actually possible from data this app already has.
+
+- [x] Micro-entrepreneur cotisations sociales estimate, computed per `activityCategory` off the period's `byCategory` breakdown, using the company's own (editable) cotisation rates
+- [x] Optional versement libératoire estimate, added only when the company has opted in (`Company.versementLiberatoireOptIn`)
+- [x] Explicit "not applicable" message — never a guessed number — for any `legalStatus` other than `MICRO_ENTREPRENEUR`
+- [x] Turnover left in "non catégorisé" is excluded from the estimate and called out explicitly, so the total reads as a floor, not a silently wrong full figure
+- [x] Included in the on-screen report, the PDF export, and the CSV export
+- [x] Cotisation rates (`Company.cotisationVenteBasisPoints`/`cotisationPrestationBicBasisPoints`/`cotisationPrestationBncBasisPoints`) are pre-filled with the official rates but artisan-editable in "Mon entreprise" — same reasoning as `microEntrepreneurCeiling`: real rates are revised periodically and a Cipav-affiliated profession pays a different rate than the general regime, and this app can't guarantee a baked-in number stays current
 
 ## Features — Activity Analytics
 
-- [ ] Revenue-over-time chart (encaissé, by month, last 12 months)
-- [ ] Top clients by revenue, top products/services by revenue and by frequency
-- [ ] Outstanding total: sum of `NON_PAYEE` + `En retard` invoices (Phase 16), so the artisan sees "billed but not yet collected" alongside what's actually been received
-- [ ] Basic activity counters: invoice count, average invoice value, count of active clients/products
-- [ ] Hosted in "Mon activité" (Phase 9's existing "Atelier sobre" section, company settings) — the sanctioned spot where the app already speaks about the artisan's business rather than asking for fast data entry, extended rather than duplicated with a new screen
+- [x] Revenue-over-time chart (encaissé, by month, last 12 months)
+- [x] Top clients by revenue, top products/services by revenue and by frequency
+- [x] Outstanding total: sum of `NON_PAYEE` + `En retard` invoices (Phase 16), so the artisan sees "billed but not yet collected" alongside what's actually been received
+- [x] Basic activity counters: invoice count, average invoice value, count of active clients/products
+- [x] Hosted in "Mon activité" (Phase 9's existing "Atelier sobre" section, company settings) — the sanctioned spot where the app already speaks about the artisan's business rather than asking for fast data entry, extended rather than duplicated with a new screen
 
 ## Non-goals
 
 - **No e-filing / URSSAF API integration.** The artisan still enters the figure on the official portal themselves; this phase produces the correct number and a paper trail, not a submission.
-- **No tax advice, no rate computation.** The app reports categorized turnover — it does not calculate cotisations owed, apply rates, or account for ACRE/exemptions. Matches the same honesty principle already applied to Phase 10 (sourcing) and Phase 12 (mail delivery): the app states what it can verify from its own data and stops there.
-- **No expense/charge tracking.** FactureLeBat only knows the revenue side (invoices); a full accounting picture (deductible expenses, etc.) is a materially different feature and out of scope here.
+- **No *guessed* tax advice.** ~~No rate computation~~ — revised after initial delivery (see "Features — Estimated Charges" above): the app *does* now compute an estimate of cotisations sociales/versement libératoire for a micro-entrepreneur, since that computation is fully determined by data the app already has (categorized turnover x the company's own rates). What's still firmly out of scope is anything that would require *guessing* — ACRE/exemptions, a mid-period regime change, or any figure for a `COMPANY` (whose real IS/IR depends on deductible expenses this app doesn't track). Matches the same honesty principle already applied to Phase 10 (sourcing) and Phase 12 (mail delivery): the app computes what it can fully verify from its own data, and says plainly when it can't, rather than approximating past that line.
+- **No expense/charge tracking.** FactureLe only knows the revenue side (invoices); a full accounting picture (deductible expenses, etc.) is a materially different feature and out of scope here.
 - **No automatic activity-category detection.** Guessing VENTE vs. PRESTATION from a product/service name risks being confidently wrong on exactly the field that determines a real declaration — left to explicit artisan input instead.
 
 ## Notes
 
 - Depends on Phase 16 for `paidAt`/status — sequenced after it for that reason, not just numbering convenience.
 - Cross-reference: this roadmap's own Product Vision has named "business insights" as a long-term goal since the very first draft; this phase is the first concrete delivery of that promise.
+
+## Decided during implementation
+
+- **No premium gate, decided explicitly with the user** — unlike `PremiumGateService.assertCanCreateInvoice`, both the quarterly report and Activity Analytics are reachable regardless of subscription status. An artisan must always be able to produce their own turnover declaration; only invoice creation past the free trial is ever gated.
+- **`activityCategory` is snapshotted onto `InvoiceLine`/`InvoiceServiceLine` at creation time, never a live join through `Product`/`Service`.** `InvoiceLine` already has no live FK to `Product` at all (only the freehand `productCode` — see Phase 8.5/11), so a snapshot is the only option for product lines; for service lines (which do have a soft `serviceId` FK) the same snapshot rule was chosen deliberately rather than reading `Service.activityCategory` live at report time: retroactively recategorizing a catalog item must never silently change a quarterly report for a period that may already have been declared to URSSAF. The frontend carries this the same "autofill, not a lock" way as `productCode`/`catalogProductId` — copied in from the picked catalog `Product`/`Service` at add-time (`InvoiceCreateLinesStepPage.addProductFromCatalog`/`addServiceFromCatalog`), never its own visible form field.
+- **Every figure is HT (excl. VAT), including Activity Analytics** — not just the legally-required Quarterly Report. URSSAF's own "chiffre d'affaires encaissé" is HT (VAT collected isn't the artisan's own turnover), and using one convention everywhere avoids a second basis to reason about. The Quarterly Report's per-invoice audit-trail list is the one deliberate exception: each row shows that invoice's TTC total, since that's the amount that actually landed in the artisan's bank account and is what the artisan will cross-check the report against.
+- **`REDISTRIBUTED` service-line amounts are never bucketed separately** — `InvoiceCalculationService` already folds them into the receiving product lines' own totals (Phase 5), so summing by each line's own `activityCategory` captures that value exactly once, with no separate handling needed.
+- **A `MANUAL` invoice has no per-line categorization at all** — its whole subtotal lands in the "non catégorisé" bucket rather than being silently dropped, matching the "no automatic activity-category detection" non-goal (manual mode has no fixed column roles to hang a category off of).
+- **"Rapports" is a new top-level nav entry**, not tucked into the "Mon répertoire" dropdown or reachable only from company settings — decided explicitly with the user as important enough to be one click away.
+- **The revenue-over-time chart is a hand-rolled SVG component (`RevenueBarChartComponent`)**, no charting library added — same "small owned UI primitives over a dependency" precedent as the Phase 8 tour engine and Phase 9's motion primitives.
+- **`CompanyRepository.update` was rewritten to build its Prisma `data` object explicitly** (matching `ProductRepository`/`ServiceCatalogRepository`'s existing convention) instead of passing the DTO straight through — needed so a blanked `microEntrepreneurCeilingEuros` field on the settings form actually clears the ceiling (and stops the plafond warning from showing) instead of a `PATCH` silently leaving the old value in place.
+- **Top clients/products/services and the activity counters are all scoped to the same rolling 12-month PAYEE window as the revenue chart** — one "what does activity mean here" answer for the whole dashboard. `outstandingTotalCents` is the deliberate exception (an unpaid invoice has no `paidAt` to scope by), always the company's entire unpaid book.
+- **Cotisation rates are editable, versement libératoire rates are not.** Confirmed explicitly with the user: the three cotisation-sociales rates (`Company.cotisationVenteBasisPoints` and friends) are pre-filled defaults the artisan can correct — they're revised periodically and a Cipav-affiliated liberal profession pays a different rate than the general regime, the same volatility that already justified making `microEntrepreneurCeiling` editable rather than hardcoded. The versement libératoire rates (1% / 1.7% / 2.2%) are plain constants (`VERSEMENT_LIBERATOIRE_RATE_BASIS_POINTS` in `activity-category.util.ts`) instead: they're fixed nationally by law with no per-profession variation, so there's nothing for an artisan to correct.
+- **The estimate is scoped to `legalStatus MICRO_ENTREPRENEUR` only, with an honest message otherwise — never a number for a `COMPANY`.** A société's real IS/IR is a function of deductible expenses (Phase 17's own pre-existing "No expense/charge tracking" non-goal), which this app has no way to know; showing *any* figure there would look authoritative while being unfounded. This is the load-bearing reason the original "no rate computation" non-goal could be narrowed rather than dropped outright — the computation that got added is the one case where full-precision data actually exists.
+- **Uncategorized turnover is excluded from the estimate, not zero-rated or averaged in.** Applying a rate to turnover the artisan never assigned a category to would silently misstate the estimate in either direction; excluding it and surfacing the excluded amount (`uncategorizedExclVatCents`) keeps the shown total an honest floor instead.
+- **The estimate is duplicated three times (JSON report, PDF, CSV) rather than computed once and referenced** — same shape as every other report figure in this phase (`byCategory`, `plafondWarning`): `ReportsService.getQuarterlyReport` computes it once per request, and the controller reshapes that same result for each output format, so the three can never disagree with each other for the same period.
+
+---
+
+# Phase 17.5 — Resend as the System SMTP Relay
+
+## Objective
+
+Wire up an actual SMTP relay for Phase 13's `SYSTEM_SMTP_*` env vars (account verification, password reset), which had been unconfigured — those routes replied 503 up to now. Chose [Resend](https://resend.com) over a raw mailbox (Gmail app-password, etc.): reliable deliverability out of the box, a free tier that comfortably covers this app's transactional volume, and no code changes needed since `AuthService`/`MailerService` already speak plain SMTP.
+
+## Implementation notes
+
+- [x] `SYSTEM_SMTP_HOST=smtp.resend.com`, `SYSTEM_SMTP_PORT=465`, `SYSTEM_SMTP_SECURE=true`, `SYSTEM_SMTP_USER=resend` — Resend's SMTP relay always authenticates with the literal username `resend`; the password slot is a Resend API key, not a mailbox password.
+- [x] `SYSTEM_MAIL_FROM_ADDRESS=onboarding@resend.dev` for now — Resend's shared sender, usable immediately with no domain verification. **Revisit once a real domain is verified in the Resend dashboard**: switch this to an address on that domain so verification/reset emails don't arrive from a resend.dev address.
+- No application code changed — this phase is purely `backend/.env` configuration plus documenting the Resend option in `.env.example` for future deploys/environments.
+
+---
+
+# Phase 18 — Guided Tour Rework: A Real Quick-Mode Walkthrough
+
+## Objective
+
+Turn `invoice-creation` (mode rapide's mini-tour, Phase 8) from a fixed script into something that actually reacts to what the artisan does and what's already in their account — while leaving `invoice-creation-manual` (Phase 9.5) untouched, since mode manuel's tour was already considered right.
+
+## Features
+
+- [x] If the artisan has no client yet, the tour walks them through creating one step-by-step and explains it'll be reusable on every future invoice — instead of always spotlighting a client grid that might be empty.
+- [x] "Ajouter un produit" and "ajouter une prestation" are one logical tour step: it reacts to whichever of the two buttons is actually clicked, and branches into a different explanation depending on which one it was.
+- [x] Whether the artisan creates their first product or picks one already in the catalog, the tour reacts the same way afterward: it asks for the chantier's real quantity/metrage.
+- [x] The tour explains that a validated line is a card you can reopen, and that "Mettre à jour" there is optional — it only touches the catalog if you want it to.
+- [x] A dedicated step for prestations explains the FIXED vs. PERCENTAGE margin choice (Phase 13.5): whichever you pick, the calculation is automatic and identical for every client, no favoritism.
+- [x] The tour's last spotlighted step now points at "Mes documents" in the nav, tying the whole walkthrough back to where the invoice/devis actually lives once saved.
+
+## Implementation notes
+
+- **The engine gained just enough branching to stay declarative.** `TourStepDefinition` (`tour-definitions.ts`) can now carry: `id` (a stable jump target), `altAnchorIds` (other anchors that also advance the same logical step), `showIf` (a symbolic runtime condition — currently only `noCustomers`/`hasCustomers` — that skips a step exactly like a missing anchor already did), `next` (an unconditional jump to another step's `id`), and `nextByAnchor` (the same jump, but keyed by which anchor actually fired). `TourService` is still the only thing that *resolves* these — `tour-definitions.ts` stays pure data, same rule Phase 8 set.
+- **`TourOverlayComponent.next()` now takes the anchor id that fired**, so a step offering two ways forward (the product/service "add-line" step) can tell `TourService.resolveNextIndex` which branch to take; the plain "Suivant" button still calls `next()` with no argument and falls back to the step's `next`/plain index.
+- **`showIf` was first evaluated by reading `CustomerService.all()` directly**, on the assumption that `InvoiceDraftStore`'s own load would always have populated it by the time the quick-mode tour reached the customer step — true there, but not on `/clients`/`/produits`/`/prestations` (see Phase 19), which load their own local, unfiltered-cache-bypassing list instead. Revised in Phase 19 to always call the relevant service's `getAllCached()` (awaited) instead of reading a signal that might still be `null`.
+- **New anchors**: `invoice-new-customer-button` ("+ Nouveau client"), `invoice-line-quantity` (deliberately the *same* id on both the full line-form's quantity field and the collapsed gallery card's mini quantity input — whichever one is actually on screen for a given line is the one the registry finds, so one tour step covers the free-line and catalog-pick paths without branching), `invoice-lines-gallery` (the card grid itself, always mounted regardless of collapsed/expanded state — sidesteps waiting on a card that may not exist yet), `invoice-service-flyout` (the prestations panel), and `nav-my-documents` (the persistent nav link, registered from `App`'s own template since it outlives every routed page).
+- **Product and service paths converge before "Le total, en direct"** via explicit `next: 'total'` on each path's last step — the array still lists the product block before the service block, so only the step that would otherwise fall through into the other branch needs the override.
+- Mirrors the messaging work in `docs/positioning.md` and the landing page (Phase 13.3): reuse compounds (client/catalog once, invoiced forever) and the invoice lifecycle doesn't end at "PDF sent" (Phase 16's board is where relances and unpaid tracking actually happen) are both now said once in the tour and once on the public site, instead of only living in the app itself.
+
+---
+
+# Phase 19 — Two Tour "Modes": First-Time Creation vs. Guided Reminder
+
+## Objective
+
+Give `catalog` and `customers` (Phase 8) the same reactive treatment Phase 18 gave `invoice-creation`, and make the split explicit app-wide: every tour now has a "mode 1ère fois" detour — reached only while the relevant table (clients/produits/prestations) is genuinely empty for this artisan — that walks them through creating their very first entry and celebrates once it's *actually* persisted, distinct from the unconditional "mode guide" content a returning artisan sees on replay. Also closes a real gap Phase 18 left open: the quick-invoice tour never actually reached the moment a document gets saved, so it could never honestly celebrate a first client/product/prestation — Customer/Product/Service rows from that flow aren't persisted until the final "Créer la facture" submit (see `InvoiceCreatePreviewStepPage.submit()`), not when their forms are merely filled in.
+
+## Features
+
+- [x] `catalog` and `customers` each gained a "create your first X" detour, shown only when that list is empty, reusing the existing "+ Nouveau X" anchors rather than adding new ones.
+- [x] A real, persisted save — not just filling the form — is what triggers the congratulations step; cancelling or navigating away without saving falls back to the ordinary reminder content instead of a false "premier X enregistré".
+- [x] `invoice-creation` now actually reaches the real "Créer la facture"/"Créer le devis" submit and its post-save success block, and celebrates there — the one moment its client/product/prestation congratulations can honestly refer to.
+- [x] "Mode rapide" now visually reads as the recommended choice on the mode-choice screen (a "Recommandé" badge, a heavier accent border) — previously the two cards were identical.
+- [x] `docs/design-system.md`'s one documented "reward" moment (the tour-completion checkmark+glow) is now reusable mid-tour via `celebrate: true`, instead of only ever firing on a tour's literal last step — kept to a single visual treatment on purpose, so this still reads as "the same one moment," just earned at more places, not a second competing effect.
+
+## Implementation notes
+
+- **`showIf` became async.** `TourStepCondition` grew `noProducts`/`hasProducts`/`noServices`/`hasServices` alongside the existing customer pair; `TourService.evaluateShowIf` now `await`s `firstValueFrom(xService.getAllCached())` instead of reading a signal synchronously (see the corrected Phase 18 note above). Safe to call from `TourService` on demand — unlike `OnboardingService`'s eager constructor-time load (Phase 14.7's bug #1), a showIf-gated step is only ever reached while the tour is already active on an auth-gated route. A failed fetch resolves every condition to `false`, so both alternatives for that moment get skipped rather than risk showing the wrong one.
+- **The list pages (`customer-list`, `product-list`, `service-list`) don't call `getAllCached()` themselves** — each loads its own search-filtered view directly into a local signal, bypassing the shared cache Phase 8/Customer-Service already had. `getAllCached()` from `TourService` is therefore a genuine lazy-load the first time a showIf step needs it — but `Product/Service/CustomerService.create()`'s existing `upsertInCache` (unchanged) is what makes the *return trip* free: by the time the tour re-checks `hasProducts` back on `/produits`, the cache the form's own save already updated is read straight off, no second request.
+- **"+ Nouveau produit"/"+ Nouvelle prestation"/"+ Nouveau client" are real `routerLink`s to a separate create page** (`/produits/nouveau`, `/prestations/nouvelle`, `/clients/nouveau`), not an inline form — so, same rule as Phase 18's customer-picker step, their cta steps carry no `advanceOn`; the real navigation they cause is what the tour's existing forward-route-matching picks up (`findForwardStepIndexForRoute`), landing directly on a new informational step declaring that route (`produit-form-hint` etc.) and skipping the reminder content in between.
+- **Detour steps are reachable ONLY via that forward-route-match, never via plain "Suivant" fallthrough.** Each reminder step positioned between a cta and its own detour carries an explicit `next` override (e.g. `produit-new-reminder`'s `next: 'prestation-cta'`) so a returning artisan clicking through the ordinary reminder content on "Suivant" never gets silently redirected into someone else's create-page. Without this, array-adjacency alone would send a casual "Suivant" click straight into `/produits/nouveau`.
+- **Known, accepted gap**: if an artisan who already has products replays the tour and clicks the *reminder* (not the gated cta) "+ Nouveau produit" to create an *additional* one, the celebration still reads "premier produit" — `hasProducts` can't distinguish "always had some" from "just went from zero to one" without tracking prior state. Low-stakes and rare enough (requires a manual replay *and* creating another entry mid-replay) not to be worth the extra bookkeeping.
+- **`invoice-creation`'s tail was also fixed, not just extended**: the old `'preview'` step had `advanceOn: 'click'` on a button that *also* causes real navigation (to `/apercu`) — the same double-navigation hazard Phase 18's own doc note warns against elsewhere, just missed here since `/apercu` had no step of its own yet to reveal it (the tour simply flashed forward and got quietly abandoned on the following `NavigationEnd`). Fixed by removing `advanceOn` from `'preview'` and giving the new `'submit-cta'` step the `/apercu` route instead, so the real navigation is what carries the tour there, same rule as everywhere else. `'submit-cta'` itself DOES use `advanceOn: 'click'` — correctly, this time: `InvoiceCreatePreviewStepPage.submit()` causes no navigation of its own (success just flips `createdInvoice()` on the same route), so clicking only needs to move the tour's attention to `'created'`, whose own anchor-wait (already-existing `waitForAnchor` polling, ~2s) is what actually holds the reveal open until the real save resolves.
+- **The final celebration step's copy is deliberately doc-type-agnostic** ("votre document", not "votre facture"/"votre devis") rather than reading `InvoiceDraftStore.documentType()` from `TourService` — the real page heading right next to the spotlighted success block already says "Devis" or "Facture" explicitly, and reading a feature-level store from `shared/tour/` would be the first real `shared` → `features` dependency in the tour engine.
+
+---
+
+# Phase 20 — Site-wide Footer: Mentions Légales, RGPD & Compliance Audit
+
+## Objective
+
+Add a persistent, "classic" footer across the whole app — today a footer only exists on the public landing page (`landing.page.html`), not in the authenticated app shell (`app.html` has none) — carrying the standard legal surface (mentions légales, politique de confidentialité, CGU, contact), and audit that the app's actual behavior matches what those pages themselves claim.
+
+## Current State (found before starting)
+
+- `/cgu` and `/confidentialite` already exist (`features/legal/`) and are already linked from the signup consent checkbox (Phase 13) — this phase reuses them, it doesn't rebuild them.
+- No "mentions légales" page exists yet — this is new.
+- "Mentions légales" is about **FactureLe's own identity as the SaaS publisher/operator** (publisher name, SIRET, address, hosting provider, director of publication) — not an artisan's own `Company` row (`backend/prisma/schema.prisma`), which is per-tenant data used only for that artisan's own invoices and isn't reusable here.
+
+## Data Model
+
+- A small, static set of facts about FactureLe's own legal identity (publisher name, SIRET, address, hosting provider, director of publication, contact email). This does not belong on `Company` (per-tenant). Decide at implementation time whether it's a typed config constant or a `SITE_LEGAL_*` env-var set — whichever keeps it editable in exactly one place, without a migration or hunting across pages for hardcoded copies.
+
+## Features
+
+- [ ] Shared `FooterComponent`, mounted once in the app shell (`app.html`) and reused by the landing page instead of its own separate footer markup
+- [ ] New "Mentions légales" page/route (publisher identity, hosting provider, editor)
+- [ ] Footer links: Mentions légales, CGU (existing `/cgu`), Politique de confidentialité (existing `/confidentialite`), contact
+- [ ] Compliance audit: read `/confidentialite`'s actual claims (data retention, right-to-erasure, cookies, named third-party processors) and cross-check each one against what the code actually does — including every external processor the app already uses (Groq, Stripe, Resend, Google OAuth) is genuinely disclosed there
+- [ ] Any gap the audit finds gets fixed, or explicitly logged as a known limitation (same "state it, don't silently build around it" convention as Phase 13's retention-vs-erasure note)
+- [ ] FactureLe's own legal identity (name/SIRET/address/etc.) lives in exactly one place in code — editable without touching every page that cites it
+
+## Non-goals
+
+- No change to per-artisan `Company` legal fields or invoice content — this is FactureLe's own footer as a SaaS publisher, not the documents artisans generate for their own clients.
+- No cookie-consent banner unless the audit finds the app actually sets non-essential cookies requiring one (today: httpOnly auth cookies only — confirm during the audit rather than assuming either way).
+
+## Notes
+
+- Builds on Phase 13.3 (landing page footer/visual identity) and Phase 13 (CGU/confidentialité pages, RGPD deletion flow) — this phase's audit checks the app against mechanisms those phases already built.
+
+---
+
+# Phase 21 — TLS/Caddy Hardening & Certificate Monitoring
+
+## Objective
+
+Not a new certbot container. HTTPS is already fully automated by the existing `caddy` service in `infra/docker-compose.prod.yml` — Let's Encrypt issuance, renewal, and an HSTS header are already built into `infra/Caddyfile`, driven by `{$DOMAIN}` in `infra/.env`. This phase audits and hardens that existing setup, and adds visibility into certificate health, instead of duplicating what Caddy already does.
+
+## Why not certbot
+
+A separate certbot container would either fight Caddy for the port 80/443 ACME challenge or sit unused entirely — redundant either way, since `infra/docker-compose.prod.yml` already documents Caddy as "the single place that owns public exposure/TLS." Flagged and decided explicitly with the user during roadmap planning, before this phase was drafted.
+
+## Features
+
+- [ ] Audit `infra/Caddyfile`'s security headers against current best practice (HSTS already present — confirm CSP/X-Frame-Options/etc. are deliberate omissions, not oversights)
+- [ ] Verify certificate renewal actually works end-to-end in the deployed environment, not just "Caddy claims to auto-renew" — a documented manual check or a scheduled probe
+- [ ] Certificate-expiry monitoring/alerting, so a renewal failure surfaces before the cert actually lapses, not silently
+- [ ] Document the TLS setup (`infra/` or deploy docs) so "why isn't there a certbot container" doesn't get re-asked or accidentally re-built later
+- [ ] Confirm the existing `:80`-no-domain local/smoke-test fallback (`Caddyfile`) can't accidentally ship to prod without a real `DOMAIN` set
+
+## Non-goals
+
+- No certbot or any new TLS-terminating service — Caddy stays the single owner of public exposure and certificates.
+
+## Notes
+
+- Pure ops hardening, no product-facing surface change — sequenced independently of Phases 20 and 22.
+
+---
+
+# Phase 22 — Mobile App Mode (iOS/Android via Capacitor)
+
+## Objective
+
+Wrap the existing Angular app with Capacitor to ship installable iOS/Android apps, and verify the UX genuinely holds up on a real mobile form factor — not just a responsive web view. Particular attention: "Mes documents" (Phase 16's 5-column Kanban board — Devis / Non payées / En retard / Payées / Annulées, confirmed in `invoice-board.page.html`) is a wide, drag-and-drop, multi-column layout that risks becoming unreadable squeezed onto a phone screen.
+
+## Current State
+
+No Capacitor/Cordova/Ionic dependency exists in the repo today — clean addition, not a rework of an existing mobile setup.
+
+**Product goal, confirmed explicitly with the user**: presence on both the App Store and Play Store is a stated objective, not just "an installable app" — this ruled out a PWA-only approach (no store presence, weaker push/native support on iOS) as the end state, even though a PWA was considered and would have been the cheaper first step.
+
+## Why Capacitor, Not a Separate Native App or a PWA-Only Approach
+
+Weighed against two alternatives before settling on this phase's approach:
+
+- **A fully separate native app (React Native, Flutter, or Swift/Kotlin per platform)** would duplicate the entire existing Angular UI/business logic (invoice calculation, PDF pipeline, the whole invoice-creation flow) in a second codebase — a real maintenance burden with a single-developer team, for an app whose screens are forms/lists/PDF, not the kind of rich native interaction (games, heavy animation) where a WebView genuinely feels worse. Rejected.
+- **A PWA (manifest + service worker, no native wrapper)** is the cheapest option and was seriously considered — zero store review, instant deploys, reuses 100% of the existing app. Rejected only because store presence is an explicit product goal here: a PWA has no listing on either store, weaker/less reliable push notifications on iOS, and reads as less legitimate/discoverable to a non-technical artisan audience specifically looking for "the app" in a store.
+- **Capacitor** wraps the existing Angular build as-is (`@capacitor/ios`/`@capacitor/android`), gets both store listings, and keeps a single codebase — the right tradeoff for this app's UI complexity and this team's size.
+
+## App Store Billing Constraint (Stripe vs. Apple/Google In-App Purchase)
+
+Phase 14's premium gate is billed through Stripe on the web. This is a real constraint on the iOS build specifically, independent of Capacitor vs. any other wrapper choice — it would apply just as much to a fully native app:
+
+- Apple's guideline 3.1.1 requires digital subscriptions *purchased from within the app* to go through Apple's own In-App Purchase (≈30% commission), **unless** the app follows the "external subscription, used as a business tool" pattern already used by apps like Slack/Basecamp/Dropbox: the app may let an already-subscribed user use the paid features, but must not present a "Subscribe"/"Pay" button or any link that starts a Stripe checkout *from inside the iOS app*. The subscription flow (`/abonnement`, Phase 14) stays a web-only action the artisan completes outside the app (browser, desktop) before or alongside using the iOS app.
+- Google Play is materially more permissive here (external billing links are commonly tolerated for this kind of business-tool app), so the constraint is effectively iOS-only, but the safest approach is one consistent behavior on both platforms: never surface the Stripe checkout/paywall CTA inside the native app shell.
+- Concretely: `PaywallModalComponent`/the `PremiumRequiredException` (402) handling (Phase 14) needs a mobile-specific variant on iOS — inform the artisan they're past the free trial and must subscribe via the FactureLe website, without a tappable link that opens a payment flow in-app.
+
+## Architecture
+
+- `@capacitor/core` + `@capacitor/ios`/`@capacitor/android` wrapping the existing Angular build — one codebase, not a separate mobile app.
+- `capacitor.config.ts` pointed at the built Angular `dist/` output; same backend API.
+- Phase 13's httpOnly-cookie JWT auth needs verification under Capacitor's WebView — cross-origin cookie behavior there differs from a normal browser tab; may need Capacitor's native HTTP plugin or adjusted CORS/cookie config to keep the existing cookie model working, rather than falling back to a less secure token store as a shortcut.
+
+## "Mes documents" Board — Mobile UX Problem & Directions
+
+The board's 5 columns + drag-and-drop (`invoice-board.page.html`, `interactjs`-based drag directive, Phase 16) assume a wide desktop layout. Directions to evaluate on real usage, same "not mutually exclusive, whichever proves fastest wins" precedent as Phase 11's picker UX — not pre-decided here:
+
+- Horizontal snap-scroll, one column visible at a time, swipe between them — with the tap-based action buttons (already built for glove/phone use, Phase 16) as the primary interaction over drag, since dragging a card into an off-screen column isn't realistic on a phone anyway.
+- Collapse to a single filterable list + a status chip/dropdown instead of columns at all on narrow viewports, reusing the board's existing client/date filter bar.
+- Default to a "priorité" view (En retard + Non payées only — already a documented one-tap toggle in Phase 16) as the mobile landing state, with the other columns one tap away, so what needs action first is what's shown first instead of 5 equally-weighted columns.
+
+## Features
+
+- [ ] Capacitor wraps the existing Angular build for iOS and Android — one codebase, no separate app to maintain
+- [ ] Auth (Phase 13's httpOnly cookies) verified working end-to-end inside the Capacitor WebView on both platforms
+- [ ] "Mes documents" board redesigned for narrow viewports per one of the directions above (or a validated alternative) — never a horizontally-scrolling 5-column desktop layout simply squeezed onto a phone
+- [ ] Manual pass over every other multi-step/wide screen (invoice creation steps, catalog picker, Phase 17's reports/analytics charts) to catch any other desktop-assumption UI, not just the board
+- [ ] App icons/splash screens/store metadata for both platforms
+- [ ] Push notification capability evaluated (e.g. "facture en retard" reminder) — explicitly deferred/stubbed if out of scope for the first release, not half-built
+- [ ] Build pipeline for producing installable iOS/Android artifacts documented, even if store submission itself is a separate, later step
+- [ ] iOS build never exposes a Stripe checkout/payment CTA from inside the app (see billing constraint above) — a mobile-appropriate "subscribe on the website" message replaces `PaywallModalComponent`'s normal in-app link on that platform only
+
+## Non-goals
+
+- No native-only feature beyond what's needed to make the existing web UX work well on mobile (camera/native-storage integration, etc.) unless a later phase asks for it.
+- No App Store/Play Store submission process *within this phase itself* — this phase gets the app buildable, compliant, and usable on-device; the actual submission (developer accounts, review, store listings) is the confirmed next step once this phase ships, not an open-ended "someday."
+
+## Notes
+
+- Sequenced after Phase 20 (footer/legal): a mobile app submitted to either store typically needs its own reachable mentions légales/privacy links, so that surface should exist first.
+- Builds on Phase 16's board (already designed with tap-first actions for "glove/phone use") and Phase 7's mobile-first, no-hover precedent — this phase is the first time that mobile-readiness gets tested on an actual native shell rather than just a responsive browser viewport.
 
 ---

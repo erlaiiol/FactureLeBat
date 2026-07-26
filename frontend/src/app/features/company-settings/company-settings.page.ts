@@ -6,10 +6,13 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CompanyService } from '../../core/services/company.service';
 import { LegalStatus } from '../../core/models/company.model';
+import { DeclarationFrequency } from '../../core/models/report.model';
 import { MailSettingsService } from '../../core/services/mail-settings.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 import { TourService } from '../../shared/tour/tour.service';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 @Component({
   selector: 'app-company-settings-page',
@@ -21,6 +24,7 @@ export class CompanySettingsPage {
   private readonly companyService = inject(CompanyService);
   private readonly mailSettingsService = inject(MailSettingsService);
   private readonly authService = inject(AuthService);
+  private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -36,16 +40,23 @@ export class CompanySettingsPage {
   protected readonly deleteAccountForm = this.fb.nonNullable.group({ password: [''] });
 
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly saving = signal(false);
   protected readonly saved = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly toursReplayed = signal(false);
 
   protected readonly mailLoading = signal(true);
+  protected readonly mailShowSkeleton = delayedSkeleton(this.mailLoading);
   protected readonly mailSaving = signal(false);
   protected readonly mailSaved = signal(false);
   protected readonly mailErrorMessage = signal<string | null>(null);
   protected readonly mailConfigured = signal(false);
+  // Collapsed by default once we know whether SMTP is already configured —
+  // expanded automatically for a first-time visitor (nothing to hide yet),
+  // collapsed for someone who's already set it up (nothing to check twice).
+  protected readonly smtpExpanded = signal(false);
+  protected readonly smtpGuideOpen = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
@@ -59,6 +70,28 @@ export class CompanySettingsPage {
     legalStatus: ['MICRO_ENTREPRENEUR' as LegalStatus, Validators.required],
     // Entered as a plain percentage (e.g. 20) and converted to basis points on submit.
     vatRatePercent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
+    // Phase 17: which period the quarterly report screen preselects.
+    declarationFrequency: ['TRIMESTRIELLE' as DeclarationFrequency, Validators.required],
+    // Entered as a plain euro amount and converted to cents on submit — null
+    // (not 0) means "no ceiling set", same "null is the not-set value"
+    // convention as ProductFormPage's packagingQuantity.
+    microEntrepreneurCeilingEuros: this.fb.control<number | null>(null, Validators.min(0)),
+    // Phase 17 (charges estimate): entered as plain percentages, converted
+    // to basis points on submit — same boundary-conversion convention as
+    // vatRatePercent. Pre-filled with the official rates in effect when this
+    // was built (see schema.prisma's comment on
+    // Company.cotisationVenteBasisPoints for why they're editable rather
+    // than hardcoded).
+    cotisationVentePercent: [12.3, [Validators.required, Validators.min(0), Validators.max(100)]],
+    cotisationPrestationBicPercent: [
+      21.2,
+      [Validators.required, Validators.min(0), Validators.max(100)],
+    ],
+    cotisationPrestationBncPercent: [
+      21.1,
+      [Validators.required, Validators.min(0), Validators.max(100)],
+    ],
+    versementLiberatoireOptIn: [false],
   });
 
   // Phase 12: the artisan's own SMTP account, used to send invoices for
@@ -94,6 +127,14 @@ export class CompanySettingsPage {
             phone: profile.phone ?? '',
             legalStatus: profile.legalStatus,
             vatRatePercent: profile.vatRateBasisPoints / 100,
+            declarationFrequency: profile.declarationFrequency,
+            microEntrepreneurCeilingEuros: profile.microEntrepreneurCeiling
+              ? profile.microEntrepreneurCeiling / 100
+              : null,
+            cotisationVentePercent: profile.cotisationVenteBasisPoints / 100,
+            cotisationPrestationBicPercent: profile.cotisationPrestationBicBasisPoints / 100,
+            cotisationPrestationBncPercent: profile.cotisationPrestationBncBasisPoints / 100,
+            versementLiberatoireOptIn: profile.versementLiberatoireOptIn,
           });
         },
         error: () => {
@@ -109,6 +150,7 @@ export class CompanySettingsPage {
         next: (settings) => {
           this.mailLoading.set(false);
           this.mailConfigured.set(settings.configured);
+          this.smtpExpanded.set(!settings.configured);
           this.mailForm.patchValue({
             host: settings.host ?? '',
             port: settings.port ?? 587,
@@ -149,6 +191,15 @@ export class CompanySettingsPage {
         phone: value.phone || undefined,
         legalStatus: value.legalStatus,
         vatRateBasisPoints: Math.round(value.vatRatePercent * 100),
+        declarationFrequency: value.declarationFrequency,
+        microEntrepreneurCeiling:
+          value.microEntrepreneurCeilingEuros != null
+            ? Math.round(value.microEntrepreneurCeilingEuros * 100)
+            : undefined,
+        cotisationVenteBasisPoints: Math.round(value.cotisationVentePercent * 100),
+        cotisationPrestationBicBasisPoints: Math.round(value.cotisationPrestationBicPercent * 100),
+        cotisationPrestationBncBasisPoints: Math.round(value.cotisationPrestationBncPercent * 100),
+        versementLiberatoireOptIn: value.versementLiberatoireOptIn,
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -207,12 +258,22 @@ export class CompanySettingsPage {
   }
 
   protected onTourEnabledChange(enabled: boolean): void {
-    this.tourService.setTourEnabled(enabled);
+    this.tourService
+      .setTourEnabled(enabled)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        error: () => this.toastService.error('Impossible de mettre à jour ce réglage.'),
+      });
   }
 
   protected replayTours(): void {
-    this.tourService.replayTours();
-    this.toursReplayed.set(true);
+    this.tourService
+      .replayTours()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.toursReplayed.set(true),
+        error: () => this.toastService.error('Impossible de réinitialiser les visites guidées.'),
+      });
   }
 
   protected confirmDeleteAccount(): void {
@@ -227,7 +288,10 @@ export class CompanySettingsPage {
       .deleteAccount(password || undefined)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => void this.router.navigateByUrl('/connexion'),
+        next: () => {
+          this.toastService.success('Compte supprimé.');
+          void this.router.navigateByUrl('/connexion');
+        },
         error: (error: HttpErrorResponse) => {
           this.deleteAccountSaving.set(false);
           this.deleteAccountError.set(

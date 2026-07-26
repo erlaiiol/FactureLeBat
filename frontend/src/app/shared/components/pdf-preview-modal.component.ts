@@ -8,6 +8,7 @@ import {
   output,
 } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { IconCloseComponent } from './icon-close.component';
 
 // A closable modal showing the "simili-pdf" in place, replacing the earlier
 // window.open(blobUrl, '_blank') popup — popups are blocked by some browsers
@@ -17,6 +18,7 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 @Component({
   selector: 'app-pdf-preview-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [IconCloseComponent],
   templateUrl: './pdf-preview-modal.component.html',
 })
 export class PdfPreviewModalComponent {

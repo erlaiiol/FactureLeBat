@@ -19,6 +19,12 @@ const companyFixture: CompanyProfile = {
   vatRateBasisPoints: 2000,
   invoiceNumberPrefix: 'F',
   nextInvoiceNumber: 2,
+  declarationFrequency: 'TRIMESTRIELLE',
+  microEntrepreneurCeiling: null,
+  cotisationVenteBasisPoints: 1230,
+  cotisationPrestationBicBasisPoints: 2120,
+  cotisationPrestationBncBasisPoints: 2110,
+  versementLiberatoireOptIn: false,
 };
 
 describe('ManualInvoiceDraftStore', () => {
@@ -407,7 +413,7 @@ describe('ManualInvoiceDraftStore', () => {
   });
 
   describe('localStorage migration (draft saved before LINE_TOTAL existed)', () => {
-    const DRAFT_STORAGE_KEY = 'facturelebat.manualInvoiceDraft.v1';
+    const DRAFT_STORAGE_KEY = 'facturele.manualInvoiceDraft.v1';
 
     it('appends a working LINE_TOTAL column, keyed dynamically rather than by the old constant id', () => {
       // Simulates a draft persisted by a pre-LINE_TOTAL build: only the

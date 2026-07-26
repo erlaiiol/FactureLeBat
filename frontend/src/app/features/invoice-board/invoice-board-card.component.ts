@@ -6,10 +6,10 @@ import { BadgeComponent } from '../../shared/components/badge.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { InvoiceCardDragDirective } from './invoice-card-drag.directive';
 
-// Mirrors the board's 5 columns (Phase 16) — DEVIS is view/download-only
-// here (its conversion CTA lives on app-invoice-ghost-card in Non payées,
-// decided explicitly with the user), the other 4 are a real, draggable
-// FACTURE status.
+// Mirrors the board's 5 columns (Phase 16) — DEVIS never leaves this column
+// (no ghost card in Non payées, decided explicitly with the user: a devis
+// isn't a real payment status), its own card carries the conversion CTA
+// directly. The other 4 are a real, draggable FACTURE status.
 export type BoardColumn = 'DEVIS' | 'NON_PAYEE' | 'EN_RETARD' | 'PAYEE' | 'ANNULEE';
 
 // One card, reused across every column — same compact-card visual language
@@ -28,12 +28,15 @@ export class InvoiceBoardCardComponent {
 
   readonly invoice = input.required<InvoiceWithTotals>();
   readonly column = input.required<BoardColumn>();
+  readonly converting = input(false);
+  readonly sharing = input(false);
 
   readonly markPaid = output<void>();
   readonly cancel = output<void>();
   readonly restore = output<void>();
-  readonly sendEmail = output<void>();
+  readonly share = output<void>();
   readonly dropped = output<string | null>();
+  readonly convertToFacture = output<void>();
 
   protected readonly draggable = computed(() => this.column() !== 'DEVIS');
   protected readonly overdue = computed(() => this.column() === 'EN_RETARD');

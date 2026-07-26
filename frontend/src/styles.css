@@ -86,6 +86,17 @@
   --ease-out-sharp: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-entrance: 250ms;
   --duration-emphasis: 400ms;
+  --duration-materialize: 550ms;
+
+  /* ease-out-sharp reaches ~95% of its visual travel by 50% of elapsed
+     time (verified numerically — a cubic-bezier(.2,.8,.2,1) curve is
+     that front-loaded by construction), which is exactly right for a
+     quick Entrance/Emphasis confirmation but defeats a slower Materialize/
+     Contemplative band: stretching the duration to 550ms+ doesn't help if
+     the motion still visually finishes in its first ~200ms. This second
+     curve is for those two bands only (see cardMorph/asyncReveal below) —
+     ease-out-sharp stays the only curve for Entrance/Emphasis. */
+  --ease-inout-soft: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 :root.dark {
@@ -153,6 +164,13 @@ textarea.ng-invalid.ng-touched {
   box-shadow: 0 0 0 1px var(--color-danger);
 }
 
+/* Browsers only give <a> a pointer cursor by default, not <button> — every
+   button in the app (already color/brightness-feedback on hover via its own
+   variant classes) was silently missing the cursor half of that feedback. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -181,26 +199,110 @@ textarea.ng-invalid.ng-touched {
   animation: line-in var(--duration-entrance) var(--ease-out-sharp);
 }
 
-/* Phase 13.5 gallery redesign: "Valider" shrinks a full-size card down into
-   its compact gallery form — starts scaled up (standing in for the bigger
-   card it just was) and settles to its real size, instead of just fading
-   in like line-in above. The gallery card's actual position in the DOM
-   (after every other already-collapsed card, since new lines are always
-   pushed to the end of the FormArray) is what makes it "join the end of
-   the gallery" — this animation is the shrink half of that motion. */
-@keyframes card-shrink-in {
+/* ux-roadmap.md Phase 1 (Global Shell): every routed page fades up a few
+   pixels on arrival instead of popping in with the router swap. Replayed by
+   App on every NavigationEnd by toggling this class on the <main> wrapper
+   (forcing a reflow in between so the same class name restarts the
+   animation) rather than each page owning its own copy — one place to
+   tune, and new routes get it for free. Entrance band: this fires on every
+   navigation, not a rare structural moment, so it stays quick.
+
+   Deliberately `margin-top`, not `transform: translateY` — <main> wraps
+   routed pages that place their own `position: fixed` elements inside it
+   (invoice-create-shell's totals/preview footer, lines-step's two "+"
+   buttons). A non-none `transform` on an ancestor makes that ancestor the
+   containing block for `position: fixed` descendants for as long as the
+   transform is set, so those buttons/footer would render relative to
+   <main>'s narrower, centered box instead of the viewport while this
+   animation runs, then visibly snap to their real viewport position the
+   instant it ends and the transform clears — every navigation, since this
+   replays on every NavigationEnd. `margin-top` gives the same fade-up look
+   without ever touching the containing block. */
+@keyframes page-in {
   from {
     opacity: 0;
-    transform: scale(1.15);
+    margin-top: 6px;
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    margin-top: 0;
   }
 }
-.anim-card-shrink-in {
-  animation: card-shrink-in var(--duration-entrance) var(--ease-out-sharp);
+.anim-page-in {
+  animation: page-in var(--duration-entrance) var(--ease-out-sharp);
 }
+
+/* design-system.md's `asyncReveal`: the display treatment for any element
+   whose content only exists after an API response — a skeleton occupies
+   the final content's rough size while the request is in flight (see
+   `.anim-skeleton` below; shown only past `delayedSkeleton`'s ~180ms grace
+   period so a fast response never flashes one), and the real content fades
+   in while settling down from slightly above its resting place the instant
+   data arrives. Originally written for InvoiceCreatePreviewStepPage's
+   document mirror; reused as the one shared "content just arrived" class
+   for every page loading state rather than duplicating the same keyframe
+   under a new name per screen. */
+@keyframes preview-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-preview-in {
+  animation: preview-in var(--duration-materialize) var(--ease-inout-soft);
+}
+
+/* asyncReveal's skeleton half — a slow, subtle pulse (never a spinner icon)
+   on a placeholder shaped roughly like the content it stands in for. This
+   is the one deliberate exception to "no looping/repeating effects" below:
+   it loops only for the duration of a real, ongoing state (a request in
+   flight), the same way a spinner would, and stops the moment that state
+   ends. */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* Mounted separately from skeleton-pulse: without it, the placeholder's
+   very first frame is already at the pulse's 0.55 floor (CSS animations
+   don't ease into their own starting keyframe), so it snaps in instead of
+   fading — a flash right as the skeleton appears. This one-shot fade runs
+   first, ending exactly at skeleton-pulse's 0.55 floor, then skeleton-pulse
+   picks up seamlessly after the matching delay. */
+@keyframes skeleton-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+.anim-skeleton {
+  animation:
+    skeleton-fade-in 0.2s ease-out,
+    skeleton-pulse 1.6s ease-in-out 0.2s infinite;
+  background-color: var(--color-secondary-subtle);
+}
+
+/* design-system.md's `cardMorph`: the full-form ↔ compact-card transition
+   (invoice-create-lines-step.page.ts's morphCard/playCardMorph) is driven
+   entirely in TS via the Web Animations API — it animates the card's real
+   width/height/position (a FLIP transition), not a CSS transform: scale,
+   since scaling non-uniformly stretches a border/radius/shadow/text
+   unevenly and reads as cheap. Nothing here to keyframe: the JS is the
+   whole effect, this comment is just the pointer for whoever goes looking
+   for it in styles.css the way every other named motion primitive lives
+   here. anim-line-in above still supplies the plain fade for the one case
+   with no outgoing card to FLIP from (a catalog pick — see
+   addProductFromCatalog/addServiceFromCatalog). */
 
 /* Phase 13.5 gallery redesign: the two fixed "+" buttons. A CSS-grid
    icon/label split — rather than animating the button's own width — keeps
@@ -217,6 +319,31 @@ textarea.ng-invalid.ng-touched {
 .fixed-add-button:hover,
 .fixed-add-button.is-open {
   grid-template-columns: 3.5rem 12rem;
+}
+
+/* Materialize band — docs/design-system.md#motion's `panelStretch`: navbar
+   dropdown open/close. Same grid-track trick as `.fixed-add-button` above
+   (animating a 0fr/1fr row instead of `height: auto`, which can't
+   transition), so the panel grows from the trigger's own edge rather than a
+   fixed corner. The inner wrapper clips content while the row is still
+   collapsing/expanding. */
+.nav-dropdown-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--duration-materialize) var(--ease-out-sharp),
+    opacity var(--duration-materialize) var(--ease-out-sharp);
+}
+.nav-dropdown-panel.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.nav-dropdown-panel > div {
+  overflow: hidden;
+}
+.nav-dropdown-chevron {
+  transition: transform var(--duration-entrance) var(--ease-out-sharp);
 }
 
 @keyframes total-pulse {

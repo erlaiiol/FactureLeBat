@@ -1,4 +1,4 @@
-import { computePopoverPosition } from './tour-position.util';
+import { computeCornerPosition, computePopoverPosition } from './tour-position.util';
 
 const VIEWPORT = { width: 1000, height: 800 };
 const POPOVER = { width: 320, height: 200 };
@@ -34,5 +34,22 @@ describe('computePopoverPosition', () => {
     const target = { top: 100, left: 980, width: 20, height: 20 };
     const position = computePopoverPosition(target, POPOVER, VIEWPORT);
     expect(position.left).toBeLessThanOrEqual(VIEWPORT.width - POPOVER.width - 12);
+  });
+});
+
+describe('computeCornerPosition', () => {
+  it('pins the popover to the bottom-right corner, independent of any target', () => {
+    const position = computeCornerPosition(POPOVER, VIEWPORT);
+    expect(position).toEqual({
+      top: VIEWPORT.height - POPOVER.height - 12,
+      left: VIEWPORT.width - POPOVER.width - 12,
+    });
+  });
+
+  it('never places the popover off-screen on a viewport smaller than the popover', () => {
+    const tinyViewport = { width: 200, height: 150 };
+    const position = computeCornerPosition(POPOVER, tinyViewport);
+    expect(position.top).toBeGreaterThanOrEqual(0);
+    expect(position.left).toBeGreaterThanOrEqual(0);
   });
 });

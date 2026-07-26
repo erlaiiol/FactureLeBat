@@ -10,7 +10,7 @@
     </button>
   </div>
 
-  @if (services().length > 0) {
+  @if (services().length > 0 && !isCatalogLinked()) {
     <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-ink">Prestation enregistrée</span>
       <select
@@ -45,17 +45,34 @@
     }
   </label>
 
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Mode de tarification</span>
+    <select formControlName="pricingMode" class="rounded-lg border border-line px-4 py-3 text-lg">
+      <option value="FIXED">Montant fixe</option>
+      <option value="PERCENTAGE">Pourcentage du reste de la facture</option>
+    </select>
+    <app-field-hint
+      text="Pourcentage : le montant de cette prestation est recalculé automatiquement à partir du total des autres lignes et prestations visibles de la facture."
+    />
+  </label>
+
   <div class="flex gap-3">
     @if (isPercentageMode()) {
       <div class="flex flex-1 flex-col gap-1">
-        <span class="text-sm font-medium text-ink">Montant (calculé)</span>
-        <p class="rounded-lg border border-line bg-bg px-4 py-3 text-lg font-mono text-ink">
-          {{ resolvedAmountCents() / 100 | number: '1.2-2' }} €
-        </p>
+        <span class="text-sm font-medium text-ink">Pourcentage (%)</span>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          max="100"
+          [value]="displayPercentage()"
+          (input)="onPercentageInput($any($event.target).value)"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
         <app-field-hint
-          text="Calculé automatiquement : {{
-            group().controls.percentageBasisPoints.value! / 100
-          }}% du total des lignes et prestations visibles de cette facture."
+          text="Montant calculé automatiquement : {{
+            resolvedAmountCents() / 100 | number: '1.2-2'
+          }} €."
         />
       </div>
     } @else {
@@ -141,7 +158,7 @@
       [class.text-info-fg]="group().controls.saveAsNewService.value"
     >
       @if (group().controls.saveAsNewService.value) {
-        ✓
+        <app-icon-check [size]="14" />
       }
       {{ saveToCatalogLabel() }}
     </button>

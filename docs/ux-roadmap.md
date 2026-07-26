@@ -1,4 +1,4 @@
-# FactureLeBat — UI/UX Roadmap
+# FactureLe — UI/UX Roadmap
 
 ## Why this document, why now
 
@@ -8,7 +8,7 @@ This document is the next initiative, not a continuation of the same one: with "
 
 ## Vision
 
-A craftsman opens FactureLeBat on a job site, on a phone, sometimes with gloves on. The functional roadmap already optimized for that: big buttons, click over type, guided/catalog-driven entry, tap alternatives to every drag gesture. This initiative adds the layer on top — the app should not just work fast, it should **feel like a premium, considered product**: something that impresses a client glanced over the artisan's shoulder and gives the artisan themselves confidence that this is a serious business tool, not a bare CRUD form.
+A craftsman opens FactureLe on a job site, on a phone, sometimes with gloves on. The functional roadmap already optimized for that: big buttons, click over type, guided/catalog-driven entry, tap alternatives to every drag gesture. This initiative adds the layer on top — the app should not just work fast, it should **feel like a premium, considered product**: something that impresses a client glanced over the artisan's shoulder and gives the artisan themselves confidence that this is a serious business tool, not a bare CRUD form.
 
 Concretely, that means:
 
@@ -60,7 +60,7 @@ Independent of motion, this initiative is also a pass on plain visual hygiene �
 
 Each phase below scopes to one page or module and will be detailed (Objective/Features/Non-goals/Implementation notes) as it's actually worked on, the same way roadmap.md's phases were written. Listed here as a working index, roughly in the order screens will be revisited — not a hard commitment to that order.
 
-- [ ] **Phase 1 — Global Shell** (navbar, dropdowns, theme toggle): `panelStretch` rollout, naming pass on nav labels.
+- [ ] **Phase 1 — Global Shell** (navbar, dropdowns, theme toggle): `panelStretch` rollout, naming pass on nav labels. *(`asyncReveal` — skeleton + fade-in loading states — and a page-level entrance fade on every navigation are already done app-wide, ahead of their per-module phases below, since every page shared the same raw "Chargement…" text pop-in. `panelStretch` and the nav-label naming pass are still open.)*
 - [ ] **Phase 2 — Invoice Creation Flow** (client cards, catalog line activation — Phase 13.5): scroll reveal on card grids, `cardMorph` for inline product/client creation resolving into its finished card.
 - [ ] **Phase 3 — Invoice/Devis Board** (Phase 16): scroll reveal per column, drag/drop motion polish, ghost-card treatment.
 - [ ] **Phase 4 — Customer Management**: client card grid motion, search/sort screen polish (Phase 14.5).

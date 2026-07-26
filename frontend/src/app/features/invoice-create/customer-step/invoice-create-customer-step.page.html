@@ -4,44 +4,55 @@
 
 <div appTourAnchor="invoice-customer-picker" class="flex flex-col gap-4">
   @if (mode() === 'grid') {
-    @if (draftStore.customers().length > 0) {
-      <input
-        [value]="search()"
-        (input)="onSearch($any($event.target).value)"
-        type="text"
-        placeholder="Rechercher un client…"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      />
-    }
-
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      @for (customer of filteredCustomers(); track customer.id) {
-        <button
-          type="button"
-          (click)="pickCustomer(customer)"
-          class="flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm transition hover:border-primary hover:shadow-md"
-        >
-          <span class="font-semibold text-ink">{{ customer.name }}</span>
-          @if (customer.companyName) {
-            <span class="text-sm text-ink-soft">{{ customer.companyName }}</span>
+    @if (customersLoading()) {
+      @if (showCustomersSkeleton()) {
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          @for (card of skeletonCards; track $index) {
+            <div class="anim-skeleton h-20 rounded-xl"></div>
           }
-          @if (customer.address) {
-            <span class="truncate text-sm text-ink-soft">{{ customer.address }}</span>
-          }
-        </button>
+        </div>
+      }
+    } @else {
+      @if (draftStore.customers().length > 0) {
+        <input
+          [value]="search()"
+          (input)="onSearch($any($event.target).value)"
+          type="text"
+          placeholder="Rechercher un client…"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
       }
 
-      <button
-        type="button"
-        (click)="startNewCustomer()"
-        class="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line p-4 text-center font-semibold text-primary hover:bg-primary-subtle/30"
-      >
-        + Nouveau client
-      </button>
-    </div>
+      <div class="anim-preview-in grid grid-cols-1 gap-3 sm:grid-cols-2">
+        @for (customer of filteredCustomers(); track customer.id) {
+          <button
+            type="button"
+            (click)="pickCustomer(customer)"
+            class="flex flex-col gap-1 rounded-xl border border-line bg-surface p-4 text-left shadow-sm transition hover:border-primary hover:shadow-md"
+          >
+            <span class="font-semibold text-ink">{{ customer.name }}</span>
+            @if (customer.companyName) {
+              <span class="text-sm text-ink-soft">{{ customer.companyName }}</span>
+            }
+            @if (customer.address) {
+              <span class="truncate text-sm text-ink-soft">{{ customer.address }}</span>
+            }
+          </button>
+        }
 
-    @if (draftStore.customers().length > 0 && filteredCustomers().length === 0) {
-      <p class="text-sm text-ink-soft">Aucun client ne correspond à cette recherche.</p>
+        <button
+          type="button"
+          appTourAnchor="invoice-new-customer-button"
+          (click)="startNewCustomer()"
+          class="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line p-4 text-center font-semibold text-primary hover:bg-primary-subtle/30"
+        >
+          + Nouveau client
+        </button>
+      </div>
+
+      @if (draftStore.customers().length > 0 && filteredCustomers().length === 0) {
+        <p class="text-sm text-ink-soft">Aucun client ne correspond à cette recherche.</p>
+      }
     }
   } @else {
     @if (draftStore.customers().length > 0) {

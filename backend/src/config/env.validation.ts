@@ -176,7 +176,7 @@ class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
-  SYSTEM_MAIL_FROM_NAME = 'FactureLeBat';
+  SYSTEM_MAIL_FROM_NAME = 'FactureLe';
 
   @IsOptional()
   @IsString()

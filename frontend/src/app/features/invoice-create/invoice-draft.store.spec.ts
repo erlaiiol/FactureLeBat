@@ -19,6 +19,12 @@ const companyFixture: CompanyProfile = {
   vatRateBasisPoints: 2000,
   invoiceNumberPrefix: 'F',
   nextInvoiceNumber: 2,
+  declarationFrequency: 'TRIMESTRIELLE',
+  microEntrepreneurCeiling: null,
+  cotisationVenteBasisPoints: 1230,
+  cotisationPrestationBicBasisPoints: 2120,
+  cotisationPrestationBncBasisPoints: 2110,
+  versementLiberatoireOptIn: false,
 };
 
 const customerFixture: InvoiceCustomerDraft = {
@@ -43,6 +49,7 @@ const lineFixture: InvoiceLineDraft = {
   saveAsNewProduct: false,
   showUnitDetail: true,
   showBillingDetail: true,
+  activityCategory: null,
 };
 
 describe('InvoiceDraftStore', () => {
@@ -91,6 +98,7 @@ describe('InvoiceDraftStore', () => {
           percentageBasisPoints: null,
           catalogServiceId: null,
           saveAsNewService: false,
+          activityCategory: null,
         },
       ]);
 
@@ -124,6 +132,7 @@ describe('InvoiceDraftStore', () => {
           percentageBasisPoints: null,
           catalogServiceId: null,
           saveAsNewService: false,
+          activityCategory: null,
         },
       ]);
 
@@ -153,6 +162,7 @@ describe('InvoiceDraftStore', () => {
           percentageBasisPoints: null,
           catalogServiceId: null,
           saveAsNewService: false,
+          activityCategory: null,
         },
       ]);
 
@@ -229,6 +239,7 @@ describe('InvoiceDraftStore', () => {
           serviceId: 'service-1',
           catalogServiceId: 'service-1',
           saveAsNewService: false,
+          activityCategory: null,
           name: 'Marge 30%',
           description: '',
           amountEuros: 0,
@@ -254,6 +265,7 @@ describe('InvoiceDraftStore', () => {
           serviceId: 'service-1',
           catalogServiceId: 'service-1',
           saveAsNewService: false,
+          activityCategory: null,
           name: 'Marge 30%',
           description: '',
           amountEuros: 0,
@@ -267,6 +279,7 @@ describe('InvoiceDraftStore', () => {
           serviceId: 'service-2',
           catalogServiceId: 'service-2',
           saveAsNewService: false,
+          activityCategory: null,
           name: 'Marge 10%',
           description: '',
           amountEuros: 0,

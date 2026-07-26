@@ -65,6 +65,7 @@ export class ProductRepository {
         supplierUrl: data.supplierUrl ?? null,
         code: data.code ?? null,
         packagingQuantity: data.packagingQuantity ?? null,
+        activityCategory: data.activityCategory ?? null,
       },
     });
     if (count === 0) {

@@ -1,7 +1,7 @@
 import { buildDefaultInvoiceMailTemplate } from './invoice-mail-template.util';
 
 describe('buildDefaultInvoiceMailTemplate', () => {
-  it('mentions FactureLeBat in the body (product visibility requirement)', () => {
+  it('mentions FactureLe in the body (product visibility requirement)', () => {
     const { text } = buildDefaultInvoiceMailTemplate({
       companyName: 'Parquet Dupont',
       customerName: 'Mme Martin',
@@ -9,7 +9,7 @@ describe('buildDefaultInvoiceMailTemplate', () => {
       totalInclVatCents: 123456,
       documentType: 'FACTURE',
     });
-    expect(text).toContain('FactureLeBat');
+    expect(text).toContain('FactureLe');
   });
 
   it('includes the invoice number and formatted total in French currency style', () => {

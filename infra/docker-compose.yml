@@ -1,4 +1,4 @@
-name: facturelebat-dev
+name: facturele-dev
 
 services:
   postgres:

@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsInt,
@@ -10,7 +11,11 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { LegalStatus } from '../../../generated/prisma/enums';
+import { DeclarationFrequency, LegalStatus } from '../../../generated/prisma/enums';
+
+// Same generous-but-finite bound as CreateProductDto/CreateServiceDto's
+// MAX_PRICE_CENTS — rejects an obviously-wrong input, not a real limit.
+const MAX_CEILING_CENTS = 100_000_000; // 1,000,000.00 €
 
 export class UpdateCompanyDto {
   @IsString()
@@ -67,4 +72,45 @@ export class UpdateCompanyDto {
   @MinLength(1)
   @MaxLength(20)
   invoiceNumberPrefix?: string;
+
+  // Phase 17: which period the quarterly report screen preselects — the
+  // report itself always accepts an explicit from/to range regardless.
+  @IsOptional()
+  @IsEnum(DeclarationFrequency)
+  declarationFrequency?: DeclarationFrequency;
+
+  // Phase 17: cents. Deliberately not validated against any real URSSAF
+  // figure — the artisan sets whatever their own actual plafond is; a wrong
+  // number here only affects a warning banner, never a computed total.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_CEILING_CENTS)
+  microEntrepreneurCeiling?: number;
+
+  // Phase 17 (charges estimate): micro-entrepreneur "cotisations sociales"
+  // rates, basis points (1230 = 12.30%) — see schema.prisma's comment on
+  // Company.cotisationVenteBasisPoints. Capped at 10000 (100%) for the same
+  // "obviously a mistake, not a real rate" reason as vatRateBasisPoints.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  cotisationVenteBasisPoints?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  cotisationPrestationBicBasisPoints?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  cotisationPrestationBncBasisPoints?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  versementLiberatoireOptIn?: boolean;
 }

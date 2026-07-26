@@ -50,10 +50,21 @@ export const authRefreshInterceptor: HttpInterceptorFn = (req, next) => {
       if (isExempt || !(error instanceof HttpErrorResponse) || error.status !== 401) {
         return throwError(() => error);
       }
+      // Snapshot before attempting the refresh: if a fresh login/register/
+      // logout happens while this refresh is in flight (e.g. this 401 came
+      // from a stale request queued before the visitor re-authenticated on
+      // /connexion), currentUser will have moved on to a new object by the
+      // time we get to catchError below — every one of those setters
+      // installs a brand new object, never mutates in place. In that case
+      // this failure describes a session that no longer matters; forcing a
+      // redirect now would yank the visitor back to /connexion moments
+      // after they just logged in.
+      const userBeforeRefresh = authService.currentUser();
       return authService.refreshSession().pipe(
         switchMap(() => next(req)),
         catchError((refreshError: unknown) => {
-          if (!isOnPublicRoute(router.url)) {
+          const supersededByNewerAuth = authService.currentUser() !== userBeforeRefresh;
+          if (!supersededByNewerAuth && !isOnPublicRoute(router.url)) {
             void router.navigate(['/connexion']);
           }
           return throwError(() => refreshError);

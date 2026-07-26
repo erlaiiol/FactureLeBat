@@ -8,18 +8,21 @@
 <input
   [formControl]="search"
   type="text"
+  appTourAnchor="prestations-search"
   placeholder="Rechercher une prestation…"
   class="mb-6 w-full rounded-lg border border-line px-4 py-3 text-lg"
 />
 
 @if (loading()) {
-  <p class="text-ink-soft">Chargement…</p>
+  @if (showSkeleton()) {
+    <app-skeleton-rows />
+  }
 } @else if (errorMessage(); as message) {
   <p class="font-medium text-danger">{{ message }}</p>
 } @else if (services().length === 0) {
   <p class="text-ink-soft">Aucune prestation pour le moment.</p>
 } @else {
-  <ul class="flex flex-col gap-3">
+  <ul class="anim-preview-in flex flex-col gap-3">
     @for (service of services(); track service.id) {
       <li>
         <a

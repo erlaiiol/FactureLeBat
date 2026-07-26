@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ServiceVisibility } from '../../../generated/prisma/enums';
+import { ActivityCategory, ServiceVisibility } from '../../../generated/prisma/enums';
 import { RedistributionStrategy } from './redistribution-strategy.enum';
 import { ServiceLineVisibilityConsistency } from './service-line-visibility-consistency.validator';
 
@@ -66,4 +66,11 @@ export class CreateInvoiceServiceLineDto {
   @IsInt({ each: true })
   @Min(0, { each: true })
   weights?: number[];
+
+  // Phase 17: same soft-snapshot rule as CreateInvoiceLineDto.activityCategory
+  // — taken from the picked catalog Service's activityCategory when this
+  // line was added, left unset for a freehand service line.
+  @IsOptional()
+  @IsEnum(ActivityCategory)
+  activityCategory?: ActivityCategory;
 }

@@ -7,7 +7,9 @@ import { combineLatest, debounceTime, distinctUntilChanged, startWith, switchMap
 import { CustomerSearchResult, CustomerSortBy } from '../../core/models/customer.model';
 import { CustomerService } from '../../core/services/customer.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { SkeletonRowsComponent } from '../../shared/components/skeleton-rows.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 // Phase 14.5: sort options shown in the dropdown, in this order.
 const SORT_OPTIONS: ReadonlyArray<{ value: CustomerSortBy; label: string }> = [
@@ -20,7 +22,14 @@ const SORT_OPTIONS: ReadonlyArray<{ value: CustomerSortBy; label: string }> = [
 @Component({
   selector: 'app-customer-list-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, TourAnchorDirective, DatePipe],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BigButtonComponent,
+    SkeletonRowsComponent,
+    TourAnchorDirective,
+    DatePipe,
+  ],
   templateUrl: './customer-list.page.html',
 })
 export class CustomerListPage {
@@ -30,6 +39,7 @@ export class CustomerListPage {
 
   protected readonly customers = signal<CustomerSearchResult[]>([]);
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly errorMessage = signal<string | null>(null);
 
   protected readonly search = this.fb.nonNullable.control('');

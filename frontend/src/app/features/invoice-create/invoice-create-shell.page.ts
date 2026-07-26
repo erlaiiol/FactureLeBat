@@ -10,6 +10,7 @@ import {
 } from '@angular/router';
 import { filter } from 'rxjs';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { IconTrashComponent } from '../../shared/components/icon-trash.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summary.component';
 import { InvoiceDraftStore } from './invoice-draft.store';
@@ -29,6 +30,7 @@ import { InvoiceDraftStore } from './invoice-draft.store';
     RouterLink,
     RouterLinkActive,
     BigButtonComponent,
+    IconTrashComponent,
     InvoiceTotalsSummaryComponent,
     TourAnchorDirective,
   ],

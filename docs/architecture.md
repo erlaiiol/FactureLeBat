@@ -183,7 +183,7 @@ Each `features/*` folder is a routed, lazily-loaded page (`loadComponent` in `ap
 
 ## Docker (`infra/`)
 
-Two independent, non-overlapping Compose projects (`name: facturelebat-dev` / `facturelebat-prod` in each file) so dev and prod never share containers, networks, or the Postgres volume even if run from the same machine:
+Two independent, non-overlapping Compose projects (`name: facturele-dev` / `facturele-prod` in each file) so dev and prod never share containers, networks, or the Postgres volume even if run from the same machine:
 
 - `infra/docker-compose.yml` (dev, default): `postgres` + `backend` (target `dev`, bind-mounted source) + `frontend` (target `dev`, `ng serve`, bind-mounted source). `backend`, `frontend`, and `postgres` all publish their ports directly to the host (`BACKEND_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT`).
 - `infra/docker-compose.prod.yml`: `postgres` (not published) + `backend` (target `prod`, compiled `dist/`, not published) + `frontend` (target `prod`, static build served by Nginx, proxies `/api`, not published) + `caddy` (the only service publishing `80`/`443` — see above). This is the file the OVH server actually runs; see [deployment.md](deployment.md).

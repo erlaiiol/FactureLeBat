@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { Unit } from '../../../generated/prisma/enums';
+import { ActivityCategory, Unit } from '../../../generated/prisma/enums';
 
 // Generous but finite upper bound: rejects an obviously-wrong input (a stray
 // extra zero) before it reaches invoice-line prefill, not a real business
@@ -69,4 +69,11 @@ export class CreateProductDto {
   @Min(0.001)
   @Max(MAX_PACKAGING_QUANTITY)
   packagingQuantity?: number;
+
+  // Phase 17: which URSSAF turnover category this product's sales fall
+  // under — artisan-set, left unset by default (see docs/roadmap.md Phase
+  // 17's "No automatic activity-category detection" non-goal).
+  @IsOptional()
+  @IsEnum(ActivityCategory)
+  activityCategory?: ActivityCategory;
 }

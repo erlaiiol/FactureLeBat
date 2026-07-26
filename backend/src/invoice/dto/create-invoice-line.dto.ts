@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { Unit, WasteSurcharge } from '../../../generated/prisma/enums';
+import { ActivityCategory, Unit, WasteSurcharge } from '../../../generated/prisma/enums';
 import { WasteSurchargeOnlyForArea } from './waste-surcharge-only-for-area.validator';
 
 // Upper bounds are generous for a real-world invoice line but finite: they
@@ -86,4 +86,12 @@ export class CreateInvoiceLineDto {
   @IsOptional()
   @IsBoolean()
   showBillingDetail?: boolean = true;
+
+  // Phase 17: snapshotted from the picked catalog Product's activityCategory
+  // at the moment it was added to the invoice — same soft-snapshot spirit as
+  // productCode above, never re-read from Product afterwards. Left unset for
+  // a freehand line or an uncategorized product.
+  @IsOptional()
+  @IsEnum(ActivityCategory)
+  activityCategory?: ActivityCategory;
 }

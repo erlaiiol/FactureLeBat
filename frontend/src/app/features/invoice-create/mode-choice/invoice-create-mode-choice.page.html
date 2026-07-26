@@ -31,8 +31,13 @@
     <a
       routerLink="rapide"
       [queryParams]="{ type: documentType() }"
-      class="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-6 text-left shadow-sm transition hover:border-primary hover:shadow-md"
+      class="relative flex flex-col gap-2 rounded-2xl border-2 border-primary bg-surface p-6 text-left shadow-md transition hover:shadow-lg"
     >
+      <span
+        class="absolute -top-3 left-5 rounded-full bg-primary px-3 py-1 text-xs font-bold tracking-wide text-primary-fg uppercase"
+      >
+        Recommandé
+      </span>
       <span class="text-lg font-semibold text-ink">Mode rapide</span>
       <span class="text-sm text-ink-soft">
         Un client, des produits et prestations choisis pas à pas — le total se calcule pour vous.

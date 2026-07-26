@@ -1,6 +1,9 @@
 @if (createdInvoice(); as invoice) {
   <div class="flex flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center">
-    <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-success">
+    <h1
+      appTourAnchor="invoice-created-success"
+      class="font-heading uppercase tracking-wide text-2xl font-bold text-success"
+    >
       {{ invoice.documentType === 'DEVIS' ? 'Devis' : 'Facture' }} {{ invoice.number }} créé{{
         invoice.documentType === 'DEVIS' ? '' : 'e'
       }}
@@ -34,8 +37,8 @@
       <app-big-button>Télécharger le PDF</app-big-button>
     </a>
     <div class="w-full max-w-sm">
-      <app-big-button variant="secondary" tone="subtle" (click)="openEmailModal()">
-        Envoyer par mail
+      <app-big-button variant="secondary" tone="subtle" [disabled]="sharing()" (click)="share()">
+        {{ sharing() ? 'Partage…' : 'Partager' }}
       </app-big-button>
     </div>
     <div class="w-full max-w-sm">
@@ -67,9 +70,19 @@
   </p>
 
   @if (loading()) {
-    <p class="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-soft">
-      Calcul de l'aperçu…
-    </p>
+    @if (showSkeleton()) {
+      <div class="rounded-xl border border-line bg-surface p-6 shadow-sm">
+        <div class="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
+          <div class="anim-skeleton h-6 w-32 rounded"></div>
+          <div class="anim-skeleton h-6 w-40 rounded"></div>
+        </div>
+        <div class="flex flex-col gap-2">
+          @for (row of [1, 2, 3]; track row) {
+            <div class="anim-skeleton h-8 rounded"></div>
+          }
+        </div>
+      </div>
+    }
   } @else if (loadError(); as message) {
     <div
       class="flex flex-col items-center gap-3 rounded-xl border border-dashed border-danger p-6 text-center"
@@ -83,7 +96,7 @@
     <!-- The document mirror: same information the real PDF will show, laid
          out to resemble it, but plain HTML — not the rendered PDF itself —
          so each technical detail below can be individually hovered/clicked. -->
-    <div class="rounded-xl border border-line bg-surface p-6 shadow-sm">
+    <div class="anim-preview-in rounded-xl border border-line bg-surface p-6 shadow-sm">
       <div class="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
         <div>
           <p class="font-heading text-lg font-bold text-ink">
@@ -120,18 +133,18 @@
                       type="button"
                       (click)="toggleUnitDetail(i)"
                       title="Cliquer pour masquer sur le PDF envoyé au client"
-                      class="-mx-1 rounded px-1 text-ink transition-colors hover:bg-primary-subtle hover:text-primary"
+                      class="-mx-1 flex items-center gap-1 rounded px-1 text-ink transition-colors hover:bg-primary-subtle hover:text-primary"
                     >
-                      👁 {{ line.unit | unitLabel }}
+                      <app-icon-eye [size]="14" /> {{ line.unit | unitLabel }}
                     </button>
                   } @else {
                     <button
                       type="button"
                       (click)="toggleUnitDetail(i)"
                       title="Masqué sur le PDF — cliquer pour l'afficher"
-                      class="-mx-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
+                      class="-mx-1 flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
                     >
-                      masqué
+                      <app-icon-eye-off [size]="14" /> masqué
                     </button>
                   }
                 </td>
@@ -143,18 +156,18 @@
                         type="button"
                         (click)="toggleBillingDetail(i)"
                         title="Cliquer pour masquer sur le PDF envoyé au client"
-                        class="ml-1 rounded px-1 text-xs text-ink-soft transition-colors hover:bg-primary-subtle hover:text-primary"
+                        class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft transition-colors hover:bg-primary-subtle hover:text-primary"
                       >
-                        👁 (facturé : {{ line.billedQuantity }})
+                        <app-icon-eye [size]="12" /> (facturé : {{ line.billedQuantity }})
                       </button>
                     } @else {
                       <button
                         type="button"
                         (click)="toggleBillingDetail(i)"
                         title="Masqué sur le PDF — cliquer pour l'afficher"
-                        class="ml-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
+                        class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
                       >
-                        détail masqué
+                        <app-icon-eye-off [size]="12" /> détail masqué
                       </button>
                     }
                   }
@@ -236,7 +249,12 @@
     }
 
     <div class="mt-6">
-      <app-big-button type="button" [disabled]="creating() || loading()" (click)="submit()">
+      <app-big-button
+        type="button"
+        appTourAnchor="invoice-submit-button"
+        [disabled]="creating() || loading()"
+        (click)="submit()"
+      >
         {{
           creating()
             ? 'Création…'

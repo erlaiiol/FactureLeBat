@@ -2,8 +2,10 @@ import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { RedistributionStrategy, ServiceLineVisibility } from '../../../core/models/invoice.model';
+import { ActivityCategory } from '../../../core/models/report.model';
 import { ServicePricingMode, ServiceProfile } from '../../../core/models/service.model';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
+import { IconCheckComponent } from '../../../shared/components/icon-check.component';
 import { LineBadgeComponent } from '../../../shared/components/line-badge.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
@@ -25,12 +27,20 @@ export type InvoiceServiceLineFormGroup = FormGroup<{
   catalogServiceId: FormControl<string | null>;
   // UI-only, see InvoiceServiceLineDraft.saveAsNewService.
   saveAsNewService: FormControl<boolean>;
+  // Phase 17, UI-only: see InvoiceServiceLineDraft.activityCategory.
+  activityCategory: FormControl<ActivityCategory | null>;
 }>;
 
 @Component({
   selector: 'app-invoice-service-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, DecimalPipe, FieldHintComponent, LineBadgeComponent],
+  imports: [
+    ReactiveFormsModule,
+    DecimalPipe,
+    FieldHintComponent,
+    IconCheckComponent,
+    LineBadgeComponent,
+  ],
   templateUrl: './invoice-service-line-form.component.html',
 })
 export class InvoiceServiceLineFormComponent {
@@ -60,6 +70,21 @@ export class InvoiceServiceLineFormComponent {
 
   protected isPercentageMode(): boolean {
     return this.group().controls.pricingMode.value === 'PERCENTAGE';
+  }
+
+  // percentageBasisPoints stores basis points (3000 = 30.00%, same
+  // convention as CompanyProfile.vatRateBasisPoints) — displayed/typed as a
+  // plain percentage, converted at the boundary since the control itself
+  // must stay in basis points for InvoiceDraftStore.resolvedServiceAmountCents.
+  protected displayPercentage(): number {
+    const basisPoints = this.group().controls.percentageBasisPoints.value;
+    return basisPoints != null ? basisPoints / 100 : 0;
+  }
+
+  protected onPercentageInput(rawValue: string): void {
+    const percent = Number(rawValue);
+    const basisPoints = Number.isFinite(percent) ? Math.round(percent * 100) : 0;
+    this.group().controls.percentageBasisPoints.setValue(basisPoints);
   }
 
   // Same "can't rename what it references" rule as InvoiceLineFormComponent.

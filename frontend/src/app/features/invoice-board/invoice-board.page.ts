@@ -9,25 +9,27 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { InvoiceShareService } from '../../core/services/invoice-share.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BoardColumn, InvoiceBoardCardComponent } from './invoice-board-card.component';
 import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
-import { InvoiceGhostCardComponent } from './invoice-ghost-card.component';
 import { isOverdue } from './invoice-status.util';
 import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
 import { BadgeComponent } from '../../shared/components/badge.component';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 // Phase 16: replaces the old flat "Mes factures" list entirely (decided
 // explicitly with the user — a mobile-first management board, not a
 // list/board toggle) with a 5-column Kanban: Devis, Non payées, En retard,
-// Payées, Annulées. "En retard" and the Devis-conversion ghost cards in Non
-// payées are both computed here, never persisted — see invoice-status.util's
-// isOverdue and docs/roadmap.md Phase 16.
+// Payées, Annulées. A devis has no payment status, so it only ever lives in
+// the Devis column — its own card carries the conversion CTA directly,
+// never a stand-in card in another column. "En retard" is computed here,
+// never persisted — see invoice-status.util's isOverdue.
 @Component({
   selector: 'app-invoice-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     InvoiceBoardCardComponent,
-    InvoiceGhostCardComponent,
     InvoiceDueDateModalComponent,
     SendInvoiceEmailModalComponent,
     BadgeComponent,
@@ -36,10 +38,13 @@ import { BadgeComponent } from '../../shared/components/badge.component';
 })
 export class InvoiceBoardPage {
   private readonly invoiceService = inject(InvoiceService);
+  private readonly invoiceShareService = inject(InvoiceShareService);
+  private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly invoices = signal<InvoiceWithTotals[]>([]);
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly errorMessage = signal<string | null>(null);
 
   protected readonly search = signal('');
@@ -48,6 +53,7 @@ export class InvoiceBoardPage {
   protected readonly unpaidOnly = signal(false);
 
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
+  protected readonly sharingInvoiceId = signal<string | null>(null);
   // Which facture is waiting on the due-date modal, and where it's headed —
   // 'NON_PAYEE' whether the move came from a drag or the "Restaurer" button,
   // both funnel through moveToNonPayee below.
@@ -75,9 +81,6 @@ export class InvoiceBoardPage {
 
   protected readonly devis = computed(() =>
     this.filtered().filter((invoice) => invoice.documentType === 'DEVIS'),
-  );
-  protected readonly unconvertedDevis = computed(() =>
-    this.devis().filter((devis) => !devis.convertedToFacture),
   );
   protected readonly nonPayees = computed(() =>
     this.filtered().filter(
@@ -143,6 +146,12 @@ export class InvoiceBoardPage {
     this.unpaidOnly.update((value) => !value);
   }
 
+  protected unpaidToggleClasses(): string {
+    return this.unpaidOnly()
+      ? 'bg-primary text-primary-fg hover:brightness-90'
+      : 'border border-line text-ink-soft hover:bg-secondary-subtle';
+  }
+
   protected onCardDropped(invoice: InvoiceWithTotals, target: string | null): void {
     if (!target || target === invoice.status) {
       return;
@@ -157,11 +166,11 @@ export class InvoiceBoardPage {
   }
 
   protected markPaid(invoice: InvoiceWithTotals): void {
-    this.updateStatus(invoice.id, { status: 'PAYEE' });
+    this.updateStatus(invoice.id, { status: 'PAYEE' }, 'Facture marquée payée.');
   }
 
   protected cancelInvoice(invoice: InvoiceWithTotals): void {
-    this.updateStatus(invoice.id, { status: 'ANNULEE' });
+    this.updateStatus(invoice.id, { status: 'ANNULEE' }, 'Facture annulée.');
   }
 
   // Entry point for both a drag into "Non payées" and the "Restaurer"
@@ -169,7 +178,7 @@ export class InvoiceBoardPage {
   // per docs/roadmap.md Phase 16.
   protected moveToNonPayee(invoice: InvoiceWithTotals): void {
     if (invoice.dueDate) {
-      this.updateStatus(invoice.id, { status: 'NON_PAYEE' });
+      this.updateStatus(invoice.id, { status: 'NON_PAYEE' }, 'Facture déplacée vers Non payées.');
       return;
     }
     this.dueDateModalInvoice.set(invoice);
@@ -181,7 +190,11 @@ export class InvoiceBoardPage {
       return;
     }
     this.dueDateModalInvoice.set(null);
-    this.updateStatus(invoice.id, { status: 'NON_PAYEE', dueDate });
+    this.updateStatus(
+      invoice.id,
+      { status: 'NON_PAYEE', dueDate },
+      'Facture déplacée vers Non payées.',
+    );
   }
 
   protected onDueDateSkipped(): void {
@@ -190,12 +203,13 @@ export class InvoiceBoardPage {
       return;
     }
     this.dueDateModalInvoice.set(null);
-    this.updateStatus(invoice.id, { status: 'NON_PAYEE' });
+    this.updateStatus(invoice.id, { status: 'NON_PAYEE' }, 'Facture déplacée vers Non payées.');
   }
 
   private updateStatus(
     id: string,
     request: { status: 'NON_PAYEE' | 'PAYEE' | 'ANNULEE'; dueDate?: string },
+    successMessage: string,
   ): void {
     this.invoiceService
       .updateStatus(id, request)
@@ -205,6 +219,7 @@ export class InvoiceBoardPage {
           this.invoices.update((invoices) =>
             invoices.map((invoice) => (invoice.id === updated.id ? updated : invoice)),
           );
+          this.toastService.success(successMessage);
         },
         error: () => {
           this.errorMessage.set('Impossible de mettre à jour cette facture pour le moment.');
@@ -232,6 +247,7 @@ export class InvoiceBoardPage {
                 : invoice,
             ),
           ]);
+          this.toastService.success(`Devis converti en facture ${facture.number}.`);
         },
         error: () => {
           this.convertingDevisId.set(null);
@@ -244,6 +260,23 @@ export class InvoiceBoardPage {
     this.emailModalInvoice.set(invoice);
   }
 
+  protected async onShare(invoice: InvoiceWithTotals): Promise<void> {
+    if (this.sharingInvoiceId()) {
+      return;
+    }
+    this.sharingInvoiceId.set(invoice.id);
+    try {
+      const outcome = await this.invoiceShareService.share(invoice);
+      if (outcome === 'compose-email') {
+        this.openEmailModal(invoice);
+      }
+    } catch {
+      this.toastService.error('Impossible de partager ce document pour le moment.');
+    } finally {
+      this.sharingInvoiceId.set(null);
+    }
+  }
+
   protected closeEmailModal(): void {
     this.emailModalInvoice.set(null);
   }
@@ -253,6 +286,7 @@ export class InvoiceBoardPage {
       invoices.map((invoice) => (invoice.id === updated.id ? updated : invoice)),
     );
     this.emailModalInvoice.set(null);
+    this.toastService.success('Email envoyé au client.');
   }
 
   protected columnOf(invoice: InvoiceWithTotals): BoardColumn {

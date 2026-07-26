@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
+import { rapportsRedirectGuard } from './core/guards/rapports-redirect.guard';
 
 // Phase 13: every feature route below needs a valid session — wrapped as
 // children of one pathless, authGuard-protected route rather than
@@ -115,6 +116,23 @@ const protectedRoutes: Routes = [
     path: 'prestations/:id',
     loadComponent: () =>
       import('./features/service-form/service-form.page').then((m) => m.ServiceFormPage),
+  },
+  // Phase 18: "Rapports" and "Statistiques" merged into one page with two
+  // in-page tabs (see StatsReportsPage) so related figures stop being split
+  // across two separate nav clicks. The old '/rapports' URL redirects
+  // straight to the declaration tab, in case it's bookmarked.
+  {
+    path: 'statistiques',
+    loadComponent: () =>
+      import('./features/stats-reports/stats-reports.page').then((m) => m.StatsReportsPage),
+  },
+  {
+    path: 'rapports',
+    pathMatch: 'full',
+    canActivate: [rapportsRedirectGuard],
+    // Never actually renders — the guard always returns a redirect UrlTree
+    // before Angular needs a component for this route.
+    children: [],
   },
   {
     path: 'entreprise',

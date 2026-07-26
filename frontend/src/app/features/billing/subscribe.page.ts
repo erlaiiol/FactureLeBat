@@ -4,10 +4,10 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { BillingStatus } from '../../core/models/billing.model';
 import { BillingService } from '../../core/services/billing.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 function extractErrorMessage(error: HttpErrorResponse, fallback: string): string {
   const body = error.error as { message?: string | string[] } | null;
@@ -36,7 +36,10 @@ export class SubscribePage {
   private readonly fb = inject(FormBuilder);
 
   protected readonly loading = signal(true);
-  protected readonly status = signal<BillingStatus | null>(null);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
+  // Alias, not a copy — reads the app-shell-wide signal (see BillingService
+  // and app.ts's navbar button) so this page and the navbar never disagree.
+  protected readonly status = this.billingService.status;
   protected readonly checkoutLoading = signal(false);
   protected readonly checkoutError = signal<string | null>(null);
   protected readonly portalLoading = signal(false);
@@ -63,13 +66,10 @@ export class SubscribePage {
   private loadStatus(): void {
     this.loading.set(true);
     this.billingService
-      .getStatus()
+      .refreshStatus()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (status) => {
-          this.status.set(status);
-          this.loading.set(false);
-        },
+        next: () => this.loading.set(false),
         error: () => this.loading.set(false),
       });
   }

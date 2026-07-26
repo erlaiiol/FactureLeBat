@@ -41,13 +41,31 @@
   <div class="flex flex-wrap gap-2 pt-1">
     @switch (column()) {
       @case ('DEVIS') {
+        @if (!invoice().convertedToFacture) {
+          <button
+            type="button"
+            [disabled]="converting()"
+            (click)="convertToFacture.emit()"
+            class="rounded-lg bg-info px-3 py-2 text-sm font-medium text-info-fg hover:brightness-90 disabled:opacity-60"
+          >
+            {{ converting() ? 'Création…' : 'Payer la facture' }}
+          </button>
+        }
         <a
           [href]="pdfUrl()"
           target="_blank"
-          class="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-fg hover:brightness-90"
+          class="rounded-lg bg-info-subtle px-3 py-2 text-sm font-medium text-info-subtle-fg hover:brightness-90"
         >
           Télécharger le PDF
         </a>
+        <button
+          type="button"
+          [disabled]="sharing()"
+          (click)="share.emit()"
+          class="rounded-lg bg-secondary px-3 py-2 text-sm font-medium text-secondary-fg hover:brightness-90 disabled:opacity-60"
+        >
+          {{ sharing() ? 'Partage…' : 'Partager' }}
+        </button>
       }
       @case ('PAYEE') {
         <a
@@ -57,6 +75,14 @@
         >
           Télécharger le PDF
         </a>
+        <button
+          type="button"
+          [disabled]="sharing()"
+          (click)="share.emit()"
+          class="rounded-lg bg-secondary px-3 py-2 text-sm font-medium text-secondary-fg hover:brightness-90 disabled:opacity-60"
+        >
+          {{ sharing() ? 'Partage…' : 'Partager' }}
+        </button>
       }
       @case ('ANNULEE') {
         <button
@@ -70,14 +96,15 @@
       @default {
         <button
           type="button"
-          (click)="sendEmail.emit()"
-          class="rounded-lg px-3 py-2 text-sm font-medium hover:brightness-90"
+          [disabled]="sharing()"
+          (click)="share.emit()"
+          class="rounded-lg px-3 py-2 text-sm font-medium hover:brightness-90 disabled:opacity-60"
           [class.bg-danger]="overdue()"
           [class.text-danger-fg]="overdue()"
           [class.bg-secondary]="!overdue()"
           [class.text-secondary-fg]="!overdue()"
         >
-          Renvoyer un mail
+          {{ sharing() ? 'Partage…' : 'Partager' }}
         </button>
         <button
           type="button"

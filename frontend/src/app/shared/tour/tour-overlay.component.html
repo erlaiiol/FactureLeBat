@@ -25,11 +25,11 @@
     <div
       class="bg-atelier-surface text-atelier-ink font-atelier-sans pointer-events-auto absolute w-80 max-w-[calc(100vw-24px)] rounded-2xl p-5 shadow-2xl transition-[top,left] duration-200"
       [class.anim-tour-step-in]="stepAnimating()"
-      [class.anim-tour-completion-glow]="tourService.isLastStep()"
+      [class.anim-tour-completion-glow]="isCelebrating()"
       [style.top.px]="popoverPosition().top"
       [style.left.px]="popoverPosition().left"
     >
-      @if (tourService.isLastStep()) {
+      @if (isCelebrating()) {
         <svg
           class="anim-tour-checkmark mb-2 h-8 w-8"
           viewBox="0 0 24 24"
@@ -73,7 +73,7 @@
           [class.animate-pulse]="tourService.isLastStep()"
           (click)="tourService.next()"
         >
-          {{ tourService.isLastStep() ? '🎉 Terminer' : 'Suivant' }}
+          {{ tourService.isLastStep() ? 'Terminer' : 'Suivant' }}
         </button>
       </div>
     </div>

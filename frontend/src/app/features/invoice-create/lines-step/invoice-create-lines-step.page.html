@@ -17,7 +17,13 @@
 <!-- z-50, above the z-40 click-outside backdrops below, so clicking a
        button again toggles its own panel closed instead of being swallowed
        by the backdrop that just appeared on top of the page. -->
-<div class="fixed top-32 left-4 z-50 flex flex-col gap-4">
+<!-- top reads the `--nav-height` CSS variable (App's observeTopBarHeight)
+       rather than a fixed offset: at narrow widths the nav wraps across
+       several rows and grows past any one hardcoded top-* guess, which put
+       these buttons on top of the nav's own text. 8rem fallback matches
+       the old hardcoded value, for the brief window before the first
+       ResizeObserver measurement lands. -->
+<div class="fixed top-[calc(var(--nav-height,8rem)_+_1rem)] left-4 z-50 flex flex-col gap-4">
   <div class="relative">
     <button
       type="button"
@@ -64,7 +70,7 @@
                     </span>
                   </span>
                   @if (activeIndex != null) {
-                    <span class="text-primary">✓</span>
+                    <span class="text-primary"><app-icon-check [size]="14" /></span>
                   }
                 </button>
               </li>
@@ -108,6 +114,7 @@
     @if (servicePanelOpen()) {
       <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
       <div
+        appTourAnchor="invoice-service-flyout"
         class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
       >
         <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
@@ -135,7 +142,7 @@
                     </span>
                   </span>
                   @if (activeServiceIndex != null) {
-                    <span class="text-info">✓</span>
+                    <span class="text-info"><app-icon-check [size]="14" /></span>
                   }
                 </button>
               </li>
@@ -177,33 +184,37 @@
          color from "Créer la facture" so the two are never confused. -->
   @for (line of lines.controls; track line; let i = $index) {
     @if (!isLineCollapsed(line)) {
-      <div class="anim-line-in">
-        <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)">
-          <app-big-button variant="success" type="button" (click)="collapseLine(line)">
-            Valider
-          </app-big-button>
-        </app-invoice-line-form>
+      <div class="anim-line-in" [attr.data-morph-id]="morphId(line)">
+        <div class="morph-content">
+          <app-invoice-line-form [group]="line" [index]="i" (remove)="removeLine(i)">
+            <app-big-button variant="success" type="button" (click)="collapseLine(line)">
+              Valider
+            </app-big-button>
+          </app-invoice-line-form>
+        </div>
       </div>
     }
   }
   @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
     @if (!isServiceLineCollapsed(serviceLine)) {
-      <div class="anim-line-in">
-        <app-invoice-service-line-form
-          [group]="serviceLine"
-          [index]="i"
-          [services]="draftStore.services()"
-          [lineLabels]="lineLabels()"
-          (remove)="removeServiceLine(i)"
-        >
-          <app-big-button
-            variant="success"
-            type="button"
-            (click)="collapseServiceLine(serviceLine)"
+      <div class="anim-line-in" [attr.data-morph-id]="morphId(serviceLine)">
+        <div class="morph-content">
+          <app-invoice-service-line-form
+            [group]="serviceLine"
+            [index]="i"
+            [services]="draftStore.services()"
+            [lineLabels]="lineLabels()"
+            (remove)="removeServiceLine(i)"
           >
-            Valider
-          </app-big-button>
-        </app-invoice-service-line-form>
+            <app-big-button
+              variant="success"
+              type="button"
+              (click)="collapseServiceLine(serviceLine)"
+            >
+              Valider
+            </app-big-button>
+          </app-invoice-service-line-form>
+        </div>
       </div>
     }
   }
@@ -215,53 +226,58 @@
          every already-collapsed card here, with the shrink-in animation
          standing in for the "card just got smaller and joined the
          gallery" motion. -->
-  <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+  <section appTourAnchor="invoice-lines-gallery" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
     @for (line of lines.controls; track line; let i = $index) {
       @if (isLineCollapsed(line)) {
         <div
-          class="anim-card-shrink-in flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 shadow-sm hover:border-primary-subtle-border"
+          class="anim-line-in rounded-xl border border-line bg-surface p-4 shadow-sm hover:border-primary-subtle-border"
+          [attr.data-morph-id]="morphId(line)"
         >
-          <button
-            type="button"
-            (click)="expandLine(line)"
-            class="flex w-full flex-col gap-1 text-left"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <span class="font-medium text-ink">{{ line.controls.description.value }}</span>
-              <span
-                (click)="$event.stopPropagation(); removeLine(i)"
-                class="text-sm font-medium text-danger hover:underline"
-              >
-                ✕
+          <div class="morph-content flex flex-col gap-2">
+            <button
+              type="button"
+              (click)="expandLine(line)"
+              class="flex w-full flex-col gap-1 text-left"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <span class="font-medium text-ink">{{ line.controls.description.value }}</span>
+                <span
+                  (click)="$event.stopPropagation(); removeLine(i)"
+                  class="text-danger hover:underline"
+                >
+                  <app-icon-close [size]="14" />
+                </span>
+              </div>
+              <span class="text-sm text-ink-soft">
+                {{ line.controls.unitPriceEuros.value | number: '1.2-2' }} € /
+                {{ line.controls.unit.value | unitLabel }}
               </span>
-            </div>
-            <span class="text-sm text-ink-soft">
-              {{ line.controls.unitPriceEuros.value | number: '1.2-2' }} € /
-              {{ line.controls.unit.value | unitLabel }}
-            </span>
-            <span class="mt-1 font-mono text-lg font-semibold text-ink">
-              {{ lineTotalsCents()[i] | centsToEuros }}
-            </span>
-          </button>
+              <span class="mt-1 font-mono text-lg font-semibold text-ink">
+                {{ lineTotalsCents()[i] | centsToEuros }}
+              </span>
+            </button>
 
-          <!-- Always accessible without expanding the card — the one field
-               a catalog-picked line still needs (see addProductFromCatalog),
-               and the one thing an artisan measuring a job on-site keeps
-               coming back to adjust. Its own click doesn't bubble up into
-               the "expand" button above it. -->
-          <label
-            class="flex items-center gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm"
-            (click)="$event.stopPropagation()"
-          >
-            <span class="font-medium text-ink-soft">Surface du chantier</span>
-            <input
-              type="number"
-              step="0.01"
-              [formControl]="line.controls.quantity"
-              class="w-20 rounded border border-line px-2 py-1 text-right"
-            />
-            <span class="text-ink-soft">{{ line.controls.unit.value | unitLabel }}</span>
-          </label>
+            <!-- Always accessible without expanding the card — the one
+                 field a catalog-picked line still needs (see
+                 addProductFromCatalog), and the one thing an artisan
+                 measuring a job on-site keeps coming back to adjust. Its
+                 own click doesn't bubble up into the "expand" button
+                 above it. -->
+            <label
+              class="flex items-center gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm"
+              (click)="$event.stopPropagation()"
+            >
+              <span class="font-medium text-ink-soft">Surface du chantier</span>
+              <input
+                type="number"
+                step="0.01"
+                appTourAnchor="invoice-line-quantity"
+                [formControl]="line.controls.quantity"
+                class="w-20 rounded border border-line px-2 py-1 text-right"
+              />
+              <span class="text-ink-soft">{{ line.controls.unit.value | unitLabel }}</span>
+            </label>
+          </div>
         </div>
       }
     }
@@ -269,47 +285,75 @@
     @for (serviceLine of serviceLines.controls; track serviceLine; let i = $index) {
       @if (isServiceLineCollapsed(serviceLine)) {
         <div
-          class="anim-card-shrink-in flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 shadow-sm hover:border-info-subtle-border"
+          class="anim-line-in rounded-xl border border-line bg-surface p-4 shadow-sm hover:border-info-subtle-border"
+          [attr.data-morph-id]="morphId(serviceLine)"
         >
-          <button
-            type="button"
-            (click)="expandServiceLine(serviceLine)"
-            class="flex w-full flex-col gap-1 text-left"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <span class="font-medium text-ink">{{ serviceLine.controls.name.value }}</span>
-              <span
-                (click)="$event.stopPropagation(); removeServiceLine(i)"
-                class="text-sm font-medium text-danger hover:underline"
-              >
-                ✕
+          <div class="morph-content flex flex-col gap-2">
+            <button
+              type="button"
+              (click)="expandServiceLine(serviceLine)"
+              class="flex w-full flex-col gap-1 text-left"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <span class="font-medium text-ink">{{ serviceLine.controls.name.value }}</span>
+                <span
+                  (click)="$event.stopPropagation(); removeServiceLine(i)"
+                  class="text-danger hover:underline"
+                >
+                  <app-icon-close [size]="14" />
+                </span>
+              </div>
+              <span class="mt-1 font-mono text-lg font-semibold text-ink">
+                {{ serviceLineAmountsCents()[i] | centsToEuros }}
               </span>
-            </div>
-            <span class="mt-1 font-mono text-lg font-semibold text-ink">
-              {{ serviceLineAmountsCents()[i] | centsToEuros }}
-            </span>
-          </button>
+            </button>
 
-          <!-- Always accessible without expanding the card — most artisans
-               use this to hide their margin from the client, on a whim,
-               often right before creating the invoice. -->
-          <button
-            type="button"
-            (click)="toggleServiceLineVisibility(serviceLine)"
-            class="rounded-lg border px-3 py-2 text-sm font-semibold"
-            [class.border-info-subtle-border]="serviceLine.controls.visibility.value === 'VISIBLE'"
-            [class.bg-info-subtle]="serviceLine.controls.visibility.value === 'VISIBLE'"
-            [class.text-info-subtle-fg]="serviceLine.controls.visibility.value === 'VISIBLE'"
-            [class.border-secondary-subtle-border]="
-              serviceLine.controls.visibility.value !== 'VISIBLE'
-            "
-            [class.bg-secondary-subtle]="serviceLine.controls.visibility.value !== 'VISIBLE'"
-            [class.text-secondary-subtle-fg]="serviceLine.controls.visibility.value !== 'VISIBLE'"
-          >
-            {{
-              serviceLine.controls.visibility.value === 'VISIBLE' ? '👁 Visible' : '🙈 Non visible'
-            }}
-          </button>
+            <!-- Read-only price-distribution info — pricing mode and
+                 redistribution strategy are only editable from the
+                 expanded, full form (see app-invoice-service-line-form),
+                 so the compact card just states them here instead of
+                 offering a control. -->
+            @if (serviceLine.controls.pricingMode.value === 'PERCENTAGE') {
+              <app-badge variant="secondary" tone="subtle">
+                {{ serviceLine.controls.percentageBasisPoints.value! / 100 }}% du total de la
+                facture
+              </app-badge>
+            }
+            @if (serviceLine.controls.visibility.value === 'REDISTRIBUTED') {
+              <app-line-badge>
+                @if (serviceLine.controls.redistributionStrategy.value === 'WEIGHTED') {
+                  Répartie avec des poids personnalisés
+                } @else {
+                  Répartie également entre les lignes
+                }
+              </app-line-badge>
+            }
+
+            <!-- Always accessible without expanding the card — most
+                 artisans use this to hide their margin from the client, on
+                 a whim, often right before creating the invoice. -->
+            <button
+              type="button"
+              (click)="toggleServiceLineVisibility(serviceLine)"
+              class="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold"
+              [class.border-info-subtle-border]="
+                serviceLine.controls.visibility.value === 'VISIBLE'
+              "
+              [class.bg-info-subtle]="serviceLine.controls.visibility.value === 'VISIBLE'"
+              [class.text-info-subtle-fg]="serviceLine.controls.visibility.value === 'VISIBLE'"
+              [class.border-secondary-subtle-border]="
+                serviceLine.controls.visibility.value !== 'VISIBLE'
+              "
+              [class.bg-secondary-subtle]="serviceLine.controls.visibility.value !== 'VISIBLE'"
+              [class.text-secondary-subtle-fg]="serviceLine.controls.visibility.value !== 'VISIBLE'"
+            >
+              @if (serviceLine.controls.visibility.value === 'VISIBLE') {
+                <app-icon-eye [size]="14" /> Visible
+              } @else {
+                <app-icon-eye-off [size]="14" /> Non visible
+              }
+            </button>
+          </div>
         </div>
       }
     }

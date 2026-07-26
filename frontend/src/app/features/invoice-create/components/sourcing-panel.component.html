@@ -5,7 +5,8 @@
     class="flex w-full items-center justify-between gap-2 text-left"
   >
     <span class="flex items-center gap-2 text-sm font-semibold text-ink">
-      🔍 Trouver des fournisseurs
+      <app-icon-search [size]="16" />
+      Trouver des fournisseurs
       <app-badge variant="info" tone="subtle">Bêta</app-badge>
     </span>
     <span class="text-xs font-medium text-ink-soft">{{ open() ? 'Réduire' : 'Ouvrir' }}</span>

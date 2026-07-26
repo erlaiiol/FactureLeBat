@@ -13,6 +13,7 @@ import {
   CompanyModel as Company,
 } from '../../generated/prisma/models';
 import {
+  ActivityCategory,
   Unit,
   WasteSurcharge,
   ServiceVisibility,
@@ -47,6 +48,10 @@ export interface CreateInvoiceLineData {
   // on InvoiceLine.showUnitDetail/showBillingDetail.
   showUnitDetail: boolean;
   showBillingDetail: boolean;
+  // Phase 17: snapshotted from the picked catalog Product at the moment
+  // this line was added — see schema.prisma's comment on
+  // InvoiceLine.activityCategory.
+  activityCategory?: ActivityCategory;
 }
 
 export interface CreateInvoiceServiceLineData {
@@ -60,6 +65,9 @@ export interface CreateInvoiceServiceLineData {
   // An EQUAL split has already been expanded into an explicit weight of 1
   // per line by the time this reaches the repository (see InvoiceService.create).
   weights?: number[];
+  // Phase 17: snapshotted from the picked catalog Service — see
+  // schema.prisma's comment on InvoiceServiceLine.activityCategory.
+  activityCategory?: ActivityCategory;
 }
 
 // Phase 9.5: one column of a MANUAL invoice's free-form table. Positional
@@ -196,6 +204,7 @@ export class InvoiceRepository {
               productCode: line.productCode,
               showUnitDetail: line.showUnitDetail,
               showBillingDetail: line.showBillingDetail,
+              activityCategory: line.activityCategory,
             })),
           },
           manualColumns: {
@@ -230,6 +239,7 @@ export class InvoiceRepository {
             description: serviceLine.description,
             amountCents: serviceLine.amountCents,
             visibility: serviceLine.visibility,
+            activityCategory: serviceLine.activityCategory,
           },
         });
 
@@ -345,6 +355,41 @@ export class InvoiceRepository {
     return this.prisma.invoice.findFirstOrThrow({
       where: { id, companyId },
       include: INVOICE_INCLUDE,
+    });
+  }
+
+  // Phase 17: the quarterly report's own data source — a devis is never
+  // "paid" (see InvoiceService.updateStatus's documentType guard, which
+  // means a devis can never actually reach status PAYEE), but documentType
+  // is still filtered explicitly here for the same defense-in-depth reason
+  // findById filters companyId even though ids don't collide across tenants.
+  // Reused for both the report's requested period and its year-to-date
+  // plafond figure (see ReportsService) — no cap: a single period's paid
+  // invoices for one small-artisan tenant is never remotely close to
+  // MAX_LISTED_INVOICES.
+  findPaidInRange(companyId: string, from: Date, to: Date): Promise<InvoiceWithLines[]> {
+    return this.prisma.invoice.findMany({
+      where: {
+        companyId,
+        documentType: DocumentType.FACTURE,
+        status: InvoiceStatus.PAYEE,
+        paidAt: { gte: from, lte: to },
+      },
+      include: INVOICE_INCLUDE,
+      orderBy: { paidAt: 'asc' },
+    });
+  }
+
+  // Phase 17: Activity Analytics' "outstanding" figure — every FACTURE still
+  // owed, "En retard" included (it's the same NON_PAYEE status with a passed
+  // dueDate, computed by the caller, never a separate persisted value — see
+  // schema.prisma's comment on InvoiceStatus).
+  findOutstanding(companyId: string): Promise<InvoiceWithLines[]> {
+    return this.prisma.invoice.findMany({
+      where: { companyId, documentType: DocumentType.FACTURE, status: InvoiceStatus.NON_PAYEE },
+      include: INVOICE_INCLUDE,
+      orderBy: { dueDate: 'asc' },
+      take: InvoiceRepository.MAX_LISTED_INVOICES,
     });
   }
 }

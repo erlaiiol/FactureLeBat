@@ -6,21 +6,33 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { PromoCode } from '../../core/models/admin.model';
 import { AdminService } from '../../core/services/admin.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { SkeletonTableComponent } from '../../shared/components/skeleton-table.component';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 @Component({
   selector: 'app-admin-promo-codes-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BadgeComponent, BigButtonComponent, DatePipe],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BadgeComponent,
+    BigButtonComponent,
+    SkeletonTableComponent,
+    DatePipe,
+  ],
   templateUrl: './admin-promo-codes.page.html',
 })
 export class AdminPromoCodesPage {
   private readonly adminService = inject(AdminService);
+  private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(FormBuilder);
 
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly codes = signal<PromoCode[]>([]);
   protected readonly creating = signal(false);
   protected readonly createError = signal<string | null>(null);
@@ -49,7 +61,10 @@ export class AdminPromoCodesPage {
           this.codes.set(codes);
           this.loading.set(false);
         },
-        error: () => this.loading.set(false),
+        error: () => {
+          this.loading.set(false);
+          this.toastService.error('Impossible de charger les codes promo.');
+        },
       });
   }
 
@@ -73,6 +88,7 @@ export class AdminPromoCodesPage {
         next: () => {
           this.creating.set(false);
           this.form.reset({ code: '', durationDays: 30, maxRedemptions: null, expiresAt: '' });
+          this.toastService.success('Code promo créé.');
           this.load();
         },
         error: (error: HttpErrorResponse) => {
@@ -84,10 +100,17 @@ export class AdminPromoCodesPage {
   }
 
   protected toggleActive(code: PromoCode): void {
+    const nextActive = !code.active;
     this.adminService
-      .setPromoCodeActive(code.id, !code.active)
+      .setPromoCodeActive(code.id, nextActive)
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: () => this.load() });
+      .subscribe({
+        next: () => {
+          this.toastService.success(nextActive ? 'Code promo activé.' : 'Code promo désactivé.');
+          this.load();
+        },
+        error: () => this.toastService.error('Impossible de modifier ce code promo.'),
+      });
   }
 
   protected remove(code: PromoCode): void {
@@ -97,6 +120,12 @@ export class AdminPromoCodesPage {
     this.adminService
       .deletePromoCode(code.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: () => this.load() });
+      .subscribe({
+        next: () => {
+          this.toastService.success('Code promo supprimé.');
+          this.load();
+        },
+        error: () => this.toastService.error('Impossible de supprimer ce code promo.'),
+      });
   }
 }

@@ -1,3 +1,5 @@
+import { ActivityCategory } from './report.model';
+
 export type ServiceVisibility = 'VISIBLE' | 'REDISTRIBUTED';
 
 // Phase 13.5: FIXED is the pre-existing typed-euro-amount behavior;
@@ -19,6 +21,8 @@ export interface ServiceProfile {
   // Phase 11: short artisan-defined reference (e.g. "MO-POSE") — optional,
   // unique when set. Same shape as ProductProfile.code.
   code: string | null;
+  // Phase 17: same URSSAF turnover categorization as ProductProfile.activityCategory.
+  activityCategory: ActivityCategory | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,4 +35,5 @@ export interface UpsertServiceRequest {
   percentageBasisPoints?: number;
   defaultVisibility: ServiceVisibility;
   code?: string;
+  activityCategory?: ActivityCategory;
 }

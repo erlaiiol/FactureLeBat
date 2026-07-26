@@ -2,7 +2,7 @@ import { Injectable, effect, signal } from '@angular/core';
 
 export type Theme = 'light' | 'dark';
 
-const THEME_STORAGE_KEY = 'facturelebat.theme';
+const THEME_STORAGE_KEY = 'facturele.theme';
 
 // Phase 9: manual light/dark toggle for "Chantier calibré" ‚ persisted the
 // same way as the invoice draft (Phase 6)/tour state (Phase 8) — a single

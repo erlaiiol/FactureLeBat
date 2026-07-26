@@ -1,3 +1,4 @@
+import { ActivityCategory } from './report.model';
 import { Unit } from './unit.model';
 
 export type WasteSurcharge = 'NONE' | 'TEN' | 'TWENTY';
@@ -65,6 +66,10 @@ export interface CreateInvoiceLineRequest {
   // true when omitted.
   showUnitDetail?: boolean;
   showBillingDetail?: boolean;
+  // Phase 17: snapshotted from the picked catalog Product's activityCategory
+  // at the moment it was added to the invoice — see schema.prisma's comment
+  // on InvoiceLine.activityCategory. Never a form field; carried silently.
+  activityCategory?: ActivityCategory;
 }
 
 // Phase 5: a service added to the invoice, either its own visible amount or
@@ -79,6 +84,8 @@ export interface CreateInvoiceServiceLineRequest {
   visibility: ServiceLineVisibility;
   redistributionStrategy?: RedistributionStrategy;
   weights?: number[];
+  // Phase 17: same soft-snapshot rule as CreateInvoiceLineRequest.activityCategory.
+  activityCategory?: ActivityCategory;
 }
 
 // A freehand extra client field (e.g. label "SIRET", value "123 456 789
@@ -140,6 +147,7 @@ export interface InvoiceLineWithTotal {
   // never affects lineTotalExclVatCents below.
   showUnitDetail: boolean;
   showBillingDetail: boolean;
+  activityCategory: ActivityCategory | null;
   lineTotalExclVatCents: number;
 }
 
@@ -150,6 +158,7 @@ export interface InvoiceServiceLineWithAmounts {
   description: string | null;
   amountCents: number;
   visibility: ServiceLineVisibility;
+  activityCategory: ActivityCategory | null;
   distribution?: { invoiceLineId: string; amountCents: number }[];
 }
 

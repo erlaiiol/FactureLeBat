@@ -13,113 +13,118 @@
   }
 
   @if (loading()) {
-    <p class="text-ink-soft">Chargement…</p>
+    @if (showSkeleton()) {
+      <div class="anim-skeleton h-40 rounded-2xl"></div>
+      <div class="anim-skeleton h-32 rounded-2xl"></div>
+    }
   } @else if (status(); as s) {
-    <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="font-heading text-lg font-bold text-ink uppercase">Statut</h2>
-        @if (s.hasPremiumAccess) {
-          <app-badge variant="success" tone="solid">Premium actif</app-badge>
-        } @else if (s.freeInvoiceUsed) {
-          <app-badge variant="danger" tone="solid">Facture gratuite utilisée</app-badge>
-        } @else {
-          <app-badge variant="info" tone="subtle">Essai gratuit disponible</app-badge>
-        }
-      </div>
-
-      @if (!s.freeInvoiceUsed && !s.hasPremiumAccess) {
-        <p class="text-ink-soft">
-          Vous pouvez créer votre première facture gratuitement, sans abonnement. Un abonnement sera
-          nécessaire à partir de la deuxième.
-        </p>
-      }
-
-      @if (s.subscriptionStatus === 'ACTIVE') {
-        <p class="text-ink-soft">
-          Renouvellement
-          {{ s.cancelAtPeriodEnd ? 'jusqu’au (résiliation programmée)' : 'le' }}
-          @if (s.currentPeriodEnd) {
-            {{ s.currentPeriodEnd | date: 'longDate' }}
+    <div class="anim-preview-in flex flex-col gap-6">
+      <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="font-heading text-lg font-bold text-ink uppercase">Statut</h2>
+          @if (s.hasPremiumAccess) {
+            <app-badge variant="success" tone="solid">Premium actif</app-badge>
+          } @else if (s.freeInvoiceUsed) {
+            <app-badge variant="danger" tone="solid">Facture gratuite utilisée</app-badge>
+          } @else {
+            <app-badge variant="info" tone="subtle">Essai gratuit disponible</app-badge>
           }
-        </p>
-      }
-      @if (s.subscriptionStatus === 'PAST_DUE') {
-        <p class="text-danger">
-          Le dernier paiement a échoué — merci de mettre à jour votre moyen de paiement.
-        </p>
-      }
-      @if (s.premiumGrantedUntil) {
+        </div>
+
+        @if (!s.freeInvoiceUsed && !s.hasPremiumAccess) {
+          <p class="text-ink-soft">
+            Vous pouvez créer votre première facture gratuitement, sans abonnement. Un abonnement
+            sera nécessaire à partir de la deuxième.
+          </p>
+        }
+
+        @if (s.subscriptionStatus === 'ACTIVE') {
+          <p class="text-ink-soft">
+            Renouvellement
+            {{ s.cancelAtPeriodEnd ? 'jusqu’au (résiliation programmée)' : 'le' }}
+            @if (s.currentPeriodEnd) {
+              {{ s.currentPeriodEnd | date: 'longDate' }}
+            }
+          </p>
+        }
+        @if (s.subscriptionStatus === 'PAST_DUE') {
+          <p class="text-danger">
+            Le dernier paiement a échoué — merci de mettre à jour votre moyen de paiement.
+          </p>
+        }
+        @if (s.premiumGrantedUntil) {
+          <p class="text-ink-soft">
+            Accès premium offert (code promo / support) jusqu'au
+            {{ s.premiumGrantedUntil | date: 'longDate' }}.
+          </p>
+        }
+
+        @if (!s.stripeConfigured) {
+          <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
+            L'abonnement par carte n'est pas encore configuré sur ce déploiement — utilisez un code
+            promo ci-dessous, ou contactez le support.
+          </p>
+        } @else if (s.subscriptionStatus === 'ACTIVE') {
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            [disabled]="portalLoading()"
+            (click)="manageBilling()"
+          >
+            {{ portalLoading() ? 'Ouverture…' : 'Gérer mon abonnement' }}
+          </app-big-button>
+        } @else {
+          <app-big-button
+            variant="primary"
+            tone="solid"
+            [disabled]="checkoutLoading()"
+            (click)="subscribe()"
+          >
+            {{ checkoutLoading() ? 'Redirection…' : "S'abonner — 15 € / mois" }}
+          </app-big-button>
+        }
+        @if (checkoutError(); as message) {
+          <p class="text-sm font-medium text-danger">{{ message }}</p>
+        }
+        @if (portalError(); as message) {
+          <p class="text-sm font-medium text-danger">{{ message }}</p>
+        }
+      </section>
+
+      <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
+        <h2 class="font-heading text-lg font-bold text-ink uppercase">Code promo</h2>
         <p class="text-ink-soft">
-          Accès premium offert (code promo / support) jusqu'au
-          {{ s.premiumGrantedUntil | date: 'longDate' }}.
+          Vous avez reçu un code ? Saisissez-le ici pour activer votre accès.
         </p>
-      }
-
-      @if (!s.stripeConfigured) {
-        <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
-          L'abonnement par carte n'est pas encore configuré sur ce déploiement — utilisez un code
-          promo ci-dessous, ou contactez le support.
-        </p>
-      } @else if (s.subscriptionStatus === 'ACTIVE') {
-        <app-big-button
-          variant="secondary"
-          tone="subtle"
-          [disabled]="portalLoading()"
-          (click)="manageBilling()"
+        <form
+          [formGroup]="promoForm"
+          (ngSubmit)="redeemPromo()"
+          class="flex flex-col gap-3 sm:flex-row"
         >
-          {{ portalLoading() ? 'Ouverture…' : 'Gérer mon abonnement' }}
-        </app-big-button>
-      } @else {
-        <app-big-button
-          variant="primary"
-          tone="solid"
-          [disabled]="checkoutLoading()"
-          (click)="subscribe()"
-        >
-          {{ checkoutLoading() ? 'Redirection…' : "S'abonner — 15 € / mois" }}
-        </app-big-button>
-      }
-      @if (checkoutError(); as message) {
-        <p class="text-sm font-medium text-danger">{{ message }}</p>
-      }
-      @if (portalError(); as message) {
-        <p class="text-sm font-medium text-danger">{{ message }}</p>
-      }
-    </section>
-
-    <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
-      <h2 class="font-heading text-lg font-bold text-ink uppercase">Code promo</h2>
-      <p class="text-ink-soft">
-        Vous avez reçu un code ? Saisissez-le ici pour activer votre accès.
-      </p>
-      <form
-        [formGroup]="promoForm"
-        (ngSubmit)="redeemPromo()"
-        class="flex flex-col gap-3 sm:flex-row"
-      >
-        <input
-          formControlName="code"
-          type="text"
-          placeholder="CODE-PROMO"
-          class="flex-1 rounded-xl border border-line bg-bg px-4 py-3 uppercase text-ink"
-        />
-        <app-big-button
-          type="submit"
-          variant="secondary"
-          tone="subtle"
-          [disabled]="redeemLoading()"
-        >
-          {{ redeemLoading() ? 'Validation…' : 'Activer' }}
-        </app-big-button>
-      </form>
-      @if (redeemError(); as message) {
-        <p class="text-sm font-medium text-danger">{{ message }}</p>
-      }
-      @if (redeemSuccess()) {
-        <p class="text-sm font-medium text-success">
-          Code activé, votre accès premium est à jour !
-        </p>
-      }
-    </section>
+          <input
+            formControlName="code"
+            type="text"
+            placeholder="CODE-PROMO"
+            class="flex-1 rounded-xl border border-line bg-bg px-4 py-3 uppercase text-ink"
+          />
+          <app-big-button
+            type="submit"
+            variant="secondary"
+            tone="subtle"
+            [disabled]="redeemLoading()"
+          >
+            {{ redeemLoading() ? 'Validation…' : 'Activer' }}
+          </app-big-button>
+        </form>
+        @if (redeemError(); as message) {
+          <p class="text-sm font-medium text-danger">{{ message }}</p>
+        }
+        @if (redeemSuccess()) {
+          <p class="text-sm font-medium text-success">
+            Code activé, votre accès premium est à jour !
+          </p>
+        }
+      </section>
+    </div>
   }
 </div>

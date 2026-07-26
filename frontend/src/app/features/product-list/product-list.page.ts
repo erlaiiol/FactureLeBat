@@ -7,9 +7,11 @@ import { ProductProfile } from '../../core/models/product.model';
 import { ProductService } from '../../core/services/product.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { SkeletonRowsComponent } from '../../shared/components/skeleton-rows.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../shared/pipes/unit-label.pipe';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 @Component({
   selector: 'app-product-list-page',
@@ -19,6 +21,7 @@ import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
     RouterLink,
     BigButtonComponent,
     BadgeComponent,
+    SkeletonRowsComponent,
     CentsToEurosPipe,
     UnitLabelPipe,
     TourAnchorDirective,
@@ -32,6 +35,7 @@ export class ProductListPage {
 
   protected readonly products = signal<ProductProfile[]>([]);
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly errorMessage = signal<string | null>(null);
 
   protected readonly search = this.fb.nonNullable.control('');

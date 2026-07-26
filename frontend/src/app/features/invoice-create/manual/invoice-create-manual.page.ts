@@ -1,9 +1,14 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { InvoiceService } from '../../../core/services/invoice.service';
+import { PaywallService } from '../../../core/services/paywall.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconCloseComponent } from '../../../shared/components/icon-close.component';
+import { IconTrashComponent } from '../../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { InvoiceTotalsSummaryComponent } from '../components/invoice-totals-summary.component';
@@ -29,6 +34,8 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     BigButtonComponent,
+    IconCloseComponent,
+    IconTrashComponent,
     PdfPreviewModalComponent,
     TourAnchorDirective,
     InvoiceTotalsSummaryComponent,
@@ -40,6 +47,8 @@ export class InvoiceCreateManualPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly invoiceService = inject(InvoiceService);
+  private readonly paywallService = inject(PaywallService);
+  private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly store = inject(ManualInvoiceDraftStore);
 
@@ -135,8 +144,12 @@ export class InvoiceCreateManualPage {
           this.revokeCurrentPreviewUrl();
           this.previewPdfUrl.set(URL.createObjectURL(blob));
         },
-        error: () => {
+        error: (error: HttpErrorResponse) => {
           this.previewing.set(false);
+          if (error.status === 402) {
+            this.paywallService.show();
+            return;
+          }
           this.previewError.set("Impossible de générer l'aperçu pour le moment.");
         },
       });
@@ -179,9 +192,14 @@ export class InvoiceCreateManualPage {
         next: (facture) => {
           this.converting.set(false);
           this.createdInvoice.set(facture);
+          this.toastService.success(`Devis converti en facture ${facture.number}.`);
         },
-        error: () => {
+        error: (error: HttpErrorResponse) => {
           this.converting.set(false);
+          if (error.status === 402) {
+            this.paywallService.show();
+            return;
+          }
           this.errorMessage.set('Impossible de créer la facture pour le moment.');
         },
       });
@@ -225,8 +243,14 @@ export class InvoiceCreateManualPage {
           this.createdInvoice.set(invoice);
           this.store.reset();
         },
-        error: () => {
+        error: (error: HttpErrorResponse) => {
           this.creating.set(false);
+          // Same free-trial wall as mode rapide's submit() — see
+          // InvoiceCreatePreviewStepPage.
+          if (error.status === 402) {
+            this.paywallService.show();
+            return;
+          }
           this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');
         },
       });

@@ -18,9 +18,7 @@ export class LandingPage {
   protected readonly currentYear = new Date().getFullYear();
 
   constructor() {
-    this.title.setTitle(
-      'FactureLeBat — Devis et factures en un clic pour les artisans du bâtiment',
-    );
+    this.title.setTitle('FactureLe — Devis et factures en un clic pour les artisans du bâtiment');
     this.meta.updateTag({
       name: 'description',
       content:

@@ -84,6 +84,7 @@ export class InvoiceMapper {
             description: serviceLine.description,
             amountCents: serviceLine.amountCents,
             visibility: serviceLine.visibility,
+            activityCategory: serviceLine.activityCategory,
           };
         }
 
@@ -114,6 +115,7 @@ export class InvoiceMapper {
           description: serviceLine.description,
           amountCents: serviceLine.amountCents,
           visibility: serviceLine.visibility,
+          activityCategory: serviceLine.activityCategory,
           distribution,
         };
       },
@@ -133,6 +135,7 @@ export class InvoiceMapper {
       productCode: line.productCode,
       showUnitDetail: line.showUnitDetail,
       showBillingDetail: line.showBillingDetail,
+      activityCategory: line.activityCategory,
       lineTotalExclVatCents: lineTotalsById.get(line.id)!,
     }));
 
@@ -406,6 +409,7 @@ export class InvoiceMapper {
           description: serviceLine.description ?? null,
           amountCents: serviceLine.amountCents,
           visibility: serviceLine.visibility,
+          activityCategory: serviceLine.activityCategory ?? null,
         });
         continue;
       }
@@ -426,6 +430,7 @@ export class InvoiceMapper {
         description: serviceLine.description ?? null,
         amountCents: serviceLine.amountCents,
         visibility: serviceLine.visibility,
+        activityCategory: serviceLine.activityCategory ?? null,
         distribution,
       });
     }
@@ -446,6 +451,7 @@ export class InvoiceMapper {
         productCode: line.productCode ?? null,
         showUnitDetail: line.showUnitDetail ?? true,
         showBillingDetail: line.showBillingDetail ?? true,
+        activityCategory: line.activityCategory ?? null,
         lineTotalExclVatCents: lineTotalsCents[index],
       };
     });

@@ -14,14 +14,20 @@ import { Observable, catchError, forkJoin, map, of, switchMap } from 'rxjs';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { CustomerService } from '../../../core/services/customer.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
+import { InvoiceShareService } from '../../../core/services/invoice-share.service';
 import { PaywallService } from '../../../core/services/paywall.service';
 import { ProductService } from '../../../core/services/product.service';
 import { ServiceCatalogService } from '../../../core/services/service-catalog.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
+import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
+import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { delayedSkeleton } from '../../../shared/utils/delayed-skeleton';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 15: the mandatory stop between "lignes" and a real, persisted
@@ -42,19 +48,24 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
   imports: [
     DatePipe,
     BigButtonComponent,
+    IconEyeComponent,
+    IconEyeOffComponent,
     CentsToEurosPipe,
     UnitLabelPipe,
     PdfPreviewModalComponent,
     SendInvoiceEmailModalComponent,
+    TourAnchorDirective,
   ],
   templateUrl: './invoice-create-preview-step.page.html',
 })
 export class InvoiceCreatePreviewStepPage {
   private readonly invoiceService = inject(InvoiceService);
+  private readonly invoiceShareService = inject(InvoiceShareService);
   private readonly customerService = inject(CustomerService);
   private readonly productService = inject(ProductService);
   private readonly serviceCatalogService = inject(ServiceCatalogService);
   private readonly paywallService = inject(PaywallService);
+  private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
   protected readonly draftStore = inject(InvoiceDraftStore);
@@ -62,6 +73,7 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly today = new Date();
 
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly loadError = signal<string | null>(null);
   protected readonly previewData = signal<InvoiceWithTotals | null>(null);
 
@@ -76,6 +88,7 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly showEmailModal = signal(false);
+  protected readonly sharing = signal(false);
 
   // Phase 14.3: the "Créer la facture aussi immédiatement ?" prompt shown
   // after a devis is created — see convertToFacture below.
@@ -156,8 +169,13 @@ export class InvoiceCreatePreviewStepPage {
           this.revokeCurrentPdfPreviewUrl();
           this.pdfPreviewUrl.set(URL.createObjectURL(blob));
         },
-        error: () => {
+        error: (error: HttpErrorResponse) => {
           this.downloadingPdf.set(false);
+          if (error.status === 402) {
+            this.paywallService.show();
+            return;
+          }
+          this.toastService.error("Impossible de générer l'aperçu PDF pour le moment.");
         },
       });
   }
@@ -182,6 +200,24 @@ export class InvoiceCreatePreviewStepPage {
     this.showEmailModal.set(true);
   }
 
+  protected async share(): Promise<void> {
+    const invoice = this.createdInvoice();
+    if (!invoice || this.sharing()) {
+      return;
+    }
+    this.sharing.set(true);
+    try {
+      const outcome = await this.invoiceShareService.share(invoice);
+      if (outcome === 'compose-email') {
+        this.openEmailModal();
+      }
+    } catch {
+      this.toastService.error('Impossible de partager ce document pour le moment.');
+    } finally {
+      this.sharing.set(false);
+    }
+  }
+
   protected closeEmailModal(): void {
     this.showEmailModal.set(false);
   }
@@ -189,6 +225,7 @@ export class InvoiceCreatePreviewStepPage {
   protected onEmailSent(updated: InvoiceWithTotals): void {
     this.createdInvoice.set(updated);
     this.showEmailModal.set(false);
+    this.toastService.success('Email envoyé au client.');
   }
 
   protected startNewInvoice(): void {
@@ -217,6 +254,7 @@ export class InvoiceCreatePreviewStepPage {
         next: (facture) => {
           this.converting.set(false);
           this.createdInvoice.set(facture);
+          this.toastService.success(`Devis converti en facture ${facture.number}.`);
         },
         error: (error: HttpErrorResponse) => {
           this.converting.set(false);

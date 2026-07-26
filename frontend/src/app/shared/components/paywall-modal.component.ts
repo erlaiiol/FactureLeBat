@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angul
 import { Router } from '@angular/router';
 import { PaywallService } from '../../core/services/paywall.service';
 import { BigButtonComponent } from './big-button.component';
+import { IconCloseComponent } from './icon-close.component';
 
 // Mounted once at the app root (app.html), same "one shared overlay,
 // triggered from anywhere" pattern as TourOverlayComponent — reads
@@ -11,7 +12,7 @@ import { BigButtonComponent } from './big-button.component';
 @Component({
   selector: 'app-paywall-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BigButtonComponent],
+  imports: [BigButtonComponent, IconCloseComponent],
   templateUrl: './paywall-modal.component.html',
 })
 export class PaywallModalComponent {

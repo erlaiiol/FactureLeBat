@@ -5,8 +5,12 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AdminUserSummary } from '../../core/models/admin.model';
 import { AdminService } from '../../core/services/admin.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { IconCloseComponent } from '../../shared/components/icon-close.component';
+import { SkeletonTableComponent } from '../../shared/components/skeleton-table.component';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 // Phase 14 admin dashboard, first screen: search/list every artisan account
 // and grant temporary premium access by hand (support/goodwill cases) —
@@ -16,15 +20,25 @@ import { BigButtonComponent } from '../../shared/components/big-button.component
 @Component({
   selector: 'app-admin-users-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BadgeComponent, BigButtonComponent, DatePipe],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BadgeComponent,
+    BigButtonComponent,
+    IconCloseComponent,
+    SkeletonTableComponent,
+    DatePipe,
+  ],
   templateUrl: './admin-users.page.html',
 })
 export class AdminUsersPage {
   private readonly adminService = inject(AdminService);
+  private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(FormBuilder);
 
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly users = signal<AdminUserSummary[]>([]);
   protected readonly total = signal(0);
   protected readonly page = signal(1);
@@ -55,7 +69,10 @@ export class AdminUsersPage {
           this.total.set(result.total);
           this.loading.set(false);
         },
-        error: () => this.loading.set(false),
+        error: () => {
+          this.loading.set(false);
+          this.toastService.error('Impossible de charger les utilisateurs.');
+        },
       });
   }
 
@@ -89,15 +106,17 @@ export class AdminUsersPage {
       this.grantForm.markAllAsTouched();
       return;
     }
+    const days = this.grantForm.getRawValue().days;
     this.grantLoading.set(true);
     this.grantError.set(null);
     this.adminService
-      .grantPremium(companyId, this.grantForm.getRawValue().days)
+      .grantPremium(companyId, days)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.grantLoading.set(false);
           this.grantOpenFor.set(null);
+          this.toastService.success(`Accès premium accordé pour ${days} jours.`);
           this.load();
         },
         error: () => {

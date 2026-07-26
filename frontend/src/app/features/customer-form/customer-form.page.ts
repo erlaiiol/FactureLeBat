@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CustomerService } from '../../core/services/customer.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 
@@ -14,6 +15,7 @@ import { FieldHintComponent } from '../../shared/components/field-hint.component
 })
 export class CustomerFormPage {
   private readonly customerService = inject(CustomerService);
+  private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
@@ -92,6 +94,7 @@ export class CustomerFormPage {
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.saving.set(false);
+        this.toastService.success(this.isEditing ? 'Client modifié.' : 'Client enregistré.');
         void this.router.navigate(['/clients']);
       },
       error: () => {

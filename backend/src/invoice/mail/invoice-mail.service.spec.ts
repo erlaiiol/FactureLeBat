@@ -117,7 +117,7 @@ describe('InvoiceMailService.getDefaultTemplate', () => {
     const template = await service.getDefaultTemplate(COMPANY_ID, 'inv-1');
 
     expect(template.subject).toContain('F-000001');
-    expect(template.text).toContain('FactureLeBat');
+    expect(template.text).toContain('FactureLe');
   });
 
   it('throws NotFoundException for an unknown invoice id', async () => {

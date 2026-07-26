@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { TourAnchorRegistryService } from './tour-anchor-registry.service';
-import { computePopoverPosition, TourSize } from './tour-position.util';
+import { computeCornerPosition, computePopoverPosition, TourSize } from './tour-position.util';
 import { TourService } from './tour.service';
 
 // Rough, fixed estimate of the popover's footprint — good enough for
@@ -30,19 +30,20 @@ export class TourOverlayComponent {
   protected readonly tourService = inject(TourService);
   private readonly anchorRegistry = inject(TourAnchorRegistryService);
   private readonly destroyRef = inject(DestroyRef);
-  // Removes the current step's advanceOn listener (see bindAdvanceListener)
-  // — re-bound on every step change so a stale listener from a previous
-  // step can never fire next() twice.
+  // Removes the current step's advanceOn listener(s) (see
+  // bindAdvanceListener) — re-bound on every step change so a stale listener
+  // from a previous step can never fire next() twice.
   private advanceListenerCleanup: (() => void) | null = null;
 
   protected readonly targetRect = signal<DOMRect | null>(null);
 
-  protected readonly popoverPosition = computed(() =>
-    computePopoverPosition(this.targetRect(), POPOVER_ESTIMATE, {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    }),
-  );
+  protected readonly popoverPosition = computed(() => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (this.tourService.currentStep()?.popoverPlacement === 'corner') {
+      return computeCornerPosition(POPOVER_ESTIMATE, viewport);
+    }
+    return computePopoverPosition(this.targetRect(), POPOVER_ESTIMATE, viewport);
+  });
 
   // The dimmed backdrop as a single evenodd path (full-viewport rect minus
   // the spotlight rect) instead of a <rect>+<mask> pair — this is what lets
@@ -70,6 +71,14 @@ export class TourOverlayComponent {
     const count = this.tourService.stepCount();
     return count === 0 ? 0 : ((this.tourService.stepIndex() + 1) / count) * 100;
   });
+
+  // The one documented "reward" moment (docs/design-system.md) — the tour's
+  // own last step, or any earlier step explicitly marked `celebrate` (a
+  // first client/product/prestation/document actually landing in the
+  // database — see tour-definitions.ts).
+  protected readonly isCelebrating = computed(
+    () => this.tourService.isLastStep() || !!this.tourService.currentStep()?.celebrate,
+  );
 
   // The popover card is never recreated between steps (the `@if` around it
   // stays true for the whole tour), so a static animation class would only
@@ -116,30 +125,40 @@ export class TourOverlayComponent {
 
   // "The tour doesn't respond when I click the highlighted thing" — a step
   // declaring `advanceOn` (see TourStepDefinition) gets a one-shot listener
-  // on its own anchor that calls next() itself, so actually doing the thing
-  // the step describes (clicking a button, typing into a search field) is
-  // what carries the tour forward, same as it would feel to a first-time
-  // user who has no idea "Suivant" is a separate button they also need to
-  // press. Re-bound on every step change; { once: true } means a step the
-  // artisan advances via "Suivant" instead just leaves this listener
-  // unfired, harmlessly torn down on the next bindAdvanceListener() call.
+  // on its own anchor (and any altAnchorIds — see 'add-line' in
+  // tour-definitions.ts, where either of two buttons should carry the tour
+  // forward) that calls next() itself, so actually doing the thing the step
+  // describes (clicking a button, typing into a search field) is what
+  // carries the tour forward, same as it would feel to a first-time user who
+  // has no idea "Suivant" is a separate button they also need to press.
+  // Passing the anchor id that actually fired lets TourService's
+  // nextByAnchor pick a different next step depending on which one it was.
+  // Re-bound on every step change; { once: true } means a step the artisan
+  // advances via "Suivant" instead just leaves these listeners unfired,
+  // harmlessly torn down on the next bindAdvanceListener() call.
   private bindAdvanceListener(): void {
     this.advanceListenerCleanup?.();
     this.advanceListenerCleanup = null;
 
     const step = this.tourService.currentStep();
     const advanceOn = step?.advanceOn;
-    const anchorId = step?.anchorId;
-    if (!advanceOn || !anchorId) {
+    if (!advanceOn || !step?.anchorId) {
       return;
     }
-    const element = this.anchorRegistry.get(anchorId)?.nativeElement;
-    if (!element) {
-      return;
+    const anchorIds = [step.anchorId, ...(step.altAnchorIds ?? [])];
+    const cleanups: Array<() => void> = [];
+    for (const anchorId of anchorIds) {
+      const element = this.anchorRegistry.get(anchorId)?.nativeElement;
+      if (!element) {
+        continue;
+      }
+      const handler = (): void => this.tourService.next(anchorId);
+      element.addEventListener(advanceOn, handler, { once: true });
+      cleanups.push(() => element.removeEventListener(advanceOn, handler));
     }
-    const handler = (): void => this.tourService.next();
-    element.addEventListener(advanceOn, handler, { once: true });
-    this.advanceListenerCleanup = () => element.removeEventListener(advanceOn, handler);
+    if (cleanups.length > 0) {
+      this.advanceListenerCleanup = () => cleanups.forEach((cleanup) => cleanup());
+    }
   }
 
   private recomputeTargetRect(): void {

@@ -1,5 +1,5 @@
 {
-  "name": "facturelebat",
+  "name": "facturele",
   "private": true,
   "scripts": {
     "prepare": "husky"

@@ -20,7 +20,7 @@ export interface InvoiceMailTemplate {
   text: string;
 }
 
-// The roadmap's default template requirement: mentions FactureLeBat so the
+// The roadmap's default template requirement: mentions FactureLe so the
 // artisan's own client sees where the invoice/tool came from, editable by
 // the artisan before sending (see InvoiceMailService/SendInvoiceEmailDto) —
 // this function only ever supplies the starting point.
@@ -38,7 +38,7 @@ export function buildDefaultInvoiceMailTemplate(
     'Cordialement,',
     input.companyName,
     '',
-    `— ${label} envoyé${input.documentType === 'DEVIS' ? '' : 'e'} avec FactureLeBat`,
+    `— ${label} envoyé${input.documentType === 'DEVIS' ? '' : 'e'} avec FactureLe`,
   ].join('\n');
   return { subject, text };
 }

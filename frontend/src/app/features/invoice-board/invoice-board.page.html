@@ -25,25 +25,30 @@
   <button
     type="button"
     (click)="toggleUnpaidOnly()"
-    class="rounded-full px-4 py-2 text-sm font-semibold transition"
-    [class.bg-primary]="unpaidOnly()"
-    [class.text-primary-fg]="unpaidOnly()"
-    [class.border]="!unpaidOnly()"
-    [class.border-line]="!unpaidOnly()"
-    [class.text-ink-soft]="!unpaidOnly()"
+    [class]="'rounded-full px-4 py-2 text-sm font-semibold transition ' + unpaidToggleClasses()"
   >
     Non payées uniquement
   </button>
 </div>
 
 @if (loading()) {
-  <p class="text-ink-soft">Chargement…</p>
+  @if (showSkeleton()) {
+    <div class="flex gap-4 overflow-x-auto pb-4">
+      @for (column of [0, 1, 2, 3, 4]; track column) {
+        <section class="flex w-72 shrink-0 flex-col gap-3">
+          <div class="anim-skeleton h-4 w-24 rounded"></div>
+          <div class="anim-skeleton h-28 rounded-xl"></div>
+          <div class="anim-skeleton h-28 rounded-xl"></div>
+        </section>
+      }
+    </div>
+  }
 } @else {
   @if (errorMessage(); as message) {
     <p class="mb-4 font-medium text-danger">{{ message }}</p>
   }
 
-  <div class="flex gap-4 overflow-x-auto pb-4">
+  <div class="anim-preview-in flex gap-4 overflow-x-auto pb-4">
     <section class="flex w-72 shrink-0 flex-col gap-3" [style.order]="devisOrder()">
       <h2
         class="flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wide text-ink-soft"
@@ -52,7 +57,14 @@
         <app-badge variant="info" tone="subtle">{{ devis().length }}</app-badge>
       </h2>
       @for (item of devis(); track item.id) {
-        <app-invoice-board-card [invoice]="item" column="DEVIS" />
+        <app-invoice-board-card
+          [invoice]="item"
+          column="DEVIS"
+          [converting]="convertingDevisId() === item.id"
+          [sharing]="sharingInvoiceId() === item.id"
+          (convertToFacture)="convertDevis(item)"
+          (share)="onShare(item)"
+        />
       }
       @if (devis().length === 0) {
         <p class="text-sm text-ink-soft">Aucun devis.</p>
@@ -74,20 +86,14 @@
         <app-invoice-board-card
           [invoice]="item"
           column="NON_PAYEE"
+          [sharing]="sharingInvoiceId() === item.id"
           (markPaid)="markPaid(item)"
           (cancel)="cancelInvoice(item)"
-          (sendEmail)="openEmailModal(item)"
+          (share)="onShare(item)"
           (dropped)="onCardDropped(item, $event)"
         />
       }
-      @for (item of unconvertedDevis(); track item.id) {
-        <app-invoice-ghost-card
-          [devis]="item"
-          [converting]="convertingDevisId() === item.id"
-          (createFacture)="convertDevis(item)"
-        />
-      }
-      @if (nonPayees().length === 0 && unconvertedDevis().length === 0) {
+      @if (nonPayees().length === 0) {
         <p class="text-sm text-ink-soft">Rien à facturer.</p>
       }
     </section>
@@ -103,9 +109,10 @@
         <app-invoice-board-card
           [invoice]="item"
           column="EN_RETARD"
+          [sharing]="sharingInvoiceId() === item.id"
           (markPaid)="markPaid(item)"
           (cancel)="cancelInvoice(item)"
-          (sendEmail)="openEmailModal(item)"
+          (share)="onShare(item)"
           (dropped)="onCardDropped(item, $event)"
         />
       }
@@ -129,6 +136,8 @@
         <app-invoice-board-card
           [invoice]="item"
           column="PAYEE"
+          [sharing]="sharingInvoiceId() === item.id"
+          (share)="onShare(item)"
           (dropped)="onCardDropped(item, $event)"
         />
       }

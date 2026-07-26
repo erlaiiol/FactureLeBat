@@ -11,6 +11,7 @@ import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { computeBilledQuantity } from '../calculation-preview';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 import { WasteSurcharge } from '../../../core/models/invoice.model';
+import { ActivityCategory } from '../../../core/models/report.model';
 import {
   isAreaUnit,
   Unit,
@@ -19,6 +20,8 @@ import {
   UNIT_PRICE_BUTTON_LABELS,
 } from '../../../core/models/unit.model';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
+import { IconCheckComponent } from '../../../shared/components/icon-check.component';
+import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { SourcingPanelComponent } from './sourcing-panel.component';
 
 export type InvoiceLineFormGroup = FormGroup<{
@@ -39,12 +42,20 @@ export type InvoiceLineFormGroup = FormGroup<{
   // createLineGroup comment on why these still need to exist as controls.
   showUnitDetail: FormControl<boolean>;
   showBillingDetail: FormControl<boolean>;
+  // Phase 17, UI-only: see InvoiceLineDraft.activityCategory.
+  activityCategory: FormControl<ActivityCategory | null>;
 }>;
 
 @Component({
   selector: 'app-invoice-line-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FieldHintComponent, SourcingPanelComponent],
+  imports: [
+    ReactiveFormsModule,
+    FieldHintComponent,
+    IconCheckComponent,
+    SourcingPanelComponent,
+    TourAnchorDirective,
+  ],
   templateUrl: './invoice-line-form.component.html',
 })
 export class InvoiceLineFormComponent {

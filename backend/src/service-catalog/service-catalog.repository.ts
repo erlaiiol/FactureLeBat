@@ -52,6 +52,7 @@ export class ServiceCatalogRepository {
         percentageBasisPoints: data.percentageBasisPoints ?? null,
         defaultVisibility: data.defaultVisibility,
         code: data.code,
+        activityCategory: data.activityCategory ?? null,
         companyId,
       },
     });
@@ -78,6 +79,7 @@ export class ServiceCatalogRepository {
         percentageBasisPoints: data.percentageBasisPoints ?? null,
         defaultVisibility: data.defaultVisibility,
         code: data.code ?? null,
+        activityCategory: data.activityCategory ?? null,
       },
     });
     if (count === 0) {

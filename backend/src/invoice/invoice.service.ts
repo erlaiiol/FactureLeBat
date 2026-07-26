@@ -103,6 +103,7 @@ export class InvoiceService {
               productCode: line.productCode,
               showUnitDetail: line.showUnitDetail ?? true,
               showBillingDetail: line.showBillingDetail ?? true,
+              activityCategory: line.activityCategory,
             }))
           : [],
       serviceLines: serviceLineDtos.map((serviceLine): CreateInvoiceServiceLineData => {
@@ -114,6 +115,7 @@ export class InvoiceService {
           amountCents: serviceLine.amountCents,
           visibility: serviceLine.visibility,
           weights,
+          activityCategory: serviceLine.activityCategory,
         };
       }),
       // ManualModeFieldsConsistency guarantees `manualTable` is present
@@ -181,6 +183,7 @@ export class InvoiceService {
         productCode: line.productCode ?? undefined,
         showUnitDetail: line.showUnitDetail,
         showBillingDetail: line.showBillingDetail,
+        activityCategory: line.activityCategory ?? undefined,
       })),
       serviceLines: devis.serviceLines.map((serviceLine): CreateInvoiceServiceLineData => ({
         serviceId: serviceLine.serviceId ?? undefined,
@@ -188,6 +191,7 @@ export class InvoiceService {
         description: serviceLine.description ?? undefined,
         amountCents: serviceLine.amountCents,
         visibility: serviceLine.visibility,
+        activityCategory: serviceLine.activityCategory ?? undefined,
         weights:
           serviceLine.visibility === 'REDISTRIBUTED'
             ? devis.lines.map(

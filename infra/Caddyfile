@@ -4,7 +4,7 @@
 # infra/nginx.conf. Caddy owns exactly one job: public exposure + certs.
 #
 # {$DOMAIN} (infra/.env) drives the behavior:
-#   - a real domain (e.g. facturelebat.example.com) -> automatic HTTPS via
+#   - a real domain (e.g. facturele.example.com) -> automatic HTTPS via
 #     Let's Encrypt, HTTP->HTTPS redirect, cert renewal, all built in.
 #   - `:80` (the local/`make prod` smoke-test default) -> plain HTTP on port
 #     80, no ACME attempt (Caddy never requests a cert for a bare port).

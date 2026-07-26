@@ -96,7 +96,7 @@ export class AuthService {
       1,
     );
     this.frontendUrl = config.get<string>('FRONTEND_URL', 'http://localhost:4200');
-    this.systemMailFromName = config.get<string>('SYSTEM_MAIL_FROM_NAME', 'FactureLeBat');
+    this.systemMailFromName = config.get<string>('SYSTEM_MAIL_FROM_NAME', 'FactureLe');
 
     // System transactional email (verification, password reset) — a
     // deliberately separate credential set from Phase 12's per-artisan
@@ -396,8 +396,8 @@ export class AuthService {
       smtp: this.systemSmtp,
       from: { name: this.systemMailFromName, address: this.systemMailFromAddress },
       to: user.email,
-      subject: 'Confirmez votre adresse email — FactureLeBat',
-      text: `Bienvenue sur FactureLeBat !\n\nConfirmez votre adresse email en suivant ce lien :\n${link}\n\nCe lien expire dans 24 heures.`,
+      subject: 'Confirmez votre adresse email — FactureLe',
+      text: `Bienvenue sur FactureLe !\n\nConfirmez votre adresse email en suivant ce lien :\n${link}\n\nCe lien expire dans 24 heures.`,
     });
   }
 
@@ -419,7 +419,7 @@ export class AuthService {
       smtp: this.systemSmtp,
       from: { name: this.systemMailFromName, address: this.systemMailFromAddress },
       to: user.email,
-      subject: 'Réinitialisation de votre mot de passe — FactureLeBat',
+      subject: 'Réinitialisation de votre mot de passe — FactureLe',
       text: `Une réinitialisation de mot de passe a été demandée pour ce compte.\n\nSuivez ce lien pour choisir un nouveau mot de passe :\n${link}\n\nCe lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.`,
     });
   }

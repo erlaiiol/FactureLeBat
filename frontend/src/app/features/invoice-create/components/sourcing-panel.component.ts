@@ -18,6 +18,7 @@ import { Unit } from '../../../core/models/unit.model';
 import { SourcingService } from '../../../core/services/sourcing.service';
 import { BadgeComponent } from '../../../shared/components/badge.component';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconSearchComponent } from '../../../shared/components/icon-search.component';
 
 interface ExtraSearchState {
   loading: boolean;
@@ -34,7 +35,7 @@ interface ExtraSearchState {
 @Component({
   selector: 'app-sourcing-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, BadgeComponent, BigButtonComponent],
+  imports: [FormsModule, BadgeComponent, BigButtonComponent, IconSearchComponent],
   templateUrl: './sourcing-panel.component.html',
 })
 export class SourcingPanelComponent {

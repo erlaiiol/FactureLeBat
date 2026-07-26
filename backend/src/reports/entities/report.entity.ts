@@ -1,0 +1,118 @@
+import { ActivityCategory } from '../../../generated/prisma/enums';
+
+// "Non catégorisé" is deliberately not a value of ActivityCategory itself
+// (see docs/roadmap.md Phase 17 — the enum only models the three real
+// URSSAF categories) — it's a synthetic bucket key ReportsService assigns to
+// any line/service line whose activityCategory snapshot is null, so nothing
+// billed is ever silently dropped from the report total.
+export const UNCATEGORIZED = 'NON_CATEGORISE' as const;
+export type ReportCategory = ActivityCategory | typeof UNCATEGORIZED;
+
+export interface CategoryTotal {
+  category: ReportCategory;
+  totalExclVatCents: number;
+}
+
+// One row of the report's audit trail — enough for the artisan to cross-check
+// the total against their own bank statements/invoice history, never just a
+// bare number to trust blindly (see docs/roadmap.md Phase 17).
+export interface ReportInvoiceEntry {
+  id: string;
+  number: string;
+  customerName: string;
+  paidAt: Date;
+  totalInclVatCents: number;
+}
+
+// Year-to-date encaissements against Company.microEntrepreneurCeiling — only
+// present when that field is set (see CompanyController/CompanyProfile).
+export interface PlafondWarning {
+  ceilingCents: number;
+  yearToDateCents: number;
+  percentageUsed: number;
+}
+
+// One category's contribution to the estimated charges — never includes
+// UNCATEGORIZED (see EstimatedCharges.uncategorizedExclVatCents below): there
+// is no rate to apply to turnover the artisan hasn't told the app how to
+// classify.
+export interface EstimatedChargesCategoryRow {
+  category: ActivityCategory;
+  totalExclVatCents: number;
+  cotisationRateBasisPoints: number;
+  cotisationCents: number;
+  versementLiberatoireRateBasisPoints: number;
+  versementLiberatoireCents: number;
+}
+
+// A same-legal-status-under-French-law estimate of what the artisan owes on
+// this period's encaissements — cotisations sociales URSSAF (mandatory) plus
+// the versement libératoire de l'impôt sur le revenu (only if the company
+// opted in). Deliberately narrow: `applicable` is false for anything other
+// than legalStatus MICRO_ENTREPRENEUR (see docs/roadmap.md Phase 17's
+// non-goals — a real company's IS/IR depends on deductible expenses this app
+// has no way to know, so guessing would be actively misleading rather than
+// merely imprecise). Always an *estimate*: it doesn't know about ACRE, a
+// mid-period regime change, or a rate correction the artisan hasn't updated
+// in Mon entreprise yet.
+export interface EstimatedCharges {
+  applicable: boolean;
+  versementLiberatoireOptIn: boolean;
+  rows: EstimatedChargesCategoryRow[];
+  // Turnover left in the "non catégorisé" bucket — excluded from the
+  // estimate entirely (no rate to apply), called out explicitly so the
+  // total estimate reads as a floor, not a silently wrong full number.
+  uncategorizedExclVatCents: number;
+  cotisationsSocialesCents: number;
+  versementLiberatoireCents: number;
+  totalEstimatedCents: number;
+}
+
+// Phase 17: computed on demand from PAYEE invoices whose paidAt falls in the
+// requested period — never a stored entity, same "derived data is never
+// persisted" convention as invoice totals (see docs/conventions.md).
+// totalExclVatCents (not TTC) is the declaration-relevant figure: VAT
+// collected isn't the artisan's own turnover, it's remitted to the state —
+// URSSAF's own "chiffre d'affaires encaissé" is HT. The invoice list below
+// still shows totalInclVatCents per row, since that's the amount that
+// actually landed in the artisan's bank account and is what they'll
+// cross-check this report against.
+export interface QuarterlyReport {
+  from: string;
+  to: string;
+  totalExclVatCents: number;
+  byCategory: CategoryTotal[];
+  invoices: ReportInvoiceEntry[];
+  plafondWarning: PlafondWarning | null;
+  estimatedCharges: EstimatedCharges;
+}
+
+export interface RevenueMonthPoint {
+  month: string; // "2026-01"
+  totalExclVatCents: number;
+}
+
+export interface TopEntry {
+  label: string;
+  totalCents: number;
+  count: number;
+}
+
+// Phase 17: "Mon activité"'s dashboard — see docs/roadmap.md's Activity
+// Analytics feature list. Scoped to the same 12-month PAYEE window as
+// revenueByMonth for topClients/topProducts/topServices/invoiceCount/
+// averageInvoiceValueCents/activeClientCount/activeProductCount, so every
+// figure here describes the same "last 12 months of actual activity" —
+// outstandingTotalCents is the one exception, since unpaid invoices have no
+// paidAt to scope by.
+export interface ActivityAnalytics {
+  revenueByMonth: RevenueMonthPoint[];
+  topClients: TopEntry[];
+  topProducts: TopEntry[];
+  topServices: TopEntry[];
+  outstandingTotalCents: number;
+  invoiceCount: number;
+  averageInvoiceValueCents: number;
+  activeClientCount: number;
+  activeProductCount: number;
+}

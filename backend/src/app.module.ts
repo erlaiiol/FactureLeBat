@@ -17,6 +17,7 @@ import { InvoiceModule } from './invoice/invoice.module';
 import { MailSettingsModule } from './mail-settings/mail-settings.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ProductModule } from './product/product.module';
+import { ReportsModule } from './reports/reports.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 import { SourcingModule } from './sourcing/sourcing.module';
 
@@ -39,6 +40,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     SourcingModule,
     BillingModule,
     AdminModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [

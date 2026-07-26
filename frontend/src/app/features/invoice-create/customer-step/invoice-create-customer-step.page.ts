@@ -13,6 +13,7 @@ import { CustomerProfile } from '../../../core/models/customer.model';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { delayedSkeleton } from '../../../shared/utils/delayed-skeleton';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 6/13.5, step 1: card-based client picker. Clicking an existing
@@ -45,6 +46,16 @@ export class InvoiceCreateCustomerStepPage {
   );
 
   protected readonly search = signal('');
+
+  // The picker grid starts empty and pops once InvoiceDraftStore's
+  // constructor-time getAllCached() resolves (asyncReveal's "content that
+  // only exists after an API response" case, same as the standalone
+  // customer/product/service list pages) — gate it the same way so a fresh
+  // draft doesn't flash straight from "+ Nouveau client" alone to a full
+  // grid.
+  protected readonly customersLoading = computed(() => !this.draftStore.customersLoaded());
+  protected readonly showCustomersSkeleton = delayedSkeleton(this.customersLoading);
+  protected readonly skeletonCards = Array.from({ length: 3 });
 
   protected readonly filteredCustomers = computed(() => {
     const term = this.search().trim().toLowerCase();

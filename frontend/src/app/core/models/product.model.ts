@@ -1,3 +1,4 @@
+import { ActivityCategory } from './report.model';
 import { Unit } from './unit.model';
 
 export interface ProductProfile {
@@ -15,6 +16,9 @@ export interface ProductProfile {
   // a 9 m² box). Serialized as a string like every other Decimal field in
   // this codebase — null means the product is sold continuously.
   packagingQuantity: string | null;
+  // Phase 17: which URSSAF turnover category this product's sales fall
+  // under — artisan-set, null when left uncategorized.
+  activityCategory: ActivityCategory | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,6 +32,7 @@ export interface UpsertProductRequest {
   supplierUrl?: string;
   code?: string;
   packagingQuantity?: number;
+  activityCategory?: ActivityCategory;
 }
 
 // Best-effort draft returned by POST /products/import — every field is

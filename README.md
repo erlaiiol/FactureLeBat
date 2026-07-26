@@ -1,6 +1,6 @@
-# FactureLeBat
+# FactureLe
 
-Invoice generator for independent construction artisans (flooring, electrical, plumbing, drywall...). An artisan can fill in their business profile, save reusable customers and catalog materials (including importing product data straight from a supplier's product page), create an invoice — priced either by surface area (m², with an optional +10%/+20% material margin for offcuts) or by unit count — and download it as a PDF.
+Invoice generator built primarily for independent construction artisans (flooring, electrical, plumbing, drywall...) — the most obvious target, though the platform is growing into a broader small-business tool. An artisan can fill in their business profile, save reusable customers and catalog materials (including importing product data straight from a supplier's product page), create an invoice — priced either by surface area (m², with an optional +10%/+20% material margin for offcuts) or by unit count — and download it as a PDF.
 
 Phases 1-5 of the roadmap are done (see [docs/roadmap.md](docs/roadmap.md) for what's next):
 
@@ -28,7 +28,7 @@ No authentication yet — this is a single-artisan tool today (see [docs/roadmap
 ## Quickstart (Docker, recommended)
 
 ```bash
-git clone <repo-url> && cd FactureLeBat
+git clone <repo-url> && cd FactureLe
 cp infra/.env.example infra/.env      # dev defaults work out of the box
 cp backend/.env.example backend/.env  # only read for native dev, but cheap to have
 
@@ -75,7 +75,7 @@ Builds optimized images (compiled Nest `dist/`, static Angular build served by N
 
 With the default `infra/.env` (`DOMAIN=:80`), this is a local smoke test: open **http://localhost**. Deploying for real (a domain, a real TLS cert, an OVH VPS) is [docs/deployment.md](docs/deployment.md) — `DOMAIN` is the one setting that turns this from "local prod smoke test" into "real internet-facing deployment."
 
-> `make dev` publishes `BACKEND_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT` to the host; `make prod` only publishes `80`/`443` (via Caddy) — `postgres`/`backend`/`frontend` aren't reachable from the host at all in prod. The two stacks don't share ports, so running both at once is fine; they're still fully separate Compose projects (`facturelebat-dev`/`facturelebat-prod`) with their own containers and Postgres volume either way.
+> `make dev` publishes `BACKEND_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT` to the host; `make prod` only publishes `80`/`443` (via Caddy) — `postgres`/`backend`/`frontend` aren't reachable from the host at all in prod. The two stacks don't share ports, so running both at once is fine; they're still fully separate Compose projects (`facturele-dev`/`facturele-prod`) with their own containers and Postgres volume either way.
 
 ## Project structure
 

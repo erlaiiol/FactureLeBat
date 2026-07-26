@@ -57,3 +57,18 @@ export function computePopoverPosition(
     left: clamp(idealLeft, MARGIN, Math.max(MARGIN, viewport.width - popover.width - MARGIN)),
   };
 }
+
+// For a step whose anchor is a small button that opens something much
+// bigger right next to it (e.g. the lines-step "+" buttons opening a tall
+// catalog flyout) — the anchor-relative math above only ever sees the
+// button's own small rect, so it has no way to know the flyout exists and
+// happily places the popover right on top of it, blocking the very clicks
+// the step is asking for. Pinning to a fixed, anchor-independent corner
+// (see TourStepDefinition.popoverPlacement) sidesteps that entirely: the
+// spotlight still highlights the real anchor, only the text card moves.
+export function computeCornerPosition(popover: TourSize, viewport: TourSize): TourPoint {
+  return {
+    top: clamp(viewport.height - popover.height - MARGIN, MARGIN, viewport.height - MARGIN),
+    left: clamp(viewport.width - popover.width - MARGIN, MARGIN, viewport.width - MARGIN),
+  };
+}

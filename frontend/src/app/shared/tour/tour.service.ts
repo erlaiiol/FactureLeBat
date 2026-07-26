@@ -1,11 +1,14 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
-import { filter } from 'rxjs';
+import { catchError, filter, firstValueFrom, Observable, of, tap } from 'rxjs';
 import { OnboardingState, TourId } from '../../core/models/onboarding.model';
+import { CustomerService } from '../../core/services/customer.service';
 import { OnboardingService } from '../../core/services/onboarding.service';
+import { ProductService } from '../../core/services/product.service';
+import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import { TourAnchorRegistryService } from './tour-anchor-registry.service';
-import { TOUR_DEFINITIONS, TourStepDefinition } from './tour-definitions';
+import { TOUR_DEFINITIONS, TourStepCondition, TourStepDefinition } from './tour-definitions';
 
 // Which route prefix auto-launches which mini-tour, first match wins — the
 // Phase 9.5 mode-manuel prefix must come before the general
@@ -16,6 +19,7 @@ const ROUTE_TOUR_MAP: ReadonlyArray<{ prefix: string; tourId: TourId }> = [
   { prefix: '/produits', tourId: 'catalog' },
   { prefix: '/prestations', tourId: 'catalog' },
   { prefix: '/clients', tourId: 'customers' },
+  { prefix: '/statistiques', tourId: 'stats-reports' },
 ];
 
 const ANCHOR_WAIT_TIMEOUT_MS = 2000;
@@ -32,6 +36,22 @@ export class TourService {
   private readonly anchorRegistry = inject(TourAnchorRegistryService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  // Used by evaluateShowIf, via each service's getAllCached() — safe to
+  // fetch on demand from here (unlike OnboardingService's own eager
+  // constructor-time load, Phase 14.7's bug #1) because a showIf-gated step
+  // is only ever reached while the tour is already active on one of
+  // /clients, /produits, /prestations or the invoice-creation flow, all
+  // auth-gated routes. getAllCached() also means this is at worst one extra
+  // GET per gated step reached, not one per tour-service construction: the
+  // customer/product/service-list pages don't call it themselves (they load
+  // their own filtered view directly), but Product/Service/CustomerService
+  // create()/update() keep the SAME cache in sync (upsertInCache) — so the
+  // one lazy load here is also what a "return to the list after saving"
+  // celebration step (see 'produit-celebrate' etc. in tour-definitions.ts)
+  // ends up reading back, already fresh, with no second request.
+  private readonly customerService = inject(CustomerService);
+  private readonly productService = inject(ProductService);
+  private readonly serviceCatalogService = inject(ServiceCatalogService);
 
   private readonly state = signal<OnboardingState | null>(null);
   // Guards against overlapping advanceToStep() calls — without it, holding
@@ -116,24 +136,34 @@ export class TourService {
       });
   }
 
-  setTourEnabled(tourEnabled: boolean): void {
-    this.onboardingService
+  // Returns the request rather than subscribing internally, so the settings
+  // page (its only caller) can surface success/failure to the artisan —
+  // this used to subscribe here with no `error` handler, which both
+  // swallowed failures and left the caller no way to know the toggle didn't
+  // actually persist.
+  setTourEnabled(tourEnabled: boolean): Observable<OnboardingState> {
+    return this.onboardingService
       .setTourEnabled(tourEnabled)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (state) => this.state.set(state) });
+      .pipe(tap((state) => this.state.set(state)));
   }
 
   // Backs the settings page's "Rejouer les visites guidées" button: clears
   // every tour's completed state so the next visit to each section
-  // auto-launches it again, exactly like a brand new install.
-  replayTours(): void {
-    this.onboardingService
-      .resetTours()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (state) => this.state.set(state) });
+  // auto-launches it again, exactly like a brand new install. Same
+  // caller-subscribes reasoning as setTourEnabled above.
+  replayTours(): Observable<OnboardingState> {
+    return this.onboardingService.resetTours().pipe(tap((state) => this.state.set(state)));
   }
 
-  next(): void {
+  // `firedAnchorId` is only passed by TourOverlayComponent's advanceOn
+  // listener (see bindAdvanceListener) — it identifies which of a step's
+  // anchorId/altAnchorIds actually got clicked/typed into, so a step
+  // offering several ways forward (see 'add-line' in tour-definitions.ts)
+  // can send the tour down a different branch depending on which one it
+  // was. The plain "Suivant" button never passes one, and falls back to the
+  // step's own `next` (or the next array index) the same way a step with
+  // only one anchor always has.
+  next(firedAnchorId?: string): void {
     if (!this.activeTourId() || this.advancing()) {
       return;
     }
@@ -141,7 +171,19 @@ export class TourService {
       this.persistCompletion();
       return;
     }
-    void this.advanceToStep(this.stepIndex() + 1);
+    void this.advanceToStep(this.resolveNextIndex(firedAnchorId));
+  }
+
+  private resolveNextIndex(firedAnchorId?: string): number {
+    const current = this.currentStep();
+    const targetId = (firedAnchorId && current?.nextByAnchor?.[firedAnchorId]) || current?.next;
+    if (targetId) {
+      const index = this.steps().findIndex((step) => step.id === targetId);
+      if (index !== -1) {
+        return index;
+      }
+    }
+    return this.stepIndex() + 1;
   }
 
   skip(): void {
@@ -204,6 +246,10 @@ export class TourService {
         return;
       }
       const step = steps[index];
+      if (step.showIf && !(await this.evaluateShowIf(step.showIf))) {
+        await this.advanceToStep(index + 1);
+        return;
+      }
       if (step.route && step.route !== this.router.url) {
         this.selfNavigating = true;
         try {
@@ -223,6 +269,35 @@ export class TourService {
     } finally {
       this.advancing.set(false);
     }
+  }
+
+  // On a failed fetch, every condition resolves to false — both the
+  // "empty" and "non-empty" alternative for that moment get skipped rather
+  // than risk showing the wrong one (see tour-definitions.ts's showIf docs).
+  private async evaluateShowIf(condition: TourStepCondition): Promise<boolean> {
+    switch (condition) {
+      case 'noCustomers':
+      case 'hasCustomers': {
+        const count = await this.countFrom(this.customerService.getAllCached());
+        return condition === 'hasCustomers' ? count > 0 : count === 0;
+      }
+      case 'noProducts':
+      case 'hasProducts': {
+        const count = await this.countFrom(this.productService.getAllCached());
+        return condition === 'hasProducts' ? count > 0 : count === 0;
+      }
+      case 'noServices':
+      case 'hasServices': {
+        const count = await this.countFrom(this.serviceCatalogService.getAllCached());
+        return condition === 'hasServices' ? count > 0 : count === 0;
+      }
+    }
+  }
+
+  private countFrom(source$: Observable<unknown[]>): Promise<number> {
+    return firstValueFrom(source$.pipe(catchError(() => of<unknown[]>([])))).then(
+      (list) => list.length,
+    );
   }
 
   private waitForAnchor(anchorId: string): Promise<boolean> {

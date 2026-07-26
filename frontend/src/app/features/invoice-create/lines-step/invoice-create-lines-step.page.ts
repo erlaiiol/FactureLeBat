@@ -3,6 +3,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  Injector,
+  afterNextRender,
   computed,
   inject,
   signal,
@@ -16,9 +18,16 @@ import {
   WasteSurcharge,
 } from '../../../core/models/invoice.model';
 import { ProductProfile } from '../../../core/models/product.model';
+import { ActivityCategory } from '../../../core/models/report.model';
 import { ServicePricingMode, ServiceProfile } from '../../../core/models/service.model';
 import { Unit } from '../../../core/models/unit.model';
+import { BadgeComponent } from '../../../shared/components/badge.component';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconCheckComponent } from '../../../shared/components/icon-check.component';
+import { IconCloseComponent } from '../../../shared/components/icon-close.component';
+import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
+import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
+import { LineBadgeComponent } from '../../../shared/components/line-badge.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
@@ -50,7 +59,13 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
   imports: [
     ReactiveFormsModule,
     DecimalPipe,
+    BadgeComponent,
     BigButtonComponent,
+    IconCheckComponent,
+    IconCloseComponent,
+    IconEyeComponent,
+    IconEyeOffComponent,
+    LineBadgeComponent,
     CentsToEurosPipe,
     UnitLabelPipe,
     InvoiceLineFormComponent,
@@ -63,6 +78,7 @@ export class InvoiceCreateLinesStepPage {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   protected readonly draftStore = inject(InvoiceDraftStore);
 
   protected readonly errorMessage = signal<string | null>(null);
@@ -182,6 +198,7 @@ export class InvoiceCreateLinesStepPage {
     catalogProductId?: string | null;
     showUnitDetail?: boolean;
     showBillingDetail?: boolean;
+    activityCategory?: ActivityCategory | null;
   }): InvoiceLineFormGroup {
     return this.fb.nonNullable.group({
       description: this.fb.nonNullable.control(initial?.description ?? '', Validators.required),
@@ -218,6 +235,9 @@ export class InvoiceCreateLinesStepPage {
       // (see the constructor) never clobbers it back to the default.
       showUnitDetail: this.fb.nonNullable.control(initial?.showUnitDetail ?? true),
       showBillingDetail: this.fb.nonNullable.control(initial?.showBillingDetail ?? true),
+      // Phase 17: UI-only carry-through, not rendered by this step's own
+      // template — see InvoiceLineDraft.activityCategory.
+      activityCategory: this.fb.control<ActivityCategory | null>(initial?.activityCategory ?? null),
     });
   }
 
@@ -256,6 +276,7 @@ export class InvoiceCreateLinesStepPage {
       roundUpToPackaging: true,
       productCode: product.code,
       catalogProductId: product.id,
+      activityCategory: product.activityCategory,
     });
     this.lines.push(group);
     this.syncAllServiceLineWeights();
@@ -296,6 +317,7 @@ export class InvoiceCreateLinesStepPage {
     pricingMode?: ServicePricingMode;
     percentageBasisPoints?: number | null;
     catalogServiceId?: string | null;
+    activityCategory?: ActivityCategory | null;
   }): InvoiceServiceLineFormGroup {
     const group = this.fb.nonNullable.group({
       serviceId: this.fb.control<string | null>(initial?.serviceId ?? null),
@@ -324,9 +346,35 @@ export class InvoiceCreateLinesStepPage {
       // submit — never sent as-is to the invoice-creation request, mirrors
       // the product line's saveAsNewProduct.
       saveAsNewService: this.fb.nonNullable.control(false),
+      // Phase 17: UI-only carry-through — see InvoiceServiceLineDraft.activityCategory.
+      activityCategory: this.fb.control<ActivityCategory | null>(initial?.activityCategory ?? null),
     });
     this.syncServiceLineWeights(group);
+    this.syncServiceLinePricingValidators(group);
+    group.controls.pricingMode.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.syncServiceLinePricingValidators(group));
     return group;
+  }
+
+  // A PERCENTAGE line's real amount comes from percentageBasisPoints, not
+  // amountEuros (see InvoiceDraftStore.resolvedServiceAmountCents) — swap
+  // which of the two carries the "must be a positive value" validator so
+  // switching mode can't leave a stale, unvalidated field that would
+  // silently resolve to a €0 line (amountEuros just isn't sent when
+  // PERCENTAGE, and percentageBasisPoints defaults to null).
+  private syncServiceLinePricingValidators(group: InvoiceServiceLineFormGroup): void {
+    const amountEuros = group.controls.amountEuros;
+    const percentageBasisPoints = group.controls.percentageBasisPoints;
+    if (group.controls.pricingMode.value === 'PERCENTAGE') {
+      amountEuros.clearValidators();
+      percentageBasisPoints.setValidators([Validators.required, Validators.min(1)]);
+    } else {
+      amountEuros.setValidators([Validators.required, Validators.min(0)]);
+      percentageBasisPoints.clearValidators();
+    }
+    amountEuros.updateValueAndValidity({ emitEvent: false });
+    percentageBasisPoints.updateValueAndValidity({ emitEvent: false });
   }
 
   // Keeps a service line's `weights` FormArray sized to exactly the current
@@ -377,6 +425,7 @@ export class InvoiceCreateLinesStepPage {
       pricingMode: service.pricingMode,
       percentageBasisPoints: service.percentageBasisPoints,
       catalogServiceId: service.id,
+      activityCategory: service.activityCategory,
     });
     this.serviceLines.push(group);
     this.collapsedServiceLines.update((set) => new Set(set).add(group));
@@ -426,6 +475,30 @@ export class InvoiceCreateLinesStepPage {
     this.servicePanelOpen.set(false);
   }
 
+  // cardMorph (design-system.md): a real FLIP transition between a card's
+  // full-form and compact-gallery states, in both directions ("Valider"
+  // collapses, clicking a compact card re-expands it). Distorting a card
+  // with `transform: scale()` stretches its border/radius/shadow/text
+  // non-uniformly and reads as cheap — this instead measures the outgoing
+  // card's actual on-screen rect, then pins the incoming card (already laid
+  // out at its own real resting size) at that exact rect the instant it
+  // mounts, and animates real width/height/position back to its own rect.
+  // Content never distorts because the box's real dimensions are what's
+  // animating, not a stretched snapshot. morphIds gives every line/
+  // service-line group a stable DOM hook (data-morph-id) that survives the
+  // swap between the expanded-form template and the compact-card template,
+  // since nothing else ties the two together.
+  private readonly morphIds = new WeakMap<object, string>();
+
+  protected morphId(group: object): string {
+    let id = this.morphIds.get(group);
+    if (!id) {
+      id = `morph-${Math.random().toString(36).slice(2)}`;
+      this.morphIds.set(group, id);
+    }
+    return id;
+  }
+
   // Phase 13.5 gallery redesign: "Valider" on an expanded card — collapses
   // it into its compact gallery form once it actually holds valid data,
   // otherwise surfaces the same validation errors the full form already
@@ -435,15 +508,27 @@ export class InvoiceCreateLinesStepPage {
       group.markAllAsTouched();
       return;
     }
-    this.collapsedLines.update((set) => new Set(set).add(group));
+    this.morphCard(
+      this.morphId(group),
+      () => {
+        this.collapsedLines.update((set) => new Set(set).add(group));
+      },
+      true,
+    );
   }
 
   protected expandLine(group: InvoiceLineFormGroup): void {
-    this.collapsedLines.update((set) => {
-      const next = new Set(set);
-      next.delete(group);
-      return next;
-    });
+    this.morphCard(
+      this.morphId(group),
+      () => {
+        this.collapsedLines.update((set) => {
+          const next = new Set(set);
+          next.delete(group);
+          return next;
+        });
+      },
+      false,
+    );
   }
 
   protected isLineCollapsed(group: InvoiceLineFormGroup): boolean {
@@ -466,15 +551,27 @@ export class InvoiceCreateLinesStepPage {
       group.markAllAsTouched();
       return;
     }
-    this.collapsedServiceLines.update((set) => new Set(set).add(group));
+    this.morphCard(
+      this.morphId(group),
+      () => {
+        this.collapsedServiceLines.update((set) => new Set(set).add(group));
+      },
+      true,
+    );
   }
 
   protected expandServiceLine(group: InvoiceServiceLineFormGroup): void {
-    this.collapsedServiceLines.update((set) => {
-      const next = new Set(set);
-      next.delete(group);
-      return next;
-    });
+    this.morphCard(
+      this.morphId(group),
+      () => {
+        this.collapsedServiceLines.update((set) => {
+          const next = new Set(set);
+          next.delete(group);
+          return next;
+        });
+      },
+      false,
+    );
   }
 
   protected isServiceLineCollapsed(group: InvoiceServiceLineFormGroup): boolean {
@@ -490,6 +587,191 @@ export class InvoiceCreateLinesStepPage {
       next.delete(group);
       return next;
     });
+  }
+
+  // Measures the outgoing card's rect, runs `commit` (the state flip that
+  // swaps which of the two templates renders), then — once Angular has
+  // mounted the replacement but before the browser paints it — pins that
+  // replacement at the outgoing rect and animates it to its own natural
+  // rect (see playCardMorph). Skipped under prefers-reduced-motion
+  // (design-system.md's motion rules: resolve straight to `commit`'s
+  // result) and whenever there's no outgoing element to measure — e.g. a
+  // catalog pick that starts collapsed with no expanded form ever having
+  // existed (see addProductFromCatalog/addServiceFromCatalog), which just
+  // keeps its plain anim-line-in fade-in instead.
+  private morphCard(morphId: string, commit: () => void, isCollapse: boolean): void {
+    const outgoingEl = document.querySelector<HTMLElement>(`[data-morph-id="${morphId}"]`);
+    const fromRect = outgoingEl?.getBoundingClientRect() ?? null;
+
+    commit();
+
+    if (!fromRect || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+
+    afterNextRender(
+      {
+        mixedReadWrite: () => {
+          const incomingEl = document.querySelector<HTMLElement>(`[data-morph-id="${morphId}"]`);
+          if (incomingEl) {
+            this.playCardMorph(incomingEl, fromRect, isCollapse);
+          }
+        },
+      },
+      { injector: this.injector },
+    );
+  }
+
+  // The FLIP itself: `el` is already laid out at its real resting rect (by
+  // Angular + CSS grid) the moment this runs — read that as `to`, then pin
+  // `el` at `from`'s position/size via inline styles and let the Web
+  // Animations API carry it back to `to`. Vertical (top/height) resolves
+  // first, horizontal (left/width) second (the 0.55 offset), with a light
+  // spring overshoot on the settle — the same texture as a native sheet or
+  // card transition, not a linear resize. Real width/height/position
+  // animate here, never `transform: scale`, so the card's own border/
+  // radius/shadow never stretch.
+  //
+  // That alone leaves the text/inputs inside looking disconnected though —
+  // a plain block child's width defaults to filling its parent, so
+  // `.morph-content` would keep stretching to match `el`'s own
+  // still-animating width and never look like it's shrinking on its own.
+  // Pinning it to `to.width` up front (`overflow: hidden` on `el` clips the
+  // brief mismatch while `el` is still far from that size) gives it a
+  // *stable* base size for the whole animation, and — collapsing only,
+  // where the content really did just get smaller — a uniform `scale()` on
+  // top of that stable base (never non-uniform scaleX/scaleY, which is
+  // what stretches text) makes it visibly shrink in lockstep with the box.
+  // Expanding skips the content scale: the form's fields are already
+  // correctly laid out at their final width the whole time, so growing the
+  // box around them (revealed via the same overflow: hidden) is enough —
+  // scaling already-correct fields would just be motion for its own sake.
+  private playCardMorph(el: HTMLElement, from: DOMRect, isCollapse: boolean): void {
+    const to = el.getBoundingClientRect();
+    const previousStyle = el.getAttribute('style');
+
+    // `el` is about to leave the grid/flex flow (`position: fixed` below)
+    // for the whole animation — without something else holding its slot
+    // open, the container closes that gap immediately (every sibling
+    // shifts to fill it), then reopens it just as abruptly the moment `el`
+    // lands back in flow at the end. A same-size, invisible placeholder
+    // takes over `el`'s exact slot for the duration instead, so every
+    // sibling's layout stays completely still while `el` is the one thing
+    // visibly moving — removed the instant `el` resumes its normal
+    // position, at exactly the rect the placeholder was already holding.
+    const placeholder = document.createElement('div');
+    placeholder.style.width = `${to.width}px`;
+    placeholder.style.height = `${to.height}px`;
+    placeholder.style.visibility = 'hidden';
+    placeholder.setAttribute('aria-hidden', 'true');
+    el.before(placeholder);
+
+    Object.assign(el.style, {
+      position: 'fixed',
+      margin: '0',
+      zIndex: '30',
+      overflow: 'hidden',
+      top: `${from.top}px`,
+      left: `${from.left}px`,
+      width: `${from.width}px`,
+      height: `${from.height}px`,
+    });
+
+    const restore = (): void => {
+      placeholder.remove();
+      if (previousStyle) {
+        el.setAttribute('style', previousStyle);
+      } else {
+        el.removeAttribute('style');
+      }
+    };
+
+    // A spring/overshoot easing applied as a single top-level `options.
+    // easing` warps the *whole* 0–1 timeline non-linearly (that's the whole
+    // point of an overshoot curve — it races past 1 before settling back),
+    // which blows straight through the offset: 0.55 boundary early and
+    // starts the horizontal move mid-vertical-phase. Setting `easing` on
+    // each keyframe instead scopes it to that keyframe's own segment
+    // (spec'd, local progress only) — the vertical phase (0–55%) and
+    // horizontal phase (55–100%) each get their own clean spring, and stay
+    // sequential instead of bleeding into each other. A gentler overshoot
+    // (1.15 vs. the more common 1.56) reads as a smooth settle rather than
+    // a bounce.
+    const duration = 540;
+    const spring = 'cubic-bezier(0.33, 1.15, 0.5, 1)';
+    const animation = el.animate(
+      [
+        {
+          top: `${from.top}px`,
+          left: `${from.left}px`,
+          width: `${from.width}px`,
+          height: `${from.height}px`,
+          boxShadow: '0 20px 40px -12px rgb(0 0 0 / 0.25)',
+          easing: spring,
+        },
+        {
+          top: `${to.top}px`,
+          left: `${from.left}px`,
+          width: `${from.width}px`,
+          height: `${to.height}px`,
+          offset: 0.55,
+          boxShadow: '0 20px 40px -12px rgb(0 0 0 / 0.18)',
+          easing: spring,
+        },
+        {
+          top: `${to.top}px`,
+          left: `${to.left}px`,
+          width: `${to.width}px`,
+          height: `${to.height}px`,
+          boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        },
+      ],
+      { duration, fill: 'forwards' },
+    );
+
+    const content = el.querySelector<HTMLElement>('.morph-content');
+    let contentAnimation: Animation | null = null;
+    let previousContentStyle: string | null = null;
+    if (content) {
+      previousContentStyle = content.getAttribute('style');
+      content.style.width = `${to.width}px`;
+
+      if (isCollapse) {
+        // How much bigger the content looked inside the outgoing rect than
+        // it will once settled — derived from the actual area ratio (not a
+        // fixed guess) so a short one-line card and a long multi-field form
+        // each get a scale matching how dramatic their own resize really
+        // is, clamped so neither a tiny nor a huge difference ever looks
+        // absurd.
+        const areaRatio = (from.width * from.height) / (to.width * to.height);
+        const startScale = Math.min(Math.max(Math.sqrt(areaRatio), 1.15), 1.6);
+        content.style.transformOrigin = 'top center';
+        contentAnimation = content.animate(
+          [{ transform: `scale(${startScale})`, easing: spring }, { transform: 'scale(1)' }],
+          { duration, fill: 'forwards' },
+        );
+      }
+    }
+
+    // Content stays pinned exactly as long as the box is animating —
+    // whether or not it also got its own scale animation above, it must
+    // only let go of its temporary width once `el` itself has settled,
+    // never on its own separate (and, when there's no scale animation,
+    // otherwise-immediate) timer.
+    const cleanup = (): void => {
+      restore();
+      animation.cancel();
+      if (content) {
+        if (previousContentStyle) {
+          content.setAttribute('style', previousContentStyle);
+        } else {
+          content.removeAttribute('style');
+        }
+        contentAnimation?.cancel();
+      }
+    };
+
+    animation.finished.then(cleanup).catch(cleanup);
   }
 
   protected back(): void {

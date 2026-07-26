@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { authRefreshInterceptor } from './core/interceptors/auth-refresh.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
+import { timeoutInterceptor } from './core/interceptors/timeout.interceptor';
 import { xsrfInterceptor } from './core/interceptors/xsrf.interceptor';
 
 export const appConfig: ApplicationConfig = {
@@ -16,9 +17,17 @@ export const appConfig: ApplicationConfig = {
     // which is exactly our dev topology (frontend :4200, API :3000).
     // xsrfInterceptor reimplements the same double-submit mechanic without
     // that restriction.
+    // timeoutInterceptor goes first (outermost) so its deadline covers the
+    // whole request as the caller sees it, including authRefreshInterceptor's
+    // internal 401-refresh-and-retry dance further down the chain.
     provideHttpClient(
       withFetch(),
-      withInterceptors([credentialsInterceptor, xsrfInterceptor, authRefreshInterceptor]),
+      withInterceptors([
+        timeoutInterceptor,
+        credentialsInterceptor,
+        xsrfInterceptor,
+        authRefreshInterceptor,
+      ]),
     ),
   ],
 };

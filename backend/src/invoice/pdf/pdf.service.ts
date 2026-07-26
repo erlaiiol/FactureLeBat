@@ -10,6 +10,7 @@ import {
   InvoicePdfManualRow,
   InvoicePdfServiceLine,
 } from './invoice-pdf-data.interface';
+import { ReportPdfData } from './report-pdf-data.interface';
 
 const BUNDLED_FONTS_DIR = dirname(require.resolve('pdfmake/fonts/Roboto'));
 
@@ -57,6 +58,170 @@ export class PdfService {
   async generateInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
     const docDefinition = this.buildDocDefinition(data);
     return pdfMake.createPdf(docDefinition).getBuffer();
+  }
+
+  // Phase 17: the quarterly report's PDF export — reuses this same
+  // pdfMake instance/font setup, but a document shape of its own (no
+  // parties/lines table), so it's built independently of
+  // buildDocDefinition rather than shoehorned into it.
+  async generateReportPdf(data: ReportPdfData): Promise<Buffer> {
+    const docDefinition: TDocumentDefinitions = {
+      pageSize: 'A4',
+      pageMargins: [40, 40, 40, 40],
+      defaultStyle: { font: 'Roboto', fontSize: 10 },
+      content: [
+        this.buildReportHeader(data),
+        { text: '\n' },
+        ...(data.plafondWarning
+          ? [this.buildPlafondWarning(data.plafondWarning), { text: '\n' }]
+          : []),
+        this.buildReportCategoryTable(data),
+        { text: '\n' },
+        this.buildEstimatedCharges(data.estimatedCharges),
+        { text: '\n' },
+        this.buildReportInvoiceTable(data),
+      ],
+    };
+    return pdfMake.createPdf(docDefinition).getBuffer();
+  }
+
+  private buildReportHeader(data: ReportPdfData): Content {
+    return {
+      stack: [
+        {
+          columns: [
+            {
+              text: 'Rapport trimestriel',
+              font: 'ZillaSlab',
+              fontSize: 20,
+              bold: true,
+              color: ATELIER_WALNUT,
+            },
+            { text: data.issuerName, alignment: 'right', color: ATELIER_INK_SOFT },
+          ],
+        },
+        { text: data.periodLabel, color: ATELIER_INK_SOFT, margin: [0, 2, 0, 0] },
+        {
+          canvas: [
+            {
+              type: 'line',
+              x1: 0,
+              y1: 0,
+              x2: 515,
+              y2: 0,
+              lineWidth: 1.5,
+              lineColor: ATELIER_WALNUT,
+            },
+          ],
+          margin: [0, 6, 0, 0],
+        },
+        {
+          text: `Total encaissé HT : ${centsToEuros(data.totalExclVatCents)}`,
+          bold: true,
+          fontSize: 12,
+          margin: [0, 10, 0, 0],
+        },
+      ],
+    };
+  }
+
+  private buildPlafondWarning(warning: NonNullable<ReportPdfData['plafondWarning']>): Content {
+    return {
+      text: `Plafond micro-entrepreneur : ${centsToEuros(warning.yearToDateCents)} encaissés cette année sur ${centsToEuros(warning.ceilingCents)} (${warning.percentageUsed} %).`,
+      fontSize: 9,
+      color: '#555555',
+    };
+  }
+
+  private buildReportCategoryTable(data: ReportPdfData): Content {
+    const header = ['Catégorie', 'Montant HT'];
+    const rows = data.categories.map((entry) => [
+      entry.label,
+      centsToEuros(entry.totalExclVatCents),
+    ]);
+    return {
+      table: { headerRows: 1, widths: ['*', 'auto'], body: [header, ...rows] },
+    };
+  }
+
+  // Phase 17 (charges estimate): always labelled as an estimate, and honest
+  // about when it doesn't apply — see EstimatedCharges' own comment
+  // (reports module) for why a COMPANY gets a message instead of a guess.
+  private buildEstimatedCharges(charges: ReportPdfData['estimatedCharges']): Content {
+    const heading: Content = {
+      text: 'Estimation des charges (cotisations sociales, à titre indicatif)',
+      bold: true,
+      fontSize: 11,
+      margin: [0, 0, 0, 4],
+    };
+
+    if (!charges.applicable) {
+      return {
+        stack: [
+          heading,
+          {
+            text: "Non disponible pour ce statut — l'impôt d'une société dépend de ses charges réelles, à calculer avec votre expert-comptable.",
+            fontSize: 9,
+            color: '#555555',
+          },
+        ],
+      };
+    }
+
+    const header = ['Catégorie', 'Montant HT', 'Taux', 'Cotisation estimée'];
+    const rows = charges.rows.map((entry) => [
+      entry.label,
+      centsToEuros(entry.totalExclVatCents),
+      entry.cotisationRatePercent,
+      centsToEuros(entry.cotisationCents),
+    ]);
+    const totalLines = [
+      `Total cotisations sociales estimées : ${centsToEuros(charges.cotisationsSocialesCents)}`,
+      ...(charges.versementLiberatoireOptIn
+        ? [`Versement libératoire estimé : ${centsToEuros(charges.versementLiberatoireCents)}`]
+        : []),
+      `Total estimé : ${centsToEuros(charges.totalEstimatedCents)}`,
+    ];
+
+    return {
+      stack: [
+        heading,
+        {
+          table: { headerRows: 1, widths: ['*', 'auto', 'auto', 'auto'], body: [header, ...rows] },
+        },
+        { text: totalLines.join('\n'), bold: true, fontSize: 10, margin: [0, 6, 0, 0] },
+        ...(charges.uncategorizedExclVatCents > 0
+          ? [
+              {
+                text: `Dont ${centsToEuros(charges.uncategorizedExclVatCents)} non catégorisé, exclu de cette estimation.`,
+                fontSize: 8,
+                color: '#555555',
+                margin: [0, 4, 0, 0] as [number, number, number, number],
+              },
+            ]
+          : []),
+        {
+          text: 'Estimation indicative, sans valeur légale — vérifiez le montant exact sur urssaf.fr ou avec votre expert-comptable.',
+          fontSize: 8,
+          italics: true,
+          color: '#555555',
+          margin: [0, 4, 0, 0],
+        },
+      ],
+    };
+  }
+
+  private buildReportInvoiceTable(data: ReportPdfData): Content {
+    const header = ['Numéro', 'Client', "Date d'encaissement", 'Montant TTC'];
+    const rows = data.invoices.map((invoice) => [
+      invoice.number,
+      invoice.customerName,
+      invoice.paidAt.toLocaleDateString('fr-FR'),
+      centsToEuros(invoice.totalInclVatCents),
+    ]);
+    return {
+      table: { headerRows: 1, widths: ['auto', '*', 'auto', 'auto'], body: [header, ...rows] },
+    };
   }
 
   private buildDocDefinition(data: InvoicePdfData): TDocumentDefinitions {

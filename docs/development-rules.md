@@ -16,5 +16,5 @@
 - PDF generation must be isolated from business logic. Invoice Service > Invoice Data Object > PDF Generator > PDF File.
 - Never commit secrets.
 - Validate uploaded/external data. Never trust user files, URLs, external content. Security must be the rule.
-- FactureLeBat is designed for real-world artisans: the priority order is: Reliability > Simplicity  > Maintainability > Scalability > Performance > New features.
+- FactureLe is designed for real-world small businesses — artisans first and foremost, but not exclusively: the priority order is: Reliability > Simplicity  > Maintainability > Scalability > Performance > New features.
 - Have eslint/husky/prettier in mind: commits are going to be conventionals. After a prompt, Claude should always suggest the conventional type his commit should use and the message that follows it.

@@ -84,6 +84,12 @@ export class AuthController {
     return user;
   }
 
+  // Public: logging out only needs the refresh cookie (read below), never
+  // req.user — gating this behind the access-token guard would mean a
+  // visitor whose 15-minute access token already expired can't log out at
+  // all (their click would just 401 with no visible feedback, since this
+  // path is deliberately exempt from the frontend's silent-refresh retry).
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {

@@ -8,7 +8,11 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ServicePricingMode, ServiceVisibility } from '../../../generated/prisma/enums';
+import {
+  ActivityCategory,
+  ServicePricingMode,
+  ServiceVisibility,
+} from '../../../generated/prisma/enums';
 import { ServicePricingConsistency } from './service-pricing-consistency.validator';
 
 // Same finite-but-generous bound as CreateProductDto/CreateInvoiceLineDto:
@@ -61,4 +65,10 @@ export class CreateServiceDto {
   @IsString()
   @MaxLength(50)
   code?: string;
+
+  // Phase 17: same URSSAF turnover categorization as CreateProductDto.
+  // activityCategory — artisan-set, left unset by default.
+  @IsOptional()
+  @IsEnum(ActivityCategory)
+  activityCategory?: ActivityCategory;
 }

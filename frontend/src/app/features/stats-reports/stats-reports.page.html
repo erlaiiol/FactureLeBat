@@ -1,0 +1,370 @@
+<h1 class="font-heading uppercase tracking-wide mb-1 text-2xl font-bold text-ink">
+  Statistiques &amp; Rapports
+</h1>
+<p class="mb-6 text-sm text-ink-soft">
+  Suivez votre activité au quotidien, puis générez vos déclarations trimestrielles pour l'URSSAF.
+</p>
+
+<div class="mb-6 flex gap-2">
+  <button
+    type="button"
+    appTourAnchor="stats-tab-apercu"
+    (click)="setTab('apercu')"
+    [attr.aria-pressed]="tab() === 'apercu'"
+    class="font-heading rounded-full px-4 py-2 text-sm font-bold tracking-wide uppercase transition"
+    [class.bg-primary]="tab() === 'apercu'"
+    [class.text-primary-fg]="tab() === 'apercu'"
+    [class.bg-secondary-subtle]="tab() !== 'apercu'"
+    [class.text-ink]="tab() !== 'apercu'"
+  >
+    Vue d'ensemble
+  </button>
+  <button
+    type="button"
+    appTourAnchor="stats-tab-rapport"
+    (click)="setTab('rapport')"
+    [attr.aria-pressed]="tab() === 'rapport'"
+    class="font-heading rounded-full px-4 py-2 text-sm font-bold tracking-wide uppercase transition"
+    [class.bg-primary]="tab() === 'rapport'"
+    [class.text-primary-fg]="tab() === 'rapport'"
+    [class.bg-secondary-subtle]="tab() !== 'rapport'"
+    [class.text-ink]="tab() !== 'rapport'"
+  >
+    Rapport &amp; déclaration
+  </button>
+</div>
+
+@if (tab() === 'apercu') {
+  <!-- Vue d'ensemble : ancienne page /statistiques -->
+  @if (analyticsLoading()) {
+    @if (analyticsShowSkeleton()) {
+      <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        @for (tile of [1, 2, 3, 4]; track tile) {
+          <div class="anim-skeleton h-20 rounded-xl"></div>
+        }
+      </div>
+      <div class="anim-skeleton mb-6 h-32 rounded-xl"></div>
+    }
+  } @else if (analyticsError()) {
+    <p class="text-ink-soft">Impossible de charger votre activité pour le moment.</p>
+  } @else if (analytics(); as data) {
+    <div class="anim-preview-in">
+      <div appTourAnchor="stats-kpis" class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-xl border border-line bg-surface p-3 text-center">
+          <p class="text-2xl font-semibold">{{ data.invoiceCount }}</p>
+          <p class="text-xs text-ink-soft">Factures encaissées (12 mois)</p>
+        </div>
+        <div class="rounded-xl border border-line bg-surface p-3 text-center">
+          <p class="text-2xl font-semibold">{{ data.averageInvoiceValueCents | centsToEuros }}</p>
+          <p class="text-xs text-ink-soft">Panier moyen HT</p>
+        </div>
+        <div class="rounded-xl border border-line bg-surface p-3 text-center">
+          <p class="text-2xl font-semibold">{{ data.outstandingTotalCents | centsToEuros }}</p>
+          <p class="text-xs text-ink-soft">Facturé, pas encore encaissé</p>
+        </div>
+        <div class="rounded-xl border border-line bg-surface p-3 text-center">
+          <p class="text-2xl font-semibold">{{ data.activeClientCount }}</p>
+          <p class="text-xs text-ink-soft">Clients actifs (12 mois)</p>
+        </div>
+      </div>
+
+      <p class="mb-2 text-sm font-medium text-ink-soft">Chiffre d'affaires encaissé HT, par mois</p>
+      <app-revenue-bar-chart
+        appTourAnchor="stats-chart"
+        [points]="data.revenueByMonth"
+        class="mb-6 block"
+      />
+
+      <div class="grid gap-4 sm:grid-cols-3">
+        <div>
+          <p class="mb-1 text-sm font-medium text-ink-soft">Meilleurs clients</p>
+          <ul class="flex flex-col gap-1 text-sm">
+            @for (entry of data.topClients; track entry.label) {
+              <li class="flex justify-between gap-2">
+                <span class="truncate">{{ entry.label }}</span>
+                <span class="shrink-0 font-medium">{{ entry.totalCents | centsToEuros }}</span>
+              </li>
+            } @empty {
+              <li class="text-ink-soft">Aucune donnée pour le moment.</li>
+            }
+          </ul>
+        </div>
+        <div>
+          <p class="mb-1 text-sm font-medium text-ink-soft">Meilleurs produits</p>
+          <ul class="flex flex-col gap-1 text-sm">
+            @for (entry of data.topProducts; track entry.label) {
+              <li class="flex justify-between gap-2">
+                <span class="truncate">{{ entry.label }}</span>
+                <span class="shrink-0 font-medium">{{ entry.totalCents | centsToEuros }}</span>
+              </li>
+            } @empty {
+              <li class="text-ink-soft">Aucune donnée pour le moment.</li>
+            }
+          </ul>
+        </div>
+        <div>
+          <p class="mb-1 text-sm font-medium text-ink-soft">Meilleures prestations</p>
+          <ul class="flex flex-col gap-1 text-sm">
+            @for (entry of data.topServices; track entry.label) {
+              <li class="flex justify-between gap-2">
+                <span class="truncate">{{ entry.label }}</span>
+                <span class="shrink-0 font-medium">{{ entry.totalCents | centsToEuros }}</span>
+              </li>
+            } @empty {
+              <li class="text-ink-soft">Aucune donnée pour le moment.</li>
+            }
+          </ul>
+        </div>
+      </div>
+    </div>
+  }
+} @else {
+  <!-- Rapport & déclaration : ancienne page /rapports -->
+  <div
+    appTourAnchor="rapport-period"
+    class="mb-6 flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
+  >
+    @if (!customMode()) {
+      <div class="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          (click)="previousPeriod()"
+          aria-label="Période précédente"
+          class="rounded-lg border border-line px-3 py-2 text-lg hover:bg-secondary-subtle"
+        >
+          ←
+        </button>
+        <span class="font-heading text-lg font-bold">{{ periodLabel() }}</span>
+        <button
+          type="button"
+          (click)="nextPeriod()"
+          aria-label="Période suivante"
+          class="rounded-lg border border-line px-3 py-2 text-lg hover:bg-secondary-subtle"
+        >
+          →
+        </button>
+      </div>
+    }
+
+    <button
+      type="button"
+      (click)="toggleCustomMode()"
+      class="self-start text-sm font-medium text-ink-soft underline hover:text-ink"
+    >
+      {{ customMode() ? 'Revenir à un trimestre/mois' : 'Choisir une période personnalisée' }}
+    </button>
+
+    @if (customMode()) {
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink-soft">Du</span>
+          <input
+            type="date"
+            [value]="customFrom()"
+            (input)="onCustomFromInput($any($event.target).value)"
+            class="rounded-lg border border-line px-3 py-2"
+          />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink-soft">Au</span>
+          <input
+            type="date"
+            [value]="customTo()"
+            (input)="onCustomToInput($any($event.target).value)"
+            class="rounded-lg border border-line px-3 py-2"
+          />
+        </label>
+        <button
+          type="button"
+          (click)="applyCustomRange()"
+          class="rounded-lg bg-secondary px-4 py-2 font-medium text-secondary-fg hover:brightness-90"
+        >
+          Appliquer
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (reportLoading()) {
+    @if (reportShowSkeleton()) {
+      <div class="mb-6 rounded-xl border border-line bg-surface p-4">
+        <div class="anim-skeleton mb-2 h-4 w-48 rounded"></div>
+        <div class="anim-skeleton h-8 w-32 rounded"></div>
+      </div>
+      <div class="anim-skeleton mb-6 h-40 rounded-xl"></div>
+      <div class="anim-skeleton h-56 rounded-xl"></div>
+    }
+  }
+  @if (reportErrorMessage(); as message) {
+    <p class="font-medium text-danger">{{ message }}</p>
+  }
+
+  @if (report(); as data) {
+    <div class="anim-preview-in">
+      <div class="mb-6 rounded-xl border border-line bg-surface p-4">
+        <p class="text-sm text-ink-soft">Total encaissé HT sur la période</p>
+        <p class="text-3xl font-bold">{{ data.totalExclVatCents | centsToEuros }}</p>
+      </div>
+
+      @if (data.plafondWarning; as warning) {
+        <div
+          appTourAnchor="rapport-plafond"
+          class="mb-6 rounded-xl border border-line bg-surface p-4"
+        >
+          <p class="mb-2 text-sm text-ink-soft">
+            Plafond micro-entrepreneur : {{ warning.yearToDateCents | centsToEuros }} encaissés
+            cette année sur {{ warning.ceilingCents | centsToEuros }} ({{
+              warning.percentageUsed
+            }}
+            %)
+          </p>
+          <div class="h-3 w-full overflow-hidden rounded-full bg-secondary-subtle">
+            <div
+              class="h-full rounded-full"
+              [class.bg-primary]="warning.percentageUsed < 90"
+              [class.bg-danger]="warning.percentageUsed >= 90"
+              [style.width]="plafondBarWidth()"
+            ></div>
+          </div>
+          <p class="mt-2 text-xs text-ink-soft italic">
+            Suivi indicatif, sans valeur officielle — seul votre espace urssaf.fr fait foi pour
+            votre chiffre d'affaires réellement déclaré.
+          </p>
+        </div>
+      }
+
+      <div class="mb-6 overflow-x-auto rounded-xl border border-line bg-surface p-4">
+        <h2 class="font-heading mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">
+          Répartition par catégorie
+        </h2>
+        <table class="w-full text-left text-sm">
+          <tbody>
+            @for (entry of data.byCategory; track entry.category) {
+              <tr class="border-t border-line first:border-t-0">
+                <td class="py-2">{{ categoryLabels[entry.category] }}</td>
+                <td class="py-2 text-right font-medium">
+                  {{ entry.totalExclVatCents | centsToEuros }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div
+        appTourAnchor="rapport-charges"
+        class="mb-6 rounded-xl border border-line bg-surface p-4"
+      >
+        <h2 class="font-heading mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">
+          Estimation des charges
+        </h2>
+        @if (!data.estimatedCharges.applicable) {
+          <p class="text-sm text-ink-soft">
+            Non disponible pour ce statut — l'impôt d'une société dépend de ses charges réelles, à
+            calculer avec votre expert-comptable.
+          </p>
+        } @else {
+          <table class="mb-3 w-full text-left text-sm">
+            <thead>
+              <tr class="text-ink-soft">
+                <th class="pb-2 font-medium">Catégorie</th>
+                <th class="pb-2 text-right font-medium">Montant HT</th>
+                <th class="pb-2 text-right font-medium">Taux</th>
+                <th class="pb-2 text-right font-medium">Cotisation estimée</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of data.estimatedCharges.rows; track row.category) {
+                <tr class="border-t border-line">
+                  <td class="py-2">{{ categoryLabels[row.category] }}</td>
+                  <td class="py-2 text-right">{{ row.totalExclVatCents | centsToEuros }}</td>
+                  <td class="py-2 text-right">{{ row.cotisationRateBasisPoints / 100 }} %</td>
+                  <td class="py-2 text-right font-medium">
+                    {{ row.cotisationCents | centsToEuros }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <p class="text-sm">
+            Total cotisations sociales estimées :
+            <span class="font-semibold">{{
+              data.estimatedCharges.cotisationsSocialesCents | centsToEuros
+            }}</span>
+          </p>
+          @if (data.estimatedCharges.versementLiberatoireOptIn) {
+            <p class="text-sm">
+              Versement libératoire estimé :
+              <span class="font-semibold">{{
+                data.estimatedCharges.versementLiberatoireCents | centsToEuros
+              }}</span>
+            </p>
+          }
+          <p class="text-lg font-bold">
+            Total estimé :
+            {{ data.estimatedCharges.totalEstimatedCents | centsToEuros }}
+          </p>
+          @if (data.estimatedCharges.uncategorizedExclVatCents > 0) {
+            <p class="mt-1 text-xs text-ink-soft">
+              Dont {{ data.estimatedCharges.uncategorizedExclVatCents | centsToEuros }} non
+              catégorisé, exclu de cette estimation.
+            </p>
+          }
+          <p class="mt-2 text-xs text-ink-soft italic">
+            Estimation indicative, sans valeur légale — vérifiez le montant exact sur urssaf.fr ou
+            avec votre expert-comptable.
+          </p>
+        }
+      </div>
+
+      <div appTourAnchor="rapport-export" class="mb-6 flex gap-3">
+        <a
+          [href]="downloadPdfUrl()"
+          target="_blank"
+          class="flex-1 rounded-xl bg-secondary px-6 py-4 text-center text-lg font-semibold text-secondary-fg shadow-sm transition hover:brightness-90"
+        >
+          Télécharger le PDF
+        </a>
+        <a
+          [href]="downloadCsvUrl()"
+          target="_blank"
+          class="flex-1 rounded-xl border border-secondary-subtle-border bg-secondary-subtle px-6 py-4 text-center text-lg font-semibold text-secondary-subtle-fg shadow-sm transition hover:brightness-95"
+        >
+          Exporter en CSV
+        </a>
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-line bg-surface p-4">
+        <h2 class="font-heading mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">
+          Factures encaissées ({{ data.invoices.length }})
+        </h2>
+        @if (data.invoices.length === 0) {
+          <p class="text-ink-soft">Aucune facture encaissée sur cette période.</p>
+        } @else {
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="text-ink-soft">
+                <th class="pb-2 font-medium">Numéro</th>
+                <th class="pb-2 font-medium">Client</th>
+                <th class="pb-2 font-medium">Encaissée le</th>
+                <th class="pb-2 text-right font-medium">Montant TTC</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (invoice of data.invoices; track invoice.id) {
+                <tr class="border-t border-line">
+                  <td class="py-2">{{ invoice.number }}</td>
+                  <td class="py-2">{{ invoice.customerName }}</td>
+                  <td class="py-2">{{ invoice.paidAt | date: 'dd/MM/yyyy' }}</td>
+                  <td class="py-2 text-right font-medium">
+                    {{ invoice.totalInclVatCents | centsToEuros }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    </div>
+  }
+}

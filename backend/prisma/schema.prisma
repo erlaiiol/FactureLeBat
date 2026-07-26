@@ -134,6 +134,28 @@ enum AuthTokenPurpose {
   PASSWORD_RESET
 }
 
+// Phase 17: which cadence the artisan declares turnover on — a real choice
+// auto-entrepreneurs make at URSSAF registration. Purely a UI default (which
+// period the report screen preselects); the report itself always accepts an
+// explicit from/to range regardless of this value.
+enum DeclarationFrequency {
+  MENSUELLE
+  TRIMESTRIELLE
+}
+
+// Phase 17: the URSSAF turnover category a Product/Service/invoice line
+// belongs to. Artisan-set only — see docs/roadmap.md Phase 17's "No
+// automatic activity-category detection" non-goal. Snapshotted onto
+// InvoiceLine/InvoiceServiceLine at creation time (see those models below),
+// never re-derived from a live Product/Service join: retroactively
+// recategorizing a catalog item must never silently change a quarterly
+// report for a period already declared to URSSAF.
+enum ActivityCategory {
+  VENTE_MARCHANDISES
+  PRESTATION_BIC
+  PRESTATION_BNC
+}
+
 // Phase 14: mirrors the subset of Stripe subscription statuses this app
 // actually branches on — NONE (never subscribed, the default) vs. the two
 // states a real Stripe subscription can settle in that we care about.
@@ -218,6 +240,40 @@ model Company {
   // PremiumGateService checks "is either one currently valid", never one
   // exclusively.
   premiumGrantedUntil DateTime?
+
+  // Phase 17: which period the quarterly report screen preselects — see
+  // DeclarationFrequency above. microEntrepreneurCeiling (cents) is
+  // deliberately artisan-editable, not a hardcoded legal constant: the real
+  // plafond depends on activity type and changes over time, and the app
+  // can't guarantee a baked-in number stays current. Left null, the report's
+  // plafond warning simply doesn't render.
+  declarationFrequency     DeclarationFrequency @default(TRIMESTRIELLE)
+  microEntrepreneurCeiling Int?
+
+  // Phase 17 (charges estimate): the micro-entrepreneur "cotisations
+  // sociales" rate per URSSAF turnover category, basis points (1230 =
+  // 12.30%) — same convention as vatRateBasisPoints. Pre-filled with the
+  // official rates in effect when this was built, but artisan-editable, not
+  // a hardcoded constant: these rates are revised periodically (the BIC/BNC
+  // rates are also being progressively harmonized with the Cipav rate by a
+  // multi-year reform), and a profession affiliated with the Cipav pays a
+  // slightly different rate than the general-regime default. Only
+  // meaningful when legalStatus is MICRO_ENTREPRENEUR — see
+  // ReportsService's estimatedCharges computation. Ignored, but still
+  // stored, for a COMPANY (no cost to keep the same three columns).
+  cotisationVenteBasisPoints         Int     @default(1230)
+  cotisationPrestationBicBasisPoints Int     @default(2120)
+  cotisationPrestationBncBasisPoints Int     @default(2110)
+  // Whether this micro-entrepreneur opted for the "versement libératoire de
+  // l'impôt sur le revenu" at registration (a fixed extra percentage of
+  // turnover — 1% / 1.7% / 2.2% by category, in lieu of ordinary
+  // progressive-bracket income tax on this activity). Unlike the cotisation
+  // rates above, these three percentages are fixed by law with no
+  // per-profession variation, so they're plain constants in
+  // activity-category.util.ts rather than further editable columns here.
+  // Defaults to false: most micro-entrepreneurs don't opt in, and the
+  // estimate must not silently add a tax the artisan never actually chose.
+  versementLiberatoireOptIn          Boolean @default(false)
 
   invoices         Invoice[]
   sourcingSearches SourcingSearch[]
@@ -500,6 +556,11 @@ model Product {
   // docs/roadmap.md Phase 8.5 and InvoiceLine.packagingQuantity below.
   packagingQuantity Decimal? @db.Decimal(10, 3)
 
+  // Phase 17: which URSSAF turnover category this product's sales fall
+  // under — see ActivityCategory above. Optional; left unset, an invoice
+  // line built from this product reports as "non catégorisé".
+  activityCategory ActivityCategory?
+
   // Phase 13: every catalog row belongs to exactly one tenant.
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -535,6 +596,10 @@ model Service {
   priceCents            Int?
   percentageBasisPoints Int?
   defaultVisibility     ServiceVisibility  @default(VISIBLE)
+
+  // Phase 17: same URSSAF turnover categorization as Product.activityCategory
+  // above, for this service's own sales.
+  activityCategory ActivityCategory?
 
   // Phase 11: same short artisan-defined reference as Product.code — makes
   // searching/scanning a large service catalog faster than by name alone.
@@ -601,6 +666,15 @@ model InvoiceLine {
   showUnitDetail    Boolean @default(true)
   showBillingDetail Boolean @default(true)
 
+  // Phase 17: snapshotted from the picked Product.activityCategory at
+  // creation time (or left null for a freehand line/an uncategorized
+  // product) — never re-read from Product afterwards, same "autofill, not a
+  // lock" spirit as productCode above. Deliberately a snapshot rather than a
+  // live join through productCode: recategorizing a catalog product later
+  // must never retroactively change a quarterly report for a period already
+  // declared to URSSAF. See docs/roadmap.md Phase 17.
+  activityCategory ActivityCategory?
+
   serviceWeights InvoiceServiceLineWeight[]
 
   createdAt DateTime @default(now())
@@ -631,6 +705,13 @@ model InvoiceServiceLine {
   description String?
   amountCents Int
   visibility  ServiceVisibility
+
+  // Phase 17: same snapshot rule as InvoiceLine.activityCategory above,
+  // taken from Service.activityCategory when serviceId is set (null for a
+  // freehand service line). REDISTRIBUTED amounts folded into product lines
+  // (see InvoiceMapper) are bucketed under those lines' own
+  // activityCategory instead — this field only matters for VISIBLE lines.
+  activityCategory ActivityCategory?
 
   // Only populated when visibility = REDISTRIBUTED. An EQUAL split is
   // stored as a weight of 1 on every invoice line at creation time — there

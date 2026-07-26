@@ -1,6 +1,6 @@
 # Deployment (OVH VPS)
 
-FactureLeBat is deployed as a single Docker Compose stack on one OVH VPS — no orchestrator, no managed DB, no CDN. That matches the project's own priority order ([development-rules.md](development-rules.md): Reliability > Simplicity > Maintainability > Scalability > Performance): a single machine is simpler to operate and reason about than a multi-node setup, and this app has no scale requirement that justifies the extra moving parts yet. Revisit if/when Phase 13's multi-tenancy actually brings the traffic that would need it.
+FactureLe is deployed as a single Docker Compose stack on one OVH VPS — no orchestrator, no managed DB, no CDN. That matches the project's own priority order ([development-rules.md](development-rules.md): Reliability > Simplicity > Maintainability > Scalability > Performance): a single machine is simpler to operate and reason about than a multi-node setup, and this app has no scale requirement that justifies the extra moving parts yet. Revisit if/when Phase 13's multi-tenancy actually brings the traffic that would need it.
 
 See [architecture.md](architecture.md#docker-infra) for what each container does. This doc is the operational how-to.
 
@@ -30,13 +30,13 @@ Only `caddy` publishes ports to the host. `frontend`, `backend`, and `postgres` 
 
 ```bash
 ssh <user>@<vps-ip>
-git clone <repo-url> FactureLeBat && cd FactureLeBat
+git clone <repo-url> FactureLe && cd FactureLe
 cp infra/.env.example infra/.env
 ```
 
 Edit `infra/.env`:
 
-- `POSTGRES_PASSWORD` — a strong, unique value. Never the `facturelebat` dev default.
+- `POSTGRES_PASSWORD` — a strong, unique value. Never the `facturele` dev default.
 - `DOMAIN` — the real domain, e.g. `DOMAIN=factures.example.com` (not the dev default `:80`).
 - Everything else can keep its default unless you're also enabling Phase 10 (`GROQ_API_KEY`) or Phase 12 (`APP_ENCRYPTION_KEY`) — see `backend/.env.example` for what each does and how the app degrades (503 on the relevant routes) when left unset.
 
@@ -79,14 +79,14 @@ make deploy
 make backup
 ```
 
-Wraps `infra/backup.sh`: `pg_dump`s the database, gzips it to `infra/backups/facturelebat_<timestamp>.sql.gz`, and deletes anything older than 14 days. `infra/backups/` is gitignored — these are local files on the VPS, not committed.
+Wraps `infra/backup.sh`: `pg_dump`s the database, gzips it to `infra/backups/facturele_<timestamp>.sql.gz`, and deletes anything older than 14 days. `infra/backups/` is gitignored — these are local files on the VPS, not committed.
 
 Automate it with a daily cron entry on the VPS:
 
 ```bash
 crontab -e
 # 3am daily
-0 3 * * * cd /path/to/FactureLeBat && make backup >> /var/log/facturelebat-backup.log 2>&1
+0 3 * * * cd /path/to/FactureLe && make backup >> /var/log/facturele-backup.log 2>&1
 ```
 
 For real disaster-recovery coverage (surviving the VPS itself being lost, not just a bad deploy), copy `infra/backups/` off the machine periodically — e.g. an OVH Object Storage bucket via `rclone`, or a plain `scp`/`rsync` to another host. That transport is intentionally left to you to wire up (varies by what storage you already have); `infra/backup.sh` only owns "produce a good local dump."
@@ -94,7 +94,7 @@ For real disaster-recovery coverage (surviving the VPS itself being lost, not ju
 ### Restoring a backup
 
 ```bash
-gunzip -c infra/backups/facturelebat_<timestamp>.sql.gz | \
+gunzip -c infra/backups/facturele_<timestamp>.sql.gz | \
   docker compose -f infra/docker-compose.prod.yml exec -T postgres \
   psql -U <POSTGRES_USER> <POSTGRES_DB>
 ```
@@ -116,7 +116,7 @@ make logs-files-prod    # tail -f the combined log
 make logs-errors-prod   # tail -f the error-only log
 ```
 
-For direct filesystem access without going through `docker compose exec` (e.g. to `scp` a log off the VPS), find the volume's real path with `docker volume inspect facturelebat-prod_backend_logs --format '{{ .Mountpoint }}'`. See [logging.md](logging.md) for the log format, levels, and how request ids let you trace one request across the whole log.
+For direct filesystem access without going through `docker compose exec` (e.g. to `scp` a log off the VPS), find the volume's real path with `docker volume inspect facturele-prod_backend_logs --format '{{ .Mountpoint }}'`. See [logging.md](logging.md) for the log format, levels, and how request ids let you trace one request across the whole log.
 
 ## Secrets
 

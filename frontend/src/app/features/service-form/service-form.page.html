@@ -116,6 +116,22 @@
     />
   </label>
 
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Catégorie d'activité (URSSAF)</span>
+    <select
+      formControlName="activityCategory"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    >
+      <option [ngValue]="null">Non catégorisé</option>
+      @for (option of activityCategoryOptions; track option.value) {
+        <option [ngValue]="option.value">{{ option.label }}</option>
+      }
+    </select>
+    <app-field-hint
+      text="Facultatif — utilisé pour répartir votre chiffre d'affaires dans le rapport trimestriel."
+    />
+  </label>
+
   @if (errorMessage(); as message) {
     <p class="text-center font-medium text-danger">{{ message }}</p>
   }

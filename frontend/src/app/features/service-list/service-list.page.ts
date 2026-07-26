@@ -7,8 +7,10 @@ import { ServiceProfile } from '../../core/models/service.model';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { SkeletonRowsComponent } from '../../shared/components/skeleton-rows.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
+import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 @Component({
   selector: 'app-service-list-page',
@@ -18,6 +20,7 @@ import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
     RouterLink,
     BigButtonComponent,
     BadgeComponent,
+    SkeletonRowsComponent,
     CentsToEurosPipe,
     TourAnchorDirective,
   ],
@@ -30,6 +33,7 @@ export class ServiceListPage {
 
   protected readonly services = signal<ServiceProfile[]>([]);
   protected readonly loading = signal(true);
+  protected readonly showSkeleton = delayedSkeleton(this.loading);
   protected readonly errorMessage = signal<string | null>(null);
 
   protected readonly search = this.fb.nonNullable.control('');

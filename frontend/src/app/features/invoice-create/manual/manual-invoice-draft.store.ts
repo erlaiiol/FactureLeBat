@@ -87,7 +87,7 @@ const EMPTY_CUSTOMER: ManualCustomerDraft = {
   customFields: [],
 };
 
-const DRAFT_STORAGE_KEY = 'facturelebat.manualInvoiceDraft.v1';
+const DRAFT_STORAGE_KEY = 'facturele.manualInvoiceDraft.v1';
 
 // Explicit choice of VAT treatment for this one document, overriding the
 // company's own default (see ManualInvoiceDraftStore.vatOverride) — null
