@@ -31,6 +31,7 @@ import { LineBadgeComponent } from '../../../shared/components/line-badge.compon
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { TourService } from '../../../shared/tour/tour.service';
 import { computeLineTotalPreviewCents } from '../calculation-preview';
 import {
   InvoiceLineFormComponent,
@@ -80,12 +81,32 @@ export class InvoiceCreateLinesStepPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   protected readonly draftStore = inject(InvoiceDraftStore);
+  private readonly tourService = inject(TourService);
 
   protected readonly errorMessage = signal<string | null>(null);
   // Phase 13.5 gallery redesign: which of the two fixed "+" flyouts is open
   // — mutually exclusive, opening one closes the other.
   protected readonly productPanelOpen = signal(false);
   protected readonly servicePanelOpen = signal(false);
+
+  // The guided tour's 'add-line' step targets these buttons while they're
+  // collapsed to their bare "+" circle — its label span is a 0fr grid track
+  // at rest (see .fixed-add-button in styles.css) and only opens up on
+  // hover or productPanelOpen/servicePanelOpen, neither of which the tour
+  // itself triggers. Without this, the tour's spotlight (sized off the
+  // button's own getBoundingClientRect — see TourOverlayComponent) only
+  // ever highlights the "+" glyph, never the "Ajouter un produit/prestation"
+  // label the step's own copy is telling the artisan to look for. Reusing
+  // is-open here expands the button to reveal that label WHILE the step is
+  // showing, and TourOverlayComponent's keepMeasuringWhileSettling already
+  // re-measures for 600ms after every step change — long enough to catch
+  // the CSS grid-template-columns transition settling on its wider size.
+  protected readonly productButtonTourHighlighted = computed(
+    () => this.tourService.currentStep()?.anchorId === 'invoice-add-product-button',
+  );
+  protected readonly serviceButtonTourHighlighted = computed(
+    () => this.tourService.currentStep()?.anchorId === 'invoice-add-service-button',
+  );
 
   protected readonly lines = this.fb.array<InvoiceLineFormGroup>(
     this.draftStore.lines().map((line) => this.createLineGroup(line)),

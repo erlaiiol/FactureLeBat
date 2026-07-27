@@ -22,6 +22,7 @@ import {
   DocumentType,
   InvoiceStatus,
 } from '../../generated/prisma/enums';
+import { computeNextDocumentNumber } from './next-number.util';
 
 export type InvoiceWithLines = Invoice & {
   lines: InvoiceLine[];
@@ -115,13 +116,20 @@ export interface CreateInvoiceData {
   // ManualModeFieldsConsistency).
   manualColumns?: CreateManualColumnData[];
   manualRows?: CreateManualRowData[];
-  // Phase 14.3: which counter/prefix this row draws its number from — see
-  // Company.devisNumberPrefix/nextDevisNumber vs invoiceNumberPrefix/
-  // nextInvoiceNumber. Set when this facture was created by converting a
-  // devis (see InvoiceService.convertToFacture) — never set for a devis
-  // itself or a facture created from scratch.
+  // Phase 14.3: which numbering pool/prefix this row draws its number from
+  // — see Company.devisNumberPrefix/invoiceNumberPrefix. Set when this
+  // facture was created by converting a devis (see
+  // InvoiceService.convertToFacture) — never set for a devis itself or a
+  // facture created from scratch.
   documentType: DocumentType;
   convertedFromDevisId?: string;
+  // Phase 27: the artisan's own explicit number (validated + uniqueness-
+  // checked by InvoiceService.create) — when absent, the repository derives
+  // one itself (see createWithSequentialNumber / computeNextDocumentNumber).
+  number?: string;
+  // Phase 23: document-level PDF rendering toggle — see schema.prisma's
+  // comment on Invoice.simplifiedDisplay.
+  simplifiedDisplay: boolean;
 }
 
 const INVOICE_INCLUDE = {
@@ -138,9 +146,11 @@ const INVOICE_INCLUDE = {
 export class InvoiceRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Increments the company's invoice counter and creates the invoice in the
-  // same transaction: the row lock taken by the UPDATE serializes concurrent
-  // invoice creation, keeping numbering sequential and gapless.
+  // Locks the company row and creates the invoice in the same transaction:
+  // the row lock serializes concurrent invoice creation for this company, so
+  // two concurrent requests can never derive (or race to claim) the same
+  // number — whether that number is computed here or an artisan's own
+  // explicit override.
   //
   // Service lines and their redistribution weights are created after the
   // invoice + product lines, still inside the same transaction: a
@@ -155,24 +165,32 @@ export class InvoiceRepository {
   // returns the shape InvoiceMapper needs.
   async createWithSequentialNumber(data: CreateInvoiceData): Promise<InvoiceWithLines> {
     return this.prisma.$transaction(async (tx) => {
-      // Phase 14.3: a devis and a facture each draw from their own gapless
-      // counter (same row-lock-via-UPDATE mechanism as before) — see
-      // Company.devisNumberPrefix/nextDevisNumber vs invoiceNumberPrefix/
-      // nextInvoiceNumber.
-      const company =
-        data.documentType === DocumentType.DEVIS
-          ? await tx.company.update({
-              where: { id: data.companyId },
-              data: { nextDevisNumber: { increment: 1 } },
-            })
-          : await tx.company.update({
-              where: { id: data.companyId },
-              data: { nextInvoiceNumber: { increment: 1 } },
-            });
-      const number =
-        data.documentType === DocumentType.DEVIS
-          ? `${company.devisNumberPrefix}-${String(company.nextDevisNumber - 1).padStart(6, '0')}`
-          : `${company.invoiceNumberPrefix}-${String(company.nextInvoiceNumber - 1).padStart(6, '0')}`;
+      // Phase 27: `FOR UPDATE` takes the same row lock the old counter
+      // increment used to, but no longer needs a value to write — the
+      // prefix is all this reads, since the actual next number is derived
+      // fresh from this company's existing invoices below (see
+      // computeNextDocumentNumber's comment on why a stored counter can no
+      // longer be the source of truth once an artisan can override a
+      // number).
+      const [company] = await tx.$queryRaw<
+        { invoiceNumberPrefix: string; devisNumberPrefix: string }[]
+      >`SELECT "invoiceNumberPrefix", "devisNumberPrefix" FROM "Company" WHERE id = ${data.companyId} FOR UPDATE`;
+
+      let number = data.number;
+      if (!number) {
+        const existing = await tx.invoice.findMany({
+          where: { companyId: data.companyId, documentType: data.documentType },
+          select: { number: true },
+        });
+        const prefix =
+          data.documentType === DocumentType.DEVIS
+            ? company.devisNumberPrefix
+            : company.invoiceNumberPrefix;
+        number = computeNextDocumentNumber(
+          prefix,
+          existing.map((invoice) => invoice.number),
+        );
+      }
 
       const invoice = await tx.invoice.create({
         data: {
@@ -191,6 +209,7 @@ export class InvoiceRepository {
           vatOverrideCents: data.vatOverrideCents,
           totalOverrideCents: data.totalOverrideCents,
           entryMode: data.entryMode,
+          simplifiedDisplay: data.simplifiedDisplay,
           lines: {
             create: data.lines.map((line, index) => ({
               position: index,
@@ -281,6 +300,19 @@ export class InvoiceRepository {
   // schema, but reads never actually filtered on it.
   findById(companyId: string, id: string): Promise<InvoiceWithLines | null> {
     return this.prisma.invoice.findFirst({ where: { id, companyId }, include: INVOICE_INCLUDE });
+  }
+
+  // Phase 27: feeds computeNextDocumentNumber for the "next number" suggestion
+  // (InvoiceService.getNextNumber) — outside any transaction/lock since it's
+  // only ever a suggestion the artisan can freely overwrite, never the
+  // authoritative value (see createWithSequentialNumber, which re-derives
+  // this itself under a row lock at actual creation time).
+  async findNumbers(companyId: string, documentType: DocumentType): Promise<string[]> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { companyId, documentType },
+      select: { number: true },
+    });
+    return invoices.map((invoice) => invoice.number);
   }
 
   // Capped rather than paginated for now (Phase 1 has no list UI pagination

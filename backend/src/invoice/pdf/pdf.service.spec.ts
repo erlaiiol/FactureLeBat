@@ -31,6 +31,7 @@ function samplePdfData(): InvoicePdfData {
       },
     ],
     serviceLines: [],
+    simplifiedDisplay: false,
     vatApplicable: false,
     vatRateBasisPoints: 2000,
     subtotalExclVatCents: 45000,
@@ -71,6 +72,15 @@ describe('PdfService', () => {
         rows: [{ cells: ['Parquet chêne massif', '10', '45.00'], totalCents: 45000 }],
       },
     };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with just Description/Total columns when simplifiedDisplay is set', async () => {
+    const service = new PdfService();
+    const data = { ...samplePdfData(), simplifiedDisplay: true };
     const buffer = await service.generateInvoicePdf(data);
 
     expect(buffer.length).toBeGreaterThan(0);

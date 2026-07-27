@@ -4,8 +4,10 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   CreateInvoiceRequest,
+  DocumentType,
   InvoiceMailTemplate,
   InvoiceWithTotals,
+  NextNumberResponse,
   SendInvoiceEmailRequest,
   UpdateInvoiceStatusRequest,
 } from '../models/invoice.model';
@@ -66,5 +68,14 @@ export class InvoiceService {
   // edit from an existing card (same status, new dueDate).
   updateStatus(id: string, request: UpdateInvoiceStatusRequest): Observable<InvoiceWithTotals> {
     return this.http.patch<InvoiceWithTotals>(`${this.baseUrl}/${id}/status`, request);
+  }
+
+  // Phase 27: the suggested "numéro" — the highest number this company has
+  // ever used for this document type, plus one — pre-filled on the apercu
+  // step (mode rapide) and the manual canvas, freely editable from there.
+  getNextNumber(documentType: DocumentType): Observable<NextNumberResponse> {
+    return this.http.get<NextNumberResponse>(`${this.baseUrl}/next-number`, {
+      params: { documentType },
+    });
   }
 }

@@ -1,54 +1,92 @@
 @if (createdInvoice(); as invoice) {
-  <div class="flex flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center">
-    <h1
-      appTourAnchor="invoice-created-success"
-      class="font-heading uppercase tracking-wide text-2xl font-bold text-success"
-    >
-      {{ invoice.documentType === 'DEVIS' ? 'Devis' : 'Facture' }} {{ invoice.number }} créé{{
-        invoice.documentType === 'DEVIS' ? '' : 'e'
-      }}
-      !
-    </h1>
-
-    @if (invoice.documentType === 'DEVIS' && !conversionDeclined()) {
-      <div class="w-full max-w-sm rounded-lg border border-line bg-surface p-4 text-left">
-        <p class="mb-3 text-sm text-ink">Créer la facture aussi immédiatement ?</p>
-        <div class="flex gap-2">
-          <app-big-button [disabled]="converting()" (click)="convertToFacture()">
-            {{ converting() ? 'Création…' : 'Oui' }}
-          </app-big-button>
+  <div class="flex flex-col gap-4">
+    @if (convertedFacture(); as facture) {
+      <div
+        class="anim-preview-in flex flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center"
+      >
+        <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-success">
+          Facture {{ facture.number }} créée !
+        </h1>
+        <a [href]="pdfUrl(facture.id)" target="_blank" class="w-full max-w-sm">
+          <app-big-button>Télécharger le PDF</app-big-button>
+        </a>
+        <div class="w-full max-w-sm">
           <app-big-button
             variant="secondary"
             tone="subtle"
-            [disabled]="converting()"
-            (click)="declineConversion()"
+            [disabled]="sharingInvoiceId() === facture.id"
+            (click)="share(facture)"
           >
-            Plus tard
+            {{ sharingInvoiceId() === facture.id ? 'Partage…' : 'Partager' }}
           </app-big-button>
         </div>
       </div>
     }
 
-    @if (errorMessage(); as message) {
-      <p class="font-medium text-danger">{{ message }}</p>
-    }
+    <div class="flex flex-col items-center gap-4 rounded-xl bg-success-subtle p-8 text-center">
+      <h1
+        appTourAnchor="invoice-created-success"
+        class="font-heading uppercase tracking-wide text-2xl font-bold text-success"
+      >
+        {{ invoice.documentType === 'DEVIS' ? 'Devis' : 'Facture' }} {{ invoice.number }} créé{{
+          invoice.documentType === 'DEVIS' ? '' : 'e'
+        }}
+        !
+      </h1>
 
-    <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
-      <app-big-button>Télécharger le PDF</app-big-button>
-    </a>
-    <div class="w-full max-w-sm">
-      <app-big-button variant="secondary" tone="subtle" [disabled]="sharing()" (click)="share()">
-        {{ sharing() ? 'Partage…' : 'Partager' }}
-      </app-big-button>
-    </div>
-    <div class="w-full max-w-sm">
-      <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
-        Nouveau document
-      </app-big-button>
+      @if (invoice.documentType === 'DEVIS' && !convertedFacture() && !conversionDeclined()) {
+        <div class="w-full max-w-sm rounded-lg border border-line bg-surface p-4 text-left">
+          <p class="mb-3 text-sm text-ink">Créer la facture aussi immédiatement ?</p>
+          <div class="flex flex-col gap-2">
+            <app-big-button [disabled]="converting()" (click)="convertToFacture()">
+              {{ converting() ? 'Création…' : 'Facture identique' }}
+            </app-big-button>
+            <app-big-button
+              variant="secondary"
+              tone="subtle"
+              [disabled]="converting()"
+              (click)="editBeforeInvoicing()"
+            >
+              Modifier avant facturation
+            </app-big-button>
+            <app-big-button
+              variant="secondary"
+              tone="subtle"
+              [disabled]="converting()"
+              (click)="declineConversion()"
+            >
+              Plus tard
+            </app-big-button>
+          </div>
+        </div>
+      }
+
+      @if (errorMessage(); as message) {
+        <p class="font-medium text-danger">{{ message }}</p>
+      }
+
+      <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
+        <app-big-button>Télécharger le PDF</app-big-button>
+      </a>
+      <div class="w-full max-w-sm">
+        <app-big-button
+          variant="secondary"
+          tone="subtle"
+          [disabled]="sharingInvoiceId() === invoice.id"
+          (click)="share(invoice)"
+        >
+          {{ sharingInvoiceId() === invoice.id ? 'Partage…' : 'Partager' }}
+        </app-big-button>
+      </div>
+      <div class="w-full max-w-sm">
+        <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
+          Nouveau document
+        </app-big-button>
+      </div>
     </div>
   </div>
   <app-send-invoice-email-modal
-    [invoice]="showEmailModal() ? invoice : null"
+    [invoice]="emailModalInvoice()"
     (closed)="closeEmailModal()"
     (sent)="onEmailSent($event)"
   />
@@ -68,6 +106,20 @@
     Survolez une donnée technique (unité, détail de facturation) pour la masquer ou l'afficher sur
     le document — le calcul et le total ne changent jamais, seul l'affichage change.
   </p>
+
+  <label
+    class="mb-4 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
+    title="N'affiche plus que le nom du produit et le prix total sur le document envoyé au client — pratique pour un devis/une facture au forfait, sans détailler les quantités."
+  >
+    <input
+      type="checkbox"
+      [checked]="draftStore.simplifiedDisplay()"
+      (change)="draftStore.toggleSimplifiedDisplay()"
+      class="h-4 w-4 rounded border-line"
+    />
+    <span class="font-medium text-ink">Mode simplifié</span>
+    <span class="text-ink-soft">— n'afficher que le nom du produit et le prix total</span>
+  </label>
 
   @if (missingSiret()) {
     <p
@@ -110,8 +162,35 @@
     <div class="anim-preview-in rounded-xl border border-line bg-surface p-6 shadow-sm">
       <div class="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
         <div>
-          <p class="font-heading text-lg font-bold text-ink">
-            {{ draftStore.documentType() === 'DEVIS' ? 'Devis' : 'Facture' }} BROUILLON
+          <p class="flex items-center gap-1.5 font-heading text-lg font-bold text-ink">
+            {{ draftStore.documentType() === 'DEVIS' ? 'Devis' : 'Facture' }}
+            <input
+              type="text"
+              [value]="draftStore.number()"
+              (input)="draftStore.setNumber($any($event.target).value)"
+              placeholder="Numéro"
+              class="w-32 rounded border-b border-transparent bg-secondary-subtle/40 px-1 font-mono text-base font-normal text-ink outline-none transition-colors hover:bg-secondary-subtle focus:border-primary focus:bg-secondary-subtle"
+            />
+            <!-- Native details/summary: same "click to reveal" tooltip as
+                 the totals summary's VAT info icon (see
+                 invoice-totals-summary.component.ts) — works with a tap, no
+                 hover state needed. -->
+            <details class="relative">
+              <summary
+                class="cursor-pointer list-none text-sm text-ink-soft hover:text-ink"
+                aria-label="À propos du numéro"
+                title="À propos du numéro"
+              >
+                ⓘ
+              </summary>
+              <div
+                class="absolute top-full left-0 z-10 mt-1 w-72 rounded-lg border border-line bg-surface p-2 text-xs font-normal text-ink shadow-lg"
+              >
+                Suggéré automatiquement à la suite du plus grand numéro déjà utilisé par votre
+                entreprise. Modifiable librement — par exemple pour reprendre la numérotation d'un
+                ancien logiciel ou du reste de votre carrière.
+              </div>
+            </details>
           </p>
           <p class="text-sm text-ink-soft">{{ today | date: 'dd/MM/yyyy' }}</p>
         </div>
@@ -128,9 +207,11 @@
           <thead>
             <tr class="border-b border-line text-left text-ink-soft">
               <th class="py-2 pr-2 font-medium">Description</th>
-              <th class="py-2 pr-2 font-medium">Unité</th>
-              <th class="py-2 pr-2 font-medium">Quantité</th>
-              <th class="py-2 pr-2 font-medium">Prix unitaire</th>
+              @if (!draftStore.simplifiedDisplay()) {
+                <th class="py-2 pr-2 font-medium">Unité</th>
+                <th class="py-2 pr-2 font-medium">Quantité</th>
+                <th class="py-2 pr-2 font-medium">Prix unitaire</th>
+              }
               <th class="py-2 pl-2 text-right font-medium">Total</th>
             </tr>
           </thead>
@@ -138,52 +219,56 @@
             @for (line of previewLines(); track $index; let i = $index) {
               <tr class="border-b border-line/60">
                 <td class="py-2 pr-2 text-ink">{{ line.description }}</td>
-                <td class="py-2 pr-2">
-                  @if (draftStore.lines()[i]?.showUnitDetail ?? true) {
-                    <button
-                      type="button"
-                      (click)="toggleUnitDetail(i)"
-                      title="Cliquer pour masquer sur le PDF envoyé au client"
-                      class="-mx-1 flex items-center gap-1 rounded px-1 text-ink transition-colors hover:bg-primary-subtle hover:text-primary"
-                    >
-                      <app-icon-eye [size]="14" /> {{ line.unit | unitLabel }}
-                    </button>
-                  } @else {
-                    <button
-                      type="button"
-                      (click)="toggleUnitDetail(i)"
-                      title="Masqué sur le PDF — cliquer pour l'afficher"
-                      class="-mx-1 flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
-                    >
-                      <app-icon-eye-off [size]="14" /> masqué
-                    </button>
-                  }
-                </td>
-                <td class="py-2 pr-2 text-ink">
-                  {{ line.quantity }}
-                  @if (line.billedQuantity !== line.quantity) {
-                    @if (draftStore.lines()[i]?.showBillingDetail ?? true) {
+                @if (!draftStore.simplifiedDisplay()) {
+                  <td class="py-2 pr-2">
+                    @if (draftStore.lines()[i]?.showUnitDetail ?? true) {
                       <button
                         type="button"
-                        (click)="toggleBillingDetail(i)"
+                        (click)="toggleUnitDetail(i)"
                         title="Cliquer pour masquer sur le PDF envoyé au client"
-                        class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft transition-colors hover:bg-primary-subtle hover:text-primary"
+                        class="-mx-1 flex items-center gap-1 rounded px-1 text-ink transition-colors hover:bg-primary-subtle hover:text-primary"
                       >
-                        <app-icon-eye [size]="12" /> (facturé : {{ line.billedQuantity }})
+                        <app-icon-eye [size]="14" /> {{ line.unit | unitLabel }}
                       </button>
                     } @else {
                       <button
                         type="button"
-                        (click)="toggleBillingDetail(i)"
+                        (click)="toggleUnitDetail(i)"
                         title="Masqué sur le PDF — cliquer pour l'afficher"
-                        class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
+                        class="-mx-1 flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
                       >
-                        <app-icon-eye-off [size]="12" /> détail masqué
+                        <app-icon-eye-off [size]="14" /> masqué
                       </button>
                     }
-                  }
-                </td>
-                <td class="py-2 pr-2 text-ink">{{ line.displayUnitPriceCents | centsToEuros }}</td>
+                  </td>
+                  <td class="py-2 pr-2 text-ink">
+                    {{ line.quantity }}
+                    @if (line.billedQuantity !== line.quantity) {
+                      @if (draftStore.lines()[i]?.showBillingDetail ?? true) {
+                        <button
+                          type="button"
+                          (click)="toggleBillingDetail(i)"
+                          title="Cliquer pour masquer sur le PDF envoyé au client"
+                          class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft transition-colors hover:bg-primary-subtle hover:text-primary"
+                        >
+                          <app-icon-eye [size]="12" /> (facturé : {{ line.billedQuantity }})
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          (click)="toggleBillingDetail(i)"
+                          title="Masqué sur le PDF — cliquer pour l'afficher"
+                          class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
+                        >
+                          <app-icon-eye-off [size]="12" /> détail masqué
+                        </button>
+                      }
+                    }
+                  </td>
+                  <td class="py-2 pr-2 text-ink">
+                    {{ line.displayUnitPriceCents | centsToEuros }}
+                  </td>
+                }
                 <td class="py-2 pl-2 text-right font-mono text-ink">
                   {{ line.lineTotalExclVatCents | centsToEuros }}
                 </td>

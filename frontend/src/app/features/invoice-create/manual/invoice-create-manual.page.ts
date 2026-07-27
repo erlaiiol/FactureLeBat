@@ -63,15 +63,60 @@ export class InvoiceCreateManualPage {
   protected readonly converting = signal(false);
   protected readonly conversionDeclined = signal(false);
 
+  // "Créer la facture à partir du devis" — see InvoiceCreateShellPage's
+  // identical fromDevisId handling for mode rapide.
+  protected readonly loadingSourceDevis = signal(false);
+  // Dedupes fromDevisId handling below — "modifier avant facturation" (see
+  // editBeforeInvoicing) navigates back into this exact same route, which
+  // Angular's default reuse strategy keeps this component instance for
+  // (never recreated), so a plain constructor-only read would miss that
+  // second arrival entirely (see the queryParamMap subscription below).
+  private lastLoadedDevisId: string | null = null;
+
   constructor() {
     this.destroyRef.onDestroy(() => this.revokeCurrentPreviewUrl());
 
-    // Phase 14.3: only when the mode-choice slider actually sent one — see
-    // InvoiceCreateShellPage's identical guard for mode rapide.
-    const type = this.route.snapshot.queryParamMap.get('type');
-    if (type === 'DEVIS' || type === 'FACTURE') {
-      this.store.setDocumentType(type);
-    }
+    // Subscribed (not just the constructor-time snapshot) — see
+    // InvoiceCreateShellPage's identical reasoning: this page can be
+    // re-entered with a new fromDevisId without ever being recreated.
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      // Phase 14.3: only when the mode-choice slider actually sent one — see
+      // InvoiceCreateShellPage's identical guard for mode rapide.
+      const type = params.get('type');
+      if (type === 'DEVIS' || type === 'FACTURE') {
+        this.store.setDocumentType(type);
+      }
+
+      const fromDevisId = params.get('fromDevisId');
+      if (fromDevisId && fromDevisId !== this.lastLoadedDevisId) {
+        this.lastLoadedDevisId = fromDevisId;
+        this.loadingSourceDevis.set(true);
+        this.invoiceService
+          .getById(fromDevisId)
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({
+            next: (devis) => {
+              this.store.loadFromInvoice(devis);
+              // loadFromInvoice always clears the number back to blank (a
+              // converted facture never reuses the devis's own number) — a
+              // fresh suggestion is fetched here rather than relying on the
+              // call below, which already ran before this async fetch
+              // resolved and found the field blank for the wrong reason.
+              this.store.ensureNumberSuggestion();
+              this.loadingSourceDevis.set(false);
+            },
+            error: () => {
+              this.loadingSourceDevis.set(false);
+              this.toastService.error('Impossible de charger ce devis pour le moment.');
+              void this.router.navigate(['/factures']);
+            },
+          });
+      } else {
+        // Fresh draft (no fromDevisId) — the loadFromInvoice path above
+        // fetches its own suggestion once it knows the real documentType.
+        this.store.ensureNumberSuggestion();
+      }
+    });
   }
 
   // "Compléter le prix total" (the "?" button): crosses the quantity and
@@ -209,6 +254,27 @@ export class InvoiceCreateManualPage {
     this.conversionDeclined.set(true);
   }
 
+  // Same purpose as InvoiceCreatePreviewStepPage.editBeforeInvoicing — this
+  // devis was authored in mode manuel, so the target is the manuel canvas
+  // itself, pre-filled from it. Unlike the rapide counterpart, this
+  // navigates to the exact route this component is already mounted on
+  // (Angular reuses the instance rather than recreating it), so the
+  // success screen's own state is cleared explicitly here — otherwise
+  // createdInvoice() would keep showing it instead of the freshly-loading
+  // editor.
+  protected editBeforeInvoicing(): void {
+    const devis = this.createdInvoice();
+    if (!devis) {
+      return;
+    }
+    this.createdInvoice.set(null);
+    this.conversionDeclined.set(false);
+    this.errorMessage.set(null);
+    void this.router.navigate(['/factures/nouvelle/manuel'], {
+      queryParams: { type: 'FACTURE', fromDevisId: devis.id },
+    });
+  }
+
   // Same purpose as startNewInvoice() but reachable mid-edit, not only from
   // the post-success screen — a confirm() guard since this discards unsaved
   // input with no undo, exactly like the shell page's rapide-mode equivalent.
@@ -249,6 +315,15 @@ export class InvoiceCreateManualPage {
           // InvoiceCreatePreviewStepPage. premiumGateInterceptor already
           // showed the paywall modal, so this just skips the generic message.
           if (error.status === 402) {
+            return;
+          }
+          // Phase 27: a custom/typed number already used by this company —
+          // surfaces InvoiceService.createInvoiceRow's actual message
+          // ("Ce numéro est déjà utilisé.") instead of the generic one, so
+          // the artisan knows exactly what to fix rather than just retrying
+          // the same request.
+          if (error.status === 409) {
+            this.errorMessage.set(error.error?.message ?? 'Ce numéro est déjà utilisé.');
             return;
           }
           this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');

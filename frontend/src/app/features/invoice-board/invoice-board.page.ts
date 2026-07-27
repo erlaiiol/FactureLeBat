@@ -2,42 +2,111 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  ViewChild,
   computed,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { InvoiceShareService } from '../../core/services/invoice-share.service';
 import { ToastService } from '../../core/services/toast.service';
-import { BoardColumn, InvoiceBoardCardComponent } from './invoice-board-card.component';
-import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
-import { isOverdue } from './invoice-status.util';
-import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
 import { BadgeComponent } from '../../shared/components/badge.component';
+import { IconChevronDownComponent } from '../../shared/components/icon-chevron-down.component';
+import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
+import { InvoiceListRowComponent } from './invoice-list-row.component';
+import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
-import { createNarrowViewportSignal } from '../../shared/utils/narrow-viewport.util';
+import { isOverdue } from './invoice-status.util';
 
-// Matches Tailwind v4's default `lg` breakpoint (min-width: 1024px) — the
-// same threshold invoice-board.page.html already uses for its
-// flex-row-of-fixed-columns -> equal-width-flex-columns switch.
-const NARROW_VIEWPORT_MAX_PX = 1023;
+// Phase 24: which column the table is currently sorted by — a Finder/
+// Explorer-style sortable-header list. Statut isn't sortable (see
+// StatusFilter below, its header cycles a filter instead) — everything
+// else is a plain value compare.
+type SortColumn = 'date' | 'number' | 'customerName';
 
-// Phase 16: replaces the old flat "Mes factures" list entirely (decided
-// explicitly with the user — a mobile-first management board, not a
-// list/board toggle) with a 5-column Kanban: Devis, Non payées, En retard,
-// Payées, Annulées. A devis has no payment status, so it only ever lives in
-// the Devis column — its own card carries the conversion CTA directly,
-// never a stand-in card in another column. "En retard" is computed here,
-// never persisted — see invoice-status.util's isOverdue.
+// One comparator per sortable column — always ascending, `rows` above
+// flips the sign for 'desc'. Ties fall back to the invoice's own date
+// (newest first) so same-name groups still read chronologically.
+const SORT_COMPARATORS: Record<SortColumn, (a: InvoiceWithTotals, b: InvoiceWithTotals) => number> =
+  {
+    date: (a, b) => a.date.localeCompare(b.date),
+    // Phase 27: `numeric: true` reads embedded digit runs as numbers (so
+    // "F-9" sorts before "F-10") — load-bearing now that an artisan can type
+    // a free-form custom number, no longer always the same fixed-width
+    // zero-padded shape a plain lexicographic compare could rely on.
+    number: (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }),
+    customerName: (a, b) =>
+      a.customerName.localeCompare(b.customerName) || b.date.localeCompare(a.date),
+  };
+
+// Phase 25: the "Statut" header itself is the filter control — clicking it
+// cycles through this fixed sequence rather than opening a separate picker.
+// 'ALL' is the resting state (header shows the plain "Statut" label, every
+// document visible, devis grouped with their attached facture); every other
+// value scopes the list to just that one payment state — a devis is never a
+// member of the 4 payment states, so it (and the whole disclosure/nesting
+// mechanism) simply disappears from view while a filter is active, rather
+// than needing its own dedicated rule to hide it.
+type StatusFilter = 'ALL' | 'PAYEE' | 'NON_PAYEE' | 'ANNULEE' | 'EN_RETARD';
+const STATUS_FILTER_CYCLE: readonly StatusFilter[] = [
+  'ALL',
+  'PAYEE',
+  'NON_PAYEE',
+  'ANNULEE',
+  'EN_RETARD',
+];
+
+function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): boolean {
+  if (filter === 'ALL') {
+    return true;
+  }
+  if (invoice.documentType === 'DEVIS') {
+    return false;
+  }
+  switch (filter) {
+    case 'PAYEE':
+      return invoice.status === 'PAYEE';
+    case 'ANNULEE':
+      return invoice.status === 'ANNULEE';
+    case 'EN_RETARD':
+      return isOverdue(invoice);
+    case 'NON_PAYEE':
+      return invoice.status === 'NON_PAYEE' && !isOverdue(invoice);
+  }
+}
+
+// Phase 23: replaces the Phase 16 5-column Kanban with a single sortable
+// list — decided explicitly with the user, who found the board's column
+// layout unclear about what to do next with a given document, then (Phase
+// 24) asked for it to read like a real Finder/Explorer-style file list
+// (sortable column headers, hover-highlighted rows) rather than stacked
+// cards. Phase 25: the "Statut" header is itself a filter, not a sort — it
+// cycles ALL/Payée/Non payée/Annulée/En retard on click and shows whichever
+// is currently active as its own label (see StatusFilter/cycleStatusFilter
+// below), replacing the old standalone "Non payées uniquement" toggle.
+// Phase 26: a facture born from converting a devis is always its own
+// top-level row here, exactly like any other document — it must stay
+// findable by its own date/search even if it was issued days after its
+// devis, which a "only reachable by expanding the right devis" design
+// couldn't support. The devis instead shows a small "→ Facture X" link
+// (see attachedFactureOf/highlightedPair below); clicking it highlights
+// both rows in the same tint so the artisan can see they're the same
+// document without them needing to sit next to each other in the sort
+// order. "En retard" stays computed, never persisted — see
+// invoice-status.util's isOverdue (used inside InvoiceListRowComponent and
+// matchesStatusFilter above).
 @Component({
   selector: 'app-invoice-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    InvoiceBoardCardComponent,
+    InvoiceListRowComponent,
     InvoiceDueDateModalComponent,
     SendInvoiceEmailModalComponent,
+    IconChevronDownComponent,
     BadgeComponent,
   ],
   templateUrl: './invoice-board.page.html',
@@ -47,6 +116,13 @@ export class InvoiceBoardPage {
   private readonly invoiceShareService = inject(InvoiceShareService);
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
+
+  // Phase 24: the reflow-retrigger technique App.replayPageEnterAnimation
+  // already uses for route changes — replayed on the <tbody> whenever the
+  // sort changes, so re-ordering reads as a deliberate refresh (asyncReveal's
+  // fade-up-from-above) instead of rows silently jumping to new positions.
+  @ViewChild('tbodyRef') private readonly tbodyRef?: ElementRef<HTMLElement>;
 
   protected readonly invoices = signal<InvoiceWithTotals[]>([]);
   protected readonly loading = signal(true);
@@ -56,23 +132,29 @@ export class InvoiceBoardPage {
   protected readonly search = signal('');
   protected readonly dateFrom = signal('');
   protected readonly dateTo = signal('');
-  protected readonly unpaidOnly = signal(false);
-
-  // Phase 22: below `lg`, the board opens on a "priorité" view (En retard +
-  // Non payées only) instead of all 5 columns — the desktop "always render
-  // all 5" decision above stays true at `lg`+, this is a narrow-viewport-only
-  // exception, not a reversal of it. The artisan can still reach the other 3
-  // columns with one tap ("Tout voir").
-  protected readonly isNarrow = createNarrowViewportSignal(NARROW_VIEWPORT_MAX_PX);
-  protected readonly mobileView = signal<'priorite' | 'tout'>('priorite');
 
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly sharingInvoiceId = signal<string | null>(null);
-  // Which facture is waiting on the due-date modal, and where it's headed —
-  // 'NON_PAYEE' whether the move came from a drag or the "Restaurer" button,
-  // both funnel through moveToNonPayee below.
+  // Which facture is waiting on the due-date modal — same "Non payée" entry
+  // point whether it came from the status menu on a fresh NON_PAYEE move or
+  // from restoring an ANNULEE one, both funnel through moveToNonPayee below.
   protected readonly dueDateModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly convertingDevisId = signal<string | null>(null);
+
+  // Phase 26: the devis/facture pair currently highlighted (see
+  // attachedFactureOf/toggleHighlight/isHighlighted below) — at most one
+  // pair at a time, cleared by clicking the same devis's link again.
+  protected readonly highlightedPair = signal<{ devisId: string; factureId: string } | null>(null);
+  // Phase 23: which single facture row's status menu is open — at most one
+  // at a time.
+  protected readonly statusMenuInvoiceId = signal<string | null>(null);
+
+  // Phase 24: sortable column headers — defaults to newest-first, the same
+  // ordering the API itself already returns.
+  protected readonly sortColumn = signal<SortColumn>('date');
+  protected readonly sortDirection = signal<'asc' | 'desc'>('desc');
+  // Phase 25: the "Statut" header's own filter state — see StatusFilter above.
+  protected readonly statusFilter = signal<StatusFilter>('ALL');
 
   private readonly filtered = computed(() => {
     const search = this.search().trim().toLowerCase();
@@ -93,40 +175,72 @@ export class InvoiceBoardPage {
     });
   });
 
-  protected readonly devis = computed(() =>
-    this.filtered().filter((invoice) => invoice.documentType === 'DEVIS'),
-  );
-  protected readonly nonPayees = computed(() =>
-    this.filtered().filter(
-      (invoice) =>
-        invoice.documentType === 'FACTURE' && invoice.status === 'NON_PAYEE' && !isOverdue(invoice),
-    ),
-  );
-  protected readonly enRetard = computed(() =>
-    this.filtered().filter((invoice) => invoice.documentType === 'FACTURE' && isOverdue(invoice)),
-  );
-  protected readonly payees = computed(() =>
-    this.filtered().filter(
-      (invoice) => invoice.documentType === 'FACTURE' && invoice.status === 'PAYEE',
-    ),
-  );
-  protected readonly annulees = computed(() =>
-    this.filtered().filter(
-      (invoice) => invoice.documentType === 'FACTURE' && invoice.status === 'ANNULEE',
-    ),
+  // Phase 26: every document is always its own top-level row, devis and
+  // facture alike — see the class doc comment for why a converted facture
+  // is never excluded/nested anymore. Phase 24: sorted by whichever column
+  // header was last clicked.
+  protected readonly rows = computed(() => {
+    const filter = this.statusFilter();
+    const column = this.sortColumn();
+    const direction = this.sortDirection() === 'asc' ? 1 : -1;
+    const compare = SORT_COMPARATORS[column];
+    const scoped =
+      filter === 'ALL'
+        ? this.filtered()
+        : this.filtered().filter((invoice) => matchesStatusFilter(invoice, filter));
+    return scoped.sort((a, b) => compare(a, b) * direction);
+  });
+
+  private readonly invoicesById = computed(
+    () => new Map(this.invoices().map((invoice) => [invoice.id, invoice])),
   );
 
-  // All 5 columns are always rendered (even empty, with a placeholder
-  // message) — decided explicitly with the user, who wants the whole board
-  // shape visible at a glance rather than columns popping in/out. "Non
-  // payées uniquement" instead reorders the board via CSS `order` (below)
-  // so the two "problem" columns (En retard, Non payées) lead, without
-  // hiding Devis/Payées/Annulées.
-  protected readonly devisOrder = computed(() => (this.unpaidOnly() ? 3 : 1));
-  protected readonly nonPayeeOrder = computed(() => (this.unpaidOnly() ? 2 : 2));
-  protected readonly enRetardOrder = computed(() => (this.unpaidOnly() ? 1 : 3));
-  protected readonly payeeOrder = 4;
-  protected readonly annuleeOrder = 5;
+  protected attachedFactureOf(devis: InvoiceWithTotals): InvoiceWithTotals | null {
+    const link = devis.convertedToFacture;
+    return link ? (this.invoicesById().get(link.id) ?? null) : null;
+  }
+
+  protected isHighlighted(invoice: InvoiceWithTotals): boolean {
+    const pair = this.highlightedPair();
+    return pair !== null && (pair.devisId === invoice.id || pair.factureId === invoice.id);
+  }
+
+  // Phase 26: toggles the shared highlight for a devis and the facture it
+  // was converted into, and scrolls that facture's row into view — the two
+  // can land far apart in the sorted list (different dates), so a plain
+  // color cue alone might not be visible without also bringing it on
+  // screen. Clicking the same devis's link again clears the highlight.
+  protected toggleHighlight(devis: InvoiceWithTotals): void {
+    const facture = this.attachedFactureOf(devis);
+    if (!facture) {
+      return;
+    }
+    const current = this.highlightedPair();
+    if (current?.devisId === devis.id) {
+      this.highlightedPair.set(null);
+      return;
+    }
+    this.highlightedPair.set({ devisId: devis.id, factureId: facture.id });
+    this.scrollRowIntoView(facture.id);
+  }
+
+  private scrollRowIntoView(invoiceId: string): void {
+    document
+      .querySelector(`[data-invoice-row-id="${invoiceId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  protected isStatusMenuOpen(invoiceId: string): boolean {
+    return this.statusMenuInvoiceId() === invoiceId;
+  }
+
+  protected toggleStatusMenu(invoiceId: string): void {
+    this.statusMenuInvoiceId.update((current) => (current === invoiceId ? null : invoiceId));
+  }
+
+  private closeStatusMenu(): void {
+    this.statusMenuInvoiceId.set(null);
+  }
 
   constructor() {
     this.invoiceService
@@ -156,47 +270,93 @@ export class InvoiceBoardPage {
     this.dateTo.set(value);
   }
 
-  protected toggleUnpaidOnly(): void {
-    this.unpaidOnly.update((value) => !value);
+  // Phase 25: the "Statut" header's click handler — cycles ALL -> Payée ->
+  // Non payée -> Annulée -> En retard -> back to ALL, replaying the same
+  // reflow-retrigger reveal as a sort change since the visible row set just
+  // changed the same way.
+  protected cycleStatusFilter(): void {
+    const currentIndex = STATUS_FILTER_CYCLE.indexOf(this.statusFilter());
+    this.statusFilter.set(STATUS_FILTER_CYCLE[(currentIndex + 1) % STATUS_FILTER_CYCLE.length]);
+    this.replaySortAnimation();
   }
 
-  protected toggleMobileView(): void {
-    this.mobileView.update((value) => (value === 'priorite' ? 'tout' : 'priorite'));
+  protected statusFilterLabel(): string {
+    switch (this.statusFilter()) {
+      case 'PAYEE':
+        return 'Payée';
+      case 'NON_PAYEE':
+        return 'Non payée';
+      case 'ANNULEE':
+        return 'Annulée';
+      case 'EN_RETARD':
+        return 'En retard';
+      default:
+        return 'Statut';
+    }
   }
 
-  protected unpaidToggleClasses(): string {
-    return this.unpaidOnly()
-      ? 'bg-primary text-primary-fg hover:brightness-90'
-      : 'border border-line text-ink-soft hover:bg-secondary-subtle';
+  protected statusFilterVariant(): 'warning' | 'danger' | 'success' | 'secondary' {
+    switch (this.statusFilter()) {
+      case 'PAYEE':
+        return 'success';
+      case 'ANNULEE':
+        return 'secondary';
+      case 'EN_RETARD':
+        return 'danger';
+      default:
+        return 'warning';
+    }
   }
 
-  protected onCardDropped(invoice: InvoiceWithTotals, target: string | null): void {
-    if (!target || target === invoice.status) {
+  // Phase 24: clicking the active column's header flips direction; clicking
+  // a different column switches to it, always starting ascending — same
+  // convention as Finder/Explorer's own sortable list headers.
+  protected sortBy(column: SortColumn): void {
+    if (this.sortColumn() === column) {
+      this.sortDirection.update((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+    } else {
+      this.sortColumn.set(column);
+      this.sortDirection.set('asc');
+    }
+    this.replaySortAnimation();
+  }
+
+  protected sortIndicator(column: SortColumn): 'asc' | 'desc' | null {
+    return this.sortColumn() === column ? this.sortDirection() : null;
+  }
+
+  // Same reflow-retrigger idiom as App.replayPageEnterAnimation — removes
+  // then re-adds the class so the fade-up-from-above plays again on every
+  // sort, even though @for just moves the existing rows rather than
+  // recreating them (which would otherwise never replay a mount-triggered
+  // CSS animation).
+  private replaySortAnimation(): void {
+    const element = this.tbodyRef?.nativeElement;
+    if (!element) {
       return;
     }
-    if (target === 'NON_PAYEE') {
-      this.moveToNonPayee(invoice);
-    } else if (target === 'PAYEE') {
-      this.markPaid(invoice);
-    } else if (target === 'ANNULEE') {
-      this.cancelInvoice(invoice);
-    }
+    element.classList.remove('anim-preview-in');
+    void element.offsetWidth;
+    element.classList.add('anim-preview-in');
   }
 
   protected markPaid(invoice: InvoiceWithTotals): void {
+    this.closeStatusMenu();
     this.updateStatus(invoice.id, { status: 'PAYEE' }, 'Facture marquée payée.');
   }
 
   protected cancelInvoice(invoice: InvoiceWithTotals): void {
+    this.closeStatusMenu();
     this.updateStatus(invoice.id, { status: 'ANNULEE' }, 'Facture annulée.');
   }
 
-  // Entry point for both a drag into "Non payées" and the "Restaurer"
-  // button — opens the due-date modal only if none is set yet (skippable),
-  // per docs/roadmap.md Phase 16.
+  // Entry point for picking "Non payée" from the status menu, whatever the
+  // invoice's current status — opens the due-date modal only if none is set
+  // yet (skippable), per docs/roadmap.md Phase 16.
   protected moveToNonPayee(invoice: InvoiceWithTotals): void {
+    this.closeStatusMenu();
     if (invoice.dueDate) {
-      this.updateStatus(invoice.id, { status: 'NON_PAYEE' }, 'Facture déplacée vers Non payées.');
+      this.updateStatus(invoice.id, { status: 'NON_PAYEE' }, 'Facture marquée non payée.');
       return;
     }
     this.dueDateModalInvoice.set(invoice);
@@ -208,11 +368,7 @@ export class InvoiceBoardPage {
       return;
     }
     this.dueDateModalInvoice.set(null);
-    this.updateStatus(
-      invoice.id,
-      { status: 'NON_PAYEE', dueDate },
-      'Facture déplacée vers Non payées.',
-    );
+    this.updateStatus(invoice.id, { status: 'NON_PAYEE', dueDate }, 'Facture marquée non payée.');
   }
 
   protected onDueDateSkipped(): void {
@@ -221,7 +377,7 @@ export class InvoiceBoardPage {
       return;
     }
     this.dueDateModalInvoice.set(null);
-    this.updateStatus(invoice.id, { status: 'NON_PAYEE' }, 'Facture déplacée vers Non payées.');
+    this.updateStatus(invoice.id, { status: 'NON_PAYEE' }, 'Facture marquée non payée.');
   }
 
   private updateStatus(
@@ -265,6 +421,7 @@ export class InvoiceBoardPage {
                 : invoice,
             ),
           ]);
+          this.highlightedPair.set({ devisId: devis.id, factureId: facture.id });
           this.toastService.success(`Devis converti en facture ${facture.number}.`);
         },
         error: () => {
@@ -272,6 +429,23 @@ export class InvoiceBoardPage {
           this.errorMessage.set('Impossible de créer la facture pour le moment.');
         },
       });
+  }
+
+  // "Créer une facture à partir du devis": unlike convertDevis above (an
+  // untouched, already-persisted clone), this opens the creation wizard
+  // pre-filled from the devis so the artisan can adjust anything — what was
+  // actually agreed/delivered at the client's — before a facture exists.
+  // Routed by the devis's own entryMode: a GUIDED devis jumps straight to
+  // the rapide lignes step (never client — see InvoiceCreateShellPage's
+  // cameFromDevis), a MANUAL one goes to its own canvas.
+  protected createFromDevis(devis: InvoiceWithTotals): void {
+    const commands =
+      devis.entryMode === 'MANUAL'
+        ? ['/factures/nouvelle/manuel']
+        : ['/factures/nouvelle/rapide/lignes'];
+    void this.router.navigate(commands, {
+      queryParams: { type: 'FACTURE', fromDevisId: devis.id },
+    });
   }
 
   protected openEmailModal(invoice: InvoiceWithTotals): void {
@@ -305,18 +479,5 @@ export class InvoiceBoardPage {
     );
     this.emailModalInvoice.set(null);
     this.toastService.success('Email envoyé au client.');
-  }
-
-  protected columnOf(invoice: InvoiceWithTotals): BoardColumn {
-    if (invoice.documentType === 'DEVIS') {
-      return 'DEVIS';
-    }
-    if (invoice.status === 'PAYEE') {
-      return 'PAYEE';
-    }
-    if (invoice.status === 'ANNULEE') {
-      return 'ANNULEE';
-    }
-    return isOverdue(invoice) ? 'EN_RETARD' : 'NON_PAYEE';
   }
 }

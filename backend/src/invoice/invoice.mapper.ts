@@ -230,6 +230,7 @@ export class InvoiceMapper {
       dueDate: invoice.dueDate,
       paidAt: invoice.paidAt,
       lastReminderAt: invoice.lastReminderAt,
+      simplifiedDisplay: invoice.simplifiedDisplay,
     };
   }
 
@@ -312,6 +313,7 @@ export class InvoiceMapper {
       dueDate: invoice.dueDate,
       paidAt: invoice.paidAt,
       lastReminderAt: invoice.lastReminderAt,
+      simplifiedDisplay: invoice.simplifiedDisplay,
     };
   }
 
@@ -360,6 +362,7 @@ export class InvoiceMapper {
       serviceLines: withTotals.serviceLines
         .filter((serviceLine) => serviceLine.visibility === 'VISIBLE')
         .map((serviceLine) => ({ name: serviceLine.name, amountCents: serviceLine.amountCents })),
+      simplifiedDisplay: withTotals.simplifiedDisplay,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
@@ -408,6 +411,9 @@ export class InvoiceMapper {
           .map((column) => ({ label: column.label })),
         rows,
       },
+      // Manual mode's freehand column set has no fixed Quantité/Prix
+      // unitaire columns to hide — see InvoicePdfData.simplifiedDisplay.
+      simplifiedDisplay: false,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
@@ -542,11 +548,12 @@ export class InvoiceMapper {
     );
 
     return {
-      // Not a real invoice: nothing is persisted, so no id/sequential
-      // number was ever allocated. 'BROUILLON' is distinct from any real
-      // "{prefix}-NNNNNN" number, never collides.
+      // Not a real invoice: nothing is persisted, so no number was ever
+      // allocated. Falls back to 'BROUILLON' only until the artisan's own
+      // suggested/typed number (dto.number, see InvoiceService.getNextNumber)
+      // is known — once it is, the preview shows exactly what will be used.
       id: '',
-      number: 'BROUILLON',
+      number: dto.number ?? 'BROUILLON',
       date: new Date(),
       customerName: dto.customerName,
       customerAddress: dto.customerAddress ?? null,
@@ -574,6 +581,7 @@ export class InvoiceMapper {
       dueDate: null,
       paidAt: null,
       lastReminderAt: null,
+      simplifiedDisplay: dto.simplifiedDisplay ?? false,
     };
   }
 
@@ -621,7 +629,8 @@ export class InvoiceMapper {
 
     return {
       id: '',
-      number: 'BROUILLON',
+      // Same fallback rule as toPreviewInvoiceWithTotals above.
+      number: dto.number ?? 'BROUILLON',
       date: new Date(),
       customerName: dto.customerName,
       customerAddress: dto.customerAddress ?? null,
@@ -659,6 +668,9 @@ export class InvoiceMapper {
       dueDate: null,
       paidAt: null,
       lastReminderAt: null,
+      // Manual mode's freehand column set has no fixed Quantité/Prix
+      // unitaire columns to hide — see InvoicePdfData.simplifiedDisplay.
+      simplifiedDisplay: false,
     };
   }
 
@@ -693,6 +705,7 @@ export class InvoiceMapper {
             totalCents: row.lineTotalExclVatCents,
           })),
         },
+        simplifiedDisplay: false,
         vatApplicable: withTotals.vatApplicable,
         vatRateBasisPoints: withTotals.vatRateBasisPoints,
         subtotalExclVatCents: withTotals.subtotalExclVatCents,
@@ -726,6 +739,7 @@ export class InvoiceMapper {
       serviceLines: withTotals.serviceLines
         .filter((serviceLine) => serviceLine.visibility === 'VISIBLE')
         .map((serviceLine) => ({ name: serviceLine.name, amountCents: serviceLine.amountCents })),
+      simplifiedDisplay: withTotals.simplifiedDisplay,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
       subtotalExclVatCents: withTotals.subtotalExclVatCents,

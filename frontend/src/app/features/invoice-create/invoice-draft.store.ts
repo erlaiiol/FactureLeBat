@@ -7,6 +7,7 @@ import {
   CreateInvoiceRequest,
   CreateInvoiceServiceLineRequest,
   DocumentType,
+  InvoiceWithTotals,
   RedistributionStrategy,
   ServiceLineVisibility,
   WasteSurcharge,
@@ -16,6 +17,7 @@ import { ServicePricingMode } from '../../core/models/service.model';
 import { isAreaUnit, Unit } from '../../core/models/unit.model';
 import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
+import { InvoiceService } from '../../core/services/invoice.service';
 import { ProductService } from '../../core/services/product.service';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import {
@@ -138,6 +140,9 @@ interface PersistedDraft {
   lines: InvoiceLineDraft[];
   serviceLines: InvoiceServiceLineDraft[];
   documentType: DocumentType;
+  simplifiedDisplay: boolean;
+  sourceDevisId: string | null;
+  number: string;
 }
 
 // Shared, in-progress state for the whole "nouvelle facture" flow (Phase 6):
@@ -151,6 +156,7 @@ interface PersistedDraft {
 export class InvoiceDraftStore {
   private readonly companyService = inject(CompanyService);
   private readonly customerService = inject(CustomerService);
+  private readonly invoiceService = inject(InvoiceService);
   private readonly productService = inject(ProductService);
   private readonly serviceCatalogService = inject(ServiceCatalogService);
   private readonly destroyRef = inject(DestroyRef);
@@ -175,12 +181,32 @@ export class InvoiceDraftStore {
   // says which.
   readonly documentType = signal<DocumentType>('FACTURE');
 
+  // "Créer la facture à partir du devis" (see loadFromInvoice below): the id
+  // of the devis this draft was seeded from, if any — carried through to
+  // buildInvoiceRequest's convertedFromDevisId so the resulting facture
+  // stays linked to it, same lineage InvoiceService.convertToFacture's
+  // one-shot clone already produces. Null for every ordinary draft.
+  readonly sourceDevisId = signal<string | null>(null);
+
+  // Phase 27: the document's number, shown/editable on the apercu step —
+  // starts blank and is filled once by ensureNumberSuggestion() with "the
+  // highest number this company has ever used for this document type + 1"
+  // (see InvoiceService.getNextNumber); the artisan can freely overwrite it
+  // from there, e.g. to continue a previous software's sequence. Blank at
+  // submit time just means "let the backend pick", same fallback the
+  // suggestion itself uses.
+  readonly number = signal('');
+
   readonly customer = signal<InvoiceCustomerDraft>(EMPTY_CUSTOMER);
   // Phase 13.5 gallery redesign: no default blank line — the lines step now
   // starts as an empty gallery, a card only exists once the artisan actually
   // adds one via a fixed "+" button (see InvoiceCreateLinesStepPage).
   readonly lines = signal<InvoiceLineDraft[]>([]);
   readonly serviceLines = signal<InvoiceServiceLineDraft[]>([]);
+  // Phase 23: document-level toggle set from the "Personnaliser l'affichage"
+  // step — hides the whole Quantité/Prix unitaire columns on the rendered
+  // document, leaving only description + line total.
+  readonly simplifiedDisplay = signal(false);
 
   readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
 
@@ -280,6 +306,9 @@ export class InvoiceDraftStore {
         lines: this.lines(),
         serviceLines: this.serviceLines(),
         documentType: this.documentType(),
+        simplifiedDisplay: this.simplifiedDisplay(),
+        sourceDevisId: this.sourceDevisId(),
+        number: this.number(),
       };
       this.writeToStorage(snapshot);
     });
@@ -291,6 +320,31 @@ export class InvoiceDraftStore {
   // silently flips it back to FACTURE.
   setDocumentType(type: DocumentType): void {
     this.documentType.set(type);
+  }
+
+  setNumber(number: string): void {
+    this.number.set(number);
+  }
+
+  // Phase 27: fetches "highest number ever used for this document type + 1"
+  // and fills the field with it — but only if it's still blank (a typed
+  // override, a previously-fetched suggestion restored from localStorage,
+  // or one already loaded some other way must never be silently
+  // overwritten). Best-effort: a failure just leaves the field blank, same
+  // as every other best-effort load in this store — the backend falls back
+  // to computing its own suggestion if the field is still empty at submit
+  // time, so nothing blocks the artisan either way.
+  ensureNumberSuggestion(): void {
+    if (this.number().trim().length > 0) {
+      return;
+    }
+    this.invoiceService
+      .getNextNumber(this.documentType())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ number }) => this.number.set(number),
+        error: () => undefined,
+      });
   }
 
   setCustomer(customer: InvoiceCustomerDraft): void {
@@ -316,12 +370,96 @@ export class InvoiceDraftStore {
     );
   }
 
+  toggleSimplifiedDisplay(): void {
+    this.simplifiedDisplay.update((value) => !value);
+  }
+
   reset(): void {
     this.customer.set(EMPTY_CUSTOMER);
     this.lines.set([]);
     this.serviceLines.set([]);
     this.documentType.set('FACTURE');
+    this.simplifiedDisplay.set(false);
+    this.sourceDevisId.set(null);
+    this.number.set('');
     this.clearStorage();
+  }
+
+  // "Créer la facture à partir du devis" (mes documents / the post-devis
+  // "modifier avant facturation" prompt): seeds every signal from an
+  // already-persisted devis (entryMode GUIDED only — the caller is
+  // responsible for routing a MANUAL devis to ManualInvoiceDraftStore
+  // instead) so the artisan can adjust anything before submitting, rather
+  // than InvoiceService.convertToFacture's untouched one-shot clone.
+  // Overwrites the draft wholesale (not a merge) so no stale field from a
+  // previously abandoned draft survives.
+  //
+  // Service lines lose two things the create-time DTO never returns on a
+  // persisted invoice: pricingMode/percentageBasisPoints (a PERCENTAGE line
+  // becomes a FIXED one, amount preserved) and the exact original
+  // WEIGHTED/EQUAL choice for a REDISTRIBUTED line (rebuilt as WEIGHTED
+  // using each line's actual distributed amountCents as its weight — same
+  // proportional split, see redistribution.util.expandServiceLineWeights).
+  loadFromInvoice(source: InvoiceWithTotals): void {
+    this.customer.set({
+      customerId: source.customerId,
+      customerName: source.customerName,
+      customerAddress: source.customerAddress ?? '',
+      customerEmail: source.customerEmail ?? '',
+      customerPhone: source.customerPhone ?? '',
+      saveAsNewCustomer: false,
+    });
+
+    this.lines.set(
+      source.lines.map((line) => ({
+        description: line.description,
+        unit: line.unit,
+        quantity: Number(line.quantity),
+        unitPriceEuros: line.unitPriceCents / 100,
+        wasteSurcharge: line.wasteSurcharge,
+        packagingQuantity: line.packagingQuantity !== null ? Number(line.packagingQuantity) : null,
+        roundUpToPackaging: line.roundUpToPackaging,
+        productCode: line.productCode,
+        catalogProductId: null,
+        saveAsNewProduct: false,
+        activityCategory: line.activityCategory,
+        showUnitDetail: line.showUnitDetail,
+        showBillingDetail: line.showBillingDetail,
+      })),
+    );
+
+    this.serviceLines.set(
+      source.serviceLines.map((serviceLine) => ({
+        serviceId: null,
+        name: serviceLine.name,
+        description: serviceLine.description ?? '',
+        amountEuros: serviceLine.amountCents / 100,
+        visibility: serviceLine.visibility,
+        redistributionStrategy: 'WEIGHTED',
+        weights:
+          serviceLine.visibility === 'REDISTRIBUTED'
+            ? source.lines.map(
+                (line) =>
+                  serviceLine.distribution?.find((d) => d.invoiceLineId === line.id)?.amountCents ??
+                  0,
+              )
+            : [],
+        pricingMode: 'FIXED',
+        percentageBasisPoints: null,
+        catalogServiceId: null,
+        saveAsNewService: false,
+        activityCategory: serviceLine.activityCategory,
+      })),
+    );
+
+    this.documentType.set('FACTURE');
+    this.simplifiedDisplay.set(source.simplifiedDisplay);
+    this.sourceDevisId.set(source.id);
+    // A converted facture always gets its own fresh number, never the
+    // devis's — left blank so ensureNumberSuggestion() computes a real one
+    // for FACTURE (the devis's own suggestion, if any was fetched earlier,
+    // was for a DEVIS number and would be meaningless here).
+    this.number.set('');
   }
 
   // Builds the exact payload shape the backend expects, for both the real
@@ -380,6 +518,9 @@ export class InvoiceDraftStore {
       documentType: this.documentType(),
       lines,
       serviceLines: serviceLines.length > 0 ? serviceLines : undefined,
+      simplifiedDisplay: this.simplifiedDisplay(),
+      convertedFromDevisId: this.sourceDevisId() ?? undefined,
+      number: this.number().trim() || undefined,
     };
   }
 
@@ -519,6 +660,15 @@ export class InvoiceDraftStore {
       }
       if (parsed.documentType === 'DEVIS' || parsed.documentType === 'FACTURE') {
         this.documentType.set(parsed.documentType);
+      }
+      if (typeof parsed.simplifiedDisplay === 'boolean') {
+        this.simplifiedDisplay.set(parsed.simplifiedDisplay);
+      }
+      if (typeof parsed.sourceDevisId === 'string') {
+        this.sourceDevisId.set(parsed.sourceDevisId);
+      }
+      if (typeof parsed.number === 'string') {
+        this.number.set(parsed.number);
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

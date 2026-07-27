@@ -6,9 +6,11 @@ import {
   CreateManualColumnRequest,
   CreateManualRowRequest,
   DocumentType,
+  InvoiceWithTotals,
   ManualColumnRole,
 } from '../../../core/models/invoice.model';
 import { CompanyService } from '../../../core/services/company.service';
+import { InvoiceService } from '../../../core/services/invoice.service';
 import { computeTotalsPreview, TotalsPreview } from '../calculation-preview';
 import {
   formatManualPrice,
@@ -106,6 +108,8 @@ interface PersistedManualDraft {
   totalOverrideText: string;
   vatChoice: ManualVatChoice | null;
   documentType: DocumentType;
+  sourceDevisId: string | null;
+  number: string;
 }
 
 // Phase 9.5 mode manuel: the free-form canvas's shared, in-progress draft
@@ -119,12 +123,23 @@ interface PersistedManualDraft {
 @Injectable({ providedIn: 'root' })
 export class ManualInvoiceDraftStore {
   private readonly companyService = inject(CompanyService);
+  private readonly invoiceService = inject(InvoiceService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly company = signal<CompanyProfile | null>(null);
 
   // Phase 14.3: same seeding/persistence rule as InvoiceDraftStore.documentType.
   readonly documentType = signal<DocumentType>('FACTURE');
+
+  // Same "Créer la facture à partir du devis" lineage field as
+  // InvoiceDraftStore.sourceDevisId — see loadFromInvoice below.
+  readonly sourceDevisId = signal<string | null>(null);
+
+  // Phase 27: same "suggested, freely editable" number as InvoiceDraftStore
+  // — shown inline on the manual canvas rather than gated behind a step,
+  // consistent with mode manuel having no wizard steps at all. See
+  // ensureNumberSuggestion.
+  readonly number = signal('');
 
   readonly customer = signal<ManualCustomerDraft>(EMPTY_CUSTOMER);
   readonly columns = signal<ManualColumnDraft[]>(defaultColumns());
@@ -246,6 +261,8 @@ export class ManualInvoiceDraftStore {
         totalOverrideText: this.totalOverrideText(),
         vatChoice: this.vatChoice(),
         documentType: this.documentType(),
+        sourceDevisId: this.sourceDevisId(),
+        number: this.number(),
       };
       this.writeToStorage(snapshot);
     });
@@ -255,6 +272,25 @@ export class ManualInvoiceDraftStore {
   // one" rule as InvoiceDraftStore.setDocumentType.
   setDocumentType(type: DocumentType): void {
     this.documentType.set(type);
+  }
+
+  setNumber(number: string): void {
+    this.number.set(number);
+  }
+
+  // Same "only fill if still blank, best-effort" rule as
+  // InvoiceDraftStore.ensureNumberSuggestion.
+  ensureNumberSuggestion(): void {
+    if (this.number().trim().length > 0) {
+      return;
+    }
+    this.invoiceService
+      .getNextNumber(this.documentType())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ number }) => this.number.set(number),
+        error: () => undefined,
+      });
   }
 
   setCustomer(customer: ManualCustomerDraft): void {
@@ -425,7 +461,93 @@ export class ManualInvoiceDraftStore {
     this.totalOverrideText.set('');
     this.vatChoice.set(null);
     this.documentType.set('FACTURE');
+    this.sourceDevisId.set(null);
+    this.number.set('');
     this.clearStorage();
+  }
+
+  // "Créer la facture à partir du devis" (see InvoiceDraftStore.loadFromInvoice
+  // for the mode-rapide counterpart): seeds the canvas from an already-
+  // persisted MANUAL devis so the artisan can adjust anything before
+  // submitting. Overwrites the draft wholesale, same "no stale field
+  // survives" rule as the rapide store.
+  //
+  // The three aggregate overrides (subtotal/vat/total) are deliberately left
+  // blank rather than guessed back from the devis's totals — InvoiceWithTotals
+  // only ever exposes the *computed* figures, never whether they came from an
+  // override, so a blank override here simply recomputes from the copied
+  // rows/vatChoice, which reconciles unless the devis itself had one of the
+  // three overridden (the artisan can re-set it here, same as any other
+  // manual-mode field being freely editable, see docs memory on manual mode).
+  loadFromInvoice(source: InvoiceWithTotals): void {
+    this.customer.set({
+      customerName: source.customerName,
+      customerAddress: source.customerAddress ?? '',
+      customerEmail: source.customerEmail ?? '',
+      customerPhone: source.customerPhone ?? '',
+      customFields: source.customerFields.map((field) => ({
+        id: crypto.randomUUID(),
+        label: field.label,
+        value: field.value,
+      })),
+    });
+
+    const table = source.manualTable;
+    // The store's own logic (canPreview, buildInvoiceRequest's row filter)
+    // hardcodes DESCRIPTION/QUANTITY/UNIT_PRICE/LINE_TOTAL_COLUMN_ID rather
+    // than looking columns up by role — true of every draft that ever
+    // existed before this method, since defaultColumns() is the only other
+    // place those four columns get created, always with these same
+    // constants. A persisted devis's manualTable carries its own
+    // database-generated column ids instead, which would silently break
+    // that hardcoded lookup (a pre-filled row reads as having no
+    // description at all) — remapped back onto the fixed constants here so
+    // every other reader keeps working unmodified. Only a CUSTOM column has
+    // no fixed id to remap onto, so it keeps its own.
+    const fixedIdByRole: Partial<Record<ManualColumnRole, string>> = {
+      DESCRIPTION: DESCRIPTION_COLUMN_ID,
+      QUANTITY: QUANTITY_COLUMN_ID,
+      UNIT_PRICE: UNIT_PRICE_COLUMN_ID,
+      LINE_TOTAL: LINE_TOTAL_COLUMN_ID,
+    };
+    const sourceColumns = table && table.columns.length > 0 ? table.columns : null;
+    const columns: ManualColumnDraft[] = sourceColumns
+      ? sourceColumns.map((column) => ({
+          id: fixedIdByRole[column.role] ?? column.id,
+          role: column.role,
+          label: column.label,
+          widthPx: column.widthPx ?? 140,
+        }))
+      : defaultColumns();
+    const rows: ManualRowDraft[] =
+      sourceColumns && table && table.rows.length > 0
+        ? table.rows.map((row) => ({
+            id: row.id,
+            heightPx: row.heightPx ?? 44,
+            cells: Object.fromEntries(
+              columns.map((column, index) => [
+                column.id,
+                row.cells.find((cell) => cell.columnId === sourceColumns[index].id)?.value ?? '',
+              ]),
+            ),
+          }))
+        : [emptyRow(columns)];
+    this.columns.set(columns);
+    this.rows.set(rows);
+
+    this.subtotalOverrideText.set('');
+    this.vatOverrideText.set('');
+    this.totalOverrideText.set('');
+    this.vatChoice.set({
+      applicable: source.vatApplicable,
+      rateBasisPoints: source.vatRateBasisPoints,
+    });
+
+    this.documentType.set('FACTURE');
+    this.sourceDevisId.set(source.id);
+    // Same "a converted facture always gets its own fresh number" rule as
+    // InvoiceDraftStore.loadFromInvoice.
+    this.number.set('');
   }
 
   // Builds the exact payload shape the backend expects, for both the real
@@ -485,6 +607,8 @@ export class ManualInvoiceDraftStore {
       totalOverrideCents: totalOverride !== null ? Math.round(totalOverride * 100) : undefined,
       vatApplicableOverride: vatChoice?.applicable,
       vatRateBasisPointsOverride: vatChoice?.rateBasisPoints,
+      convertedFromDevisId: this.sourceDevisId() ?? undefined,
+      number: this.number().trim() || undefined,
     };
   }
 
@@ -534,6 +658,12 @@ export class ManualInvoiceDraftStore {
       }
       if (parsed.documentType === 'DEVIS' || parsed.documentType === 'FACTURE') {
         this.documentType.set(parsed.documentType);
+      }
+      if (typeof parsed.sourceDevisId === 'string') {
+        this.sourceDevisId.set(parsed.sourceDevisId);
+      }
+      if (typeof parsed.number === 'string') {
+        this.number.set(parsed.number);
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

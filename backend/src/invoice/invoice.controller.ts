@@ -1,7 +1,18 @@
-import { Controller, Get, Header, Param, Patch, Post, Body, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+  Body,
+  Query,
+  StreamableFile,
+} from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { GetNextNumberQueryDto } from './dto/get-next-number-query.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceService } from './invoice.service';
@@ -29,6 +40,18 @@ export class InvoiceController {
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser): Promise<InvoiceWithTotals[]> {
     return this.invoiceService.findAll(user.companyId);
+  }
+
+  // Phase 27: the suggested "numéro" pre-filled on the apercu step (mode
+  // rapide) and the manual canvas — see InvoiceService.getNextNumber. Must
+  // be declared before `:id` below, or Nest would match "next-number" as an
+  // invoice id instead.
+  @Get('next-number')
+  getNextNumber(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: GetNextNumberQueryDto,
+  ): Promise<{ number: string }> {
+    return this.invoiceService.getNextNumber(user.companyId, query.documentType);
   }
 
   // Phase 14.3: turns a devis into a real, independently-numbered facture —

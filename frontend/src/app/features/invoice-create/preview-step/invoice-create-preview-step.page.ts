@@ -94,13 +94,17 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly creating = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
-  protected readonly showEmailModal = signal(false);
-  protected readonly sharing = signal(false);
+  protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
+  protected readonly sharingInvoiceId = signal<string | null>(null);
 
   // Phase 14.3: the "Créer la facture aussi immédiatement ?" prompt shown
-  // after a devis is created — see convertToFacture below.
+  // after a devis is created — see convertToFacture below. Phase 23: on
+  // success this no longer replaces createdInvoice (which would make the
+  // devis unreachable/undownloadable right after converting it) — the new
+  // facture surfaces alongside it instead, see convertedFacture below.
   protected readonly converting = signal(false);
   protected readonly conversionDeclined = signal(false);
+  protected readonly convertedFacture = signal<InvoiceWithTotals | null>(null);
 
   // Secondary affordance: the artisan can still open the exact, real PDF
   // (same app-pdf-preview-modal Phase 6 already used) as a fidelity check
@@ -118,6 +122,7 @@ export class InvoiceCreatePreviewStepPage {
       void this.router.navigate(['/factures/nouvelle/rapide/lignes']);
       return;
     }
+    this.draftStore.ensureNumberSuggestion();
     this.loadPreview();
     this.companyService
       .getProfile()
@@ -226,40 +231,44 @@ export class InvoiceCreatePreviewStepPage {
     return this.invoiceService.pdfUrl(invoiceId);
   }
 
-  protected openEmailModal(): void {
-    this.showEmailModal.set(true);
+  protected openEmailModal(invoice: InvoiceWithTotals): void {
+    this.emailModalInvoice.set(invoice);
   }
 
-  protected async share(): Promise<void> {
-    const invoice = this.createdInvoice();
-    if (!invoice || this.sharing()) {
+  protected async share(invoice: InvoiceWithTotals): Promise<void> {
+    if (this.sharingInvoiceId()) {
       return;
     }
-    this.sharing.set(true);
+    this.sharingInvoiceId.set(invoice.id);
     try {
       const outcome = await this.invoiceShareService.share(invoice);
       if (outcome === 'compose-email') {
-        this.openEmailModal();
+        this.openEmailModal(invoice);
       }
     } catch {
       this.toastService.error('Impossible de partager ce document pour le moment.');
     } finally {
-      this.sharing.set(false);
+      this.sharingInvoiceId.set(null);
     }
   }
 
   protected closeEmailModal(): void {
-    this.showEmailModal.set(false);
+    this.emailModalInvoice.set(null);
   }
 
   protected onEmailSent(updated: InvoiceWithTotals): void {
-    this.createdInvoice.set(updated);
-    this.showEmailModal.set(false);
+    if (this.convertedFacture()?.id === updated.id) {
+      this.convertedFacture.set(updated);
+    } else {
+      this.createdInvoice.set(updated);
+    }
+    this.emailModalInvoice.set(null);
     this.toastService.success('Email envoyé au client.');
   }
 
   protected startNewInvoice(): void {
     this.createdInvoice.set(null);
+    this.convertedFacture.set(null);
     this.errorMessage.set(null);
     this.conversionDeclined.set(false);
     this.draftStore.reset();
@@ -268,8 +277,9 @@ export class InvoiceCreatePreviewStepPage {
 
   // Phase 14.3: "Créer la facture aussi immédiatement ?" — accepting reuses
   // the devis's own already-confirmed data (see InvoiceService.convertToFacture
-  // on the backend) and swaps the success screen over to the new facture,
-  // rather than leaving the artisan looking at the devis they just converted.
+  // on the backend). Phase 23: the new facture is shown alongside the devis
+  // (fading in above it, see the template) rather than replacing it — the
+  // devis stays reachable/downloadable from this same screen afterwards.
   protected convertToFacture(): void {
     const devis = this.createdInvoice();
     if (!devis || this.converting()) {
@@ -283,7 +293,7 @@ export class InvoiceCreatePreviewStepPage {
       .subscribe({
         next: (facture) => {
           this.converting.set(false);
-          this.createdInvoice.set(facture);
+          this.convertedFacture.set(facture);
           this.toastService.success(`Devis converti en facture ${facture.number}.`);
         },
         error: (error: HttpErrorResponse) => {
@@ -300,6 +310,23 @@ export class InvoiceCreatePreviewStepPage {
 
   protected declineConversion(): void {
     this.conversionDeclined.set(true);
+  }
+
+  // "Créer la facture à partir du devis": unlike convertToFacture above (an
+  // untouched, already-persisted clone), this re-enters the wizard
+  // pre-filled from the just-created devis so the artisan can adjust
+  // anything — quantities, lines, the client's actual answer — before a
+  // facture is ever created. This devis was authored in mode rapide, so the
+  // target is always the rapide lignes step, never client (see
+  // InvoiceCreateShellPage.cameFromDevis).
+  protected editBeforeInvoicing(): void {
+    const devis = this.createdInvoice();
+    if (!devis) {
+      return;
+    }
+    void this.router.navigate(['/factures/nouvelle/rapide/lignes'], {
+      queryParams: { type: 'FACTURE', fromDevisId: devis.id },
+    });
   }
 
   // Moved here from InvoiceCreateLinesStepPage as-is (Phase 15: "Créer la
@@ -344,6 +371,13 @@ export class InvoiceCreatePreviewStepPage {
           // used up — premiumGateInterceptor already showed the paywall
           // modal, so this just skips the generic message.
           if (error.status === 402) {
+            return;
+          }
+          // Phase 27: same "surface the actual reason" rule as
+          // InvoiceCreateManualPage.submit — a custom/typed number already
+          // used by this company.
+          if (error.status === 409) {
+            this.errorMessage.set(error.error?.message ?? 'Ce numéro est déjà utilisé.');
             return;
           }
           this.errorMessage.set('Erreur lors de la création de la facture. Veuillez réessayer.');

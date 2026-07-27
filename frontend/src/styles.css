@@ -321,13 +321,16 @@ button:not(:disabled) {
   grid-template-columns: 3.5rem 12rem;
 }
 
-/* Materialize band — docs/design-system.md#motion's `panelStretch`: navbar
-   dropdown open/close. Same grid-track trick as `.fixed-add-button` above
-   (animating a 0fr/1fr row instead of `height: auto`, which can't
-   transition), so the panel grows from the trigger's own edge rather than a
-   fixed corner. The inner wrapper clips content while the row is still
-   collapsing/expanding. */
-.nav-dropdown-panel {
+/* Materialize band — docs/design-system.md#motion's `panelStretch`: any
+   expand/collapse panel (navbar dropdown menus, the invoice list's
+   attached-facture disclosure — see invoice-list-row.component). Same
+   grid-track trick as `.fixed-add-button` above (animating a 0fr/1fr row
+   instead of `height: auto`, which can't transition), so the panel grows
+   from the trigger's own edge rather than a fixed corner. The inner wrapper
+   clips content while the row is still collapsing/expanding. Generic name
+   (not nav-specific) since this is now used beyond the navbar — one shared
+   mechanism, per this file's own "one place to tune" convention. */
+.panel-stretch {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
@@ -335,11 +338,11 @@ button:not(:disabled) {
     grid-template-rows var(--duration-materialize) var(--ease-out-sharp),
     opacity var(--duration-materialize) var(--ease-out-sharp);
 }
-.nav-dropdown-panel.is-open {
+.panel-stretch.is-open {
   grid-template-rows: 1fr;
   opacity: 1;
 }
-.nav-dropdown-panel > div {
+.panel-stretch > div {
   overflow: hidden;
 }
 .nav-dropdown-chevron {

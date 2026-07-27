@@ -186,15 +186,21 @@ model Company {
   legalStatus        LegalStatus
   vatRateBasisPoints Int         @default(2000)
 
+  // Phase 27: only the prefix is stored here now — the actual next number is
+  // computed on demand as (the highest number ever used by this company for
+  // this document type) + 1, never from a separately-tracked counter (see
+  // next-number.util.ts). This is what lets an artisan freely override a
+  // document's number (e.g. to continue a previous software's sequence) and
+  // have every following auto-suggestion pick up right after it, with
+  // nothing left to fall out of sync. InvoiceRepository still locks this row
+  // during creation for concurrency safety, exactly as the old counter did.
   invoiceNumberPrefix String @default("F")
-  nextInvoiceNumber   Int    @default(1)
 
-  // Phase 14.3: a devis gets its own independent sequential counter, same
-  // "gapless, per-company" mechanism as invoiceNumberPrefix/nextInvoiceNumber
-  // above — French law's numbering rule only binds real factures, but there's
-  // no reason to weaken the same guarantee where it isn't legally required.
+  // Phase 14.3: a devis gets its own independent numbering pool, same
+  // reasoning as invoiceNumberPrefix above — French law's numbering rule
+  // only binds real factures, but there's no reason to weaken the same
+  // guarantee where it isn't legally required.
   devisNumberPrefix String @default("DEV")
-  nextDevisNumber   Int    @default(1)
 
   // Phase 8 onboarding tour: tourEnabled is the master on/off switch,
   // completedTours holds the ids (see onboarding/onboarding.constants.ts)
@@ -418,7 +424,10 @@ model PushDevice {
 model Invoice {
   id String @id @default(uuid())
 
-  number String   @unique
+  // Phase 27: unique per company, not globally — two different artisans
+  // both starting from the same default prefix/first-number (e.g. every new
+  // company's very first devis) must never collide. See @@unique below.
+  number String
   date   DateTime @default(now())
 
   customerName    String
@@ -469,6 +478,14 @@ model Invoice {
 
   // Phase 14.3: which kind of document this row is — see DocumentType above.
   documentType DocumentType @default(FACTURE)
+
+  // Phase 23: artisan-chosen, persisted like showUnitDetail/showBillingDetail
+  // below — set from the "Personnaliser l'affichage" screen, hides the whole
+  // Quantité/Prix unitaire columns on the generated PDF, leaving only
+  // description + line total. Purely a rendering concern, document-level
+  // (unlike the two per-line toggles below). Defaults false so an artisan
+  // who never opens that screen sees no behavior change.
+  simplifiedDisplay Boolean @default(false)
 
   // Set on a FACTURE created by converting a DEVIS — points at the original
   // devis, which conversion leaves untouched and independently retrievable
@@ -523,6 +540,7 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, number])
   @@index([companyId])
   @@index([customerId])
   // Cross-tenant sweep for ReminderCronService (Phase 22) — unlike every

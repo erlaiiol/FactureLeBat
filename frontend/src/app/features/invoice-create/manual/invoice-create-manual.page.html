@@ -12,9 +12,17 @@
     @if (invoice.documentType === 'DEVIS' && !conversionDeclined()) {
       <div class="w-full max-w-sm rounded-lg border border-line bg-surface p-4 text-left">
         <p class="mb-3 text-sm text-ink">Créer la facture aussi immédiatement ?</p>
-        <div class="flex gap-2">
+        <div class="flex flex-col gap-2">
           <app-big-button [disabled]="converting()" (click)="convertToFacture()">
-            {{ converting() ? 'Création…' : 'Oui' }}
+            {{ converting() ? 'Création…' : 'Facture identique' }}
+          </app-big-button>
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            [disabled]="converting()"
+            (click)="editBeforeInvoicing()"
+          >
+            Modifier avant facturation
           </app-big-button>
           <app-big-button
             variant="secondary"
@@ -41,6 +49,8 @@
       </app-big-button>
     </div>
   </div>
+} @else if (loadingSourceDevis()) {
+  <p class="mx-auto max-w-5xl text-sm text-ink-soft">Chargement du devis…</p>
 } @else {
   <div class="mx-auto flex max-w-5xl flex-col gap-6 pb-44">
     <div class="flex items-start justify-between gap-2">
@@ -57,15 +67,46 @@
           ← Choisir un autre mode
         </button>
       </div>
-      <button
-        type="button"
-        (click)="resetDraft()"
-        class="rounded-full border border-danger-subtle-border bg-danger-subtle px-3 py-2 text-danger hover:brightness-95"
-        aria-label="Vider la facture et recommencer"
-        title="Vider la facture et recommencer"
-      >
-        <app-icon-trash [size]="18" />
-      </button>
+      <div class="flex items-center gap-2">
+        <label class="flex items-center gap-1.5 text-sm">
+          <span class="font-medium text-ink-soft">Numéro</span>
+          <input
+            type="text"
+            [value]="store.number()"
+            (input)="store.setNumber($any($event.target).value)"
+            placeholder="Numéro"
+            class="w-32 rounded border-b border-transparent bg-secondary-subtle/40 px-1 font-mono text-ink outline-none transition-colors hover:bg-secondary-subtle focus:border-primary focus:bg-secondary-subtle"
+          />
+          <!-- Native details/summary: same "click to reveal" tooltip as the
+               totals summary's VAT info icon — works with a tap, no hover
+               state needed. -->
+          <details class="relative">
+            <summary
+              class="cursor-pointer list-none text-ink-soft hover:text-ink"
+              aria-label="À propos du numéro"
+              title="À propos du numéro"
+            >
+              ⓘ
+            </summary>
+            <div
+              class="absolute top-full right-0 z-10 mt-1 w-72 rounded-lg border border-line bg-surface p-2 text-xs font-normal text-ink shadow-lg"
+            >
+              Suggéré automatiquement à la suite du plus grand numéro déjà utilisé par votre
+              entreprise. Modifiable librement — par exemple pour reprendre la numérotation d'un
+              ancien logiciel ou du reste de votre carrière.
+            </div>
+          </details>
+        </label>
+        <button
+          type="button"
+          (click)="resetDraft()"
+          class="rounded-full border border-danger-subtle-border bg-danger-subtle px-3 py-2 text-danger hover:brightness-95"
+          aria-label="Vider la facture et recommencer"
+          title="Vider la facture et recommencer"
+        >
+          <app-icon-trash [size]="18" />
+        </button>
+      </div>
     </div>
 
     <!-- Facturé à: freehand, click-to-edit customer fields — no picker, no

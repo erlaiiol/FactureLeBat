@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
 import { DocumentType, InvoiceEntryMode, InvoiceStatus } from '../../generated/prisma/enums';
 import { PremiumGateService } from '../billing/premium-gate.service';
 import { CompanyService } from '../company/company.service';
@@ -10,10 +16,12 @@ import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceMapper } from './invoice.mapper';
 import {
+  CreateInvoiceData,
   CreateInvoiceServiceLineData,
   InvoiceRepository,
   InvoiceWithLines,
 } from './invoice.repository';
+import { computeNextDocumentNumber } from './next-number.util';
 import { InvoicePdfData } from './pdf/invoice-pdf-data.interface';
 import { expandServiceLineWeights } from './redistribution.util';
 
@@ -54,6 +62,21 @@ export class InvoiceService {
       await this.customerService.findById(companyId, dto.customerId);
     }
 
+    // "Créer la facture à partir du devis" (editable flow, see
+    // InvoiceDraftStore.loadFromInvoice/ManualInvoiceDraftStore.loadFromInvoice):
+    // same lineage/uniqueness guard as convertToFacture below, just reached
+    // through the normal create() path since the artisan may have edited
+    // the devis's data before submitting.
+    if (dto.convertedFromDevisId) {
+      const devis = await this.findRawById(companyId, dto.convertedFromDevisId);
+      if (devis.documentType !== DocumentType.DEVIS) {
+        throw new BadRequestException(`Invoice ${dto.convertedFromDevisId} is not a devis`);
+      }
+      if (devis.convertedToFacture) {
+        throw new BadRequestException(`Devis ${dto.convertedFromDevisId} is already converted`);
+      }
+    }
+
     // Manual mode (Phase 9.5) has no serviceLines concept at all —
     // ManualModeFieldsConsistency already rejects a request that tries to
     // combine the two, so this can only run for entryMode GUIDED.
@@ -67,7 +90,7 @@ export class InvoiceService {
       }
     }
 
-    const invoice = await this.invoiceRepository.createWithSequentialNumber({
+    const invoice = await this.createInvoiceRow({
       companyId: company.id,
       customerName: dto.customerName,
       customerAddress: dto.customerAddress,
@@ -88,6 +111,11 @@ export class InvoiceService {
       totalOverrideCents: dto.totalOverrideCents,
       entryMode,
       documentType: dto.documentType ?? DocumentType.FACTURE,
+      convertedFromDevisId: dto.convertedFromDevisId,
+      // Phase 27: absent means "use the auto-suggested next number" — see
+      // createInvoiceRow/computeNextDocumentNumber.
+      number: dto.number,
+      simplifiedDisplay: dto.simplifiedDisplay ?? false,
       // ManualModeFieldsConsistency guarantees `lines` is a non-empty array
       // whenever entryMode is GUIDED (the only branch that reads it below).
       lines:
@@ -153,7 +181,7 @@ export class InvoiceService {
       throw new BadRequestException(`Invoice ${devisId} is not a devis`);
     }
 
-    const invoice = await this.invoiceRepository.createWithSequentialNumber({
+    const invoice = await this.createInvoiceRow({
       companyId,
       customerName: devis.customerName,
       customerAddress: devis.customerAddress ?? undefined,
@@ -172,6 +200,7 @@ export class InvoiceService {
       entryMode: devis.entryMode,
       documentType: DocumentType.FACTURE,
       convertedFromDevisId: devis.id,
+      simplifiedDisplay: devis.simplifiedDisplay,
       lines: devis.lines.map((line) => ({
         description: line.description,
         unit: line.unit,
@@ -307,6 +336,36 @@ export class InvoiceService {
 
     const company = await this.companyService.getProfile(companyId);
     return this.mapper.toPreviewInvoiceWithTotals(dto, company);
+  }
+
+  // Phase 27: the suggestion shown on the "numéro" field before the artisan
+  // has typed anything of their own — same computation
+  // createInvoiceRow/createWithSequentialNumber falls back to when no
+  // explicit number is submitted, just read outside any transaction/lock
+  // since nothing is being reserved yet (see InvoiceRepository.findNumbers).
+  async getNextNumber(companyId: string, documentType: DocumentType): Promise<{ number: string }> {
+    const company = await this.companyService.getProfile(companyId);
+    const existing = await this.invoiceRepository.findNumbers(companyId, documentType);
+    const prefix =
+      documentType === DocumentType.DEVIS ? company.devisNumberPrefix : company.invoiceNumberPrefix;
+    return { number: computeNextDocumentNumber(prefix, existing) };
+  }
+
+  // Thin wrapper shared by create()/convertToFacture(): turns the DB's
+  // unique-constraint violation (an artisan's custom number already used,
+  // or — vanishingly unlikely given the row lock — a race on the
+  // auto-computed one) into a clean 409, same
+  // ProductService.mapKnownError/P2002 convention used elsewhere in this
+  // codebase, instead of an unhandled 500 from the raw DB error.
+  private async createInvoiceRow(data: CreateInvoiceData): Promise<InvoiceWithLines> {
+    try {
+      return await this.invoiceRepository.createWithSequentialNumber(data);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Ce numéro est déjà utilisé.');
+      }
+      throw error;
+    }
   }
 
   private async findRawById(companyId: string, id: string): Promise<InvoiceWithLines> {

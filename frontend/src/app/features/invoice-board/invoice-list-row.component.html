@@ -1,0 +1,131 @@
+<tr
+  [attr.data-invoice-row-id]="invoice().id"
+  class="group border-b border-line/60 transition-colors last:border-b-0 hover:bg-secondary-subtle/50"
+  [class.bg-info-subtle]="highlighted()"
+>
+  <td class="px-4 py-3 align-top">
+    @if (isDevis()) {
+      <app-badge variant="info" tone="subtle">Devis</app-badge>
+    } @else {
+      <div class="inline-block">
+        <button
+          #statusTrigger
+          type="button"
+          (click)="onStatusBadgeClick(statusTrigger)"
+          class="cursor-pointer"
+        >
+          <app-badge [variant]="statusVariant()" tone="solid">{{ statusLabel() }}</app-badge>
+        </button>
+        @if (statusMenuOpen()) {
+          <div class="fixed inset-0 z-40" (click)="toggleStatusMenu.emit()"></div>
+          <div
+            class="anim-line-in fixed z-50 flex w-40 flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-xl"
+            [style.top.px]="menuPosition()?.top"
+            [style.left.px]="menuPosition()?.left"
+          >
+            <button
+              type="button"
+              (click)="setNonPayee.emit()"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+              [class.font-semibold]="invoice().status === 'NON_PAYEE'"
+            >
+              Non payée
+            </button>
+            <button
+              type="button"
+              (click)="setPaid.emit()"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+              [class.font-semibold]="invoice().status === 'PAYEE'"
+            >
+              Payée
+            </button>
+            <button
+              type="button"
+              (click)="setCancelled.emit()"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+              [class.font-semibold]="invoice().status === 'ANNULEE'"
+            >
+              Annulée
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </td>
+
+  <td class="px-4 py-3 align-top whitespace-nowrap text-ink-soft">
+    {{ invoice().date | date: 'dd/MM/yyyy' }}
+    @if (!isDevis() && invoice().dueDate) {
+      <span class="block text-xs" [class.text-danger]="overdue()">
+        Échéance {{ invoice().dueDate | date: 'dd/MM/yyyy' }}
+      </span>
+    }
+    @if (!isDevis() && invoice().lastReminderAt) {
+      <span class="block text-xs text-ink-soft/80">
+        Relancée {{ invoice().lastReminderAt | date: 'dd/MM/yyyy' }}
+      </span>
+    }
+  </td>
+
+  <td class="px-4 py-3 align-top">
+    <div class="flex flex-col">
+      <span class="font-medium text-ink">
+        {{ isDevis() ? 'Devis' : 'Facture' }} {{ invoice().number }}
+      </span>
+      @if (isDevis() && attachedFactureNumber(); as factureNumber) {
+        <button
+          type="button"
+          (click)="toggleHighlight.emit()"
+          class="-mt-0.5 flex items-center gap-1 text-left text-xs text-info hover:underline"
+          [class.font-semibold]="highlighted()"
+        >
+          → Facture {{ factureNumber }}
+        </button>
+      }
+    </div>
+  </td>
+
+  <td class="px-4 py-3 align-top text-ink">{{ invoice().customerName }}</td>
+
+  <td class="px-4 py-3 text-right align-top font-mono text-ink">
+    {{ invoice().totalInclVatCents | centsToEuros }}
+  </td>
+
+  <td class="px-4 py-3 align-top">
+    <div class="flex flex-wrap items-center justify-end gap-2">
+      @if (isDevis() && !invoice().convertedToFacture) {
+        <button
+          type="button"
+          [disabled]="converting()"
+          (click)="convertToFacture.emit()"
+          class="rounded-lg bg-info px-2.5 py-1.5 text-xs font-medium text-info-fg hover:brightness-90 disabled:opacity-60"
+        >
+          {{ converting() ? 'Création…' : 'Facture identique' }}
+        </button>
+        <button
+          type="button"
+          [disabled]="converting()"
+          (click)="createFromDevis.emit()"
+          class="rounded-lg bg-secondary px-2.5 py-1.5 text-xs font-medium text-secondary-fg hover:brightness-90 disabled:opacity-60"
+        >
+          Facture à partir du devis
+        </button>
+      }
+      <a
+        [href]="pdfUrl()"
+        target="_blank"
+        class="rounded-lg bg-secondary px-2.5 py-1.5 text-xs font-medium text-secondary-fg hover:brightness-90"
+      >
+        Télécharger
+      </a>
+      <button
+        type="button"
+        [disabled]="sharing()"
+        (click)="share.emit()"
+        class="rounded-lg bg-secondary-subtle px-2.5 py-1.5 text-xs font-medium text-secondary-subtle-fg hover:brightness-95 disabled:opacity-60"
+      >
+        {{ sharing() ? 'Partage…' : 'Partager' }}
+      </button>
+    </div>
+  </td>
+</tr>

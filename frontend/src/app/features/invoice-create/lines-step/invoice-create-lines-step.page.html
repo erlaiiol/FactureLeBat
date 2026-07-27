@@ -30,7 +30,7 @@
       appTourAnchor="invoice-add-product-button"
       (click)="toggleProductPanel()"
       class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-primary text-primary-fg shadow-lg"
-      [class.is-open]="productPanelOpen()"
+      [class.is-open]="productPanelOpen() || productButtonTourHighlighted()"
       aria-label="Ajouter un produit"
     >
       <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
@@ -38,7 +38,7 @@
       </span>
       <span
         class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
-        [class.opacity-100]="productPanelOpen()"
+        [class.opacity-100]="productPanelOpen() || productButtonTourHighlighted()"
       >
         Ajouter un produit
       </span>
@@ -98,7 +98,7 @@
       appTourAnchor="invoice-add-service-button"
       (click)="toggleServicePanel()"
       class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-info text-info-fg shadow-lg"
-      [class.is-open]="servicePanelOpen()"
+      [class.is-open]="servicePanelOpen() || serviceButtonTourHighlighted()"
       aria-label="Ajouter une prestation"
     >
       <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
@@ -106,7 +106,7 @@
       </span>
       <span
         class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
-        [class.opacity-100]="servicePanelOpen()"
+        [class.opacity-100]="servicePanelOpen() || serviceButtonTourHighlighted()"
       >
         Ajouter une prestation
       </span>

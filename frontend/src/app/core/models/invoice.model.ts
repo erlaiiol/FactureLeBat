@@ -127,6 +127,22 @@ export interface CreateInvoiceRequest {
   // mirrors the backend's ManualModeFieldsConsistency rule.
   vatApplicableOverride?: boolean;
   vatRateBasisPointsOverride?: number;
+  // Phase 23: document-level PDF rendering toggle, set from the "Personnaliser
+  // l'affichage" screen — hides the whole Quantité/Prix unitaire columns,
+  // showing only description + line total. Purely a display concern, same
+  // spirit as a line's showUnitDetail/showBillingDetail; defaults to false
+  // backend-side when omitted.
+  simplifiedDisplay?: boolean;
+  // "Créer la facture à partir du devis": set when this draft was seeded
+  // from an existing devis (see InvoiceDraftStore.loadFromInvoice /
+  // ManualInvoiceDraftStore.loadFromInvoice) so the resulting facture stays
+  // linked to it, same as InvoiceService.convertToFacture's one-shot clone.
+  convertedFromDevisId?: string;
+  // Phase 27: the artisan's own explicit document number, overriding the
+  // "highest number ever used + 1" suggestion (see
+  // InvoiceService.getNextNumber) — e.g. to continue the sequence from a
+  // previous software. Absent/blank means "use the suggestion".
+  number?: string;
 }
 
 export interface InvoiceLineWithTotal {
@@ -236,6 +252,8 @@ export interface InvoiceWithTotals {
   dueDate: string | null;
   paidAt: string | null;
   lastReminderAt: string | null;
+  // Phase 23: see CreateInvoiceRequest.simplifiedDisplay.
+  simplifiedDisplay: boolean;
 }
 
 // Phase 16: drives both the board's drag/button status changes and a
@@ -258,4 +276,9 @@ export interface SendInvoiceEmailRequest {
 export interface InvoiceMailTemplate {
   subject: string;
   text: string;
+}
+
+// Phase 27: the suggested next document number — see InvoiceService.getNextNumber.
+export interface NextNumberResponse {
+  number: string;
 }

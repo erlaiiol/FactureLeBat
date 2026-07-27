@@ -5,24 +5,17 @@
     <title>FactureLe</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Phase 22: the web deployment gets its CSP from infra/Caddyfile's
-    response header (see docs/deployment.md), but a Capacitor app's WebView
-    serves this HTML from the local bundle, which never passes through
-    Caddy — no header CSP applies there at all otherwise. A meta-tag CSP is
-    the one form that's enforced regardless of how the HTML was delivered,
-    so this is a second, portable copy of the same policy, not a
-    replacement for the header (header-only directives like
-    frame-ancestors/Permissions-Policy can't be expressed here and stay
-    server-side only). Keep the two in sync if either ever changes.
-    This file is also the base for index.dev.html (angular.json's
-    `development` build configuration swaps to it — see that file's own
-    comment): frontend and backend are same-origin everywhere this file
-    actually ships (prod via Caddy/nginx, mobile via capacitor.config.ts's
-    server.hostname trick), so connect-src 'self' is correct here — it's
-    only plain `ng serve` (:4200 vs :3000) that needs the relaxed copy. -->
+    <!-- Same CSP as index.html's, except connect-src also allows
+    localhost:3000 — only `ng serve` (dev build configuration, see
+    angular.json's `index` override) ever uses this file. Production and
+    the Capacitor mobile bundle both keep index.html's stricter 'self' as
+    published, since their backend is genuinely same-origin (Caddy/nginx
+    proxying in prod, capacitor.config.ts's server.hostname trick on
+    mobile — see that file's own comment) — only plain local dev has the
+    frontend and backend on two different origins (:4200 and :3000). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:3000; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />

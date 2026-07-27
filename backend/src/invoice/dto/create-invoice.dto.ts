@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -164,4 +165,44 @@ export class CreateInvoiceDto {
   @Min(0)
   @Max(10000)
   vatRateBasisPointsOverride?: number;
+
+  // Phase 23: document-level PDF rendering toggle set from the
+  // "Personnaliser l'affichage" screen — hides the whole Quantité/Prix
+  // unitaire columns, leaving only description + line total. Same
+  // rendering-only spirit as CreateInvoiceLineDto's showUnitDetail/
+  // showBillingDetail, just document-level instead of per-line.
+  @IsOptional()
+  @IsBoolean()
+  simplifiedDisplay?: boolean = false;
+
+  // "Créer la facture à partir du devis" (editable flow): the artisan
+  // re-entered the creation wizard pre-filled from this devis and may have
+  // changed anything before submitting — unlike InvoiceService.convertToFacture
+  // (an untouched, one-shot clone), this still records the lineage so the
+  // resulting facture shows up linked to its devis (see
+  // schema.prisma's Invoice.convertedFromDevisId). Validated in
+  // InvoiceService.create against this same tenant's devis, not just shaped
+  // like a UUID.
+  @IsOptional()
+  @IsUUID()
+  convertedFromDevisId?: string;
+
+  // Phase 27: the artisan's own explicit document number — overrides
+  // InvoiceService's own "highest number ever used + 1" suggestion (see
+  // next-number.util.ts), e.g. to continue the sequence from a previous
+  // software or the rest of their career. Absent means "use the
+  // suggestion". Charset is deliberately restrictive (no quotes, backslash,
+  // or line breaks) — this value is later interpolated unescaped into a
+  // Content-Disposition filename and a mail attachment filename (see
+  // InvoiceController.downloadPdf/InvoiceMailService.send), where those
+  // characters would be a header-injection/broken-download risk.
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  @Matches(/^[\p{L}\p{N} _.-]+$/u, {
+    message:
+      'Le numéro ne peut contenir que des lettres, chiffres, espaces, points, tirets et underscores.',
+  })
+  number?: string;
 }

@@ -1,13 +1,15 @@
 <div class="mx-auto flex max-w-2xl flex-col gap-6 pb-44">
   <nav class="flex items-center justify-between gap-2 text-sm font-medium">
     <div class="flex gap-2">
-      <a
-        routerLink="client"
-        routerLinkActive="bg-primary !text-primary-fg"
-        class="rounded-full bg-secondary-subtle px-4 py-2 text-ink"
-      >
-        1. Client
-      </a>
+      @if (!cameFromDevis()) {
+        <a
+          routerLink="client"
+          routerLinkActive="bg-primary !text-primary-fg"
+          class="rounded-full bg-secondary-subtle px-4 py-2 text-ink"
+        >
+          1. Client
+        </a>
+      }
       <a
         routerLink="lignes"
         routerLinkActive="bg-primary !text-primary-fg"
@@ -34,7 +36,11 @@
     </button>
   </nav>
 
-  <router-outlet />
+  @if (loadingSourceDevis()) {
+    <p class="text-sm text-ink-soft">Chargement du devis…</p>
+  } @else {
+    <router-outlet />
+  }
 </div>
 
 <div class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface p-4 shadow-lg">
@@ -50,12 +56,14 @@
           variant="secondary"
           tone="subtle"
           appTourAnchor="invoice-preview"
-          [disabled]="!draftStore.canPreview()"
-          (click)="goToPreview()"
+          [disabled]="!draftStore.canPreview() || loadingPdfPreview()"
+          (click)="openPdfPreview()"
         >
-          Aperçu de la facture
+          {{ loadingPdfPreview() ? 'Génération…' : 'Aperçu de la facture' }}
         </app-big-button>
       </div>
     }
   </div>
 </div>
+
+<app-pdf-preview-modal [pdfBlobUrl]="pdfPreviewUrl()" (closed)="closePdfPreview()" />

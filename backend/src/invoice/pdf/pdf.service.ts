@@ -322,7 +322,27 @@ export class PdfService {
     };
   }
 
+  // Phase 23: simplifiedDisplay collapses this down to just Description +
+  // Total — an artisan-chosen, document-level toggle (see InvoicePdfData.
+  // simplifiedDisplay), never the default. Header/widths/each row's cells
+  // must shrink together, so both column sets are built as whole arrays
+  // rather than filtering a fixed 5-column shape after the fact.
   private buildLinesTable(data: InvoicePdfData): Content {
+    if (data.simplifiedDisplay) {
+      const header = ['Description', 'Total'];
+      const rows = data.lines.map((line: InvoicePdfLine) => [
+        line.description,
+        centsToEuros(line.totalCents),
+      ]);
+      return {
+        table: {
+          headerRows: 1,
+          widths: ['*', 'auto'],
+          body: [header, ...rows],
+        },
+      };
+    }
+
     const header = ['Description', 'Unité', 'Quantité', 'Prix unitaire', 'Total'];
     const rows = data.lines.map((line: InvoicePdfLine) => [
       line.description,

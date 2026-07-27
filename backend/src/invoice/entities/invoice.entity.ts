@@ -157,4 +157,6 @@ export interface InvoiceWithTotals {
   dueDate: Date | null;
   paidAt: Date | null;
   lastReminderAt: Date | null;
+  // Phase 23: see schema.prisma's comment on Invoice.simplifiedDisplay.
+  simplifiedDisplay: boolean;
 }

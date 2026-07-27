@@ -19,9 +19,7 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     legalStatus: 'COMPANY',
     vatRateBasisPoints: 2000,
     invoiceNumberPrefix: 'F',
-    nextInvoiceNumber: 2,
     devisNumberPrefix: 'DEV',
-    nextDevisNumber: 1,
     tourEnabled: true,
     completedTours: [],
     smtpHost: null,
@@ -76,6 +74,7 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
     documentType: 'FACTURE',
     convertedFromDevisId: null,
     convertedToFacture: null,
+    simplifiedDisplay: false,
     lines: [
       {
         id: 'line-1',

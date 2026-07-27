@@ -82,6 +82,11 @@ export interface InvoicePdfData {
   lines: InvoicePdfLine[];
   serviceLines: InvoicePdfServiceLine[];
   manualTable?: InvoicePdfManualTable;
+  // Phase 23: GUIDED-only — hides the whole Quantité/Prix unitaire columns
+  // in PdfService.buildLinesTable, leaving only description + total. Always
+  // false for MANUAL, whose freehand column set has no fixed Quantité/Prix
+  // unitaire columns to hide in the first place.
+  simplifiedDisplay: boolean;
 
   vatApplicable: boolean;
   vatRateBasisPoints: number;

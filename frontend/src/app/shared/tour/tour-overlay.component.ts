@@ -2,19 +2,26 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   HostListener,
   computed,
   effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { TourAnchorRegistryService } from './tour-anchor-registry.service';
 import { computeCornerPosition, computePopoverPosition, TourSize } from './tour-position.util';
 import { TourService } from './tour.service';
 
-// Rough, fixed estimate of the popover's footprint — good enough for
-// clamped positioning without measuring the real rendered element, since a
-// few px of slack is invisible on a spotlight overlay like this one.
+// Fallback used only until the real popover card has rendered at least once
+// (its very first frame) — width is reliable (the card is a fixed w-80), but
+// height varies with each step's own title/body length, so a fixed guess
+// here used to send a long-bodied step's card (see 'add-line' in
+// tour-definitions.ts) past the bottom of the viewport in corner placement:
+// computeCornerPosition anchors the card's *top* edge off of this height, so
+// underestimating it pushes the real, taller card's bottom edge off-screen.
+// measuredPopoverSize (below) replaces this the instant the card is measured.
 const POPOVER_ESTIMATE: TourSize = { width: 320, height: 220 };
 
 // Padding around the real target rect, and a floor under its own width/
@@ -61,12 +68,21 @@ export class TourOverlayComponent {
 
   protected readonly targetRect = signal<DOMRect | null>(null);
 
+  // The popover card itself (see the template) — never destroyed between
+  // steps (its `@if` stays true for the whole tour), so one ResizeObserver
+  // attached once (see the constructor) keeps this current across every
+  // step's own title/body length, including mid-step content changes.
+  private readonly popoverCard = viewChild<ElementRef<HTMLElement>>('popoverCard');
+  private readonly measuredPopoverSize = signal<TourSize | null>(null);
+  private popoverResizeObserver: ResizeObserver | null = null;
+
   protected readonly popoverPosition = computed(() => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const popoverSize = this.measuredPopoverSize() ?? POPOVER_ESTIMATE;
     if (this.tourService.currentStep()?.popoverPlacement === 'corner') {
-      return computeCornerPosition(POPOVER_ESTIMATE, viewport);
+      return computeCornerPosition(popoverSize, viewport);
     }
-    return computePopoverPosition(this.targetRect(), POPOVER_ESTIMATE, viewport);
+    return computePopoverPosition(this.targetRect(), popoverSize, viewport);
   });
 
   // The dimmed backdrop as a single evenodd path (full-viewport rect minus
@@ -126,11 +142,32 @@ export class TourOverlayComponent {
       queueMicrotask(() => this.stepAnimating.set(true));
     });
 
+    // Set up once the popover card first mounts (this effect only ever runs
+    // again if the card were destroyed and recreated, which it isn't — see
+    // popoverCard's own comment) — real border-box measurements (via
+    // getBoundingClientRect in the callback, not ResizeObserver's own
+    // content-box contentRect) on every size change, including the very
+    // first render and every step-to-step title/body change afterwards.
+    effect(() => {
+      const element = this.popoverCard()?.nativeElement;
+      this.popoverResizeObserver?.disconnect();
+      this.popoverResizeObserver = null;
+      if (!element) {
+        return;
+      }
+      this.popoverResizeObserver = new ResizeObserver(() => {
+        const rect = element.getBoundingClientRect();
+        this.measuredPopoverSize.set({ width: rect.width, height: rect.height });
+      });
+      this.popoverResizeObserver.observe(element);
+    });
+
     this.destroyRef.onDestroy(() => {
       this.advanceListenerCleanup?.();
       if (this.settleRafHandle !== null) {
         cancelAnimationFrame(this.settleRafHandle);
       }
+      this.popoverResizeObserver?.disconnect();
     });
   }
 
