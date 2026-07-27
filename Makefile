@@ -1,4 +1,4 @@
-.PHONY: dev prod down migrate logs deploy backup logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android
+.PHONY: dev prod down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-dev android-prod ios-dev ios-prod
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build
@@ -41,6 +41,14 @@ deploy:
 backup:
 	sh infra/backup.sh
 
+# Read-only check of backend/.env and infra/.env: flags missing required
+# secrets, dev-only defaults left in place, secrets that look too short to be
+# a real generated value, and optional features (Stripe, Google OAuth, system
+# email, push, ...) that are half-configured or simply not set. Never prints
+# a secret's value. Safe to run anytime, including against prod.
+audit:
+	sh infra/audit-config.sh
+
 # Phase 22 mobile app (see docs/roadmap.md) — builds the production Angular
 # bundle and syncs it, plus every installed Capacitor plugin, into
 # frontend/ios/ and frontend/android/. Requires Xcode (with an active full
@@ -77,3 +85,27 @@ ios: mobile-build
 # activates once that file exists (frontend/android/app/build.gradle).
 android: mobile-build
 	cd frontend && npx cap open android
+
+# Same app as `ios`/`android` above, but built and installed straight onto a
+# running emulator/simulator (frontend/scripts/run-{android,ios}.sh) — no
+# Xcode/Android Studio window to click through, closer to "install it like
+# it came from the store": release build, real app icon, no dev server
+# attached. Still requires the same Xcode/Android SDK prerequisites as
+# `ios`/`android`, an already-booted (or bootable) emulator/simulator, and
+# for *-dev, a backend actually reachable on your LAN — see the scripts'
+# own comments for exactly what each mode does.
+#   make android-dev [LOCAL_HOST=192.168.1.23]   # backend on your machine
+#   make android-prod                            # real API domain
+#   make ios-dev [LOCAL_HOST=192.168.1.23]
+#   make ios-prod
+android-dev:
+	sh frontend/scripts/run-android.sh dev $(LOCAL_HOST)
+
+android-prod:
+	sh frontend/scripts/run-android.sh prod
+
+ios-dev:
+	sh frontend/scripts/run-ios.sh dev $(LOCAL_HOST)
+
+ios-prod:
+	sh frontend/scripts/run-ios.sh prod

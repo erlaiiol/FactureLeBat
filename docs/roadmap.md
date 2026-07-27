@@ -1354,3 +1354,53 @@ The board's 5 columns + drag-and-drop (`invoice-board.page.html`, `interactjs`-b
 - **`make ios`/`make android`** (Makefile) build the production Angular bundle, `cap sync` (copying it plus every installed plugin into `ios/`/`android/`), then open the native IDE — `LOCAL_HOST=<lan-ip>` routes at a local backend instead of the real domain for simulator/emulator testing. Neither target installs Xcode/Android Studio/the Android SDK themselves, only invokes them.
 
 ---
+
+# Phase 22.5 — Rewarded Ads: Bonus Free Invoices on Mobile
+
+## Objective
+
+Give a mobile artisan past their one free invoice (Phase 14's gate) a way to unlock a handful more without subscribing: watch a short batch of rewarded video ads (Google AdMob) to earn one bonus invoice, up to a small lifetime cap per company. Mobile-only (iOS/Android via Capacitor, Phase 22) — the web app's paywall is untouched, still Stripe-or-nothing.
+
+This is not meant to replace the 15€/mois subscription as a viable full-time path (an artisan who invoices regularly still needs to subscribe) — it's a bridge for someone who hit the wall this month and isn't ready to pay yet, and a low-cost way to partially offset server/infra costs from users who would otherwise convert to €0.
+
+## How It Works
+
+1. An artisan on mobile hits the existing paywall (`PaywallModalComponent`, thrown as `PremiumRequiredException` from `PremiumGateService.assertCanCreateInvoice`).
+2. If they still have bonus credits available (lifetime cap: **5 per company**) and are on native mobile (not web), the modal offers an alternative to subscribing: **"Regarder des pubs pour débloquer une facture."**
+3. Accepting plays a short, fixed-size batch of rewarded video ads back to back (exact count decided at implementation time, in the 3–5 range the user asked for) via AdMob's rewarded video format.
+4. Each ad completion is confirmed server-side via **AdMob Server-Side Verification (SSV)** — never trusted from the client alone (a client could otherwise fake "ad watched" callbacks with no ad ever shown). Once the batch is confirmed complete, the backend grants one bonus invoice credit.
+5. `PremiumGateService.assertCanCreateInvoice` allows one additional invoice per unspent bonus credit, same "frustrate at the last moment" gate as Phase 14 — nothing about catalog/customer/service screens changes.
+6. Once all 5 lifetime credits are spent, the modal only offers the subscribe path — no infinite ad loop.
+
+## Data Model
+
+- `Company.rewardedAdCreditsGranted: Int @default(0)` — how many bonus invoice credits this company has ever earned, capped at 5 by application logic before granting (mirrors `PromoCodeRedemption`'s "cap enforced explicitly, not just assumed" pattern, just without needing a separate join table since there's no per-code identity to track, only a count).
+- `PremiumGateService.assertCanCreateInvoice`'s free-trial check changes from the hardcoded `invoiceCount < 1` to `invoiceCount < 1 + rewardedAdCreditsGranted` — `invoiceCount` itself stays derived (never persisted), exactly as today; only the *allowance* becomes variable instead of a constant `1`.
+- A small `RewardedAdBatch` (or similar) row per in-progress batch — tracks how many of the required ad views in the *current* batch have been SSV-confirmed for a given company, so a batch can survive the app being backgrounded mid-sequence rather than losing progress. Cleared/consumed once the batch completes and a credit is granted.
+
+## Features
+
+- [ ] AdMob Capacitor plugin integrated (`@capacitor-community/admob` or equivalent), rewarded video ad unit configured for both iOS and Android
+- [ ] Paywall (`PaywallModalComponent`) gains a mobile-only "regarder des pubs" alternative path, hidden entirely on web and once the 5-credit lifetime cap is reached
+- [ ] Sequential rewarded-ad batch flow: plays the configured number of ads back to back, tracking progress if the app is backgrounded mid-batch
+- [ ] Backend AdMob SSV callback endpoint: verifies Google's signature on each reward callback (rotating public keys fetched from Google's published verification-key endpoint, cached), matches the callback's `custom_data` back to a company, and increments that company's in-progress batch
+- [ ] Once a batch reaches its required count, one bonus invoice credit is granted (`rewardedAdCreditsGranted += 1`), capped server-side at 5 — the cap is enforced in the granting code path itself, not just hidden client-side once reached
+- [ ] `PremiumGateService.assertCanCreateInvoice` updated to the `1 + rewardedAdCreditsGranted` allowance; existing e2e coverage for the free-trial gate extended for the new allowance
+- [ ] Admin dashboard (existing users list/detail, Phase 14) shows a company's ad-credit count (e.g. "3/5 utilisés") alongside its existing subscription status — same "admin can see the full billing picture" precedent as `premiumGrantedUntil`
+- [ ] iOS: App Tracking Transparency (ATT) prompt wired if personalized ads are used, or AdMob configured for non-personalized-only to skip ATT entirely (decide at implementation time — non-personalized is simpler and avoids an extra permission prompt, at the cost of lower fill/eCPM); `PrivacyInfo.xcprivacy` (scaffolded in Phase 22) updated to declare the AdMob SDK's actual data collection; SKAdNetwork identifiers added to `Info.plist` per Google's published list
+- [ ] Android: `AD_ID` permission declared (or explicitly excluded if non-personalized-only) in `AndroidManifest.xml`
+
+## Non-goals
+
+- No ads anywhere on the web app — the existing Stripe-only paywall (`PaywallModalComponent` on web) is unchanged.
+- No ads or reward mechanism for companies that already have premium access (active subscription or a live `premiumGrantedUntil` grant) — this only ever applies to a company currently blocked by the free-trial gate.
+- Not a replacement for Phase 14's subscription funnel — the modal always still offers "s'abonner" as the primary path; watching ads is the secondary option, and disappears once the lifetime cap is spent.
+- No generic display-ad network (banners, interstitials outside this one reward flow) — rewarded video in this one specific spot only.
+
+## Notes
+
+- Depends on Phase 22 (Capacitor mobile shell must exist) and Phase 14 (`PremiumGateService`/`PaywallModalComponent`).
+- Extends Phase 22's store-compliance audit rather than starting a new one — the AdMob SDK's data collection needs to be folded into the same `PrivacyInfo.xcprivacy` and both stores' data-safety questionnaires Phase 22 already tracked as pre-submission checklist items.
+- The exact ad-count-per-batch (3, 4, or 5) and whether ads are personalized are the two implementation-time decisions left open — both are cheap to change later (a config value and an AdMob dashboard toggle, not a schema change), so not worth blocking this phase's build on.
+
+---

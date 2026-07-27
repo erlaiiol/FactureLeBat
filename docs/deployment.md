@@ -90,6 +90,22 @@ HTTPS is entirely owned by the `caddy` service (see [Topology](#topology) above)
   ```
 - The `:80`-no-domain fallback (`infra/.env.example`'s `DOMAIN=:80` default, for local `make prod` smoke-testing — see below) can't reach production by accident: `infra/deploy.sh` refuses to run if `infra/.env`'s `DOMAIN` is empty or still `:80`.
 
+## DDoS / bot protection (Cloudflare)
+
+Not enabled by default — `DOMAIN` alone (a bare A/AAAA record at your registrar) works fine and is what [First deploy](#first-deploy) above describes. This section is for turning on Cloudflare's free plan in front of Caddy, recommended once the app has real users, since it absorbs volumetric/multi-vector (L3-L7) attacks before they ever reach the VPS — something no amount of app-level rate-limiting can do on its own.
+
+`infra/Caddyfile` and `backend/src/main.ts` are already prepared for this (a `trusted_proxies` block listing Cloudflare's published edge ranges, and `app.set('trust proxy', 2)`) — turning Cloudflare on is a dashboard/DNS change, not a code change, except for the one `trust proxy` bump called out below.
+
+1. Create a free account at [cloudflare.com](https://cloudflare.com) and add your domain.
+2. At your registrar, replace the domain's nameservers with the two Cloudflare assigns you (takes anywhere from minutes to ~24h to propagate).
+3. In Cloudflare's DNS tab, make sure the `A`/`AAAA` record pointing at the VPS is **proxied** (orange cloud, not grey) — this is what actually routes traffic through Cloudflare's edge instead of straight to the VPS.
+4. SSL/TLS tab → set the mode to **Full (strict)**, not Flexible: Caddy already terminates real Let's Encrypt certs, so Cloudflare should verify the origin cert rather than trust any self-signed one. Flexible would mean Cloudflare-to-origin traffic goes over plain HTTP.
+5. Security tab → Bots/WAF: the free plan includes Cloudflare's managed WAF ruleset and basic bot-fight mode — turn both on. If under an active attack, the Security tab's "I'm Under Attack Mode" adds a JS challenge in front of every request; only use it while actively firefighting, since it adds friction for real visitors too.
+6. In `backend/src/main.ts`, change `app.set('trust proxy', 2)` to `app.set('trust proxy', 3)` (Cloudflare is now an extra hop before Caddy) and redeploy (`make deploy`). Skipping this step doesn't break traffic, but it does silently key the login/forgot-password rate limits off Cloudflare's edge IP instead of real visitor IPs — the same shared-bucket problem `trust proxy` was added to avoid in the first place.
+7. Sanity check after switching: `curl -sI https://<your-domain>` should show Cloudflare's `cf-ray` response header, and `docker compose -f infra/docker-compose.prod.yml logs backend` on a fresh request should log the real visitor IP, not one of Cloudflare's ranges.
+
+Firewall rules stay as-is (step in [Prerequisites](#prerequisites)) — Cloudflare proxying doesn't change what's open on the VPS itself, it just means most attack traffic never gets that far. Optionally, once confident DNS is stable, you can further restrict the VPS firewall to only accept 80/443 from Cloudflare's published ranges (same list as `infra/Caddyfile`'s `trusted_proxies`) to stop anyone from bypassing Cloudflare by hitting the VPS's IP directly — not done by default here since it makes debugging (`curl` straight to the VPS) harder and isn't needed for the WAF/DDoS protection itself to work.
+
 ## Backups
 
 ```bash
@@ -149,6 +165,20 @@ Both need `frontend/ios/`/`frontend/android/` (already committed) and, for push 
 ```bash
 make ios LOCAL_HOST=192.168.1.23
 ```
+
+**Installing straight onto an emulator/simulator**, instead of opening Xcode/Android Studio and hitting Run by hand:
+
+```bash
+make android-dev [LOCAL_HOST=192.168.1.23]   # backend on your machine, auto-detects LAN IP if omitted
+make android-prod                            # real API domain (facturele.net)
+make ios-dev [LOCAL_HOST=192.168.1.23]
+make ios-prod
+```
+
+These (`frontend/scripts/run-android.sh`/`run-ios.sh`) build a release-configuration artifact and `adb install`/`xcrun simctl install` it directly, then launch it — closer to "as if it came from the store" than `make ios`/`android` (which still open the IDE): a real app icon, no dev server or debugger attached. Two things worth knowing:
+
+- Android's `release` build type is signed with Gradle's auto-generated debug keystore (`frontend/android/app/build.gradle`) — fine for sideloading onto an emulator, but not a store-distribution signature. A real release keystore needs generating before ever uploading to the Play Store (see the comment there).
+- The `*-dev` modes temporarily uncomment the same cleartext/ATS exceptions `LOCAL_HOST=` needs above (`AndroidManifest.xml`+`network_security_config.xml`, `Info.plist`), fill in your LAN IP, build, then revert those files via `git checkout` on exit — so nothing ends up committed uncommented. This requires `frontend/android/app/src/main/AndroidManifest.xml`, its `network_security_config.xml`, and `frontend/ios/App/App/Info.plist` to be clean (no uncommitted changes) before running; commit or stash first if they aren't.
 
 Store submission itself (developer accounts, App Store Connect/Play Console listings, review) is out of scope for what's built so far — see [roadmap.md](roadmap.md) Phase 22's non-goals and its store-compliance audit notes for what's already handled in code versus what's still an operational checklist item before actually submitting.
 

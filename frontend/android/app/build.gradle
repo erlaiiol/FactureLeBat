@@ -20,6 +20,19 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Signed with the debug keystore Gradle auto-generates
+            // (~/.android/debug.keystore) purely so `assembleRelease` is
+            // installable on an emulator via `make android-dev`/`android-prod`
+            // (frontend/scripts/run-android.sh) without any signing setup.
+            // This is NOT a store-distribution signature — before ever
+            // uploading to the Play Store, generate a real release keystore
+            // and point this at it instead (`keytool -genkey -v -keystore
+            // release.keystore -keyalg RSA -keysize 2048 -validity 10000
+            // -alias facturele`, kept outside git, referenced via
+            // gradle.properties), or the app couldn't receive updates after
+            // the first ever upload since Play requires the same signature
+            // release over release.
+            signingConfig signingConfigs.debug
         }
     }
 }

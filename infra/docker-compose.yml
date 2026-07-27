@@ -27,6 +27,14 @@ services:
       dockerfile: Dockerfile
       target: dev
     restart: unless-stopped
+    # entrypoint.dev.sh execs into `npm run start:dev`, but npm itself is
+    # still PID 1 underneath the Nest CLI's watch process — npm's SIGTERM
+    # forwarding to that process tree is inconsistent enough that `docker
+    # compose down` regularly has to wait out the full stop_grace_period
+    # (10s default) and SIGKILL instead of stopping cleanly. `init: true`
+    # runs the container under tini as PID 1, which does forward/reap
+    # correctly regardless of what npm does.
+    init: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +48,10 @@ services:
       - ../backend:/app
       - /app/node_modules
       - /app/generated
+      # NOT excluding dist/ here: nest-cli.json's deleteOutDir rmdir's the
+      # whole dist/ folder on every rebuild, and Docker refuses to rmdir a
+      # volume's own mount point (EBUSY) — tried it, it crash-loops the
+      # container. dist/ stays on the regular bind mount.
 
   frontend:
     build:
@@ -47,6 +59,9 @@ services:
       dockerfile: frontend/Dockerfile
       target: dev
     restart: unless-stopped
+    # Same signal-forwarding rationale as backend's init: true above — npx
+    # sits between PID 1 and the actual ng serve process.
+    init: true
     depends_on:
       - backend
     ports:
@@ -54,6 +69,18 @@ services:
     volumes:
       - ../frontend:/app
       - /app/node_modules
+      # frontend/android and frontend/ios are native Gradle/Xcode projects
+      # (make android / make ios) that `ng serve` never touches, but
+      # `../frontend:/app` above pulls the whole directory along anyway —
+      # including their Gradle/Pods/DerivedData caches once those targets
+      # have actually been run, easily hundreds of MB to GB+ that has no
+      # reason to be synced into the dev container. .angular is ng serve's
+      # own build cache, meaningless outside the container it was written
+      # in, so excluding it too drops another source of constant write
+      # traffic across the mount.
+      - /app/android
+      - /app/ios
+      - /app/.angular
 
 volumes:
   postgres_data:
