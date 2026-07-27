@@ -151,6 +151,37 @@
             </p>
           }
         </section>
+
+        @if (referralStatus(); as r) {
+          <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
+            <h2 class="font-heading text-lg font-bold text-ink uppercase">Parrainage</h2>
+            <p class="text-ink-soft">
+              Invitez un autre artisan avec votre lien : dès que son compte est vérifié, vous gagnez
+              1 mois de premium offert et il/elle bénéficie de 5 € de réduction sur son premier mois
+              d'abonnement (15 € → 10 €).
+            </p>
+            <div class="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                readonly
+                [value]="referralLink(r)"
+                class="flex-1 rounded-xl border border-line bg-bg px-4 py-3 text-sm text-ink"
+              />
+              <app-big-button
+                type="button"
+                variant="secondary"
+                tone="subtle"
+                (click)="copyReferralLink(r)"
+              >
+                {{ referralLinkCopied() ? 'Copié !' : 'Copier le lien' }}
+              </app-big-button>
+            </div>
+            <p class="text-sm text-ink-soft">
+              {{ r.confirmedReferrals }} filleul(s) confirmé(s) — {{ r.rewardDaysEarned }} jour(s)
+              de premium gagnés au total grâce au parrainage.
+            </p>
+          </section>
+        }
       }
     </div>
   }

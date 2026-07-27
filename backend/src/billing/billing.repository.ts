@@ -9,6 +9,7 @@ export interface BillingFields {
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   premiumGrantedUntil: Date | null;
+  pendingReferralDiscount: boolean;
 }
 
 const BILLING_FIELDS_SELECT = {
@@ -18,6 +19,7 @@ const BILLING_FIELDS_SELECT = {
   currentPeriodEnd: true,
   cancelAtPeriodEnd: true,
   premiumGrantedUntil: true,
+  pendingReferralDiscount: true,
 } as const;
 
 @Injectable()
@@ -65,7 +67,26 @@ export class BillingRepository {
       cancelAtPeriodEnd: boolean;
     },
   ): Promise<void> {
-    return this.prisma.company.update({ where: { id: companyId }, data }).then(() => undefined);
+    // A confirmed subscription event means any pending referral-discount
+    // coupon (see setPendingReferralDiscount) either just got attached to
+    // the Checkout Session that produced this subscription, or was never
+    // relevant to begin with — either way there is nothing left "pending"
+    // once a real subscription exists. Harmless no-op when already false.
+    return this.prisma.company
+      .update({ where: { id: companyId }, data: { ...data, pendingReferralDiscount: false } })
+      .then(() => undefined);
+  }
+
+  // Phase 29: set when a filleul's Stripe discount coupon couldn't be
+  // applied immediately (no live subscription to apply it to yet — the
+  // normal case for a brand-new filleul) — see
+  // BillingService.grantReferralDiscount/createCheckoutSession. Cleared
+  // once BillingService.applySubscriptionEvent confirms a real subscription
+  // exists, whether or not it started via a discounted checkout.
+  setPendingReferralDiscount(companyId: string, pending: boolean): Promise<void> {
+    return this.prisma.company
+      .update({ where: { id: companyId }, data: { pendingReferralDiscount: pending } })
+      .then(() => undefined);
   }
 
   // Extends from whichever is later — the current grant (if still running)

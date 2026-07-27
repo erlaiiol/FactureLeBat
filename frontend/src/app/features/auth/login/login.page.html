@@ -60,6 +60,27 @@
     </a>
   }
 
+  @if (demoProfiles().length > 0) {
+    <!-- Only ever non-empty on a `make demo` stack (DEMO_MODE=true) — see
+    AuthService.demoProfiles(). Dashed border deliberately reads as "not a
+    real production feature" rather than a normal login option. -->
+    <div class="flex flex-col gap-2 rounded-xl border border-dashed border-line p-4">
+      <p class="text-center text-sm font-medium text-ink-soft">Démo — accès en un clic</p>
+      @for (profile of demoProfiles(); track profile.key) {
+        <button
+          type="button"
+          (click)="demoLogin(profile.key)"
+          [disabled]="saving()"
+          class="rounded-lg border border-line px-4 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle disabled:opacity-50"
+        >
+          {{ profile.label }}
+        </button>
+      }
+    </div>
+  }
+
+  <app-referral-code-prompt (codeConfirmed)="onReferralCodeConfirmed($event)" />
+
   <p class="text-center text-sm text-ink-soft">
     Pas encore de compte ?
     <a routerLink="/inscription" class="font-medium underline">Créer un compte</a>

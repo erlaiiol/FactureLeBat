@@ -32,4 +32,12 @@ export class RegisterDto {
   @IsOptional()
   @IsBoolean()
   newsletterOptIn?: boolean;
+
+  // Phase 29: an unknown/invalid code is silently ignored (see
+  // AuthService.register/ReferralService.attributeReferral) — a bad
+  // referral code must never block account creation.
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  referralCode?: string;
 }

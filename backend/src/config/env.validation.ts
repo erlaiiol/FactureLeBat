@@ -222,6 +222,17 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   ADMIN_SEED_EMAIL?: string;
+
+  // `make demo` (see Makefile, infra/demo-seed.sh) — gates the one-click
+  // demo-login endpoints (auth/guards/demo-mode-enabled.guard.ts) so a real
+  // deployment, where this is never set, can never log in as one of the
+  // fixed demo accounts (auth/demo.constants.ts). Same string->boolean
+  // transform as SYSTEM_SMTP_SECURE above: env vars only ever arrive as raw
+  // strings.
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  @IsOptional()
+  DEMO_MODE = false;
 }
 
 // Wired into ConfigModule.forRoot({ validate }) in AppModule — runs once at

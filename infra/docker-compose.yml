@@ -42,6 +42,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       CORS_ORIGIN: http://localhost:${FRONTEND_PORT}
       PORT: 3000
+      # Unset/false for every normal `make dev` — `make demo` (Makefile) is
+      # the only caller that sets DEMO_MODE=true in its own shell env before
+      # `docker compose up`, turning on the one-click demo-login endpoints
+      # (see backend/src/auth/guards/demo-mode-enabled.guard.ts).
+      DEMO_MODE: ${DEMO_MODE:-false}
     ports:
       - '${BACKEND_PORT}:3000'
     volumes:

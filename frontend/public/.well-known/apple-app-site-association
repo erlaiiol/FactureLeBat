@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.fr.facturele.app"],
+        "components": [
+          { "/": "/inscription", "comment": "Referral links — Phase 29" },
+          { "/": "/connexion", "comment": "Referral links — Phase 29" }
+        ]
+      }
+    ]
+  }
+}

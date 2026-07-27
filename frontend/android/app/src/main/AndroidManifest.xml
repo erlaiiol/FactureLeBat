@@ -26,6 +26,27 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Phase 29: Android App Links for referral links — autoVerify
+            triggers Play's Digital Asset Links check against
+            https://facturele.net/.well-known/assetlinks.json at install
+            time. Requires that file's sha256_cert_fingerprints to hold the
+            real release-signing key's fingerprint before this can actually
+            verify (still a placeholder as of this phase — see
+            frontend/public/.well-known/assetlinks.json). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="facturele.net"
+                    android:pathPrefix="/inscription" />
+                <data
+                    android:scheme="https"
+                    android:host="facturele.net"
+                    android:pathPrefix="/connexion" />
+            </intent-filter>
         </activity>
 
         <provider

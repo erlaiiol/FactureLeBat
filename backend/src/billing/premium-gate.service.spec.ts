@@ -11,6 +11,7 @@ function buildService(options: { invoiceCount: number; fields: Partial<BillingFi
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
     premiumGrantedUntil: null,
+    pendingReferralDiscount: false,
     ...options.fields,
   };
   const getBillingFields = jest.fn().mockResolvedValue(fields);

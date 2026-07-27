@@ -21,12 +21,14 @@ import { REFRESH_TOKEN_COOKIE } from './auth.constants';
 import { AuthService, GoogleProfile } from './auth.service';
 import { clearAuthCookies, setAuthCookies } from './cookie.util';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import { DemoLoginDto } from './dto/demo-login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { PublicUser } from './entities/public-user.entity';
+import { DemoModeEnabledGuard } from './guards/demo-mode-enabled.guard';
 import { GoogleOAuthEnabledGuard } from './guards/google-oauth-enabled.guard';
 
 function readRefreshCookie(req: Request): string | undefined {
@@ -68,6 +70,33 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.login(dto);
+    setAuthCookies(res, tokens, this.isProduction);
+    return user;
+  }
+
+  // Always callable, DEMO_MODE or not — returns [] when it's off (see
+  // AuthService.getDemoProfiles), so the login page can decide whether to
+  // render any quick-login buttons at all without ever showing one that
+  // would 503 on click.
+  @Public()
+  @Get('demo-profiles')
+  demoProfiles(): { key: string; label: string }[] {
+    return this.authService.getDemoProfiles();
+  }
+
+  // Same brute-force-mitigation throttle as `login` above, even though there
+  // is no password to guess here — this still creates a real session for
+  // whoever calls it.
+  @Public()
+  @UseGuards(DemoModeEnabledGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('demo-login')
+  @HttpCode(HttpStatus.OK)
+  async demoLogin(
+    @Body() dto: DemoLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<PublicUser> {
+    const { user, tokens } = await this.authService.demoLogin(dto.key);
     setAuthCookies(res, tokens, this.isProduction);
     return user;
   }

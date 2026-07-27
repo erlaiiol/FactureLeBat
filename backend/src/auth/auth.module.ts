@@ -3,8 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { MailerModule } from '../mailer/mailer.module';
+import { ReferralModule } from '../referral/referral.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { DemoModeEnabledGuard } from './guards/demo-mode-enabled.guard';
 import { GoogleOAuthEnabledGuard } from './guards/google-oauth-enabled.guard';
 import { AuthTokenRepository } from './repositories/auth-token.repository';
 import { RefreshTokenRepository } from './repositories/refresh-token.repository';
@@ -27,6 +29,7 @@ const googleProviders: Provider[] =
   imports: [
     PassportModule,
     MailerModule,
+    ReferralModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -42,6 +45,7 @@ const googleProviders: Provider[] =
     AuthTokenRepository,
     JwtStrategy,
     GoogleOAuthEnabledGuard,
+    DemoModeEnabledGuard,
     ...googleProviders,
   ],
   exports: [AuthService],

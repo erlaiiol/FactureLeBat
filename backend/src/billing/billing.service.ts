@@ -84,12 +84,22 @@ export class BillingService {
       await this.repository.setStripeCustomerId(companyId, customerId);
     }
 
+    // Phase 29: a filleul whose referral reward fired before they ever
+    // subscribed (the normal case) has pendingReferralDiscount set — attach
+    // the coupon to this checkout rather than losing the reward. Left set
+    // until BillingService.applySubscriptionEvent confirms the resulting
+    // subscription, so an abandoned checkout doesn't burn it.
+    const discountCouponId = fields.pendingReferralDiscount
+      ? await this.stripeClient.ensureReferralDiscountCoupon()
+      : undefined;
+
     const session = await this.stripeClient.createCheckoutSession({
       customerId,
       companyId,
       successUrl: `${this.frontendUrl}/abonnement?success=1`,
       cancelUrl: `${this.frontendUrl}/abonnement?canceled=1`,
       idempotencyKey: buildCheckoutIdempotencyKey(companyId),
+      discountCouponId,
     });
 
     if (!session.url) {
@@ -116,6 +126,34 @@ export class BillingService {
 
   isStripeConfigured(): boolean {
     return this.stripeClient.isConfigured();
+  }
+
+  // Phase 29: the filleul side of the referral reward — 5€ off their first
+  // billing cycle. A no-op deployment with no Stripe configured has no
+  // subscription price to discount in the first place, same "optional
+  // feature, boots fine without it" posture as the rest of billing/. Called
+  // from ReferralService.grantRewardForVerifiedEmail, which already
+  // guarantees this fires at most once per company (Referral.
+  // referredCompanyId is @@unique).
+  async grantReferralDiscount(companyId: string): Promise<void> {
+    if (!this.stripeClient.isConfigured()) {
+      return;
+    }
+    const fields = await this.repository.getBillingFields(companyId);
+    const hasLiveSubscription =
+      fields.stripeSubscriptionId !== null &&
+      (fields.subscriptionStatus === SubscriptionStatus.ACTIVE ||
+        fields.subscriptionStatus === SubscriptionStatus.PAST_DUE);
+
+    if (hasLiveSubscription) {
+      const couponId = await this.stripeClient.ensureReferralDiscountCoupon();
+      await this.stripeClient.applyCouponToSubscription(fields.stripeSubscriptionId!, couponId);
+      return;
+    }
+    // The normal case: a brand-new filleul has no subscription yet — flag
+    // it so the next Checkout Session they create picks up the discount
+    // (see createCheckoutSession above).
+    await this.repository.setPendingReferralDiscount(companyId, true);
   }
 
   async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {

@@ -22,6 +22,7 @@ import {
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { BillingService } from './core/services/billing.service';
+import { DeepLinkService } from './core/services/deep-link.service';
 import { PushRegistrationService } from './core/services/push-registration.service';
 import { ThemeService } from './core/services/theme.service';
 import { ToastService } from './core/services/toast.service';
@@ -69,6 +70,7 @@ export class App {
   protected readonly authService = inject(AuthService);
   protected readonly billingService = inject(BillingService);
   private readonly pushRegistrationService = inject(PushRegistrationService);
+  private readonly deepLinkService = inject(DeepLinkService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
   private readonly activatedRoute = inject(ActivatedRoute);
@@ -120,6 +122,10 @@ export class App {
   );
 
   constructor() {
+    // Registered once, regardless of auth state — a referral link can be
+    // tapped whether or not the artisan is currently logged in.
+    this.deepLinkService.listen();
+
     // Closes the dropdown on any navigation, not just clicks on its own
     // links — covers browser back/forward and any other route change while
     // it happens to be open.

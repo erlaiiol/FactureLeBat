@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { Observable, catchError, finalize, of, shareReplay, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { LoginRequest, PublicUser, RegisterRequest } from '../models/auth.model';
+import { DemoProfile, LoginRequest, PublicUser, RegisterRequest } from '../models/auth.model';
 
 // Auth session state, providedIn: 'root' — same "shared, constructed-once"
 // pattern as ThemeService/TourService/InvoiceDraftStore. Tokens themselves
@@ -42,6 +42,19 @@ export class AuthService {
   login(payload: LoginRequest): Observable<PublicUser> {
     return this.http
       .post<PublicUser>(`${this.baseUrl}/login`, payload, { withCredentials: true })
+      .pipe(tap((user) => this.currentUser.set(user)));
+  }
+
+  // Always safe to call, DEMO_MODE or not — resolves to [] rather than
+  // erroring when it's off, so the login page can render nothing instead of
+  // a quick-login section that would 503 on click.
+  demoProfiles(): Observable<DemoProfile[]> {
+    return this.http.get<DemoProfile[]>(`${this.baseUrl}/demo-profiles`);
+  }
+
+  demoLogin(key: string): Observable<PublicUser> {
+    return this.http
+      .post<PublicUser>(`${this.baseUrl}/demo-login`, { key }, { withCredentials: true })
       .pipe(tap((user) => this.currentUser.set(user)));
   }
 

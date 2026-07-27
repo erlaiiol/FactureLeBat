@@ -1404,3 +1404,149 @@ This is not meant to replace the 15€/mois subscription as a viable full-time p
 - The exact ad-count-per-batch (3, 4, or 5) and whether ads are personalized are the two implementation-time decisions left open — both are cheap to change later (a config value and an AdMob dashboard toggle, not a schema change), so not worth blocking this phase's build on.
 
 ---
+
+# Phase 28 — Prestataires & Sous-traitance: What You Owe, Not What You're Owed
+
+## Objective
+
+Give the artisan/salon a way to track amounts *owed to* an external prestataire/sous-traitant/freelance guest — a genuinely new ledger, the mirror image of everything FactureLe has built so far. Every existing model (`Invoice`, `Customer`, `Product`, `Service`) answers "what is the company owed" (accounts receivable). This phase answers "what does the company owe" (accounts payable) — a materially different question this app has never had any way to answer.
+
+**Not yet scoped for implementation.** This phase exists to record the problem, the data model shape, and — critically — the open questions that need a real answer *before* a schema migration is written, not to greenlight a build. See Open Questions below.
+
+## Why This Discovery Happened
+
+Surfaced while building `make demo`'s seed data (`backend/prisma/seed-demo.ts`, see also this roadmap entry's own git history): to make the demo catalog realistic, subcontractor costs (an electrician, a mandatory diagnostic, freelance makeup artists for a big event) were modeled as ordinary `Service` catalog entries, priced at exact pass-through cost, reused consistently so their total is visible via "Statistiques > Meilleures prestations" (Phase 17's Activity Analytics).
+
+That trick genuinely works for the narrow case it was built for (one prestataire, one client job, no markup, paid in step with the client) — but it is a **workaround exploiting a revenue-tracking feature to approximate an expense-tracking one**, not a real answer, and it breaks down immediately outside that narrow case:
+
+- **No cross-job aggregation.** The same prestataire working three different client jobs this month produces three unrelated `Service` line strings — nothing sums "how much do I owe Dupont Élec right now," which was the actual question asked.
+- **No independent payment lifecycle.** `Invoice.status`/`paidAt` answer "did the client pay me" — there is no field anywhere for "did I pay my prestataire, and when."
+- **Conflates two numbers that should be free to differ.** What the client is billed and what the prestataire is owed only look identical because the seed deliberately priced the pass-through line at cost. An artisan who wants to keep a margin on subcontracted work needs these as two separate numbers, not one.
+- **No legal-compliance surface.** France's *obligation de vigilance* (Code du travail, art. L8222-1): above 5 000 €/an of sous-traitance with the same provider, the payer must hold a current attestation URSSAF from them, or risk being held jointly liable for that provider's unpaid cotisations. Nothing in the current schema can hold this.
+- **Wrong default exposure.** The workaround puts the pass-through amount on the client-facing PDF (it's just an invoice line, after all) — but "what I pay my subcontractor" is not information most artisans want printed on a document handed to their client by default. A real feature needs to make that an explicit, opt-in choice, never an automatic side effect of entering the data.
+
+This is also why "just add a 3rd + button on the invoice line" was considered and rejected: it would keep solving the client-facing half (which the existing Product/Service catalog already does fine) while leaving the actual question — what do I owe, to whom, has it been paid — exactly as unanswerable as today.
+
+## Relationship to Phase 17's Non-Goal
+
+Phase 17 already states, deliberately: *"No expense/charge tracking. FactureLe only knows the revenue side (invoices); a full accounting picture (deductible expenses, etc.) is a materially different feature and out of scope here."* This phase does **not** reverse that decision — see Non-goals below. Tracking "who is owed what and whether it's been paid" is not the same claim as "here is your deductible-expense total for tax purposes," and this phase must not blur that line, the same honesty-first posture Phase 17 already applied to its own Estimated Charges feature (computed only where the app has full-precision data, an honest "not applicable" everywhere else).
+
+## Data Model (draft — not final, see Open Questions)
+
+- New model `Prestataire` — a per-company catalog entry, same tenant-scoping shape as `Customer`: `name`, `companyName?`, `siret?` (14-digit regex, same convention as `Customer.siret`), `email?`, `phone?`, `description?`.
+  - `vigilanceAttestationObtainedAt: DateTime?` — nullable, artisan-set, same "the app reminds, it does not certify" posture as every other compliance-adjacent optional field in this app.
+- New model `PayableLine` (name TBD — see Open Questions) — one row per amount owed to a `Prestataire` for one piece of work:
+  - `prestataireId`, `companyId` (tenant-scoped, `onDelete: Cascade` like everything else hanging off `Company`)
+  - `invoiceId?` — **optional** soft cross-reference to the client job this cost relates to, same "autofill, not a lock" spirit as `Invoice.customerId`; never required, since a retainer or an internal cost isn't always tied to one client invoice
+  - `label`, `description?`
+  - `amountOwedCents: Int` — the source of truth, same "flat integer cents" convention as `InvoiceServiceLine.amountCents`
+  - `status: A_PAYER | PAYE`, `paidAt: DateTime?`, `dueDate: DateTime?` (the prestataire's own échéance — independent of the client's)
+  - `createdAt`/`updatedAt`
+- Explicitly **not** touching `Invoice`, `InvoiceLine`, `InvoiceServiceLine`, or `PdfService` in this phase — no new invoice-line type, no PDF change.
+
+## Features (draft — nothing here is built yet)
+
+- [ ] `prestataire/` backend domain (controller/service/repository/DTOs/entities, per `docs/conventions.md`'s one-domain-one-responsibility shape) — CRUD, tenant-scoped like `Customer`/`Product`/`Service`.
+- [ ] "Ce que je dois" screen: a list of `PayableLine` rows, filterable by prestataire/status — A payer / Payé, a much smaller echo of Phase 16's board conventions.
+- [ ] "Total dû" per prestataire — sum of unpaid `PayableLine` rows, computed on demand (derived, never persisted, same rule as every invoice total in this app).
+- [ ] Optional, read-only link shown on an `Invoice` back to any `PayableLine` referencing it — informational only, never a line rendered on the invoice/devis itself.
+- [ ] SIRET field + vigilance-attestation flag + a simple on-screen reminder once cumulative amount owed to one prestataire crosses the 5 000 €/year threshold — a nudge, not an enforced block.
+
+## Non-goals
+
+- **No PDF/document-facing exposure by default.** Nothing built in this phase appears on an `Invoice`/`Devis` sent to a client. A specific, separately-decided "sous-traitance déclarée" mention for a specific legal context (e.g. certain `marchés publics` requiring a formal DC4-style declaration) is a distinct, narrower feature to consider later — not a default consequence of this one.
+- **No deductible-expense / IS computation, no reversal of Phase 17's "no expense/charge tracking" non-goal.** This phase tracks who is owed what and whether it's been paid — it does not feed the Quarterly Report, Estimated Charges, or any tax-liability figure. Reversing that boundary is a separate, much bigger decision (see Phase 17's own reasoning about a `COMPANY`'s real IS/IR depending on deductible expenses this app can't fully see) and is not assumed here.
+- **No enforcement of the vigilance-attestation legal obligation.** The app can only remind — verifying a real, current attestation URSSAF is outside what FactureLe can certify on its own.
+- **No automatic Invoice-to-Payable creation.** A `PayableLine` is always entered explicitly by the artisan; nothing is auto-generated from an invoice/service line, to avoid silently inventing a payable the artisan didn't actually incur.
+- **No payment execution.** No transfer, no virement, no payout to the prestataire — same "tracker, not a payment collector" posture as Phase 16's board for the receivable side.
+
+## Open Questions — resolve with the user before writing a migration
+
+- **Naming.** `Prestataire`, `Sous-traitant`, `Fournisseur`, or a more generic `ExternalProvider`/`Payee`? This name propagates through every layer (schema, DTOs, routes, frontend copy) — worth deciding once.
+- **Line shape.** Is a single flat `amountOwedCents` per `PayableLine` enough, or does day/hour-rate billing matter here too (mirroring `Product.unit`+quantity, especially now that the demo catalog has HOUR/DAY-rate rental products)?
+- **Scope of "done."** Is an on-screen list genuinely sufficient for v1, or does this need its own exportable document (e.g. a simple récépissé for the artisan's own records)?
+- **Future cash-flow reporting.** Should this eventually feed a "trésorerie" view (paid invoices − paid payables = net position), or stay a standalone ledger indefinitely? Doesn't need an answer now, but the data model should not accidentally foreclose it.
+- **Priority.** Per `docs/development-rules.md`'s own stated order — Reliability > Simplicity > Maintainability > Scalability > Performance > New features — is this needed before the next paying customer, or does it sit in the backlog behind reliability/simplicity work already in flight? A brand-new domain of this size deserves a deliberate slot, not a rushed one bolted onto an unrelated prompt.
+
+## Notes
+
+- `backend/prisma/seed-demo.ts` keeps the pass-through-`Service` workaround for now, explicitly commented as a stand-in for this phase rather than the intended long-term model — see the comment above `sousTraitanceDefs` (Bâti Rénov) and `freelanceRow` (L'Atelier Beauté).
+- Independent of Phase 16/17 (doesn't depend on either shipping further work), but should reuse their vocabulary/UX conventions (`A payer`/`Payé` states, "derived totals never persisted") rather than inventing new ones.
+
+---
+
+# Phase 29 — Parrainage (Referral Program)
+
+## Objective
+
+Let any existing artisan invite others via a personal referral link. When someone creates an account through that link and verifies their email, the reward is **asymmetric**, matching how a referral actually creates value for each side:
+
+- **Parrain** (the existing artisan who invited): **1 month of premium offered**, stacking additively like every other grant into `premiumGrantedUntil`.
+- **Filleul** (the new artisan): **5 € off their first billing cycle** (15 € → 10 €) — a discount to help convert a brand-new prospect into a paying subscriber, not free days.
+
+Visible in "Mon abonnement", alongside Phase 14's promo code section. Must work from a mobile install, not just the web app.
+
+## Reward Mechanism
+
+Two different existing mechanisms, one per side, deliberately not unified into one:
+
+- **Parrain → `Company.premiumGrantedUntil`.** Same "one mechanism, several ways to reach it" convention that field already follows (Phase 14: Stripe subscription / admin grant / promo code all funnel through `BillingRepository.grantPremiumDays`) — this becomes a fourth way through that same field.
+- **Filleul → a Stripe coupon.** A discount on what a subscriber actually pays isn't something `premiumGrantedUntil` can express at all (that field means "premium *without* Stripe," not "cheaper Stripe") — so this side goes through a real Stripe `Coupon` (`amount_off: 500`, `currency: eur`, `duration: once`) instead, applied either directly to an existing live subscription or attached to the filleul's next Checkout Session (see `BillingService.grantReferralDiscount`/`createCheckoutSession`).
+
+No new `PromoCode` row is minted per referral; a `Referral` row is the record of *why* the grant happened, not a redeemable code of its own.
+
+## Data Model
+
+- `Company.referralCode: String @unique` — generated once at company creation (`UserRepository.createWithCompany()`, retry-on-collision loop), same alphabet/shape convention as `generatePromoCode()` (`promo-code-generator.util.ts`).
+- `Company.pendingReferralDiscount: Boolean @default(false)` — set when a filleul's reward fires before they have a live Stripe subscription to apply the coupon to (the normal case — a filleul is by definition brand new). Picked up by the next `createCheckoutSession` call, cleared once that checkout's subscription is confirmed by webhook. No monthly/rate-limit field is needed: `Referral.referredCompanyId` being `@@unique` already guarantees this fires at most once per company, ever.
+- `Referral` (new model):
+  - `id`, `referrerCompanyId` (FK `Company`), `referredCompanyId` (FK `Company`, **`@@unique`** — a company can be referred at most once, immutable after registration)
+  - `rewardGrantedAt: DateTime?` — null until the reward actually fires (see anti-abuse below), non-null once both sides are credited
+  - `createdAt`
+  - `@@index([referrerCompanyId])`
+
+## Anti-Abuse: Reward Gated on Email Verification, Not Registration
+
+A raw email/password registration is trivially fakeable in bulk — granting a reward the instant a referred account is *created* would let someone farm unlimited free parrain-months with throwaway addresses. Instead: `RegisterDto` gains an optional `referralCode`; at registration a `Referral` row is created immediately (`rewardGrantedAt: null`) if the code resolves to a real company, but **both rewards only fire from `AuthService.verifyEmail()`**, right after it sets `emailVerifiedAt` — reusing Phase 13's existing non-blocking verification email as a real (if modest) proof of a live inbox, at zero extra infrastructure cost. A Google-OAuth signup already sets `emailVerifiedAt` immediately (Phase 13), so referral capture for that path is a **known limitation, deferred**: threading `referralCode` through Google's OAuth `state` round-trip is materially more plumbing than the email/password path for a first version — flagged here rather than silently unsupported.
+
+## Features
+
+- [x] `Company.referralCode` generated for every company (backfilled for existing rows via migration), globally unique, uppercase
+- [x] `Referral` model + migration
+- [x] `POST /auth/register` accepts optional `referralCode`; invalid/unknown codes are silently ignored (never block registration on a bad referral code)
+- [x] `GET /referral/validate/:code` — public, cross-tenant lookup (same "small admin-adjacent catalog, not tenant-scoped" shape as `PromoCode`) so the frontend can confirm a code before submit without exposing the referrer's identity
+- [x] `GET /referral/me` (authenticated) — own code, shareable link, count of confirmed referrals, total premium days earned as parrain
+- [x] `AuthService.verifyEmail()` → `ReferralService.grantRewardForVerifiedEmail()` grants the parrain 30 days via `BillingRepository.grantPremiumDays` and the filleul a Stripe discount via `BillingService.grantReferralDiscount`, sets `Referral.rewardGrantedAt`, exactly once (guarded by the already-non-null check, same idempotency shape as the rest of `verifyEmail`)
+- [x] `BillingService.grantReferralDiscount`: applies the coupon directly (`StripeClientService.applyCouponToSubscription`) if the filleul already has a live (`ACTIVE`/`PAST_DUE`) subscription, otherwise sets `pendingReferralDiscount` for `createCheckoutSession` to pick up on their next checkout; a no-op entirely if Stripe isn't configured on this deployment
+- [x] "Mon abonnement" (`subscribe.page.html`) gains a third section, sibling to "Code promo": referral link + copy-to-clipboard button + confirmed-referral count + total parrain-days earned, with the asymmetric reward spelled out in plain language. Gated behind `!platformService.isIosApp()`, same as the existing "Code promo" section (Apple 3.1.1 caution — a section whose entire purpose is describing how to earn premium access/a discount outside IAP)
+- [x] `/inscription?ref=CODE` prefills (but never locks — "autofill, not a lock", same as every other prefill in this app) a referral-code field, validated live (debounced) against `GET /referral/validate/:code`
+- [x] **Mobile — warm deep link**: tapping a referral link with the app already installed opens straight into `/inscription` with the code carried through. iOS Associated Domains entitlement (`App.entitlements`) + `apple-app-site-association`, Android App Links intent filter (`AndroidManifest.xml`, `autoVerify`) + `assetlinks.json`, both served under `/.well-known/` (new nginx `location` blocks forcing `application/json`, since the default MIME map has no entry for an extension-less AASA file), and `@capacitor/app`'s `appUrlOpen` listener (`DeepLinkService`) wired up — the package had been a dependency since Phase 22, unused until now
+- [x] **Mobile — connexion/inscription screens get a standalone referral button** (not just a form field): `ReferralCodePromptComponent`, native-mobile-only ("J'ai un code de parrainage"), opening a small entry affordance
+- [x] **Mobile — best-effort deferred-link detection**: on first native launch, the connexion/inscription screen makes one best-effort clipboard read (`@capacitor/clipboard`, wrapped in try/catch, gated to once per install via a `localStorage` flag) and — only if it matches the referral-code shape — turns the standalone button above into a pre-filled proposal ("Code détecté, l'utiliser ?") rather than auto-applying it
+- [ ] **Not built: a web fallback "copier le code et ouvrir le Store" nudge** for the link-tapped-before-install case. Deliberately dropped rather than half-built: neither app is on the App Store/Play Store yet (Phase 22 left store submission as a separate future step), so a "open the Store" button would point at a listing that doesn't exist — the same "never fabricate a URL/placeholder" posture as `SiteLegalInfo` starting empty rather than with invented text. Revisit once Phase 22's store submission actually ships; mobile web registration works fully today regardless (the `?ref=` prefill above needs no app install at all)
+
+## Non-goals
+
+- **No third-party attribution SDK** (Branch, AppsFlyer, Adjust, Firebase Dynamic Links — the last of which is shut down anyway). True deferred deep linking (a code surviving an App Store/Play Store round-trip with zero user action) is not achievable without one; the clipboard-based fallback above is a deliberate, honest best-effort substitute, not a claimed equivalent.
+- **No referral-farming defense beyond email-verification-gating.** A referrer motivated enough to verify multiple real-looking throwaway inboxes can still farm parrain-months; no CAPTCHA, device fingerprinting, or per-referrer cap is built here. Worth revisiting only if abuse is actually observed.
+- **No reward for a Google-OAuth-created referred account** in this pass (see Anti-Abuse section above) — email/password registration only.
+- **No change to `PromoCode`/`PromoCodeRedemption`** — the parrain's reward is a parallel path into the same `premiumGrantedUntil` field, not a redeemable-code system of its own; the filleul's is a Stripe coupon, orthogonal to `PromoCode` entirely.
+- **The filleul's discount is a fixed 5 € amount, not a literal 30% `percent_off`.** The user's own framing ("30%, de 15 à 10 €") doesn't square exactly (30% of 15€ is 4.50€, not 5€) — `amount_off: 500` was used instead of `percent_off` specifically so the result is always exactly 10€ regardless of that rounding, matching the concrete numbers given over the imprecise percentage.
+
+## Notes
+
+- Depends on Phase 13 (accounts/email verification), Phase 14 (`BillingRepository.grantPremiumDays`, the "Mon abonnement" page), and Phase 22 (Capacitor shell, `PlatformService`, the still-unresolved `facturele.net` domain TODO in `capacitor.config.ts` — the Universal/App Links work in this phase inherits that same open dependency and cannot be finalized/tested end-to-end until that domain is confirmed live).
+- `@capacitor/app` has sat in `frontend/package.json` unused since Phase 22 scaffolding — this is the first phase that actually wires it up.
+
+## Implementation notes
+
+- **`referralCode` backfill migration was hand-written, not `prisma migrate dev`.** Same "nullable column → backfill → tighten to NOT NULL" shape as Phase 7's unit-enum migration: `prisma migrate dev` refuses to add a required unique column to a non-empty `Company` table non-interactively, so `20260727214839_referral_program/migration.sql` adds the column nullable, backfills every existing row with `upper(substr(md5(gen_random_uuid()::text || id), 1, 10))`, then tightens it. Verified against the real dev DB (2 pre-existing companies at the time). A second migration (`20260727223548_referral_discount`) added `pendingReferralDiscount` once the reward mechanism was corrected — a plain additive `BOOLEAN NOT NULL DEFAULT false`, no backfill needed.
+- **The reward is not granted at registration — it's granted at email verification.** `AuthService.register()` only creates a `Referral` row (`rewardGrantedAt: null`) via `ReferralService.attributeReferral()`; both sides of the reward fire from `AuthService.verifyEmail()`, right after `markEmailVerified()`, via `ReferralService.grantRewardForVerifiedEmail()`. This is the one deliberate anti-abuse speed bump in this phase (see the Anti-Abuse section above).
+- **This reward assignment (parrain = free month / filleul = discount) reverses two earlier drafts of this same phase within the same conversation** — first "both sides get a free month," then briefly "parrain = discount / filleul = free month" — before landing here, at the user's explicit correction, as the final, intentional shape: a parrain who's already a customer is rewarded with more of the product they already value (a free month), while a brand-new filleul is rewarded with a lower price to help convert them into a paying subscriber in the first place — the standard shape of a referral program (existing customer gets appreciation, new prospect gets a conversion incentive).
+- **`BillingService.grantReferralDiscount(companyId)` is the filleul-side entry point**, symmetric to `grantPremiumDays` on the parrain side but Stripe-specific: it checks `stripeClient.isConfigured()` first (a no-op deployment-wide if Stripe billing isn't set up at all — same "optional feature" posture as the rest of billing/), then branches on whether the filleul already has a live subscription (`stripeSubscriptionId` set and status `ACTIVE`/`PAST_DUE` → `StripeClientService.applyCouponToSubscription` immediately) or not (→ `BillingRepository.setPendingReferralDiscount(companyId, true)`, picked up by `createCheckoutSession`'s next call for this company and cleared once `applySubscriptionEvent`'s webhook confirms the resulting subscription — so an abandoned checkout never burns the reward).
+- **One shared, fixed-id Stripe Coupon (`referral-filleul-5eur-1mois`), not one minted per referral.** `StripeClientService.ensureReferralDiscountCoupon()` looks it up first and only creates it on a genuine 404 — idempotent by construction, a concurrent creator racing the same id is treated as "it exists now" rather than surfaced as an error. `amount_off: 500` (not `percent_off`) so the result is always exactly 10€ — see the Non-goals note on the 30%-vs-5€ framing mismatch. `duration: 'once'` applies it to exactly one invoice (the filleul's first), never repeating.
+- **Every `Company` gets a `referralCode`, including Google-OAuth signups and `make demo` seed companies** — `UserRepository.createWithCompany()`'s `referralCode` field is required, so `AuthService.handleGoogleLogin()` and `backend/prisma/seed-demo.ts`'s `createTenant()` both call the same generator (`generateReferralCode()`) as the email/password path, even though *capturing* an incoming referral code is email/password-only for now.
+- **`ReferralModule` imports `BillingModule`, `AuthModule` imports `ReferralModule`** — same layering precedent as `AdminModule` importing `BillingModule` (Phase 14): no circular dependency, since `BillingModule` never reaches back into either.
+- **The "Parrainage" section on `/abonnement` is gated behind `!platformService.isIosApp()`**, exactly like the neighboring "Code promo" section — a judgment call (not re-litigated live with the user this pass): the section's entire content is "here's how to earn premium access outside Stripe," which reads the same way to Apple's 3.1.1 reviewer as the promo-code section already does. The registration-time referral capture (login/register pages) is **not** gated this way — entering a code isn't itself a payment-adjacent action, only *displaying paths to earn/redeem premium* is.
+- **`ReferralCodePromptComponent` is one shared component for both connexion and inscription**, with different `(codeConfirmed)` handlers: register.page.ts patches its own form control; login.page.ts (which has no account-creation form at all) navigates to `/inscription` with `?ref=` attached instead.
+- **iOS/Android Universal/App Link wiring is config-only, not exercised on a real device** — same honest posture as Phase 22's own "not yet exercised on a real Xcode/Android Studio run" caveat, for the same reason (no Xcode/Android SDK in this environment). Concretely still open: `App.entitlements`'s associated-domains capability needs to actually be added to the Xcode target via Signing & Capabilities (no `CODE_SIGN_ENTITLEMENTS` build setting exists yet in `project.pbxproj` — dropping the file alone doesn't wire it in, same class of manual step as Phase 22's Firebase SPM dependency); `apple-app-site-association`'s `appIDs` still has a literal `TEAMID` placeholder (no Apple Developer Team ID exists yet); `assetlinks.json`'s `sha256_cert_fingerprints` still has a literal placeholder (no release signing key exists yet, per Phase 22's own notes). All three are grep-able markers, not silent guesses.

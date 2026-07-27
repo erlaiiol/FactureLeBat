@@ -34,6 +34,8 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
     premiumGrantedUntil: null,
+    referralCode: 'REFCODE1',
+    pendingReferralDiscount: false,
     declarationFrequency: 'TRIMESTRIELLE',
     microEntrepreneurCeiling: null,
     cotisationVenteBasisPoints: 1230,

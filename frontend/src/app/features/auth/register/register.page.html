@@ -50,6 +50,29 @@
       <span class="text-sm text-ink">Je souhaite recevoir la newsletter FactureLe.</span>
     </label>
 
+    <app-referral-code-prompt
+      [prefillCode]="refCodeFromQuery"
+      (codeConfirmed)="onReferralCodeConfirmed($event)"
+    />
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Code de parrainage (facultatif)</span>
+      <input
+        formControlName="referralCode"
+        type="text"
+        placeholder="CODE-PARRAINAGE"
+        class="rounded-lg border border-line px-4 py-3 uppercase text-ink"
+      />
+      @if (referralCodeValid() === true) {
+        <span class="text-xs font-medium text-success">
+          Code valide — vous bénéficierez de 5 € de réduction sur votre premier mois d'abonnement
+          (15 € → 10 €).
+        </span>
+      } @else if (referralCodeValid() === false) {
+        <span class="text-xs font-medium text-danger">Code inconnu — vérifiez la saisie.</span>
+      }
+    </label>
+
     @if (errorMessage(); as message) {
       <p class="text-center font-medium text-danger">{{ message }}</p>
     }

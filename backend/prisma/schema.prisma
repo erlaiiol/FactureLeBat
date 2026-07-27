@@ -247,6 +247,31 @@ model Company {
   // exclusively.
   premiumGrantedUntil DateTime?
 
+  // Phase 29: referral program. The reward is asymmetric — the parrain
+  // (referralsMade side) gets a straight 30-day premiumGrantedUntil grant (a
+  // fourth way into that field, alongside Stripe/admin grant/promo code
+  // above), but the filleul (referredBy side) gets a Stripe coupon instead
+  // (15€ -> 10€ off their first billing cycle) — see
+  // BillingService.grantReferralDiscount. referralCode is generated once at
+  // company creation (UserRepository.createWithCompany), globally unique
+  // like PromoCode.code (small cross-tenant catalog, not per-tenant), never
+  // regenerated.
+  referralCode  String     @unique
+  referralsMade Referral[] @relation("Referrer")
+  referredBy    Referral?  @relation("Referred")
+
+  // Set instead of applying the filleul's Stripe coupon immediately when
+  // this company has no live subscription yet (the normal case — a filleul
+  // is, by definition, a brand-new company that hasn't subscribed yet).
+  // BillingService.createCheckoutSession attaches the coupon to the next
+  // Checkout Session it builds, and the flag is cleared once the resulting
+  // subscription is actually confirmed by webhook (BillingService.
+  // applySubscriptionEvent) — an abandoned checkout must not burn the
+  // reward. No rate limiting needed here beyond that: Referral.
+  // referredCompanyId is @@unique, so a company can only ever be a filleul
+  // (and therefore only ever get this discount) once.
+  pendingReferralDiscount Boolean @default(false)
+
   // Phase 17: which period the quarterly report screen preselects — see
   // DeclarationFrequency above. microEntrepreneurCeiling (cents) is
   // deliberately artisan-editable, not a hardcoded legal constant: the real
@@ -937,6 +962,28 @@ model PromoCodeRedemption {
 
   @@unique([promoCodeId, companyId])
   @@index([companyId])
+}
+
+// Phase 29: one row per referred company, created at registration time
+// (referredCompanyId is @@unique — a company can be referred at most once,
+// immutable after). rewardGrantedAt stays null until AuthService.verifyEmail
+// actually grants the 30-day reward to both companies — deliberately not
+// granted at registration itself, since an unverified email is trivially
+// fakeable in bulk (see docs/roadmap.md Phase 29's anti-abuse section).
+model Referral {
+  id String @id @default(uuid())
+
+  referrerCompanyId String
+  referrerCompany   Company @relation("Referrer", fields: [referrerCompanyId], references: [id], onDelete: Cascade)
+
+  referredCompanyId String  @unique
+  referredCompany   Company @relation("Referred", fields: [referredCompanyId], references: [id], onDelete: Cascade)
+
+  rewardGrantedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([referrerCompanyId])
 }
 
 // Phase 20: FactureLe's own legal identity as the SaaS publisher (mentions

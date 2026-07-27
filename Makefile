@@ -1,10 +1,32 @@
-.PHONY: dev prod down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-dev android-prod ios-dev ios-prod
+.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-dev android-prod ios-dev ios-prod
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build
 
 prod:
 	docker compose -f infra/docker-compose.prod.yml up --build -d
+
+# Throwaway sales-demo stack — same dev image/mounts as `make dev` (infra/
+# docker-compose.yml), just brought up under its own compose project name
+# (`-p facturele-demo`) so it gets its own containers/network/volume,
+# entirely separate from your real dev database. Populates itself with two
+# fictitious tenants (an artisan du bâtiment and an institut de beauté —
+# see backend/prisma/seed-demo.ts) via infra/demo-seed.sh, so there's
+# real-looking data to click through in front of a prospect/investor.
+# DEMO_MODE=true (read by infra/docker-compose.yml's backend service) turns
+# on the login page's one-click "Démo — accès en un clic" buttons — see
+# backend/src/auth/guards/demo-mode-enabled.guard.ts. Since it reuses the
+# same host ports as `make dev` (infra/.env), the two can't run at the same
+# time — stop one before starting the other.
+demo:
+	DEMO_MODE=true docker compose -f infra/docker-compose.yml -p facturele-demo up --build -d
+	sh infra/demo-seed.sh
+
+# Tears the demo stack down AND destroys its database volume (`down -v`,
+# unlike the shared `down` target below) — every `make demo` therefore
+# starts from a clean, freshly-seeded slate.
+demo-down:
+	docker compose -f infra/docker-compose.yml -p facturele-demo down -v
 
 down:
 	docker compose -f infra/docker-compose.yml down

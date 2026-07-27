@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthTokenPurpose, UserRole } from '../../generated/prisma/enums';
 import { UserModel as User } from '../../generated/prisma/models';
 import { MailerService } from '../mailer/mailer.service';
+import { ReferralService } from '../referral/referral.service';
 import { AuthService } from './auth.service';
 import { AuthTokenRepository } from './repositories/auth-token.repository';
 import { RefreshTokenRepository } from './repositories/refresh-token.repository';
@@ -89,6 +90,15 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
   const send = jest.fn().mockResolvedValue(undefined);
   const mailerService = { send } as unknown as MailerService;
 
+  const generateUniqueCode = jest.fn().mockResolvedValue('REFCODE1');
+  const attributeReferral = jest.fn().mockResolvedValue(undefined);
+  const grantRewardForVerifiedEmail = jest.fn().mockResolvedValue(undefined);
+  const referralService = {
+    generateUniqueCode,
+    attributeReferral,
+    grantRewardForVerifiedEmail,
+  } as unknown as ReferralService;
+
   const configValues = { ...CONFIG_DEFAULTS, ...configOverrides };
   const configGet = jest.fn((key: string, fallback?: unknown) => configValues[key] ?? fallback);
   const config = { get: configGet } as unknown as ConfigService;
@@ -99,6 +109,7 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
     authTokenRepository,
     jwtService,
     mailerService,
+    referralService,
     config,
   );
 
@@ -119,6 +130,9 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
     authTokenFindByHash,
     authTokenConsume,
     send,
+    generateUniqueCode,
+    attributeReferral,
+    grantRewardForVerifiedEmail,
   };
 }
 

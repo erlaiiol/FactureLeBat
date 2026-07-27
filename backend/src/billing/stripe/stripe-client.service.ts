@@ -1,7 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { StripeUnavailableError } from './stripe-unavailable.error';
+
+// Phase 29: the filleul's referral reward — 5€ off (15€ -> 10€) their first
+// billing cycle. A fixed amount_off rather than percent_off so the actual
+// discounted price is exactly 10€ regardless of how Stripe would round a
+// percentage — see docs/roadmap.md Phase 29. One shared, well-known coupon
+// (fixed id) reused by every filleul, not minted per-referral: there is
+// nothing per-company to encode in it, unlike a PromoCode.
+const REFERRAL_DISCOUNT_COUPON_ID = 'referral-filleul-5eur-1mois';
+const REFERRAL_DISCOUNT_AMOUNT_CENTS = 500;
 
 // Isolated from BillingService on purpose, same "isolate the risky external
 // boundary" split as GroqClientService/MailerService: this class only ever
@@ -14,6 +23,7 @@ import { StripeUnavailableError } from './stripe-unavailable.error';
 // configured.
 @Injectable()
 export class StripeClientService {
+  private readonly logger = new Logger(StripeClientService.name);
   private readonly client?: Stripe;
   private readonly priceId?: string;
   private readonly webhookSecret?: string;
@@ -55,6 +65,7 @@ export class StripeClientService {
     cancelUrl: string;
     companyId: string;
     idempotencyKey: string;
+    discountCouponId?: string;
   }): Promise<Stripe.Checkout.Session> {
     const client = this.requireClient();
     if (!this.priceId) {
@@ -68,12 +79,47 @@ export class StripeClientService {
         success_url: params.successUrl,
         cancel_url: params.cancelUrl,
         subscription_data: { metadata: { companyId: params.companyId } },
+        ...(params.discountCouponId ? { discounts: [{ coupon: params.discountCouponId }] } : {}),
       },
       // Same key -> Stripe returns the original Session instead of minting a
       // second one, so a retried/duplicated request can never turn into a
       // second subscription (see BillingService.buildCheckoutIdempotencyKey).
       { idempotencyKey: params.idempotencyKey },
     );
+  }
+
+  // Phase 29: idempotent by construction — a fixed coupon id is looked up
+  // first, and only created on a genuine 404. A concurrent creator racing
+  // this exact id is harmless: Stripe rejects the loser's create call,
+  // which is treated the same as "it already existed".
+  async ensureReferralDiscountCoupon(): Promise<string> {
+    const client = this.requireClient();
+    try {
+      await client.coupons.retrieve(REFERRAL_DISCOUNT_COUPON_ID);
+      return REFERRAL_DISCOUNT_COUPON_ID;
+    } catch {
+      try {
+        await client.coupons.create({
+          id: REFERRAL_DISCOUNT_COUPON_ID,
+          amount_off: REFERRAL_DISCOUNT_AMOUNT_CENTS,
+          currency: 'eur',
+          duration: 'once',
+        });
+      } catch (error) {
+        this.logger.debug(`Referral discount coupon create raced or failed: ${String(error)}`);
+      }
+      return REFERRAL_DISCOUNT_COUPON_ID;
+    }
+  }
+
+  // Applied directly to an already-live subscription — the rare case where
+  // a filleul's referral gets confirmed after they've already subscribed
+  // (see BillingService.grantReferralDiscount). Takes effect on their next
+  // invoice ('once' duration on the coupon itself).
+  async applyCouponToSubscription(subscriptionId: string, couponId: string): Promise<void> {
+    await this.requireClient().subscriptions.update(subscriptionId, {
+      discounts: [{ coupon: couponId }],
+    });
   }
 
   async createPortalSession(

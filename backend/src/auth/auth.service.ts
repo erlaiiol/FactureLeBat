@@ -18,6 +18,7 @@ import {
 } from '../../generated/prisma/models';
 import { SmtpCredentials } from '../mail-settings/entities/mail-settings.entity';
 import { MailerService } from '../mailer/mailer.service';
+import { ReferralService } from '../referral/referral.service';
 import {
   BCRYPT_SALT_ROUNDS,
   CURRENT_TERMS_VERSION,
@@ -25,6 +26,7 @@ import {
   PASSWORD_RESET_TTL_MS,
   REFRESH_REUSE_GRACE_PERIOD_MS,
 } from './auth.constants';
+import { DEMO_PROFILES } from './demo.constants';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -80,6 +82,7 @@ export class AuthService {
   private readonly systemSmtp: SmtpCredentials | null;
   private readonly systemMailFromName: string;
   private readonly systemMailFromAddress?: string;
+  private readonly demoModeEnabled: boolean;
 
   constructor(
     private readonly userRepository: UserRepository,
@@ -87,6 +90,7 @@ export class AuthService {
     private readonly authTokenRepository: AuthTokenRepository,
     private readonly jwtService: JwtService,
     private readonly mailerService: MailerService,
+    private readonly referralService: ReferralService,
     config: ConfigService,
   ) {
     this.accessExpiresIn = config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m') as StringValue;
@@ -119,6 +123,8 @@ export class AuthService {
           }
         : null;
     this.systemMailFromAddress = fromAddress;
+
+    this.demoModeEnabled = config.get<boolean>('DEMO_MODE', false);
   }
 
   async register(dto: RegisterDto): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
@@ -128,13 +134,25 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
+    const referralCode = await this.referralService.generateUniqueCode();
     const user = await this.userRepository.createWithCompany({
       email: dto.email,
       passwordHash,
       newsletterOptIn: dto.newsletterOptIn ?? false,
       termsAcceptedAt: new Date(),
       termsVersion: CURRENT_TERMS_VERSION,
+      referralCode,
     });
+
+    // Best-effort, never blocks registration — an unknown/invalid code is
+    // silently ignored (see docs/roadmap.md Phase 29). The actual reward is
+    // granted later, from verifyEmail(), not here — see
+    // ReferralService.grantRewardForVerifiedEmail.
+    await this.referralService
+      .attributeReferral(dto.referralCode, user.companyId)
+      .catch((error: unknown) =>
+        this.logger.warn(`Échec de l'attribution du parrainage : ${String(error)}`),
+      );
 
     // Best-effort, never blocks registration — email verification is
     // deliberately non-blocking (see docs/roadmap.md Phase 13).
@@ -162,6 +180,35 @@ export class AuthService {
     return { user: toPublicUser(user), tokens };
   }
 
+  // Public even when DEMO_MODE is off — returns [] rather than gating behind
+  // DemoModeEnabledGuard, so the frontend can always call this at login-page
+  // load to decide whether to render the quick-login buttons, with no risk
+  // of a dead/erroring button reaching a real deployment's login page.
+  getDemoProfiles(): { key: string; label: string }[] {
+    if (!this.demoModeEnabled) {
+      return [];
+    }
+    return DEMO_PROFILES.map(({ key, label }) => ({ key, label }));
+  }
+
+  // Only reachable behind DemoModeEnabledGuard (see auth.controller.ts) —
+  // logs straight into one of the fixed demo accounts with no password,
+  // reusing the exact same issueTokens/cookie flow as a real login.
+  async demoLogin(key: string): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
+    const profile = DEMO_PROFILES.find((p) => p.key === key);
+    if (!profile) {
+      throw new NotFoundException('Profil de démonstration inconnu.');
+    }
+    const user = await this.userRepository.findByEmail(profile.email);
+    if (!user) {
+      throw new NotFoundException(
+        'Compte de démonstration introuvable — le seed (`make demo`) a-t-il bien été lancé ?',
+      );
+    }
+    const tokens = await this.issueTokens(user, true);
+    return { user: toPublicUser(user), tokens };
+  }
+
   async handleGoogleLogin(
     profile: GoogleProfile,
   ): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
@@ -178,6 +225,10 @@ export class AuthService {
             newsletterOptIn: false,
             termsAcceptedAt: new Date(),
             termsVersion: CURRENT_TERMS_VERSION,
+            // No referral capture on this path yet (see docs/roadmap.md
+            // Phase 29's known limitation) — every company still needs its
+            // own code to give out, though.
+            referralCode: await this.referralService.generateUniqueCode(),
           });
     }
 
@@ -297,7 +348,18 @@ export class AuthService {
 
   async verifyEmail(token: string): Promise<void> {
     const authToken = await this.consumeValidToken(token, AuthTokenPurpose.EMAIL_VERIFICATION);
-    await this.userRepository.markEmailVerified(authToken.userId);
+    const user = await this.userRepository.markEmailVerified(authToken.userId);
+
+    // Best-effort: verifying the email must succeed regardless of what
+    // happens to a pending referral reward (see docs/roadmap.md Phase 29 —
+    // the reward is gated on this exact event as an anti-abuse measure).
+    await this.referralService
+      .grantRewardForVerifiedEmail(user.companyId)
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Échec de l'attribution de la récompense de parrainage : ${String(error)}`,
+        ),
+      );
   }
 
   async resendVerification(userId: string): Promise<void> {

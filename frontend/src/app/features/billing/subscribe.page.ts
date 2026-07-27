@@ -5,7 +5,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { BillingService } from '../../core/services/billing.service';
+import { ReferralStatus } from '../../core/models/referral.model';
 import { PlatformService } from '../../core/services/platform.service';
+import { ReferralService } from '../../core/services/referral.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
@@ -32,6 +34,7 @@ function extractErrorMessage(error: HttpErrorResponse, fallback: string): string
 })
 export class SubscribePage {
   private readonly billingService = inject(BillingService);
+  private readonly referralService = inject(ReferralService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
@@ -50,6 +53,9 @@ export class SubscribePage {
   protected readonly redeemError = signal<string | null>(null);
   protected readonly redeemSuccess = signal(false);
 
+  protected readonly referralStatus = signal<ReferralStatus | null>(null);
+  protected readonly referralLinkCopied = signal(false);
+
   protected readonly redirectNotice: 'success' | 'canceled' | null =
     this.route.snapshot.queryParamMap.get('success') === '1'
       ? 'success'
@@ -63,6 +69,29 @@ export class SubscribePage {
 
   constructor() {
     this.loadStatus();
+    // Independent of billing status — a referral code exists for every
+    // company regardless of premium state, so this loads unconditionally
+    // rather than nested inside loadStatus().
+    this.referralService
+      .getStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (status) => this.referralStatus.set(status) });
+  }
+
+  protected referralLink(status: ReferralStatus): string {
+    return `${window.location.origin}/inscription?ref=${status.code}`;
+  }
+
+  protected async copyReferralLink(status: ReferralStatus): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(this.referralLink(status));
+      this.referralLinkCopied.set(true);
+      setTimeout(() => this.referralLinkCopied.set(false), 3000);
+    } catch {
+      // Clipboard access can be denied by the browser — the link is also
+      // shown as plain, selectable text right next to the button, so this
+      // is a convenience, never the only way to get it.
+    }
   }
 
   private loadStatus(): void {
