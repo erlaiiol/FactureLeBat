@@ -83,6 +83,14 @@ export class App {
   @ViewChild('dataMenu') private readonly dataMenuRef?: ElementRef<HTMLElement>;
   protected readonly dataMenuOpen = signal(false);
 
+  // Bootstrap-style navbar-collapse for phone widths (nav wrapped instead of
+  // collapsing before this, see app.html). #mobileNavRoot is the whole <nav>
+  // rather than just the toggler+panel — at the widths where this menu can
+  // be open, the desktop-only containers are `display: none`, so "outside
+  // this element" and "outside the toggler/panel" are the same click.
+  @ViewChild('mobileNavRoot') private readonly mobileNavRootRef?: ElementRef<HTMLElement>;
+  protected readonly mobileMenuOpen = signal(false);
+
   // Measured and republished as the `--nav-height` CSS variable — see
   // observeTopBarHeight below and app.html's #topBar.
   @ViewChild('topBar') private readonly topBarRef?: ElementRef<HTMLElement>;
@@ -136,6 +144,7 @@ export class App {
       )
       .subscribe(() => {
         this.dataMenuOpen.set(false);
+        this.mobileMenuOpen.set(false);
         this.replayPageEnterAnimation();
       });
 
@@ -222,20 +231,29 @@ export class App {
     this.dataMenuOpen.set(false);
   }
 
+  protected toggleMobileMenu(): void {
+    this.mobileMenuOpen.update((open) => !open);
+  }
+
+  protected closeMobileMenu(): void {
+    this.mobileMenuOpen.set(false);
+  }
+
   @HostListener('document:click', ['$event'])
   protected onDocumentClick(event: MouseEvent): void {
-    if (!this.dataMenuOpen()) {
-      return;
-    }
     const target = event.target as Node;
-    if (!this.dataMenuRef?.nativeElement.contains(target)) {
+    if (this.dataMenuOpen() && !this.dataMenuRef?.nativeElement.contains(target)) {
       this.dataMenuOpen.set(false);
+    }
+    if (this.mobileMenuOpen() && !this.mobileNavRootRef?.nativeElement.contains(target)) {
+      this.mobileMenuOpen.set(false);
     }
   }
 
   @HostListener('document:keydown.escape')
   protected onEscapeKey(): void {
     this.dataMenuOpen.set(false);
+    this.mobileMenuOpen.set(false);
   }
 
   protected billingButtonState(): BillingButtonState {

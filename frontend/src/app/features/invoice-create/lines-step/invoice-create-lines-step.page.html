@@ -23,7 +23,7 @@
        these buttons on top of the nav's own text. 8rem fallback matches
        the old hardcoded value, for the brief window before the first
        ResizeObserver measurement lands. -->
-<div class="fixed top-[calc(var(--nav-height,8rem)_+_1rem)] left-4 z-50 flex flex-col gap-4">
+<div class="fixed top-[calc(var(--nav-height,8rem)_+_1rem)] left-4 z-50 flex flex-col gap-5">
   <div class="relative">
     <button
       type="button"
@@ -47,10 +47,10 @@
     </button>
 
     @if (productPanelOpen()) {
-      <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
+      <div class="fixed inset-0 z-40 bg-ink/30 sm:bg-transparent" (click)="closePanels()"></div>
       <div
         appTourAnchor="invoice-product-flyout"
-        class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
+        class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
       >
         <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
           Mon catalogue
@@ -117,10 +117,10 @@
     </button>
 
     @if (servicePanelOpen()) {
-      <div class="fixed inset-0 z-40" (click)="closePanels()"></div>
+      <div class="fixed inset-0 z-40 bg-ink/30 sm:bg-transparent" (click)="closePanels()"></div>
       <div
         appTourAnchor="invoice-service-flyout"
-        class="anim-line-in absolute top-0 left-full z-50 ml-3 flex max-h-[70vh] w-80 flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
+        class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
       >
         <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
           Mes prestations

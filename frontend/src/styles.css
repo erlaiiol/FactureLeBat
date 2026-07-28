@@ -313,16 +313,69 @@ button:not(:disabled) {
    state (flyout open, or on touch where :hover never fires). */
 .fixed-add-button {
   display: grid;
-  /* 0rem, not 0fr: the expanded state below is a fixed 12rem, and a browser
-     can only interpolate a grid track transition when both endpoints are
-     the same value type (length vs flex) — mixing fr and rem here made the
-     column snap open instantly instead of sliding. */
+  /* 0rem, not 0fr: the expanded state below is a fixed 14.5rem, and a
+     browser can only interpolate a grid track transition when both
+     endpoints are the same value type (length vs flex) — mixing fr and rem
+     here made the column snap open instantly instead of sliding. */
   grid-template-columns: 3.5rem 0rem;
   transition: grid-template-columns var(--duration-entrance) var(--ease-out-sharp);
 }
 .fixed-add-button:hover,
 .fixed-add-button.is-open {
-  grid-template-columns: 3.5rem 12rem;
+  /* 14.5rem, not the original 12rem: "Ajouter une prestation" (the longer
+     of the two labels) measures ~216px in Barlow Condensed 700 uppercase
+     with this button's tracking — a 12rem (192px) track clipped it via the
+     button's own overflow-hidden, cutting the label off mid-word instead
+     of ever fitting it. 14.5rem (232px) covers both labels with margin. */
+  grid-template-columns: 3.5rem 14.5rem;
+}
+
+/* Phase 13.5 gallery redesign, mobile fix: the catalog flyout the two "+"
+   buttons above open (invoice-create-lines-step.page.html) anchors beside
+   the button (`left: 100%`) on the assumption there's room to its right —
+   true on desktop, false on a phone-width viewport, where an already
+   ~290px-wide open button leaves a 320px-wide panel nowhere to go but off
+   the right edge. Below the `sm` breakpoint this repositions the panel as
+   a fixed bottom sheet instead — independent of the button's own position,
+   so it also stops covering the other "+" button in the stack the way a
+   side panel with no room would have. `line-in`'s upward nudge reads as
+   the wrong direction for a panel sliding up from the screen's own bottom
+   edge, so the sheet gets its own entrance, `sheet-in`, using the
+   Materialize band (docs/design-system.md#motion): a sheet settling into
+   place is the same "expand/collapse panel" moment `panelStretch` already
+   covers, just anchored to the viewport's bottom edge instead of the
+   trigger, which has no edge of its own to grow from here. At `sm` and up
+   there's enough width for the original side-anchored panel, so this falls
+   back to that exact positioning and its existing `line-in` animation. */
+.fixed-add-flyout {
+  position: fixed;
+  inset-inline: 1rem;
+  bottom: 1rem;
+  width: auto;
+  animation: sheet-in var(--duration-materialize) var(--ease-out-sharp);
+}
+@media (min-width: 640px) {
+  .fixed-add-flyout {
+    position: absolute;
+    inset-inline: auto;
+    bottom: auto;
+    top: 0;
+    left: 100%;
+    margin-left: 0.75rem;
+    width: 20rem;
+    animation: line-in var(--duration-entrance) var(--ease-out-sharp);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Materialize band — docs/design-system.md#motion's `panelStretch`: any
@@ -351,6 +404,27 @@ button:not(:disabled) {
 }
 .nav-dropdown-chevron {
   transition: transform var(--duration-entrance) var(--ease-out-sharp);
+}
+
+/* Navbar-collapse toggler (app.html, phone widths only): the three bars
+   morph into an X instead of swapping to a separate close icon. Translate
+   distance (6px) matches the 6-unit gap between the three path y-coordinates
+   (y=6/12/18 in the 24x24 viewBox) so the top/bottom bars land exactly on
+   the middle bar's position before rotating into the X. */
+.hamburger-line {
+  transform-origin: 12px 12px;
+  transition:
+    transform var(--duration-entrance) var(--ease-out-sharp),
+    opacity var(--duration-entrance) var(--ease-out-sharp);
+}
+.hamburger.is-open .hamburger-line-top {
+  transform: translateY(6px) rotate(45deg);
+}
+.hamburger.is-open .hamburger-line-mid {
+  opacity: 0;
+}
+.hamburger.is-open .hamburger-line-bottom {
+  transform: translateY(-6px) rotate(-45deg);
 }
 
 @keyframes total-pulse {

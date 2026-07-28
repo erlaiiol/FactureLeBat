@@ -9,239 +9,457 @@
          at narrow widths the nav wraps across several rows and a fixed
          pixel guess would sit the buttons on top of the nav text. -->
     <div #topBar>
-      <nav class="flex items-center gap-2 border-b border-line bg-surface px-4 py-3">
-        <a routerLink="/factures" class="mr-1 flex shrink-0 items-center" aria-label="FactureLe">
-          <img src="/android-chrome-192x192.png" alt="" width="32" height="32" class="rounded-lg" />
-        </a>
-        <div class="flex flex-1 flex-wrap gap-2">
-          <a
-            routerLink="/factures/nouvelle"
-            class="font-heading rounded-lg bg-primary px-4 py-2 text-sm font-bold tracking-wide text-primary-fg uppercase hover:bg-primary/90"
-            >Nouveau document</a
-          >
-          <a
-            routerLink="/factures"
-            appTourAnchor="nav-my-documents"
-            routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
-            [routerLinkActiveOptions]="{ exact: true }"
-            class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-            >Mes documents</a
-          >
-          <div class="relative" #dataMenu>
-            <button
-              type="button"
-              (click)="toggleDataMenu()"
-              [attr.aria-expanded]="dataMenuOpen()"
-              aria-haspopup="true"
-              class="font-heading flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-bold tracking-wide uppercase hover:bg-secondary-subtle"
-              [class.bg-info]="dataSectionActive()"
-              [class.text-info-fg]="dataSectionActive()"
-              [class.text-ink]="!dataSectionActive()"
-              [class.hover:!bg-info/90]="dataSectionActive()"
+      <nav #mobileNavRoot class="border-b border-line bg-surface px-4 py-3">
+        <div class="flex items-center gap-2">
+          <a routerLink="/factures" class="mr-1 flex shrink-0 items-center" aria-label="FactureLe">
+            <img
+              src="/android-chrome-192x192.png"
+              alt=""
+              width="32"
+              height="32"
+              class="rounded-lg"
+            />
+          </a>
+          <div class="hidden flex-1 flex-wrap gap-2 lg:flex">
+            <a
+              routerLink="/factures/nouvelle"
+              class="font-heading rounded-lg bg-primary px-4 py-2 text-sm font-bold tracking-wide text-primary-fg uppercase hover:bg-primary/90"
+              >Nouveau document</a
             >
-              Mon répertoire
-              <svg
-                viewBox="0 0 24 24"
-                width="14"
-                height="14"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                class="nav-dropdown-chevron"
-                [class.rotate-180]="dataMenuOpen()"
+            <a
+              routerLink="/factures"
+              appTourAnchor="nav-my-documents"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              [routerLinkActiveOptions]="{ exact: true }"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mes documents</a
+            >
+            <div class="relative" #dataMenu>
+              <button
+                type="button"
+                (click)="toggleDataMenu()"
+                [attr.aria-expanded]="dataMenuOpen()"
+                aria-haspopup="true"
+                class="font-heading flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-bold tracking-wide uppercase hover:bg-secondary-subtle"
+                [class.bg-info]="dataSectionActive()"
+                [class.text-info-fg]="dataSectionActive()"
+                [class.text-ink]="!dataSectionActive()"
+                [class.hover:!bg-info/90]="dataSectionActive()"
               >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            <div
-              class="panel-stretch absolute top-full left-0 z-20 mt-1 w-48"
-              [class.is-open]="dataMenuOpen()"
-              role="menu"
-            >
+                Mon répertoire
+                <svg
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  class="nav-dropdown-chevron"
+                  [class.rotate-180]="dataMenuOpen()"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
               <div
-                class="flex flex-col gap-1 rounded-lg border border-line bg-surface p-1.5 shadow-lg"
+                class="panel-stretch absolute top-full left-0 z-20 mt-1 w-48"
+                [class.is-open]="dataMenuOpen()"
+                role="menu"
               >
-                <a
-                  routerLink="/clients"
-                  routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
-                  (click)="closeDataMenu()"
-                  role="menuitem"
-                  class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-                  >Mes clients</a
+                <div
+                  class="flex flex-col gap-1 rounded-lg border border-line bg-surface p-1.5 shadow-lg"
                 >
-                <a
-                  routerLink="/produits"
-                  routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
-                  (click)="closeDataMenu()"
-                  role="menuitem"
-                  class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-                  >Mes produits</a
-                >
-                <a
-                  routerLink="/prestations"
-                  routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
-                  (click)="closeDataMenu()"
-                  role="menuitem"
-                  class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-                  >Mes prestations</a
-                >
+                  <a
+                    routerLink="/clients"
+                    routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                    (click)="closeDataMenu()"
+                    role="menuitem"
+                    class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+                    >Mes clients</a
+                  >
+                  <a
+                    routerLink="/produits"
+                    routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                    (click)="closeDataMenu()"
+                    role="menuitem"
+                    class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+                    >Mes produits</a
+                  >
+                  <a
+                    routerLink="/prestations"
+                    routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                    (click)="closeDataMenu()"
+                    role="menuitem"
+                    class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+                    >Mes prestations</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
-          <a
-            routerLink="/statistiques"
-            routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
-            class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-            >Statistiques</a
-          >
-          <a
-            routerLink="/entreprise"
-            routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
-            class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-            >Mon entreprise</a
-          >
-          <a
-            routerLink="/abonnement"
-            routerLinkActive="ring-2 ring-ink/40 ring-offset-1 ring-offset-bg"
-            [attr.aria-label]="billingButtonAriaLabel()"
-            class="font-heading flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold tracking-wide uppercase transition"
-            [class]="billingButtonClasses()"
-          >
-            @switch (billingButtonState()) {
-              @case ('active') {
-                <svg
-                  viewBox="0 0 24 24"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M20 6L9 17l-5-5" />
-                </svg>
-              }
-              @case ('blocked') {
-                <svg
-                  viewBox="0 0 24 24"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 9v4M12 17h.01" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-              }
-            }
-            Mon abonnement</a
-          >
-          @if (authService.currentUser()?.role === 'ADMIN') {
             <a
-              routerLink="/admin"
+              routerLink="/statistiques"
               routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
               class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
-              >Admin</a
+              >Statistiques</a
             >
-          }
-        </div>
-        <!-- One clear, always-the-same action — "show me how this page
-           works" — instead of the old on/off toggle whose label changed
-           depending on its own state (confusing for a non-technical
-           artisan: is it a button that's currently on, or one that turns
-           something on?). The auto-launch preference itself still lives in
-           Réglages ("Rejouer les visites guidées"); this only ever replays
-           the current page's tour on demand, so it works even if that
-           preference is off. Hidden on a page with no tour of its own,
-           rather than sitting there doing nothing. -->
-        @if (tourService.currentRouteTourId()) {
+            <a
+              routerLink="/entreprise"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mon entreprise</a
+            >
+            <a
+              routerLink="/abonnement"
+              routerLinkActive="ring-2 ring-ink/40 ring-offset-1 ring-offset-bg"
+              [attr.aria-label]="billingButtonAriaLabel()"
+              class="font-heading flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold tracking-wide uppercase transition"
+              [class]="billingButtonClasses()"
+            >
+              @switch (billingButtonState()) {
+                @case ('active') {
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                }
+                @case ('blocked') {
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 9v4M12 17h.01" />
+                    <circle cx="12" cy="12" r="9" />
+                  </svg>
+                }
+              }
+              Mon abonnement</a
+            >
+            @if (authService.currentUser()?.role === 'ADMIN') {
+              <a
+                routerLink="/admin"
+                routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+                >Admin</a
+              >
+            }
+          </div>
+          <div class="hidden items-center gap-2 lg:flex">
+            <!-- One clear, always-the-same action — "show me how this page
+             works" — instead of the old on/off toggle whose label changed
+             depending on its own state (confusing for a non-technical
+             artisan: is it a button that's currently on, or one that turns
+             something on?). The auto-launch preference itself still lives in
+             Réglages ("Rejouer les visites guidées"); this only ever replays
+             the current page's tour on demand, so it works even if that
+             preference is off. Hidden on a page with no tour of its own,
+             rather than sitting there doing nothing. -->
+            @if (tourService.currentRouteTourId()) {
+              <button
+                type="button"
+                (click)="replayHelp()"
+                title="Revoir l'aide de cette page"
+                aria-label="Revoir l'aide de cette page"
+                class="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M9.5 9.3a2.5 2.5 0 0 1 4.83.87c0 1.67-2.33 1.83-2.33 3.33" />
+                  <circle cx="12" cy="17" r="0.25" fill="currentColor" />
+                </svg>
+                <span>Aide</span>
+              </button>
+            }
+            <button
+              type="button"
+              (click)="themeService.toggle()"
+              class="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+              [attr.aria-label]="
+                themeService.theme() === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'
+              "
+            >
+              @if (themeService.theme() === 'dark') {
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="4" />
+                  <path
+                    d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+                  />
+                </svg>
+                Clair
+              } @else {
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+                Sombre
+              }
+            </button>
+            <span class="text-sm text-ink-soft">{{ authService.currentUser()?.email }}</span>
+            <button
+              type="button"
+              (click)="logout()"
+              class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+            >
+              Déconnexion
+            </button>
+          </div>
+          <!-- Bootstrap-style navbar-collapse toggler for phone widths: the
+           hamburger's three bars morph into an X (see .hamburger-line in
+           styles.css) instead of swapping in a separate close icon. -->
           <button
             type="button"
-            (click)="replayHelp()"
-            title="Revoir l'aide de cette page"
-            aria-label="Revoir l'aide de cette page"
-            class="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+            (click)="toggleMobileMenu()"
+            [attr.aria-expanded]="mobileMenuOpen()"
+            [attr.aria-label]="mobileMenuOpen() ? 'Fermer le menu' : 'Ouvrir le menu'"
+            aria-controls="mobile-nav-panel"
+            class="hamburger ml-auto flex shrink-0 items-center justify-center rounded-lg border border-line p-2.5 hover:bg-secondary-subtle lg:hidden"
+            [class.is-open]="mobileMenuOpen()"
           >
             <svg
               viewBox="0 0 24 24"
-              width="18"
-              height="18"
+              width="20"
+              height="20"
               fill="none"
               stroke="currentColor"
-              stroke-width="2"
+              stroke-width="2.25"
               stroke-linecap="round"
-              stroke-linejoin="round"
               aria-hidden="true"
             >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M9.5 9.3a2.5 2.5 0 0 1 4.83.87c0 1.67-2.33 1.83-2.33 3.33" />
-              <circle cx="12" cy="17" r="0.25" fill="currentColor" />
+              <path class="hamburger-line hamburger-line-top" d="M4 6h16" />
+              <path class="hamburger-line hamburger-line-mid" d="M4 12h16" />
+              <path class="hamburger-line hamburger-line-bottom" d="M4 18h16" />
             </svg>
-            <span class="hidden sm:inline">Aide</span>
           </button>
-        }
-        <button
-          type="button"
-          (click)="themeService.toggle()"
-          class="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-          [attr.aria-label]="
-            themeService.theme() === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'
-          "
-        >
-          @if (themeService.theme() === 'dark') {
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+        </div>
+
+        <div class="panel-stretch lg:hidden" [class.is-open]="mobileMenuOpen()">
+          <div id="mobile-nav-panel" class="flex flex-col gap-1 pt-3">
+            <a
+              routerLink="/factures/nouvelle"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg bg-primary px-4 py-2 text-sm font-bold tracking-wide text-primary-fg uppercase hover:bg-primary/90"
+              >Nouveau document</a
             >
-              <circle cx="12" cy="12" r="4" />
-              <path
-                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
-              />
-            </svg>
-            Clair
-          } @else {
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+            <a
+              routerLink="/factures"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              [routerLinkActiveOptions]="{ exact: true }"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mes documents</a
             >
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-            Sombre
-          }
-        </button>
-        <span class="hidden text-sm text-ink-soft sm:inline">{{
-          authService.currentUser()?.email
-        }}</span>
-        <button
-          type="button"
-          (click)="logout()"
-          class="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
-        >
-          Déconnexion
-        </button>
+            <a
+              routerLink="/clients"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mes clients</a
+            >
+            <a
+              routerLink="/produits"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mes produits</a
+            >
+            <a
+              routerLink="/prestations"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mes prestations</a
+            >
+            <a
+              routerLink="/statistiques"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Statistiques</a
+            >
+            <a
+              routerLink="/entreprise"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mon entreprise</a
+            >
+            <a
+              routerLink="/abonnement"
+              routerLinkActive="ring-2 ring-ink/40 ring-offset-1 ring-offset-bg"
+              [attr.aria-label]="billingButtonAriaLabel()"
+              (click)="closeMobileMenu()"
+              class="font-heading flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold tracking-wide uppercase transition"
+              [class]="billingButtonClasses()"
+            >
+              @switch (billingButtonState()) {
+                @case ('active') {
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                }
+                @case ('blocked') {
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 9v4M12 17h.01" />
+                    <circle cx="12" cy="12" r="9" />
+                  </svg>
+                }
+              }
+              Mon abonnement</a
+            >
+            @if (authService.currentUser()?.role === 'ADMIN') {
+              <a
+                routerLink="/admin"
+                routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                (click)="closeMobileMenu()"
+                class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+                >Admin</a
+              >
+            }
+
+            <div class="my-1 border-t border-line"></div>
+
+            @if (tourService.currentRouteTourId()) {
+              <button
+                type="button"
+                (click)="replayHelp(); closeMobileMenu()"
+                class="flex items-center gap-1.5 rounded-lg px-4 py-2 text-left text-sm font-medium text-ink hover:bg-secondary-subtle"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M9.5 9.3a2.5 2.5 0 0 1 4.83.87c0 1.67-2.33 1.83-2.33 3.33" />
+                  <circle cx="12" cy="17" r="0.25" fill="currentColor" />
+                </svg>
+                Revoir l'aide de cette page
+              </button>
+            }
+            <button
+              type="button"
+              (click)="themeService.toggle()"
+              class="flex items-center gap-1.5 rounded-lg px-4 py-2 text-left text-sm font-medium text-ink hover:bg-secondary-subtle"
+            >
+              @if (themeService.theme() === 'dark') {
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="4" />
+                  <path
+                    d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+                  />
+                </svg>
+                Passer en thème clair
+              } @else {
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+                Passer en thème sombre
+              }
+            </button>
+            <p class="px-4 py-1 text-sm text-ink-soft">
+              {{ authService.currentUser()?.email }}
+            </p>
+            <button
+              type="button"
+              (click)="logout(); closeMobileMenu()"
+              class="rounded-lg px-4 py-2 text-left text-sm font-medium text-ink hover:bg-secondary-subtle"
+            >
+              Déconnexion
+            </button>
+          </div>
+        </div>
       </nav>
       @if (authService.currentUser()?.emailVerified === false) {
         <p
