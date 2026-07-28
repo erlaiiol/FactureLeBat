@@ -17,13 +17,24 @@
 <!-- z-50, above the z-40 click-outside backdrops below, so clicking a
        button again toggles its own panel closed instead of being swallowed
        by the backdrop that just appeared on top of the page. -->
-<!-- top reads the `--nav-height` CSS variable (App's observeTopBarHeight)
-       rather than a fixed offset: at narrow widths the nav wraps across
-       several rows and grows past any one hardcoded top-* guess, which put
-       these buttons on top of the nav's own text. 8rem fallback matches
+<!-- Below `sm`, top-anchored (even under the nav) put these buttons right
+       over the page title/back link on a phone-height viewport at first
+       load — vertical-centering on the viewport instead keeps them clear
+       of both the nav above and whatever's at the very bottom of the
+       lines list, without needing to know either one's height. Left stays
+       pinned at the same left-4 either way — only the vertical anchor
+       changes, per the artisan's own read that centering sideways looked
+       wrong but centering vertically doesn't. At `sm` and up there's
+       enough vertical room that this doesn't come up, so it reverts to
+       the original top-anchored placement, which reads the `--nav-height`
+       CSS variable (App's observeTopBarHeight) rather than a fixed
+       offset: at those widths the nav can still wrap across several rows
+       and grow past any one hardcoded top-* guess. 8rem fallback matches
        the old hardcoded value, for the brief window before the first
        ResizeObserver measurement lands. -->
-<div class="fixed top-[calc(var(--nav-height,8rem)_+_1rem)] left-4 z-50 flex flex-col gap-5">
+<div
+  class="fixed top-1/2 left-4 z-50 flex -translate-y-1/2 flex-col gap-5 sm:top-[calc(var(--nav-height,8rem)_+_1rem)] sm:translate-y-0"
+>
   <div class="relative">
     <button
       type="button"

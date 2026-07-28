@@ -112,7 +112,14 @@ export class InvoiceCreateLinesStepPage {
   // produit"/"Ajouter une prestation" label is readable before collapsing
   // into the bare "+" circle — same is-open mechanism as the panel-open and
   // tour-highlight states above, just time-driven instead of user-driven.
-  protected readonly introExpanded = signal(true);
+  // Desktop-only (`sm` breakpoint, matching styles.css's .fixed-add-flyout
+  // and this page's own fixed-position container): on a phone the two "+"
+  // circles are already a large, obviously-tappable fraction of the
+  // viewport (see ux-roadmap.md's mobile-first vision) the way they never
+  // are on a 15"+ screen, so there's nothing this reveal explains that the
+  // button itself doesn't already — it would just cover the page the
+  // artisan just landed on with two expanded pills for no reason.
+  protected readonly introExpanded = signal(window.matchMedia('(min-width: 640px)').matches);
 
   protected readonly lines = this.fb.array<InvoiceLineFormGroup>(
     this.draftStore.lines().map((line) => this.createLineGroup(line)),
@@ -212,8 +219,10 @@ export class InvoiceCreateLinesStepPage {
       this.draftStore.setServiceLines(this.serviceLines.getRawValue());
     });
 
-    const introTimer = setTimeout(() => this.introExpanded.set(false), 3000);
-    this.destroyRef.onDestroy(() => clearTimeout(introTimer));
+    if (this.introExpanded()) {
+      const introTimer = setTimeout(() => this.introExpanded.set(false), 3000);
+      this.destroyRef.onDestroy(() => clearTimeout(introTimer));
+    }
   }
 
   private createLineGroup(initial?: {
