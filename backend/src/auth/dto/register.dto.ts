@@ -4,6 +4,7 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -17,8 +18,11 @@ export class RegisterDto {
   // bound — bcrypt silently truncates at 72 bytes, but rejecting a long
   // passphrase outright would punish an artisan who chose a strong one.
   @IsString()
-  @MinLength(8)
+  @MinLength(8, { message: 'Le mot de passe doit contenir au moins 8 caractères.' })
   @MaxLength(200)
+  @Matches(/(?=.*[A-Z])(?=.*\d)/, {
+    message: 'Le mot de passe doit contenir au moins une majuscule et un chiffre.',
+  })
   password: string;
 
   // Hard requirement, not just documentation: a registration attempt that

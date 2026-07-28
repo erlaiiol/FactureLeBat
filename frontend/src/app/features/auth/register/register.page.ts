@@ -1,7 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
@@ -9,6 +15,12 @@ import { PlatformService } from '../../../core/services/platform.service';
 import { ReferralService } from '../../../core/services/referral.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { ReferralCodePromptComponent } from '../../../shared/components/referral-code-prompt.component';
+
+function passwordsMatchValidator(group: AbstractControl): ValidationErrors | null {
+  const password = group.get('password')?.value;
+  const confirmPassword = group.get('confirmPassword')?.value;
+  return password === confirmPassword ? null : { passwordMismatch: true };
+}
 
 @Component({
   selector: 'app-register-page',
@@ -36,17 +48,26 @@ export class RegisterPage {
   // the field below stays fully editable.
   protected readonly refCodeFromQuery = this.route.snapshot.queryParamMap.get('ref');
 
-  protected readonly form = this.fb.nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(8)]],
-    // Mandatory — see RegisterDto.acceptTerms on the backend. Deliberately
-    // its own control, never bundled with newsletterOptIn below.
-    acceptTerms: [false, Validators.requiredTrue],
-    // Unchecked by default — RGPD requires this stay an independent,
-    // explicit opt-in.
-    newsletterOptIn: [false],
-    referralCode: [this.refCodeFromQuery ?? ''],
-  });
+  protected readonly form = this.fb.nonNullable.group(
+    {
+      email: ['', [Validators.required, Validators.email]],
+      // Mirrors RegisterDto.password on the backend: 8 chars minimum, at
+      // least one uppercase letter and one digit.
+      password: [
+        '',
+        [Validators.required, Validators.minLength(8), Validators.pattern(/(?=.*[A-Z])(?=.*\d)/)],
+      ],
+      confirmPassword: ['', Validators.required],
+      // Mandatory — see RegisterDto.acceptTerms on the backend. Deliberately
+      // its own control, never bundled with newsletterOptIn below.
+      acceptTerms: [false, Validators.requiredTrue],
+      // Unchecked by default — RGPD requires this stay an independent,
+      // explicit opt-in.
+      newsletterOptIn: [false],
+      referralCode: [this.refCodeFromQuery ?? ''],
+    },
+    { validators: passwordsMatchValidator },
+  );
 
   // Live feedback only — never blocks submission (see RegisterDto.referralCode
   // on the backend: an unknown/invalid code is always silently ignored
@@ -91,7 +112,7 @@ export class RegisterPage {
     this.saving.set(true);
     this.errorMessage.set(null);
 
-    const { referralCode, ...rest } = this.form.getRawValue();
+    const { referralCode, confirmPassword: _confirmPassword, ...rest } = this.form.getRawValue();
     this.authService
       .register({ ...rest, referralCode: referralCode.trim() || undefined })
       .pipe(takeUntilDestroyed(this.destroyRef))

@@ -313,7 +313,11 @@ button:not(:disabled) {
    state (flyout open, or on touch where :hover never fires). */
 .fixed-add-button {
   display: grid;
-  grid-template-columns: 3.5rem 0fr;
+  /* 0rem, not 0fr: the expanded state below is a fixed 12rem, and a browser
+     can only interpolate a grid track transition when both endpoints are
+     the same value type (length vs flex) — mixing fr and rem here made the
+     column snap open instantly instead of sliding. */
+  grid-template-columns: 3.5rem 0rem;
   transition: grid-template-columns var(--duration-entrance) var(--ease-out-sharp);
 }
 .fixed-add-button:hover,

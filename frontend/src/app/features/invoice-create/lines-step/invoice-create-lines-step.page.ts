@@ -108,6 +108,12 @@ export class InvoiceCreateLinesStepPage {
     () => this.tourService.currentStep()?.anchorId === 'invoice-add-service-button',
   );
 
+  // Holds both "+" buttons open on first mount so their "Ajouter un
+  // produit"/"Ajouter une prestation" label is readable before collapsing
+  // into the bare "+" circle — same is-open mechanism as the panel-open and
+  // tour-highlight states above, just time-driven instead of user-driven.
+  protected readonly introExpanded = signal(true);
+
   protected readonly lines = this.fb.array<InvoiceLineFormGroup>(
     this.draftStore.lines().map((line) => this.createLineGroup(line)),
   );
@@ -205,6 +211,9 @@ export class InvoiceCreateLinesStepPage {
     this.serviceLines.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.draftStore.setServiceLines(this.serviceLines.getRawValue());
     });
+
+    const introTimer = setTimeout(() => this.introExpanded.set(false), 3000);
+    this.destroyRef.onDestroy(() => clearTimeout(introTimer));
   }
 
   private createLineGroup(initial?: {
