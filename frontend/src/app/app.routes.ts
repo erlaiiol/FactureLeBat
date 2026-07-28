@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
+import { companyOnboardingGuard } from './core/guards/company-onboarding.guard';
 import { guestGuard } from './core/guards/guest.guard';
 import { rapportsRedirectGuard } from './core/guards/rapports-redirect.guard';
 
@@ -136,6 +137,7 @@ const protectedRoutes: Routes = [
   },
   {
     path: 'entreprise',
+    canDeactivate: [companyOnboardingGuard],
     loadComponent: () =>
       import('./features/company-settings/company-settings.page').then(
         (m) => m.CompanySettingsPage,

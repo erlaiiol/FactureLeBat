@@ -52,6 +52,12 @@ const DEMO_ARTISAN_PASSWORD = 'DemoArtisan2026!';
 const DEMO_BEAUTE_EMAIL = demoEmail('beaute');
 const DEMO_BEAUTE_PASSWORD = 'DemoBeaute2026!';
 
+// No real Stripe subscription behind these tenants — premiumGrantedUntil is
+// the same "premium access granted outside Stripe" mechanism as an admin
+// grant or a redeemed PromoCode (see PremiumGateService.hasPremiumAccess),
+// so a prospect/investor clicking through the demo never hits the paywall.
+const DEMO_PREMIUM_GRANTED_UNTIL = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: mustGetEnv('DATABASE_URL') }),
 });
@@ -295,6 +301,7 @@ async function seedArtisanBatiment(): Promise<void> {
       phone: '04 78 12 34 56',
       legalStatus: LegalStatus.COMPANY,
       vatRateBasisPoints: 2000,
+      premiumGrantedUntil: DEMO_PREMIUM_GRANTED_UNTIL,
     },
     email: DEMO_ARTISAN_EMAIL,
     password: DEMO_ARTISAN_PASSWORD,
@@ -1002,6 +1009,7 @@ async function seedInstitutBeaute(): Promise<void> {
       legalStatus: LegalStatus.MICRO_ENTREPRENEUR,
       vatRateBasisPoints: 0,
       declarationFrequency: DeclarationFrequency.MENSUELLE,
+      premiumGrantedUntil: DEMO_PREMIUM_GRANTED_UNTIL,
     },
     email: DEMO_BEAUTE_EMAIL,
     password: DEMO_BEAUTE_PASSWORD,

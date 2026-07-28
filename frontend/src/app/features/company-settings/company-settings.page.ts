@@ -39,6 +39,25 @@ export class CompanySettingsPage {
   // stranded on the settings page with just an inline "Enregistré !".
   protected readonly onboarding = this.route.snapshot.queryParamMap.get('onboarding') === '1';
 
+  // companyOnboardingGuard (app.routes.ts) calls canDeactivate() below on
+  // every attempted navigation away from this page — these two signals
+  // drive the warning banner that appears the moment that first blocks
+  // someone, so "you can't leave yet" comes with a visible reason rather
+  // than a silently-cancelled nav.
+  private static readonly essentialFieldLabels = {
+    name: "Nom de l'entreprise",
+    siret: 'SIRET',
+    addressLine1: 'Adresse',
+    postalCode: 'Code postal',
+    city: 'Ville',
+    legalStatus: 'Statut',
+  } as const;
+  private readonly essentialControlNames = Object.keys(
+    CompanySettingsPage.essentialFieldLabels,
+  ) as (keyof typeof CompanySettingsPage.essentialFieldLabels)[];
+  protected readonly onboardingBlocked = signal(false);
+  protected readonly missingEssentialFields = signal<string[]>([]);
+
   // Phase 13 RGPD self-service deletion — a two-step reveal (button ->
   // inline confirm form) rather than a native confirm() dialog, matching
   // this app's own custom-component style everywhere else (e.g.
@@ -151,6 +170,20 @@ export class CompanySettingsPage {
           this.errorMessage.set("Impossible de charger les informations de l'entreprise.");
         },
       });
+
+    // Only worth the extra work once a blocked attempt has actually shown
+    // the banner — keeps it in sync live as the artisan fixes fields,
+    // instead of requiring another failed nav attempt to clear it.
+    this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (!this.onboardingBlocked()) {
+        return;
+      }
+      const missing = this.computeMissingEssentialFields();
+      this.missingEssentialFields.set(missing);
+      if (missing.length === 0) {
+        this.onboardingBlocked.set(false);
+      }
+    });
 
     this.mailSettingsService
       .getSettings()
@@ -269,6 +302,36 @@ export class CompanySettingsPage {
           );
         },
       });
+  }
+
+  // companyOnboardingGuard's CanDeactivate hook. Only ever refuses
+  // navigation during the first-login redirect (`onboarding=1`) and only
+  // for the fields that actually print on an invoice — the VAT/déclaration
+  // section below has sane defaults already, so it's never what's blocking
+  // someone here.
+  // Public, not protected: companyOnboardingGuard (a CanDeactivateFn outside
+  // this class) needs to call it directly.
+  canDeactivate(): boolean {
+    if (!this.onboarding) {
+      return true;
+    }
+    const missing = this.computeMissingEssentialFields();
+    if (missing.length === 0) {
+      return true;
+    }
+    this.essentialControlNames.forEach((name) => this.form.controls[name].markAsTouched());
+    this.missingEssentialFields.set(missing);
+    this.onboardingBlocked.set(true);
+    this.toastService.error(
+      "Complétez d'abord ces informations avant de continuer — elles apparaissent sur vos factures.",
+    );
+    return false;
+  }
+
+  private computeMissingEssentialFields(): string[] {
+    return this.essentialControlNames
+      .filter((name) => this.form.controls[name].invalid)
+      .map((name) => CompanySettingsPage.essentialFieldLabels[name]);
   }
 
   protected onTourEnabledChange(enabled: boolean): void {

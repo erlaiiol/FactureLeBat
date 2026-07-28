@@ -14,6 +14,19 @@
     }
   </div>
 
+  @if (onboardingBlocked()) {
+    <div
+      role="alert"
+      class="mb-6 flex flex-col gap-1 rounded-lg bg-warning-subtle px-4 py-3 text-sm text-warning-subtle-fg"
+    >
+      <p class="font-semibold">Complétez ces informations avant de continuer</p>
+      <p>
+        Elles apparaissent directement sur vos factures — il manque :
+        {{ missingEssentialFields().join(', ') }}.
+      </p>
+    </div>
+  }
+
   @if (loading() && showSkeleton()) {
     <div class="flex flex-col gap-4">
       @for (row of [1, 2, 3, 4, 5, 6]; track row) {
@@ -38,6 +51,7 @@
         formControlName="name"
         type="text"
         class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        [class.border-danger]="form.controls.name.invalid && form.controls.name.touched"
       />
       <app-field-hint text="Le nom affiché en haut de chaque facture." />
     </label>
@@ -50,6 +64,7 @@
         inputmode="numeric"
         maxlength="14"
         class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        [class.border-danger]="form.controls.siret.invalid && form.controls.siret.touched"
       />
       <app-field-hint text="Votre numéro d'identification légal — obligatoire sur toute facture." />
     </label>
@@ -60,6 +75,9 @@
         formControlName="addressLine1"
         type="text"
         class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        [class.border-danger]="
+          form.controls.addressLine1.invalid && form.controls.addressLine1.touched
+        "
       />
       <app-field-hint text="L'adresse de votre entreprise, affichée sur vos factures." />
     </label>
@@ -81,6 +99,9 @@
           formControlName="postalCode"
           type="text"
           class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+          [class.border-danger]="
+            form.controls.postalCode.invalid && form.controls.postalCode.touched
+          "
         />
         <app-field-hint text="Le code postal de votre entreprise." />
       </label>
@@ -90,6 +111,7 @@
           formControlName="city"
           type="text"
           class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+          [class.border-danger]="form.controls.city.invalid && form.controls.city.touched"
         />
         <app-field-hint text="La ville de votre entreprise." />
       </label>
@@ -120,6 +142,9 @@
       <select
         formControlName="legalStatus"
         class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        [class.border-danger]="
+          form.controls.legalStatus.invalid && form.controls.legalStatus.touched
+        "
       >
         <option value="MICRO_ENTREPRENEUR">Micro-entrepreneur (sans TVA)</option>
         <option value="COMPANY">Entreprise (avec TVA)</option>

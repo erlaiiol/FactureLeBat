@@ -11,6 +11,7 @@ import {
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
+import { IconDotsVerticalComponent } from '../../shared/components/icon-dots-vertical.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { isOverdue } from './invoice-status.util';
 
@@ -40,7 +41,7 @@ import { isOverdue } from './invoice-status.util';
   selector: 'app-invoice-list-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { style: 'display: contents' },
-  imports: [DatePipe, CentsToEurosPipe, BadgeComponent],
+  imports: [DatePipe, CentsToEurosPipe, BadgeComponent, IconDotsVerticalComponent],
   templateUrl: './invoice-list-row.component.html',
 })
 export class InvoiceListRowComponent {
@@ -59,11 +60,14 @@ export class InvoiceListRowComponent {
   readonly sharing = input(false);
   // Facture-only: whether the status-change menu is open for this row.
   readonly statusMenuOpen = input(false);
+  // Whether the actions ("...") dropdown is open for this row.
+  readonly actionsMenuOpen = input(false);
 
   readonly convertToFacture = output<void>();
   readonly createFromDevis = output<void>();
   readonly toggleHighlight = output<void>();
   readonly toggleStatusMenu = output<void>();
+  readonly toggleActionsMenu = output<void>();
   readonly setPaid = output<void>();
   readonly setCancelled = output<void>();
   readonly setNonPayee = output<void>();
@@ -118,5 +122,21 @@ export class InvoiceListRowComponent {
     const rect = trigger.getBoundingClientRect();
     this.menuPosition.set({ top: rect.bottom + 4, left: rect.left });
     this.toggleStatusMenu.emit();
+  }
+
+  // Same fixed-position technique as menuPosition above, but right-aligned
+  // to the trigger (the actions column sits at the far right edge of a
+  // horizontally-scrollable table, so a left-aligned menu would frequently
+  // overflow past the viewport).
+  private static readonly ACTIONS_MENU_WIDTH = 176;
+  protected readonly actionsMenuPosition = signal<{ top: number; left: number } | null>(null);
+
+  protected onActionsMenuClick(trigger: HTMLElement): void {
+    const rect = trigger.getBoundingClientRect();
+    this.actionsMenuPosition.set({
+      top: rect.bottom + 4,
+      left: rect.right - InvoiceListRowComponent.ACTIONS_MENU_WIDTH,
+    });
+    this.toggleActionsMenu.emit();
   }
 }

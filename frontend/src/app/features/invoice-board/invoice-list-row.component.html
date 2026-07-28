@@ -91,41 +91,60 @@
     {{ invoice().totalInclVatCents | centsToEuros }}
   </td>
 
-  <td class="px-4 py-3 align-top">
-    <div class="flex flex-wrap items-center justify-end gap-2">
-      @if (isDevis() && !invoice().convertedToFacture) {
-        <button
-          type="button"
-          [disabled]="converting()"
-          (click)="convertToFacture.emit()"
-          class="rounded-lg bg-info px-2.5 py-1.5 text-xs font-medium text-info-fg hover:brightness-90 disabled:opacity-60"
-        >
-          {{ converting() ? 'Création…' : 'Facture identique' }}
-        </button>
-        <button
-          type="button"
-          [disabled]="converting()"
-          (click)="createFromDevis.emit()"
-          class="rounded-lg bg-secondary px-2.5 py-1.5 text-xs font-medium text-secondary-fg hover:brightness-90 disabled:opacity-60"
-        >
-          Facture à partir du devis
-        </button>
-      }
-      <a
-        [href]="pdfUrl()"
-        target="_blank"
-        class="rounded-lg bg-secondary px-2.5 py-1.5 text-xs font-medium text-secondary-fg hover:brightness-90"
-      >
-        Télécharger
-      </a>
+  <td class="px-4 py-3 align-top text-right">
+    <div class="inline-block">
       <button
+        #actionsTrigger
         type="button"
-        [disabled]="sharing()"
-        (click)="share.emit()"
-        class="rounded-lg bg-secondary-subtle px-2.5 py-1.5 text-xs font-medium text-secondary-subtle-fg hover:brightness-95 disabled:opacity-60"
+        (click)="onActionsMenuClick(actionsTrigger)"
+        class="rounded-lg p-1.5 text-ink-soft hover:bg-secondary-subtle hover:text-ink"
+        aria-label="Actions"
       >
-        {{ sharing() ? 'Partage…' : 'Partager' }}
+        <app-icon-dots-vertical [size]="18" />
       </button>
+      @if (actionsMenuOpen()) {
+        <div class="fixed inset-0 z-40" (click)="toggleActionsMenu.emit()"></div>
+        <div
+          class="anim-line-in fixed z-50 flex w-44 flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-xl"
+          [style.top.px]="actionsMenuPosition()?.top"
+          [style.left.px]="actionsMenuPosition()?.left"
+        >
+          @if (isDevis() && !invoice().convertedToFacture) {
+            <button
+              type="button"
+              [disabled]="converting()"
+              (click)="convertToFacture.emit(); toggleActionsMenu.emit()"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+            >
+              {{ converting() ? 'Création…' : 'Facture identique' }}
+            </button>
+            <button
+              type="button"
+              [disabled]="converting()"
+              (click)="createFromDevis.emit(); toggleActionsMenu.emit()"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+            >
+              Facture à partir du devis
+            </button>
+          }
+          <a
+            [href]="pdfUrl()"
+            target="_blank"
+            (click)="toggleActionsMenu.emit()"
+            class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+          >
+            Télécharger
+          </a>
+          <button
+            type="button"
+            [disabled]="sharing()"
+            (click)="share.emit(); toggleActionsMenu.emit()"
+            class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+          >
+            {{ sharing() ? 'Partage…' : 'Partager' }}
+          </button>
+        </div>
+      }
     </div>
   </td>
 </tr>

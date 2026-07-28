@@ -119,9 +119,14 @@ export class InvoiceBoardPage {
   private readonly router = inject(Router);
 
   // Phase 24: the reflow-retrigger technique App.replayPageEnterAnimation
-  // already uses for route changes — replayed on the <tbody> whenever the
-  // sort changes, so re-ordering reads as a deliberate refresh (asyncReveal's
-  // fade-up-from-above) instead of rows silently jumping to new positions.
+  // already uses for route changes — replayed whenever the sort changes, so
+  // re-ordering reads as a deliberate refresh (asyncReveal's fade-up-from-
+  // above) instead of rows silently jumping to new positions. Anchored on
+  // the table's wrapping <div>, not the <tbody> itself: `anim-preview-in`
+  // animates `transform`, and transforming a table-row-group is enough for
+  // Chrome/Safari to botch that table's column-width layout until something
+  // else forces a reflow (e.g. hovering a row) — columns would render
+  // squashed/misaligned on every sort and on first load until then.
   @ViewChild('tbodyRef') private readonly tbodyRef?: ElementRef<HTMLElement>;
 
   protected readonly invoices = signal<InvoiceWithTotals[]>([]);
@@ -148,6 +153,9 @@ export class InvoiceBoardPage {
   // Phase 23: which single facture row's status menu is open — at most one
   // at a time.
   protected readonly statusMenuInvoiceId = signal<string | null>(null);
+  // Which single row's actions ("...") dropdown is open — at most one at a
+  // time, same convention as statusMenuInvoiceId above.
+  protected readonly actionsMenuInvoiceId = signal<string | null>(null);
 
   // Phase 24: sortable column headers — defaults to newest-first, the same
   // ordering the API itself already returns.
@@ -235,11 +243,24 @@ export class InvoiceBoardPage {
   }
 
   protected toggleStatusMenu(invoiceId: string): void {
+    this.actionsMenuInvoiceId.set(null);
     this.statusMenuInvoiceId.update((current) => (current === invoiceId ? null : invoiceId));
   }
 
   private closeStatusMenu(): void {
     this.statusMenuInvoiceId.set(null);
+  }
+
+  protected isActionsMenuOpen(invoiceId: string): boolean {
+    return this.actionsMenuInvoiceId() === invoiceId;
+  }
+
+  // Same single-menu-at-a-time convention as toggleStatusMenu above — the
+  // two dropdowns are visually independent triggers but should never both
+  // be open at once for the same row (or two different rows).
+  protected toggleActionsMenu(invoiceId: string): void {
+    this.statusMenuInvoiceId.set(null);
+    this.actionsMenuInvoiceId.update((current) => (current === invoiceId ? null : invoiceId));
   }
 
   constructor() {

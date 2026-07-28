@@ -40,7 +40,10 @@
       <p class="mb-4 font-medium text-danger">{{ message }}</p>
     }
 
-    <div class="overflow-x-auto rounded-xl border border-line bg-surface shadow-sm">
+    <div
+      #tbodyRef
+      class="anim-preview-in overflow-x-auto rounded-xl border border-line bg-surface shadow-sm"
+    >
       <table class="w-full min-w-[44rem] text-sm">
         <thead>
           <tr class="border-b border-line text-left text-ink-soft">
@@ -100,7 +103,7 @@
             <th class="px-4 py-3 text-right font-medium">Actions</th>
           </tr>
         </thead>
-        <tbody #tbodyRef class="anim-preview-in">
+        <tbody>
           @for (item of rows(); track item.id) {
             <app-invoice-list-row
               [invoice]="item"
@@ -109,10 +112,12 @@
               [converting]="convertingDevisId() === item.id"
               [sharing]="sharingInvoiceId() === item.id"
               [statusMenuOpen]="isStatusMenuOpen(item.id)"
+              [actionsMenuOpen]="isActionsMenuOpen(item.id)"
               (convertToFacture)="convertDevis(item)"
               (createFromDevis)="createFromDevis(item)"
               (toggleHighlight)="toggleHighlight(item)"
               (toggleStatusMenu)="toggleStatusMenu(item.id)"
+              (toggleActionsMenu)="toggleActionsMenu(item.id)"
               (setPaid)="markPaid(item)"
               (setCancelled)="cancelInvoice(item)"
               (setNonPayee)="moveToNonPayee(item)"

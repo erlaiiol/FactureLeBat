@@ -1,7 +1,7 @@
 .PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-dev android-prod ios-dev ios-prod
 
 dev:
-	docker compose -f infra/docker-compose.yml up --build
+	docker compose -f infra/docker-compose.yml up --build -V
 
 prod:
 	docker compose -f infra/docker-compose.prod.yml up --build -d
@@ -19,7 +19,7 @@ prod:
 # same host ports as `make dev` (infra/.env), the two can't run at the same
 # time — stop one before starting the other.
 demo:
-	DEMO_MODE=true docker compose -f infra/docker-compose.yml -p facturele-demo up --build -d
+	DEMO_MODE=true docker compose -f infra/docker-compose.yml -p facturele-demo up --build -d -V
 	sh infra/demo-seed.sh
 
 # Tears the demo stack down AND destroys its database volume (`down -v`,

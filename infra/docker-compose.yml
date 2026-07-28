@@ -53,6 +53,13 @@ services:
       - ../backend:/app
       - /app/node_modules
       - /app/generated
+      # Compose reuses an anonymous volume's prior content across `up
+      # --build` by default, so a schema.prisma change alone won't refresh
+      # this one — the freshly-`prisma generate`d client built into the new
+      # image gets shadowed by the old volume, producing stale-type errors
+      # that look like a Prisma/TS bug. `make dev`/`make demo` pass `-V`
+      # (--renew-anon-volumes) specifically so this volume gets rebuilt
+      # every time; don't drop that flag from the Makefile.
       # NOT excluding dist/ here: nest-cli.json's deleteOutDir rmdir's the
       # whole dist/ folder on every rebuild, and Docker refuses to rmdir a
       # volume's own mount point (EBUSY) — tried it, it crash-loops the
