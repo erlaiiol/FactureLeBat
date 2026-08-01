@@ -16,6 +16,7 @@ import { InvoiceService } from '../../core/services/invoice.service';
 import { InvoiceShareService } from '../../core/services/invoice-share.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
+import { IconCalendarComponent } from '../../shared/components/icon-calendar.component';
 import { IconChevronDownComponent } from '../../shared/components/icon-chevron-down.component';
 import { IconCloseComponent } from '../../shared/components/icon-close.component';
 import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
@@ -112,6 +113,7 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
     SendInvoiceEmailModalComponent,
     IconChevronDownComponent,
     IconCloseComponent,
+    IconCalendarComponent,
     BadgeComponent,
   ],
   templateUrl: './invoice-board.page.html',

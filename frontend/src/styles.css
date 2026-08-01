@@ -598,3 +598,12 @@ button:not(:disabled) {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+/* The template draws its own app-icon-calendar over every date input
+   (filled or empty) for a consistent look across browsers — Chromium's own
+   picker-indicator glyph would otherwise double up with it once a date is
+   set. Still fully clickable (opacity, not display/visibility), so it
+   keeps opening the native picker. Firefox has no equivalent pseudo-element
+   to hide the same way, but doesn't render a competing icon either. */
+input[type='date']::-webkit-calendar-picker-indicator {
+  opacity: 0;
+}

@@ -3,7 +3,7 @@
     Mes documents
   </h1>
 
-  <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+  <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
     <input
       [value]="search()"
       (input)="onSearchInput($any($event.target).value)"
@@ -11,39 +11,52 @@
       placeholder="Rechercher un client…"
       class="rounded-lg border border-line px-4 py-3 text-lg"
     />
-    <div class="relative">
-      <input
-        [value]="dateFrom()"
-        (input)="onDateFromInput($any($event.target).value)"
-        type="date"
-        aria-label="Du"
-        class="rounded-lg border border-line px-4 py-3 text-ink"
-        [class.date-input-empty]="!dateFrom()"
-      />
-      @if (!dateFrom()) {
-        <div
-          class="pointer-events-none absolute inset-0 flex items-center rounded-lg border border-line px-4 py-3 text-ink-soft"
-        >
-          ../../..
+    <div class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink-soft">Dates</span>
+      <div class="flex flex-wrap gap-3">
+        <div class="relative">
+          <input
+            [value]="dateFrom()"
+            (input)="onDateFromInput($any($event.target).value)"
+            type="date"
+            aria-label="Du"
+            class="rounded-lg border border-line py-3 pr-9 pl-4 text-ink"
+            [class.date-input-empty]="!dateFrom()"
+          />
+          @if (!dateFrom()) {
+            <div
+              class="pointer-events-none absolute inset-0 flex items-center rounded-lg border border-line py-3 pr-9 pl-4 text-ink-soft"
+            >
+              ../../..
+            </div>
+          }
+          <app-icon-calendar
+            [size]="16"
+            class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-soft"
+          />
         </div>
-      }
-    </div>
-    <div class="relative">
-      <input
-        [value]="dateTo()"
-        (input)="onDateToInput($any($event.target).value)"
-        type="date"
-        aria-label="Au"
-        class="rounded-lg border border-line px-4 py-3 text-ink"
-        [class.date-input-empty]="!dateTo()"
-      />
-      @if (!dateTo()) {
-        <div
-          class="pointer-events-none absolute inset-0 flex items-center rounded-lg border border-line px-4 py-3 text-ink-soft"
-        >
-          ../../..
+        <div class="relative">
+          <input
+            [value]="dateTo()"
+            (input)="onDateToInput($any($event.target).value)"
+            type="date"
+            aria-label="Au"
+            class="rounded-lg border border-line py-3 pr-9 pl-4 text-ink"
+            [class.date-input-empty]="!dateTo()"
+          />
+          @if (!dateTo()) {
+            <div
+              class="pointer-events-none absolute inset-0 flex items-center rounded-lg border border-line py-3 pr-9 pl-4 text-ink-soft"
+            >
+              ../../..
+            </div>
+          }
+          <app-icon-calendar
+            [size]="16"
+            class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-soft"
+          />
         </div>
-      }
+      </div>
     </div>
     @if (highlightedClientId()) {
       <button
