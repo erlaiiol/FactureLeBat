@@ -10,9 +10,9 @@
 #   0 8 * * * cd /path/to/FactureLe && sh infra/check-cert-expiry.sh >> /var/log/facturele-cert-check.log 2>&1
 #
 # Reads infra/.env directly rather than duplicating config: DOMAIN is the
-# same value Caddy itself uses, and the alert email reuses Phase 17.5's
-# already-configured Resend account (SYSTEM_SMTP_PASSWORD is a Resend API
-# key, usable as-is against Resend's HTTP API — no new secret to provision).
+# same value Caddy itself uses, and the alert email is sent over plain SMTP
+# using the already-configured SYSTEM_SMTP_* system mailbox credentials (no
+# separate provider API, no new secret to provision).
 # Requires OPS_ALERT_EMAIL set in infra/.env to actually send an alert; with
 # it unset, the script still logs its finding on stdout (still useful for a
 # cron log) but has no way to notify anyone.
@@ -38,21 +38,45 @@ alert() {
 	echo "==> ALERT: $message" >&2
 
 	to=$(env_var OPS_ALERT_EMAIL)
-	api_key=$(env_var SYSTEM_SMTP_PASSWORD)
+	smtp_host=$(env_var SYSTEM_SMTP_HOST)
+	smtp_port=$(env_var SYSTEM_SMTP_PORT)
+	smtp_secure=$(env_var SYSTEM_SMTP_SECURE)
+	smtp_user=$(env_var SYSTEM_SMTP_USER)
+	smtp_password=$(env_var SYSTEM_SMTP_PASSWORD)
 	from_address=$(env_var SYSTEM_MAIL_FROM_ADDRESS)
 	from_name=$(env_var SYSTEM_MAIL_FROM_NAME)
 
-	if [ -z "$to" ] || [ -z "$api_key" ] || [ -z "$from_address" ]; then
-		echo "==> OPS_ALERT_EMAIL/SYSTEM_SMTP_PASSWORD/SYSTEM_MAIL_FROM_ADDRESS not all set — logged above only, no email sent" >&2
+	if [ -z "$to" ] || [ -z "$smtp_host" ] || [ -z "$smtp_user" ] || [ -z "$smtp_password" ] || [ -z "$from_address" ]; then
+		echo "==> OPS_ALERT_EMAIL/SYSTEM_SMTP_*/SYSTEM_MAIL_FROM_ADDRESS not all set — logged above only, no email sent" >&2
 		return 0
 	fi
 
-	curl -sS -X POST 'https://api.resend.com/emails' \
-		-H "Authorization: Bearer $api_key" \
-		-H 'Content-Type: application/json' \
-		-d "$(printf '{"from":"%s <%s>","to":["%s"],"subject":"[FactureLe] Alerte certificat TLS","text":"%s"}' \
-			"${from_name:-FactureLe}" "$from_address" "$to" "$message")" \
-		>/dev/null || echo "==> Failed to send the Resend alert email (see curl exit above)" >&2
+	smtp_port=${smtp_port:-587}
+	if [ "$smtp_secure" = "true" ]; then
+		smtp_url="smtps://$smtp_host:$smtp_port"
+		ssl_flag=""
+	else
+		smtp_url="smtp://$smtp_host:$smtp_port"
+		ssl_flag="--ssl-reqd"
+	fi
+
+	message_file=$(mktemp)
+	{
+		printf 'From: %s <%s>\r\n' "${from_name:-FactureLe}" "$from_address"
+		printf 'To: %s\r\n' "$to"
+		printf 'Subject: [FactureLe] Alerte certificat TLS\r\n'
+		printf 'Content-Type: text/plain; charset=utf-8\r\n'
+		printf '\r\n'
+		printf '%s\r\n' "$message"
+	} >"$message_file"
+
+	curl -sS $ssl_flag --url "$smtp_url" \
+		--mail-from "$from_address" --mail-rcpt "$to" \
+		--user "$smtp_user:$smtp_password" \
+		--upload-file "$message_file" \
+		>/dev/null || echo "==> Failed to send the alert email over SMTP (see curl exit above)" >&2
+
+	rm -f "$message_file"
 }
 
 DOMAIN=$(env_var DOMAIN)
