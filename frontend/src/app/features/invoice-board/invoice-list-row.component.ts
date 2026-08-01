@@ -56,6 +56,12 @@ export class InvoiceListRowComponent {
   // pair (see InvoiceBoardPage.highlightedPair) — applies the same tint to
   // both rows regardless of how far apart they land in the sorted list.
   readonly highlighted = input(false);
+  // True when this row belongs to the client currently highlighted from
+  // "Mes clients" (see InvoiceBoardPage.highlightedClientId) — a separate,
+  // distinctly-colored tint from `highlighted` above, since the two convey
+  // different things (a devis/facture pair vs. "this is that client's
+  // document") and can be true at once.
+  readonly clientHighlighted = input(false);
   readonly converting = input(false);
   readonly sharing = input(false);
   // Facture-only: whether the status-change menu is open for this row.
@@ -72,6 +78,10 @@ export class InvoiceListRowComponent {
   readonly setCancelled = output<void>();
   readonly setNonPayee = output<void>();
   readonly share = output<void>();
+  // Opens the preview modal (see InvoicePreviewModalComponent) — emitted
+  // from the <tr> itself; the status and actions columns stop propagation
+  // so their own dropdown triggers still take priority over opening it.
+  readonly rowClick = output<void>();
 
   protected readonly isDevis = computed(() => this.invoice().documentType === 'DEVIS');
   protected readonly overdue = computed(() => !this.isDevis() && isOverdue(this.invoice()));

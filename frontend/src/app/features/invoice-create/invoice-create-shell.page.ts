@@ -18,7 +18,7 @@ import {
   RouterLinkActive,
   RouterOutlet,
 } from '@angular/router';
-import { filter } from 'rxjs';
+import { filter, Subscription, TimeoutError } from 'rxjs';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { IconTrashComponent } from '../../shared/components/icon-trash.component';
@@ -70,6 +70,10 @@ export class InvoiceCreateShellPage {
 
   protected readonly loadingPdfPreview = signal(false);
   protected readonly pdfPreviewUrl = signal<string | null>(null);
+  // Lets closePdfPreview() cancel an in-flight generation if the artisan
+  // closes the modal before it resolves — otherwise a late response could
+  // reopen the modal (or set a URL) after they've already moved on.
+  private pdfPreviewSubscription?: Subscription;
 
   // "Créer la facture à partir du devis" (mes documents' second action, and
   // the post-devis "modifier avant facturation" prompt): true once a
@@ -174,7 +178,7 @@ export class InvoiceCreateShellPage {
     const request = this.draftStore.buildInvoiceRequest(
       this.draftStore.customer().customerId ?? undefined,
     );
-    this.invoiceService
+    this.pdfPreviewSubscription = this.invoiceService
       .previewPdf(request)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -183,19 +187,25 @@ export class InvoiceCreateShellPage {
           this.revokeCurrentPdfPreviewUrl();
           this.pdfPreviewUrl.set(URL.createObjectURL(blob));
         },
-        error: (error: HttpErrorResponse) => {
+        error: (error: HttpErrorResponse | TimeoutError) => {
           this.loadingPdfPreview.set(false);
           // premiumGateInterceptor already showed the paywall modal for the
           // 402 — this just skips the generic error toast.
-          if (error.status === 402) {
+          if (error instanceof HttpErrorResponse && error.status === 402) {
             return;
           }
-          this.toastService.error("Impossible de générer l'aperçu PDF pour le moment.");
+          this.toastService.error(
+            error instanceof TimeoutError
+              ? 'La génération du PDF prend trop de temps. Réessayez.'
+              : "Impossible de générer l'aperçu PDF pour le moment.",
+          );
         },
       });
   }
 
   protected closePdfPreview(): void {
+    this.pdfPreviewSubscription?.unsubscribe();
+    this.loadingPdfPreview.set(false);
     this.revokeCurrentPdfPreviewUrl();
     this.pdfPreviewUrl.set(null);
   }

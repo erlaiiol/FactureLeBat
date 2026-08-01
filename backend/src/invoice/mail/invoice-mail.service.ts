@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InvoiceStatus } from '../../../generated/prisma/enums';
+import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
 import { MailerService } from '../../mailer/mailer.service';
 import { InvoiceWithTotals } from '../entities/invoice.entity';
@@ -25,6 +26,7 @@ export class InvoiceMailService {
     private readonly invoiceRepository: InvoiceRepository,
     private readonly mapper: InvoiceMapper,
     private readonly pdfService: PdfService,
+    private readonly companyService: CompanyService,
     private readonly mailSettingsService: MailSettingsService,
     private readonly mailerService: MailerService,
   ) {}
@@ -72,7 +74,8 @@ export class InvoiceMailService {
       documentType: invoice.documentType,
     });
 
-    const pdfData = this.mapper.toPdfData(raw);
+    const logo = await this.companyService.getLogo(companyId);
+    const pdfData = this.mapper.toPdfData(raw, logo);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(pdfData);
     const filePrefix = invoice.documentType === 'DEVIS' ? 'devis' : 'facture';
 

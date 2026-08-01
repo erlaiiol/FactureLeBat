@@ -1,9 +1,11 @@
 <tr
   [attr.data-invoice-row-id]="invoice().id"
-  class="group border-b border-line/60 transition-colors last:border-b-0 hover:bg-secondary-subtle/50"
+  (click)="rowClick.emit()"
+  class="group cursor-pointer border-b border-line/60 transition-colors last:border-b-0 hover:bg-secondary-subtle/50"
   [class.bg-info-subtle]="highlighted()"
+  [class.bg-primary-subtle]="!highlighted() && clientHighlighted()"
 >
-  <td class="px-4 py-3 align-top">
+  <td class="px-4 py-3 align-top" (click)="$event.stopPropagation()">
     @if (isDevis()) {
       <app-badge variant="info" tone="subtle">Devis</app-badge>
     } @else {
@@ -75,7 +77,7 @@
       @if (isDevis() && attachedFactureNumber(); as factureNumber) {
         <button
           type="button"
-          (click)="toggleHighlight.emit()"
+          (click)="$event.stopPropagation(); toggleHighlight.emit()"
           class="-mt-0.5 flex items-center gap-1 text-left text-xs text-info hover:underline"
           [class.font-semibold]="highlighted()"
         >
@@ -91,7 +93,7 @@
     {{ invoice().totalInclVatCents | centsToEuros }}
   </td>
 
-  <td class="px-4 py-3 align-top text-right">
+  <td class="px-4 py-3 align-top text-right" (click)="$event.stopPropagation()">
     <div class="inline-block">
       <button
         #actionsTrigger

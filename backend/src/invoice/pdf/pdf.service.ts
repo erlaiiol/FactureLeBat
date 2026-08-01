@@ -1,9 +1,10 @@
 import { dirname } from 'node:path';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import pdfMake from 'pdfmake';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const roboto = require('pdfmake/fonts/Roboto') as Record<string, unknown>;
+import { FACTURELE_WATERMARK_LOGO_BASE64 } from './facturele-watermark-logo';
 import {
   InvoicePdfData,
   InvoicePdfLine,
@@ -55,9 +56,28 @@ pdfMake.setLocalAccessPolicy(
 // Object > PDF Generator > PDF File).
 @Injectable()
 export class PdfService {
+  private static readonly logger = new Logger(PdfService.name);
+
   async generateInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
-    const docDefinition = this.buildDocDefinition(data);
-    return pdfMake.createPdf(docDefinition).getBuffer();
+    try {
+      return await pdfMake.createPdf(this.buildDocDefinition(data)).getBuffer();
+    } catch (error) {
+      // The artisan's uploaded logo is only best-effort validated at upload
+      // time (CompanyController.uploadLogo checks mimetype + magic bytes,
+      // not full image integrity) — a file pdfMake still can't decode must
+      // never break every future invoice/devis this company generates.
+      // Retry once without it rather than surfacing a 500 for a problem the
+      // artisan has no way to self-diagnose from here.
+      if (data.issuerLogo) {
+        PdfService.logger.warn(
+          `PDF generation failed with issuer logo attached, retrying without it: ${String(error)}`,
+        );
+        return pdfMake
+          .createPdf(this.buildDocDefinition({ ...data, issuerLogo: null }))
+          .getBuffer();
+      }
+      throw error;
+    }
   }
 
   // Phase 17: the quarterly report's PDF export — reuses this same
@@ -256,6 +276,23 @@ export class PdfService {
   private buildHeader(data: InvoicePdfData): Content {
     return {
       stack: [
+        // The artisan's own uploaded logo (Company > CompanyLogo, see
+        // schema.prisma) — its own row above the title/date so it can never
+        // overlap them regardless of its aspect ratio; a plain flex spacer
+        // column docks it against the same right margin the rest of the
+        // document respects, rather than an absolutely-positioned overlay
+        // that would need to be re-tuned by hand for every logo shape.
+        ...(data.issuerLogo
+          ? [
+              {
+                columns: [
+                  { text: '', width: '*' },
+                  { image: data.issuerLogo.base64, fit: [90, 50] as [number, number] },
+                ],
+                margin: [0, 0, 0, 6] as [number, number, number, number],
+              },
+            ]
+          : []),
         {
           columns: [
             {
@@ -445,6 +482,36 @@ export class PdfService {
       "En cas de retard de paiement, une indemnité forfaitaire de 40€ pour frais de recouvrement est due, ainsi qu'une pénalité de retard calculée au taux d'intérêt légal en vigueur.",
     ].filter((mention): mention is string => Boolean(mention));
 
-    return { text: mentions.join('\n'), fontSize: 7, color: '#555555' };
+    return {
+      stack: [
+        { text: mentions.join('\n'), fontSize: 7, color: '#555555' },
+        // facturele.net signature — every invoice/devis carries it unless
+        // the issuing company's effective plan tier removes it (see
+        // PLAN_DEFINITIONS.removesWatermark, InvoiceMapper.issuerFields).
+        // Site address centered, small brand mark below — never a link,
+        // just a plain mention, since this PDF is a static document handed
+        // to the artisan's own client.
+        ...(data.showWatermark ? [this.buildWatermark()] : []),
+      ],
+    };
+  }
+
+  private buildWatermark(): Content {
+    return {
+      stack: [
+        {
+          text: 'facturele.net',
+          alignment: 'center',
+          fontSize: 8,
+          color: '#999999',
+          margin: [0, 16, 0, 3],
+        },
+        {
+          image: FACTURELE_WATERMARK_LOGO_BASE64,
+          fit: [20, 20],
+          alignment: 'center',
+        },
+      ],
+    };
   }
 }

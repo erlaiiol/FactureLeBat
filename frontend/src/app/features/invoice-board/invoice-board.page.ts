@@ -9,15 +9,18 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription, TimeoutError } from 'rxjs';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { InvoiceShareService } from '../../core/services/invoice-share.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { IconChevronDownComponent } from '../../shared/components/icon-chevron-down.component';
+import { IconCloseComponent } from '../../shared/components/icon-close.component';
 import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
 import { InvoiceListRowComponent } from './invoice-list-row.component';
+import { InvoicePreviewModalComponent } from './invoice-preview-modal.component';
 import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 import { isOverdue } from './invoice-status.util';
@@ -105,8 +108,10 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
   imports: [
     InvoiceListRowComponent,
     InvoiceDueDateModalComponent,
+    InvoicePreviewModalComponent,
     SendInvoiceEmailModalComponent,
     IconChevronDownComponent,
+    IconCloseComponent,
     BadgeComponent,
   ],
   templateUrl: './invoice-board.page.html',
@@ -117,6 +122,7 @@ export class InvoiceBoardPage {
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   // Phase 24: the reflow-retrigger technique App.replayPageEnterAnimation
   // already uses for route changes — replayed whenever the sort changes, so
@@ -140,6 +146,15 @@ export class InvoiceBoardPage {
 
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly sharingInvoiceId = signal<string | null>(null);
+  // Which document's preview modal is open — opened by clicking anywhere on
+  // its row (see InvoiceListRowComponent.rowClick); combines the PDF preview
+  // and the "..." actions into one place that's always fully on-screen, no
+  // horizontal table scroll required to reach "Partager" on a phone.
+  protected readonly previewInvoice = signal<InvoiceWithTotals | null>(null);
+  // Object URL for the preview's iframe — see openPreview/closePreview,
+  // which own its fetch and revocation.
+  protected readonly previewPdfUrl = signal<string | null>(null);
+  private previewPdfSubscription?: Subscription;
   // Which facture is waiting on the due-date modal — same "Non payée" entry
   // point whether it came from the status menu on a fresh NON_PAYEE move or
   // from restoring an ANNULEE one, both funnel through moveToNonPayee below.
@@ -150,6 +165,16 @@ export class InvoiceBoardPage {
   // attachedFactureOf/toggleHighlight/isHighlighted below) — at most one
   // pair at a time, cleared by clicking the same devis's link again.
   protected readonly highlightedPair = signal<{ devisId: string; factureId: string } | null>(null);
+  // Client-repertory entry point: CustomerListPage's "Documents" button
+  // navigates here with ?clientId=&clientName= so the artisan lands on
+  // their full, unfiltered document list with that client's rows tinted
+  // (see isClientHighlighted/InvoiceListRowComponent.clientHighlighted) —
+  // deliberately not a hard filter, so re-sorting/re-filtering afterwards
+  // still shows which rows belong to that client rather than losing the
+  // context. Cleared only by dismissClientHighlight (the chip's close
+  // button next to the date filters), never by sorting/filtering.
+  protected readonly highlightedClientId = signal<string | null>(null);
+  protected readonly highlightedClientName = signal<string | null>(null);
   // Phase 23: which single facture row's status menu is open — at most one
   // at a time.
   protected readonly statusMenuInvoiceId = signal<string | null>(null);
@@ -213,6 +238,30 @@ export class InvoiceBoardPage {
     return pair !== null && (pair.devisId === invoice.id || pair.factureId === invoice.id);
   }
 
+  protected isClientHighlighted(invoice: InvoiceWithTotals): boolean {
+    const clientId = this.highlightedClientId();
+    return clientId !== null && invoice.customerId === clientId;
+  }
+
+  // The chip next to the date filters — the only way this highlight ever
+  // clears, since sorting/filtering must leave it in place (see
+  // highlightedClientId's doc comment above).
+  protected dismissClientHighlight(): void {
+    this.highlightedClientId.set(null);
+    this.highlightedClientName.set(null);
+  }
+
+  private scrollToClientRow(): void {
+    const clientId = this.highlightedClientId();
+    if (!clientId) {
+      return;
+    }
+    const match = this.rows().find((invoice) => invoice.customerId === clientId);
+    if (match) {
+      this.scrollRowIntoView(match.id);
+    }
+  }
+
   // Phase 26: toggles the shared highlight for a devis and the facture it
   // was converted into, and scrolls that facture's row into view — the two
   // can land far apart in the sorted list (different dates), so a plain
@@ -264,6 +313,13 @@ export class InvoiceBoardPage {
   }
 
   constructor() {
+    const queryParams = this.route.snapshot.queryParamMap;
+    const clientId = queryParams.get('clientId');
+    if (clientId) {
+      this.highlightedClientId.set(clientId);
+      this.highlightedClientName.set(queryParams.get('clientName'));
+    }
+
     this.invoiceService
       .list()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -271,6 +327,11 @@ export class InvoiceBoardPage {
         next: (invoices) => {
           this.invoices.set(invoices);
           this.loading.set(false);
+          if (this.highlightedClientId()) {
+            // Rows render on the next change-detection pass after the
+            // signal write above — the target row isn't in the DOM yet.
+            setTimeout(() => this.scrollToClientRow(), 0);
+          }
         },
         error: () => {
           this.loading.set(false);
@@ -467,6 +528,71 @@ export class InvoiceBoardPage {
     void this.router.navigate(commands, {
       queryParams: { type: 'FACTURE', fromDevisId: devis.id },
     });
+  }
+
+  protected openPreview(invoice: InvoiceWithTotals): void {
+    this.previewInvoice.set(invoice);
+    this.revokePreviewPdfUrl();
+    this.previewPdfUrl.set(null);
+    this.previewPdfSubscription = this.invoiceService
+      .getPdfBlob(invoice.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => this.previewPdfUrl.set(URL.createObjectURL(blob)),
+        error: (error: unknown) => {
+          this.toastService.error(
+            error instanceof TimeoutError
+              ? 'La génération du PDF prend trop de temps. Réessayez.'
+              : "Impossible de générer l'aperçu pour le moment.",
+          );
+          this.closePreview();
+        },
+      });
+  }
+
+  protected closePreview(): void {
+    this.previewPdfSubscription?.unsubscribe();
+    this.previewInvoice.set(null);
+    this.revokePreviewPdfUrl();
+    this.previewPdfUrl.set(null);
+  }
+
+  private revokePreviewPdfUrl(): void {
+    const url = this.previewPdfUrl();
+    if (url) {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // The preview modal's own action buttons close it first — each action
+  // already gives its own feedback (toast, new tab, or a navigation), so
+  // leaving the preview open behind it would just add a second overlay to
+  // dismiss.
+  protected onPreviewShare(): void {
+    const invoice = this.previewInvoice();
+    if (!invoice) {
+      return;
+    }
+    this.closePreview();
+    void this.onShare(invoice);
+  }
+
+  protected onPreviewConvertToFacture(): void {
+    const invoice = this.previewInvoice();
+    if (!invoice) {
+      return;
+    }
+    this.closePreview();
+    this.convertDevis(invoice);
+  }
+
+  protected onPreviewCreateFromDevis(): void {
+    const invoice = this.previewInvoice();
+    if (!invoice) {
+      return;
+    }
+    this.closePreview();
+    this.createFromDevis(invoice);
   }
 
   protected openEmailModal(invoice: InvoiceWithTotals): void {

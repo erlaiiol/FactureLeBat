@@ -575,3 +575,26 @@ button:not(:disabled) {
     animation: none;
   }
 }
+
+/* invoice-board.page.html's date filters: an empty <input type="date">
+   renders the browser's own locale-formatted "day/month/year" segments,
+   which on some browsers (confirmed on Safari) reads enough like a real
+   date that artisans assumed the list was already scoped to "today".
+   Making just the native text transparent (::-webkit-datetime-edit) isn't
+   reliable enough — Safari still paints over it regardless of that rule,
+   presumably compositing the date-edit segments on a layer CSS color
+   can't touch. Hiding the whole control instead (opacity, not
+   visibility/display, so it stays clickable and focusable) is the only
+   approach that's actually guaranteed to show nothing native: the
+   template's sibling div then draws 100% of what's visible — the same
+   border/background as a normal input plus the "../../.." text — while
+   clicks still land on the invisible real input underneath and open its
+   date picker. The :focus rule below stands in for the native focus ring
+   opacity:0 also hides, so tabbing to an empty field still shows something. */
+.date-input-empty {
+  opacity: 0;
+}
+.date-input-empty:focus + div {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

@@ -1,4 +1,5 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
 import { MailerService, SendMailParams } from '../../mailer/mailer.service';
 import { InvoiceMapper } from '../invoice.mapper';
@@ -43,6 +44,9 @@ function buildService(options: {
   const generateInvoicePdf = jest.fn().mockResolvedValue(Buffer.from('pdf'));
   const pdfService = { generateInvoicePdf } as unknown as PdfService;
 
+  const getLogo = jest.fn().mockResolvedValue(null);
+  const companyService = { getLogo } as unknown as CompanyService;
+
   const getDecryptedCredentials = jest
     .fn()
     .mockResolvedValue(options.smtp === undefined ? SMTP : options.smtp);
@@ -57,6 +61,7 @@ function buildService(options: {
     invoiceRepository,
     mapper,
     pdfService,
+    companyService,
     mailSettingsService,
     mailerService,
   );

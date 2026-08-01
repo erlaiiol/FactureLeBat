@@ -88,6 +88,7 @@ export class BillingService {
         features: definition.features,
         prioritySupport: definition.prioritySupport,
         highlight: definition.highlight,
+        removesWatermark: definition.removesWatermark,
         available: availableTiers.has(tier),
       };
     });

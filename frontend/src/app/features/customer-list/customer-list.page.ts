@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { combineLatest, debounceTime, distinctUntilChanged, startWith, switchMap } from 'rxjs';
 import { CustomerSearchResult, CustomerSortBy } from '../../core/models/customer.model';
 import { CustomerService } from '../../core/services/customer.service';
@@ -36,6 +36,7 @@ export class CustomerListPage {
   private readonly customerService = inject(CustomerService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   protected readonly customers = signal<CustomerSearchResult[]>([]);
   protected readonly loading = signal(true);
@@ -65,5 +66,15 @@ export class CustomerListPage {
           this.errorMessage.set('Impossible de charger vos clients. Veuillez réessayer.');
         },
       });
+  }
+
+  // "Documents": jumps to Mes documents with this client's devis/factures
+  // highlighted (see InvoiceBoardPage.highlightedClientId) rather than
+  // hard-filtered, so the artisan can still see the rest of the list while
+  // spotting this client's rows at a glance.
+  protected viewDocuments(customer: CustomerSearchResult): void {
+    void this.router.navigate(['/factures'], {
+      queryParams: { clientId: customer.id, clientName: customer.name },
+    });
   }
 }

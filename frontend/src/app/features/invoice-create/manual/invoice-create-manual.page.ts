@@ -11,6 +11,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Subscription, TimeoutError } from 'rxjs';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -67,6 +68,7 @@ export class InvoiceCreateManualPage {
   protected readonly previewing = signal(false);
   protected readonly previewError = signal<string | null>(null);
   protected readonly previewPdfUrl = signal<string | null>(null);
+  private previewSubscription?: Subscription;
 
   protected readonly creating = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
@@ -198,7 +200,7 @@ export class InvoiceCreateManualPage {
     this.previewing.set(true);
     this.previewError.set(null);
 
-    this.invoiceService
+    this.previewSubscription = this.invoiceService
       .previewPdf(this.store.buildInvoiceRequest())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -207,19 +209,25 @@ export class InvoiceCreateManualPage {
           this.revokeCurrentPreviewUrl();
           this.previewPdfUrl.set(URL.createObjectURL(blob));
         },
-        error: (error: HttpErrorResponse) => {
+        error: (error: HttpErrorResponse | TimeoutError) => {
           this.previewing.set(false);
           // premiumGateInterceptor already showed the paywall modal for the
           // 402 — this just skips the generic error message.
-          if (error.status === 402) {
+          if (error instanceof HttpErrorResponse && error.status === 402) {
             return;
           }
-          this.previewError.set("Impossible de générer l'aperçu pour le moment.");
+          this.previewError.set(
+            error instanceof TimeoutError
+              ? 'La génération du PDF prend trop de temps. Réessayez.'
+              : "Impossible de générer l'aperçu pour le moment.",
+          );
         },
       });
   }
 
   protected closePreview(): void {
+    this.previewSubscription?.unsubscribe();
+    this.previewing.set(false);
     this.revokeCurrentPreviewUrl();
     this.previewPdfUrl.set(null);
   }

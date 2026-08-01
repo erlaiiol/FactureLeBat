@@ -166,6 +166,15 @@
          out to resemble it, but plain HTML — not the rendered PDF itself —
          so each technical detail below can be individually hovered/clicked. -->
     <div class="anim-preview-in rounded-xl border border-line bg-surface p-6 shadow-sm">
+      @if (hasLogo()) {
+        <div class="mb-3 flex justify-end">
+          <img
+            [src]="companyService.logoUrl()"
+            alt="Logo de l'entreprise"
+            class="h-12 max-w-[9rem] object-contain"
+          />
+        </div>
+      }
       <div class="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
         <div>
           <p class="flex items-center gap-1.5 font-heading text-lg font-bold text-ink">
@@ -333,6 +342,17 @@
           </tbody>
         </table>
       </div>
+
+      @if (billingService.status()?.planTier !== 'PREMIUM') {
+        <div class="mt-6 flex flex-col items-center gap-1 border-t border-line pt-4">
+          <p class="text-xs text-ink-soft">facturele.net</p>
+          <img
+            src="/facturele_logo.png"
+            alt="facturele.net"
+            class="h-5 w-5 object-contain opacity-70"
+          />
+        </div>
+      }
     </div>
 
     <div class="mt-3 text-center">
@@ -368,5 +388,9 @@
     </div>
   }
 
-  <app-pdf-preview-modal [pdfBlobUrl]="pdfPreviewUrl()" (closed)="closePdfPreview()" />
+  <app-pdf-preview-modal
+    [pdfBlobUrl]="pdfPreviewUrl()"
+    [loading]="downloadingPdf()"
+    (closed)="closePdfPreview()"
+  />
 }

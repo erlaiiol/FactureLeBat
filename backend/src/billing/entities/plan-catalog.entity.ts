@@ -16,6 +16,7 @@ export interface PlanOption {
   features: { analytics: boolean; aiSourcing: boolean };
   prioritySupport: boolean;
   highlight: boolean;
+  removesWatermark: boolean;
   available: boolean;
 }
 

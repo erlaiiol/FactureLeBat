@@ -11,20 +11,53 @@
       placeholder="Rechercher un client…"
       class="rounded-lg border border-line px-4 py-3 text-lg"
     />
-    <input
-      [value]="dateFrom()"
-      (input)="onDateFromInput($any($event.target).value)"
-      type="date"
-      aria-label="Du"
-      class="rounded-lg border border-line px-4 py-3 text-ink"
-    />
-    <input
-      [value]="dateTo()"
-      (input)="onDateToInput($any($event.target).value)"
-      type="date"
-      aria-label="Au"
-      class="rounded-lg border border-line px-4 py-3 text-ink"
-    />
+    <div class="relative">
+      <input
+        [value]="dateFrom()"
+        (input)="onDateFromInput($any($event.target).value)"
+        type="date"
+        aria-label="Du"
+        class="rounded-lg border border-line px-4 py-3 text-ink"
+        [class.date-input-empty]="!dateFrom()"
+      />
+      @if (!dateFrom()) {
+        <div
+          class="pointer-events-none absolute inset-0 flex items-center rounded-lg border border-line px-4 py-3 text-ink-soft"
+        >
+          ../../..
+        </div>
+      }
+    </div>
+    <div class="relative">
+      <input
+        [value]="dateTo()"
+        (input)="onDateToInput($any($event.target).value)"
+        type="date"
+        aria-label="Au"
+        class="rounded-lg border border-line px-4 py-3 text-ink"
+        [class.date-input-empty]="!dateTo()"
+      />
+      @if (!dateTo()) {
+        <div
+          class="pointer-events-none absolute inset-0 flex items-center rounded-lg border border-line px-4 py-3 text-ink-soft"
+        >
+          ../../..
+        </div>
+      }
+    </div>
+    @if (highlightedClientId()) {
+      <button
+        type="button"
+        (click)="dismissClientHighlight()"
+        title="Désactiver le surlignage client"
+        class="flex items-center gap-1.5 rounded-lg border border-primary-subtle-border bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-fg hover:brightness-95"
+      >
+        <span>{{
+          highlightedClientName() ? 'Client : ' + highlightedClientName() : 'Client surligné'
+        }}</span>
+        <app-icon-close [size]="14" />
+      </button>
+    }
   </div>
 
   @if (loading()) {
@@ -109,6 +142,7 @@
               [invoice]="item"
               [attachedFactureNumber]="attachedFactureOf(item)?.number ?? null"
               [highlighted]="isHighlighted(item)"
+              [clientHighlighted]="isClientHighlighted(item)"
               [converting]="convertingDevisId() === item.id"
               [sharing]="sharingInvoiceId() === item.id"
               [statusMenuOpen]="isStatusMenuOpen(item.id)"
@@ -122,6 +156,7 @@
               (setCancelled)="cancelInvoice(item)"
               (setNonPayee)="moveToNonPayee(item)"
               (share)="onShare(item)"
+              (rowClick)="openPreview(item)"
             />
           }
         </tbody>
@@ -145,5 +180,16 @@
     [invoice]="emailModalInvoice()"
     (closed)="closeEmailModal()"
     (sent)="onEmailSent($event)"
+  />
+
+  <app-invoice-preview-modal
+    [invoice]="previewInvoice()"
+    [pdfBlobUrl]="previewPdfUrl()"
+    [sharing]="sharingInvoiceId() === previewInvoice()?.id"
+    [converting]="convertingDevisId() === previewInvoice()?.id"
+    (closed)="closePreview()"
+    (share)="onPreviewShare()"
+    (convertToFacture)="onPreviewConvertToFacture()"
+    (createFromDevis)="onPreviewCreateFromDevis()"
   />
 </div>

@@ -305,8 +305,11 @@ export class InvoiceService {
   }
 
   async getPdfData(companyId: string, id: string): Promise<InvoicePdfData> {
-    const invoice = await this.findRawById(companyId, id);
-    return this.mapper.toPdfData(invoice);
+    const [invoice, logo] = await Promise.all([
+      this.findRawById(companyId, id),
+      this.companyService.getLogo(companyId),
+    ]);
+    return this.mapper.toPdfData(invoice, logo);
   }
 
   // Phase 6: renders a PDF from an unsaved draft (no id, no invoice number
@@ -321,8 +324,11 @@ export class InvoiceService {
     // late point in the flow (see docs/roadmap.md Phase 14).
     await this.premiumGate.assertCanCreateInvoice(companyId);
 
-    const company = await this.companyService.getProfile(companyId);
-    return this.mapper.toPreviewPdfData(dto, company);
+    const [company, logo] = await Promise.all([
+      this.companyService.getProfile(companyId),
+      this.companyService.getLogo(companyId),
+    ]);
+    return this.mapper.toPreviewPdfData(dto, company, logo);
   }
 
   // Phase 15: JSON counterpart of previewPdf, for the mandatory preview

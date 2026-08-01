@@ -390,5 +390,9 @@
     </div>
   </div>
 
-  <app-pdf-preview-modal [pdfBlobUrl]="previewPdfUrl()" (closed)="closePreview()" />
+  <app-pdf-preview-modal
+    [pdfBlobUrl]="previewPdfUrl()"
+    [loading]="previewing()"
+    (closed)="closePreview()"
+  />
 }

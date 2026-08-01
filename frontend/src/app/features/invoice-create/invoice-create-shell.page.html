@@ -66,4 +66,8 @@
   </div>
 </div>
 
-<app-pdf-preview-modal [pdfBlobUrl]="pdfPreviewUrl()" (closed)="closePdfPreview()" />
+<app-pdf-preview-modal
+  [pdfBlobUrl]="pdfPreviewUrl()"
+  [loading]="loadingPdfPreview()"
+  (closed)="closePdfPreview()"
+/>

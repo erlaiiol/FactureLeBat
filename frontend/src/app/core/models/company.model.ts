@@ -33,6 +33,10 @@ export interface CompanyProfile {
   // l'impôt sur le revenu at registration — see report.model.ts's
   // EstimatedCharges for how this feeds the quarterly report's estimate.
   versementLiberatoireOptIn: boolean;
+  // Whether a logo has been uploaded (CompanyService.uploadLogo) — never the
+  // image bytes themselves, see CompanyService.logoUrl for how the frontend
+  // actually displays it.
+  hasLogo: boolean;
 }
 
 export interface UpdateCompanyRequest {

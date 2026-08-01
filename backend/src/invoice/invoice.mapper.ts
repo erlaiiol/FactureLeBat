@@ -5,8 +5,12 @@ import {
   InvoiceEntryMode,
   InvoiceStatus,
   ManualColumnRole,
+  PlanTier,
 } from '../../generated/prisma/enums';
 import { CompanyModel as Company } from '../../generated/prisma/models';
+import { getEffectivePlanTier } from '../billing/plan-gate.service';
+import { PLAN_DEFINITIONS } from '../billing/plan-config';
+import { CompanyLogoData } from '../company/company.repository';
 import { isVatApplicable } from '../company/legal-status.util';
 import { UNIT_LABELS } from '../common/unit.util';
 import { InvoiceCalculationService } from './calculation/invoice-calculation.service';
@@ -317,15 +321,15 @@ export class InvoiceMapper {
     };
   }
 
-  toPdfData(invoice: InvoiceWithLines): InvoicePdfData {
+  toPdfData(invoice: InvoiceWithLines, logo?: CompanyLogoData | null): InvoicePdfData {
     const withTotals = this.toInvoiceWithTotals(invoice);
 
     if (withTotals.entryMode === InvoiceEntryMode.MANUAL) {
-      return this.toManualPdfData(invoice, withTotals);
+      return this.toManualPdfData(invoice, withTotals, logo);
     }
 
     return {
-      ...this.issuerFields(invoice.company),
+      ...this.issuerFields(invoice.company, logo),
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
@@ -378,6 +382,7 @@ export class InvoiceMapper {
   private toManualPdfData(
     invoice: InvoiceWithLines,
     withTotals: InvoiceWithTotals,
+    logo?: CompanyLogoData | null,
   ): InvoicePdfData {
     const table = withTotals.manualTable!;
     // LINE_TOTAL is excluded from the PDF's per-column cells — it's already
@@ -393,7 +398,7 @@ export class InvoiceMapper {
     }));
 
     return {
-      ...this.issuerFields(invoice.company),
+      ...this.issuerFields(invoice.company, logo),
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
@@ -679,9 +684,13 @@ export class InvoiceMapper {
   // same "compute once, reshape for PDF" pattern toPdfData applies to
   // toInvoiceWithTotals, so the JSON preview (Phase 15's HTML mirror) and
   // this PDF can never disagree on a number.
-  toPreviewPdfData(dto: CreateInvoiceDto, company: Company): InvoicePdfData {
+  toPreviewPdfData(
+    dto: CreateInvoiceDto,
+    company: Company,
+    logo?: CompanyLogoData | null,
+  ): InvoicePdfData {
     const withTotals = this.toPreviewInvoiceWithTotals(dto, company);
-    const issuer = this.issuerFields(company);
+    const issuer = this.issuerFields(company, logo);
 
     if (withTotals.entryMode === InvoiceEntryMode.MANUAL) {
       const table = withTotals.manualTable!;
@@ -751,7 +760,12 @@ export class InvoiceMapper {
   // Shared by every PDF-shaping method (persisted and preview alike) — the
   // seven issuer-prefixed fields never vary with entryMode or with whether
   // the invoice is persisted yet.
-  private issuerFields(company: Company) {
+  // logo is fetched separately by the caller (InvoiceService/InvoiceMailService,
+  // via CompanyService.getLogo) rather than joined onto `company` — see
+  // schema.prisma's comment on Company.logo for why it's kept out of the
+  // ordinary Company read. undefined for a not-yet-persisted preview when
+  // the caller hasn't fetched it; treated the same as "no logo".
+  private issuerFields(company: Company, logo?: CompanyLogoData | null) {
     return {
       issuerName: company.name,
       issuerAddressLine1: company.addressLine1,
@@ -769,6 +783,18 @@ export class InvoiceMapper {
       // one invoice to "TVA non applicable" gets the plain mention instead,
       // since art. 293 B would be a false legal citation for them.
       companyVatExempt: !isVatApplicable(company.legalStatus),
+      issuerLogo: logo
+        ? {
+            base64: `data:${logo.mimeType};base64,${logo.image.toString('base64')}`,
+            mimeType: logo.mimeType,
+          }
+        : null,
+      // A company that never subscribed/was never granted a tier is treated
+      // as Essentiel here too — same fallback PlanGateService.assertCatalogCapacity
+      // uses — so the watermark is never accidentally suppressed for a
+      // company that simply hasn't paid for anything yet.
+      showWatermark:
+        !PLAN_DEFINITIONS[getEffectivePlanTier(company) ?? PlanTier.ESSENTIEL].removesWatermark,
     };
   }
 }

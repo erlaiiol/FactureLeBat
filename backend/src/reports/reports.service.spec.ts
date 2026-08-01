@@ -1,12 +1,12 @@
-import { CompanyModel } from '../../generated/prisma/models';
 import { PlanGateService } from '../billing/plan-gate.service';
 import { InvoiceCalculationService } from '../invoice/calculation/invoice-calculation.service';
 import { InvoiceMapper } from '../invoice/invoice.mapper';
 import { InvoiceRepository, InvoiceWithLines } from '../invoice/invoice.repository';
 import { CompanyService } from '../company/company.service';
+import { CompanyProfile } from '../company/entities/company.entity';
 import { ReportsService } from './reports.service';
 
-function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
+function companyFixture(overrides: Partial<CompanyProfile> = {}): CompanyProfile {
   return {
     id: 'company-1',
     name: 'Parquets Raillere',
@@ -44,6 +44,7 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     cotisationPrestationBicBasisPoints: 2120,
     cotisationPrestationBncBasisPoints: 2110,
     versementLiberatoireOptIn: false,
+    hasLogo: false,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     ...overrides,

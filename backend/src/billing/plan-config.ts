@@ -22,6 +22,12 @@ export interface PlanDefinition {
   };
   prioritySupport: boolean;
   highlight: boolean; // marketing badge ("Meilleure valeur") on the pricing UI
+  // Whether an invoice/devis PDF from a company on this tier skips the
+  // facturele.net signature block PdfService.buildFooter otherwise appends —
+  // see InvoiceMapper.issuerFields' showWatermark. A plain per-tier benefit
+  // flag, not a GatedFeature: nothing throws when it's false, it only
+  // changes what gets rendered.
+  removesWatermark: boolean;
 }
 
 // Ascending order — array index doubles as a rank, see isTierAtLeast/
@@ -44,6 +50,7 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     features: { analytics: false, aiSourcing: false },
     prioritySupport: false,
     highlight: false,
+    removesWatermark: false,
   },
   [PlanTier.PRO]: {
     tier: PlanTier.PRO,
@@ -55,6 +62,7 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     features: { analytics: true, aiSourcing: false },
     prioritySupport: false,
     highlight: false,
+    removesWatermark: false,
   },
   [PlanTier.PREMIUM]: {
     tier: PlanTier.PREMIUM,
@@ -66,6 +74,7 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     features: { analytics: true, aiSourcing: true },
     prioritySupport: true,
     highlight: true,
+    removesWatermark: true,
   },
 };
 

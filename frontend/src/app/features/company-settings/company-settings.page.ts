@@ -2,8 +2,9 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { BillingService } from '../../core/services/billing.service';
 import { CompanyService } from '../../core/services/company.service';
 import { LegalStatus } from '../../core/models/company.model';
 import { DeclarationFrequency } from '../../core/models/report.model';
@@ -17,7 +18,7 @@ import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 @Component({
   selector: 'app-company-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
+  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, FieldHintComponent],
   templateUrl: './company-settings.page.html',
 })
 export class CompanySettingsPage {
@@ -30,6 +31,7 @@ export class CompanySettingsPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   protected readonly tourService = inject(TourService);
+  protected readonly billingService = inject(BillingService);
 
   // Set by guestGuard's '?onboarding=1' when it routed a freshly
   // registered/logged-in artisan here because their company profile was
@@ -85,6 +87,16 @@ export class CompanySettingsPage {
   // collapsed for someone who's already set it up (nothing to check twice).
   protected readonly smtpExpanded = signal(false);
   protected readonly smtpGuideOpen = signal(false);
+
+  // Logo shown top-right on invoice/devis PDFs (PdfService.buildHeader) once
+  // uploaded — see CompanyService.uploadLogo/removeLogo/logoUrl.
+  protected readonly hasLogo = signal(false);
+  protected readonly logoUploading = signal(false);
+  protected readonly logoError = signal<string | null>(null);
+  // Bumped on every successful upload/remove so the <img> URL changes and
+  // the browser can't serve a stale cached image (GET /company/logo is
+  // cacheable for a few minutes — see CompanyController.serveLogo).
+  protected readonly logoCacheBust = signal(Date.now());
 
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
@@ -144,6 +156,7 @@ export class CompanySettingsPage {
       .subscribe({
         next: (profile) => {
           this.loading.set(false);
+          this.hasLogo.set(profile.hasLogo);
           this.form.patchValue({
             name: profile.name,
             siret: profile.siret,
@@ -326,6 +339,68 @@ export class CompanySettingsPage {
       "Complétez d'abord ces informations avant de continuer — elles apparaissent sur vos factures.",
     );
     return false;
+  }
+
+  // Same PNG/JPEG-only, 2 MB bound as CompanyController.uploadLogo — checked
+  // client-side purely to fail fast with a clear message; the backend
+  // re-validates regardless (magic bytes included), never trusts this.
+  protected onLogoFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // lets the same file be re-picked after an error
+    if (!file) {
+      return;
+    }
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      this.logoError.set('Le logo doit être une image PNG ou JPEG.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      this.logoError.set('Le logo ne doit pas dépasser 2 Mo.');
+      return;
+    }
+
+    this.logoUploading.set(true);
+    this.logoError.set(null);
+    this.companyService
+      .uploadLogo(file)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.logoUploading.set(false);
+          this.hasLogo.set(true);
+          this.logoCacheBust.set(Date.now());
+        },
+        error: () => {
+          this.logoUploading.set(false);
+          this.logoError.set("Impossible d'envoyer ce logo pour le moment.");
+        },
+      });
+  }
+
+  protected removeLogo(): void {
+    if (this.logoUploading()) {
+      return;
+    }
+    this.logoUploading.set(true);
+    this.logoError.set(null);
+    this.companyService
+      .removeLogo()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.logoUploading.set(false);
+          this.hasLogo.set(false);
+        },
+        error: () => {
+          this.logoUploading.set(false);
+          this.logoError.set('Impossible de retirer ce logo pour le moment.');
+        },
+      });
+  }
+
+  protected logoUrl(): string {
+    return this.companyService.logoUrl(this.logoCacheBust());
   }
 
   private computeMissingEssentialFields(): string[] {

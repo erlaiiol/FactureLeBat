@@ -10,8 +10,9 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
-import { switchMap } from 'rxjs';
+import { Subscription, switchMap, TimeoutError } from 'rxjs';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
+import { BillingService } from '../../../core/services/billing.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
@@ -59,7 +60,8 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
 export class InvoiceCreatePreviewStepPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly invoiceShareService = inject(InvoiceShareService);
-  private readonly companyService = inject(CompanyService);
+  protected readonly companyService = inject(CompanyService);
+  protected readonly billingService = inject(BillingService);
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -83,6 +85,10 @@ export class InvoiceCreatePreviewStepPage {
     const siret = this.companySiret();
     return siret !== null && !/^\d{14}$/.test(siret);
   });
+  // Same document-mirror-only concern as companySiret above — the top-right
+  // logo (see PdfService.buildHeader) shown here purely so this HTML mirror
+  // stays a faithful preview of the real PDF.
+  protected readonly hasLogo = signal(false);
 
   protected readonly previewLines = computed(() => this.previewData()?.lines ?? []);
   // Mirrors PdfService's own rule: only VISIBLE service lines get their own
@@ -111,6 +117,7 @@ export class InvoiceCreatePreviewStepPage {
   // alongside this HTML mirror — never the primary interaction surface.
   protected readonly downloadingPdf = signal(false);
   protected readonly pdfPreviewUrl = signal<string | null>(null);
+  private pdfPreviewSubscription?: Subscription;
 
   constructor() {
     this.destroyRef.onDestroy(() => this.revokeCurrentPdfPreviewUrl());
@@ -128,7 +135,10 @@ export class InvoiceCreatePreviewStepPage {
       .getProfile()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (profile) => this.companySiret.set(profile.siret),
+        next: (profile) => {
+          this.companySiret.set(profile.siret);
+          this.hasLogo.set(profile.hasLogo);
+        },
         // Silent: see companySiret's comment above.
         error: () => undefined,
       });
@@ -194,7 +204,7 @@ export class InvoiceCreatePreviewStepPage {
     const request = this.draftStore.buildInvoiceRequest(
       this.draftStore.customer().customerId ?? undefined,
     );
-    this.invoiceService
+    this.pdfPreviewSubscription = this.invoiceService
       .previewPdf(request)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -203,19 +213,25 @@ export class InvoiceCreatePreviewStepPage {
           this.revokeCurrentPdfPreviewUrl();
           this.pdfPreviewUrl.set(URL.createObjectURL(blob));
         },
-        error: (error: HttpErrorResponse) => {
+        error: (error: HttpErrorResponse | TimeoutError) => {
           this.downloadingPdf.set(false);
           // premiumGateInterceptor already showed the paywall modal for the
           // 402 — this just skips the generic error toast.
-          if (error.status === 402) {
+          if (error instanceof HttpErrorResponse && error.status === 402) {
             return;
           }
-          this.toastService.error("Impossible de générer l'aperçu PDF pour le moment.");
+          this.toastService.error(
+            error instanceof TimeoutError
+              ? 'La génération du PDF prend trop de temps. Réessayez.'
+              : "Impossible de générer l'aperçu PDF pour le moment.",
+          );
         },
       });
   }
 
   protected closePdfPreview(): void {
+    this.pdfPreviewSubscription?.unsubscribe();
+    this.downloadingPdf.set(false);
     this.revokeCurrentPdfPreviewUrl();
     this.pdfPreviewUrl.set(null);
   }

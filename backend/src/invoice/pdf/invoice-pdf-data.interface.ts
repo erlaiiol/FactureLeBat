@@ -65,6 +65,14 @@ export interface InvoicePdfData {
   // itself is under the franchise en base de TVA, regardless of what this
   // particular invoice's vatApplicable below ends up being.
   companyVatExempt: boolean;
+  // The artisan's own uploaded logo (CompanyLogo, see schema.prisma), shown
+  // top-right on the PDF — null whenever none has been uploaded (the common
+  // case), in which case PdfService renders nothing there at all.
+  issuerLogo: { base64: string; mimeType: string } | null;
+  // Whether PdfService.buildFooter appends the facturele.net signature block
+  // — false only for a company whose effective plan tier's removesWatermark
+  // is true (see PLAN_DEFINITIONS, InvoiceMapper.issuerFields).
+  showWatermark: boolean;
 
   customerName: string;
   customerAddress: string | null;

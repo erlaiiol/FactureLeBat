@@ -205,6 +205,13 @@
                   <li [class.text-ink-soft]="!plan.prioritySupport">
                     {{ plan.prioritySupport ? '✓ Support prioritaire' : '✓ Support standard' }}
                   </li>
+                  <li [class.text-ink-soft]="!plan.removesWatermark">
+                    {{
+                      plan.removesWatermark
+                        ? '✓ Factures sans mention facturele.net'
+                        : '✗ Factures avec mention facturele.net'
+                    }}
+                  </li>
                 </ul>
 
                 @if (!s.stripeConfigured || !plan.available) {

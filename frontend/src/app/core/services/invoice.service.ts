@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, timeout } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   CreateInvoiceRequest,
@@ -11,6 +11,14 @@ import {
   SendInvoiceEmailRequest,
   UpdateInvoiceStatusRequest,
 } from '../models/invoice.model';
+
+// Generating a PDF (server render, then downloading the blob) has no
+// built-in HttpClient timeout — without one, a slow/stalled connection
+// (a bad mobile network, a stuck backend) leaves the preview modal spinning
+// forever with no way for the artisan to tell "still working" from "broken".
+// Bounding it turns that silent hang into a surfaced, retryable error — see
+// PdfPreviewModalComponent/InvoicePreviewModalComponent's loading state.
+const PDF_FETCH_TIMEOUT_MS = 20_000;
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
@@ -33,11 +41,24 @@ export class InvoiceService {
     return `${this.baseUrl}/${id}/pdf`;
   }
 
+  // Blob counterpart of pdfUrl, for embedding a saved invoice/devis in an
+  // <iframe> (see InvoicePreviewModalComponent) — the CSP's
+  // `frame-src 'self' blob:` won't allow framing the API's own origin
+  // directly in dev (different port), only a blob: URL the frontend created
+  // itself.
+  getPdfBlob(id: string): Observable<Blob> {
+    return this.http
+      .get(this.pdfUrl(id), { responseType: 'blob' })
+      .pipe(timeout(PDF_FETCH_TIMEOUT_MS));
+  }
+
   // Phase 6: renders a PDF from a not-yet-saved draft — same request shape
   // as create(), but nothing is persisted server-side (see
   // InvoiceService.previewPdf on the backend).
   previewPdf(request: CreateInvoiceRequest): Observable<Blob> {
-    return this.http.post(`${this.baseUrl}/preview`, request, { responseType: 'blob' });
+    return this.http
+      .post(`${this.baseUrl}/preview`, request, { responseType: 'blob' })
+      .pipe(timeout(PDF_FETCH_TIMEOUT_MS));
   }
 
   // Phase 15: JSON counterpart of previewPdf — same not-yet-saved draft,

@@ -15,6 +15,8 @@ function samplePdfData(): InvoicePdfData {
     issuerEmail: null,
     issuerPhone: null,
     companyVatExempt: true,
+    issuerLogo: null,
+    showWatermark: true,
     customerName: 'M. Dupont',
     customerAddress: null,
     customerEmail: null,

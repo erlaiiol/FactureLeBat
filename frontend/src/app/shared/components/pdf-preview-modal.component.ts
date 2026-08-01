@@ -15,6 +15,12 @@ import { IconCloseComponent } from './icon-close.component';
 // and always feel like the app "left" to a new tab. `pdfBlobUrl` is the
 // object URL owned by the caller (InvoiceCreateShellPage), which stays
 // responsible for revoking it; this component only renders/hides it.
+//
+// `loading` opens the modal (with a spinner, no iframe) as soon as the
+// caller starts fetching the PDF, instead of leaving it invisible until the
+// blob arrives — server-side generation + a mobile connection can take a
+// few seconds, and the only prior feedback was the trigger button's own
+// label, easy to miss and indistinguishable from the app being stuck.
 @Component({
   selector: 'app-pdf-preview-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,7 +31,10 @@ export class PdfPreviewModalComponent {
   private readonly sanitizer = inject(DomSanitizer);
 
   readonly pdfBlobUrl = input<string | null>(null);
+  readonly loading = input(false);
   readonly closed = output<void>();
+
+  protected readonly isOpen = computed(() => this.loading() || this.pdfBlobUrl() !== null);
 
   // iframe `src` is a sanitized context in Angular — bypassed here because
   // the URL is always one we created ourselves from a same-origin API blob
@@ -37,7 +46,7 @@ export class PdfPreviewModalComponent {
 
   @HostListener('document:keydown.escape')
   protected onEscape(): void {
-    if (this.pdfBlobUrl()) {
+    if (this.isOpen()) {
       this.closed.emit();
     }
   }

@@ -31,10 +31,10 @@
 } @else {
   <ul class="anim-preview-in flex flex-col gap-3">
     @for (customer of customers(); track customer.id) {
-      <li>
+      <li class="flex items-center gap-2 rounded-xl border border-line bg-surface p-4 hover:bg-bg">
         <a
           [routerLink]="['/clients', customer.id]"
-          class="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 hover:bg-bg"
+          class="flex flex-1 items-center justify-between gap-4"
         >
           <div>
             <p class="font-semibold text-ink">{{ customer.name }}</p>
@@ -59,6 +59,14 @@
             </p>
           </div>
         </a>
+        <button
+          type="button"
+          (click)="viewDocuments(customer)"
+          title="Voir les devis/factures de ce client"
+          class="shrink-0 rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink hover:bg-primary-subtle hover:text-primary-subtle-fg"
+        >
+          Documents
+        </button>
       </li>
     }
   </ul>
