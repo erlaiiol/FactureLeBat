@@ -90,6 +90,24 @@ audit_feature_group() {
 	fi
 }
 
+# Phase 30: each of the 3 Stripe Price ids is independently optional (see
+# StripeClientService.isTierAvailable) — unlike audit_feature_group's
+# all-or-nothing group above, an unset ESSENTIEL/PRO price is a normal,
+# expected state (that tier just isn't sellable yet), not a warning.
+audit_stripe_tiers() {
+	file=$1
+	for pair in "ESSENTIEL:STRIPE_PRICE_ID_ESSENTIEL" "PRO:STRIPE_PRICE_ID_PRO" "PREMIUM:STRIPE_PRICE_ID_PREMIUM"; do
+		tier=${pair%%:*}
+		var=${pair#*:}
+		val=$(env_var "$file" "$var")
+		if [ -n "$val" ]; then
+			ok "  Palier $tier ($var) : en vente"
+		else
+			info "  Palier $tier ($var) : non configuré — indisponible à la vente sur ce déploiement"
+		fi
+	done
+}
+
 check_not_tracked_by_git() {
 	file=$1
 	if [ -f "$file" ] && git ls-files --error-unmatch "$file" >/dev/null 2>&1; then
@@ -133,7 +151,8 @@ else
 	audit_feature_group "Envoi de factures par email (chiffrement SMTP)" "APP_ENCRYPTION_KEY" "$BACKEND_ENV"
 	audit_feature_group "Connexion Google" "GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET" "$BACKEND_ENV"
 	audit_feature_group "Emails système (vérification/mot de passe oublié)" "SYSTEM_SMTP_HOST SYSTEM_SMTP_USER SYSTEM_SMTP_PASSWORD SYSTEM_MAIL_FROM_ADDRESS" "$BACKEND_ENV"
-	audit_feature_group "Abonnement Stripe" "STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID" "$BACKEND_ENV"
+	audit_feature_group "Abonnement Stripe" "STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID_PREMIUM" "$BACKEND_ENV"
+	audit_stripe_tiers "$BACKEND_ENV"
 	audit_feature_group "Bootstrap admin" "ADMIN_SEED_EMAIL" "$BACKEND_ENV"
 	audit_feature_group "Notifications push (Firebase)" "FIREBASE_SERVICE_ACCOUNT_JSON" "$BACKEND_ENV"
 fi
@@ -194,7 +213,8 @@ else
 	audit_feature_group "Envoi de factures par email (chiffrement SMTP)" "APP_ENCRYPTION_KEY" "$INFRA_ENV"
 	audit_feature_group "Connexion Google" "GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET" "$INFRA_ENV"
 	audit_feature_group "Emails système (vérification/mot de passe oublié)" "SYSTEM_SMTP_HOST SYSTEM_SMTP_USER SYSTEM_SMTP_PASSWORD SYSTEM_MAIL_FROM_ADDRESS" "$INFRA_ENV"
-	audit_feature_group "Abonnement Stripe" "STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID" "$INFRA_ENV"
+	audit_feature_group "Abonnement Stripe" "STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID_PREMIUM" "$INFRA_ENV"
+	audit_stripe_tiers "$INFRA_ENV"
 	audit_feature_group "Bootstrap admin" "ADMIN_SEED_EMAIL" "$INFRA_ENV"
 	audit_feature_group "Notifications push (Firebase)" "FIREBASE_SERVICE_ACCOUNT_JSON" "$INFRA_ENV"
 	audit_feature_group "Alerte expiration certificat TLS" "OPS_ALERT_EMAIL" "$INFRA_ENV"
