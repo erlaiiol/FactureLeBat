@@ -337,7 +337,7 @@ export class InvoiceCreateLinesStepPage {
   // whether one is already active, so the template only ever needs one
   // click handler per row instead of separate add/remove bindings. The
   // flyout itself stays open afterwards so several materials can be picked
-  // in one go.
+  // in one go — desktop only, see closePanelOnMobileAfterPick.
   protected toggleProduct(product: ProductProfile): void {
     const activeIndex = this.activeProductLineIndex().get(product.id);
     if (activeIndex != null) {
@@ -345,6 +345,7 @@ export class InvoiceCreateLinesStepPage {
       return;
     }
     this.addProductFromCatalog(product);
+    this.closePanelOnMobileAfterPick();
   }
 
   private createServiceLineGroup(initial?: {
@@ -497,6 +498,19 @@ export class InvoiceCreateLinesStepPage {
       return;
     }
     this.addServiceFromCatalog(service);
+    this.closePanelOnMobileAfterPick();
+  }
+
+  // Below the `sm` breakpoint (matching introExpanded and .fixed-add-flyout
+  // in styles.css) the catalog flyout is a full-screen bottom sheet, so
+  // leaving it open after a pick — the desktop multi-pick behaviour above —
+  // would keep hiding the card just added, including the quantity field the
+  // artisan needs to fill in next. Closing it here reveals that card; the
+  // artisan can still tap the "+" button again to pick another item.
+  private closePanelOnMobileAfterPick(): void {
+    if (!window.matchMedia('(min-width: 640px)').matches) {
+      this.closePanels();
+    }
   }
 
   // Phase 13.5 gallery redesign: opening one flyout closes the other, so
