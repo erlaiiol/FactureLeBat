@@ -45,6 +45,15 @@
       </div>
       <div class="anim-skeleton mb-6 h-32 rounded-xl"></div>
     }
+  } @else if (analyticsLocked()) {
+    <div class="flex flex-col items-start gap-3 rounded-2xl border border-line bg-surface p-5">
+      <p class="text-ink-soft">
+        Les statistiques d'activité sont réservées aux offres Pro et Premium.
+      </p>
+      <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
+        Voir les offres
+      </app-big-button>
+    </div>
   } @else if (analyticsError()) {
     <p class="text-ink-soft">Impossible de charger votre activité pour le moment.</p>
   } @else if (analytics(); as data) {
@@ -213,9 +222,7 @@
         >
           <p class="mb-2 text-sm text-ink-soft">
             Plafond micro-entrepreneur : {{ warning.yearToDateCents | centsToEuros }} encaissés
-            cette année sur {{ warning.ceilingCents | centsToEuros }} ({{
-              warning.percentageUsed
-            }}
+            cette année sur {{ warning.ceilingCents | centsToEuros }} ({{ warning.percentageUsed }}
             %)
           </p>
           <div class="h-3 w-full overflow-hidden rounded-full bg-secondary-subtle">

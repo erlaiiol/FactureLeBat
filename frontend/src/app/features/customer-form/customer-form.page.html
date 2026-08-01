@@ -94,8 +94,13 @@
   @if (errorMessage(); as message) {
     <p class="text-center font-medium text-danger">{{ message }}</p>
   }
-
-  <app-big-button type="submit" [disabled]="saving()">
-    {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
-  </app-big-button>
+  @if (catalogLimitReached()) {
+    <app-big-button type="button" variant="primary" tone="solid" (click)="goToSubscribe()">
+      Voir les offres
+    </app-big-button>
+  } @else {
+    <app-big-button type="submit" [disabled]="saving()">
+      {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+    </app-big-button>
+  }
 </form>

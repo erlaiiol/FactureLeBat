@@ -16,23 +16,59 @@
     </div>
   </header>
 
-  <!-- Hero: the one load-bearing promise (docs/positioning.md). The CTA
-       button below deliberately uses the app's real "Chantier calibré"
-       accent (bg-primary), not an Atelier-sobre tone — it's the one clickable
-       element on the page that has to visually pop against the calmer
-       storytelling palette and match the button the artisan will click
-       everywhere else once signed up. -->
+  <!-- Hero: the philosophy, then the proof (docs/positioning.md). The h1 is
+       a one-shot animated litany (docs/design-system.md's `heroLitany`)
+       that plays once on load and settles on "FactureLe en 1 clic" — a
+       decorative, aria-hidden stack of lines with a screen-reader/SEO-visible
+       equivalent underneath, so it degrades to plain, static text with
+       animations off or JS unavailable. The CTA button below deliberately
+       uses the app's real "Chantier calibré" accent (bg-primary), not an
+       Atelier-sobre tone — it's the one clickable element on the page that
+       has to visually pop against the calmer storytelling palette and match
+       the button the artisan will click everywhere else once signed up. -->
   <section
     class="mx-auto flex max-w-3xl flex-col items-center gap-6 px-4 py-16 text-center sm:py-24"
   >
-    <h1 class="font-atelier-heading text-4xl leading-tight font-semibold sm:text-5xl">
-      Le système de facturation le plus simple, le plus rapide.
+    <h1
+      class="font-atelier-heading relative min-h-40 w-full text-3xl leading-tight font-semibold sm:min-h-28 sm:text-5xl"
+    >
+      <span class="sr-only">FactureLe en 1 clic.</span>
+      <span class="block h-full w-full" aria-hidden="true">
+        <span class="anim-hero-litany-line" style="animation-delay: 0ms"
+          >Tu as vendu&nbsp;? <strong class="text-atelier-walnut">FactureLe.</strong></span
+        >
+        <span class="anim-hero-litany-line" style="animation-delay: 1500ms"
+          >Tu as créé un site&nbsp;? <strong class="text-atelier-walnut">FactureLe.</strong></span
+        >
+        <span class="anim-hero-litany-line" style="animation-delay: 3000ms"
+          >Tu as réparé une voiture&nbsp;?
+          <strong class="text-atelier-walnut">FactureLe.</strong></span
+        >
+        <span class="anim-hero-litany-line" style="animation-delay: 4500ms"
+          >Tu as donné un cours&nbsp;? <strong class="text-atelier-walnut">FactureLe.</strong></span
+        >
+        <span class="anim-hero-litany-line" style="animation-delay: 6000ms"
+          >Tu as promené un chien&nbsp;?
+          <strong class="text-atelier-walnut">FactureLe.</strong></span
+        >
+        <span class="anim-hero-litany-line" style="animation-delay: 7500ms"
+          >Tu as fait une conférence&nbsp;?
+          <strong class="text-atelier-walnut">FactureLe.</strong></span
+        >
+        <span class="anim-hero-litany-line" style="animation-delay: 9000ms"
+          >Il reste une chose. <strong class="text-atelier-walnut">FactureLe.</strong></span
+        >
+        <span class="anim-hero-litany-final" style="animation-delay: 10500ms"
+          >FactureLe en 1 clic</span
+        >
+      </span>
     </h1>
     <p class="text-atelier-ink-soft max-w-xl text-lg">
-      Configurez une seule fois votre environnement de travail — clients, produits, services — puis
-      construisez vos devis et vos factures en un clic. Fini les allers-retours&nbsp;: vous êtes
-      chez le client, vous lui présentez le prix aussitôt, avec le détail de votre prestation selon
-      vos propres critères.
+      Peu importe ce que vous faites, tout finit par la même question&nbsp;: et maintenant, je
+      facture comment&nbsp;? Configurez une seule fois votre activité — clients, produits, services
+      — puis construisez vos devis et vos factures en un clic, où que vous soyez. Fini les
+      allers-retours&nbsp;: vous êtes face au client, vous lui présentez le prix aussitôt, avec le
+      détail de votre prestation selon vos propres critères.
     </p>
     <a
       routerLink="/inscription"
@@ -98,7 +134,7 @@
           <path d="M15 12.5 20 17M15 12.5l5.5-4.9a2 2 0 0 0 0-2.9 2 2 0 0 0-2.8 0L15 7.3" />
           <path d="m9 7.3 3 3 3-3" />
         </svg>
-        <h2 class="font-atelier-heading mt-3 text-lg font-semibold">Confiance sur le chantier</h2>
+        <h2 class="font-atelier-heading mt-3 text-lg font-semibold">Confiance immédiate</h2>
         <p class="text-atelier-ink-soft mt-1 text-sm">
           Le prix s'affiche devant le client, tout de suite, sans rendez-vous supplémentaire.
         </p>
@@ -171,9 +207,9 @@
         >
           2
         </div>
-        <h3 class="font-atelier-heading mt-3 font-semibold">Un clic sur le chantier</h3>
+        <h3 class="font-atelier-heading mt-3 font-semibold">Un clic, sur place</h3>
         <p class="text-atelier-ink-soft mt-1 text-sm">
-          Choisissez le client, activez ce que vous avez posé, la quantité suffit.
+          Choisissez le client, activez ce que vous avez déjà configuré, la quantité suffit.
         </p>
       </div>
       <div class="text-center">

@@ -1,4 +1,4 @@
-import { SubscriptionStatus, UserRole } from '../../../generated/prisma/enums';
+import { PlanTier, SubscriptionStatus, UserRole } from '../../../generated/prisma/enums';
 
 // One row of GET /admin/users — a User joined with its 1:1 Company's
 // billing state and invoice count. Never includes passwordHash/googleId
@@ -13,6 +13,9 @@ export interface AdminUserSummary {
   createdAt: Date;
   subscriptionStatus: SubscriptionStatus;
   hasPremiumAccess: boolean;
+  // Phase 30: the resolved effective tier (Stripe subscription OR grant,
+  // whichever is better) — null when hasPremiumAccess is false.
+  planTier: PlanTier | null;
   premiumGrantedUntil: Date | null;
   invoiceCount: number;
 }

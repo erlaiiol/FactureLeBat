@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { UNIT_LABELS } from '../common/unit.util';
 import { SearchSuppliersDto } from './dto/search-suppliers.dto';
 import { SuggestComplementaryDto } from './dto/suggest-complementary.dto';
@@ -31,15 +32,20 @@ export class SourcingService {
   constructor(
     private readonly repository: SourcingRepository,
     private readonly groqClient: GroqClientService,
+    private readonly planGateService: PlanGateService,
     config: ConfigService,
   ) {
     this.dailyCap = config.get<number>('SOURCING_DAILY_SEARCH_CAP', DEFAULT_DAILY_SEARCH_CAP);
   }
 
+  // Phase 30: Premium-only feature — checked first, before even a cache
+  // hit, so access control is never bypassed by a previously-cached result
+  // from before a downgrade. See docs/roadmap.md Phase 30.
   async searchSuppliers(
     companyId: string,
     dto: SearchSuppliersDto,
   ): Promise<SourcingSearchResult<SupplierCandidate>> {
+    await this.planGateService.assertFeatureAccess(companyId, 'aiSourcing');
     const queryHash = hashQuery({
       productName: dto.productName,
       quantity: dto.quantity,
@@ -56,6 +62,7 @@ export class SourcingService {
     companyId: string,
     dto: SuggestComplementaryDto,
   ): Promise<SourcingSearchResult<ComplementarySuggestion>> {
+    await this.planGateService.assertFeatureAccess(companyId, 'aiSourcing');
     const queryHash = hashQuery({ productName: dto.productName, unit: dto.unit });
     return this.run(companyId, SourcingSearchKind.COMPLEMENTARY_SUGGESTIONS, queryHash, () =>
       this.callComplementarySuggestions(dto),

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { CustomerRepository } from './customer.repository';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -59,7 +60,10 @@ function sortCustomers(
 
 @Injectable()
 export class CustomerService {
-  constructor(private readonly customerRepository: CustomerRepository) {}
+  constructor(
+    private readonly customerRepository: CustomerRepository,
+    private readonly planGateService: PlanGateService,
+  ) {}
 
   // Phase 14.5: search matches name/companyName/address/description (see
   // CustomerRepository.findAll); each result carries its last devis/facture
@@ -110,7 +114,13 @@ export class CustomerService {
     return customer;
   }
 
-  create(companyId: string, dto: CreateCustomerDto): Promise<CustomerProfile> {
+  // Phase 30: catalog-size cap, one of the 3 tier axes — see
+  // docs/roadmap.md Phase 30. Checked before the write, never on list/
+  // search/edit of already-saved customers, same "never earlier than the
+  // action actually being refused" posture as PlanGateService's other
+  // checks.
+  async create(companyId: string, dto: CreateCustomerDto): Promise<CustomerProfile> {
+    await this.planGateService.assertCatalogCapacity(companyId, 'customer');
     return this.customerRepository.create(companyId, dto);
   }
 

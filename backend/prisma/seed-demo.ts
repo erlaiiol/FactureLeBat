@@ -26,6 +26,7 @@ import {
   DocumentType,
   InvoiceStatus,
   LegalStatus,
+  PlanTier,
   ServicePricingMode,
   ServiceVisibility,
   Unit,
@@ -52,10 +53,12 @@ const DEMO_ARTISAN_PASSWORD = 'DemoArtisan2026!';
 const DEMO_BEAUTE_EMAIL = demoEmail('beaute');
 const DEMO_BEAUTE_PASSWORD = 'DemoBeaute2026!';
 
-// No real Stripe subscription behind these tenants — premiumGrantedUntil is
-// the same "premium access granted outside Stripe" mechanism as an admin
-// grant or a redeemed PromoCode (see PremiumGateService.hasPremiumAccess),
-// so a prospect/investor clicking through the demo never hits the paywall.
+// No real Stripe subscription behind these tenants — premiumGrantedUntil +
+// grantedPlanTier is the same "plan access granted outside Stripe"
+// mechanism as an admin grant or a redeemed PromoCode (see
+// PlanGateService.getEffectivePlanTier), so a prospect/investor clicking
+// through the demo never hits the paywall and sees every Premium-only
+// feature (Phase 30: AI assistant, analytics) unlocked.
 const DEMO_PREMIUM_GRANTED_UNTIL = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
 const prisma = new PrismaClient({
@@ -302,6 +305,7 @@ async function seedArtisanBatiment(): Promise<void> {
       legalStatus: LegalStatus.COMPANY,
       vatRateBasisPoints: 2000,
       premiumGrantedUntil: DEMO_PREMIUM_GRANTED_UNTIL,
+      grantedPlanTier: PlanTier.PREMIUM,
     },
     email: DEMO_ARTISAN_EMAIL,
     password: DEMO_ARTISAN_PASSWORD,
@@ -1010,6 +1014,7 @@ async function seedInstitutBeaute(): Promise<void> {
       vatRateBasisPoints: 0,
       declarationFrequency: DeclarationFrequency.MENSUELLE,
       premiumGrantedUntil: DEMO_PREMIUM_GRANTED_UNTIL,
+      grantedPlanTier: PlanTier.PREMIUM,
     },
     email: DEMO_BEAUTE_EMAIL,
     password: DEMO_BEAUTE_PASSWORD,

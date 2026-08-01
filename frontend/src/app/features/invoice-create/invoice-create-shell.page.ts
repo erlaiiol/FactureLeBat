@@ -1,5 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  inject,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import {
   ActivatedRoute,
@@ -50,6 +59,14 @@ export class InvoiceCreateShellPage {
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly draftStore = inject(InvoiceDraftStore);
+
+  // Measured and republished as the `--invoice-footer-height` CSS variable —
+  // see observeFooterHeight below and app-toast-container's identical
+  // `--nav-height` pattern, mirrored here for the bottom edge: this bar sits
+  // fixed at the same viewport edge as the global toasts, and without this
+  // they'd render inside its opaque footprint instead of above it.
+  @ViewChild('footerBar') private readonly footerBarRef?: ElementRef<HTMLElement>;
+  private footerHeightObserver?: ResizeObserver;
 
   protected readonly loadingPdfPreview = signal(false);
   protected readonly pdfPreviewUrl = signal<string | null>(null);
@@ -107,6 +124,28 @@ export class InvoiceCreateShellPage {
     });
 
     this.destroyRef.onDestroy(() => this.revokeCurrentPdfPreviewUrl());
+
+    afterNextRender(() => this.observeFooterHeight());
+    this.destroyRef.onDestroy(() => {
+      this.footerHeightObserver?.disconnect();
+      document.documentElement.style.removeProperty('--invoice-footer-height');
+    });
+  }
+
+  private observeFooterHeight(): void {
+    const element = this.footerBarRef?.nativeElement;
+    if (!element) {
+      return;
+    }
+    const updateFooterHeight = () => {
+      document.documentElement.style.setProperty(
+        '--invoice-footer-height',
+        `${element.getBoundingClientRect().height}px`,
+      );
+    };
+    updateFooterHeight();
+    this.footerHeightObserver = new ResizeObserver(updateFooterHeight);
+    this.footerHeightObserver.observe(element);
   }
 
   // Phase 15: hides the bottom bar's own "Aperçu" button while already on

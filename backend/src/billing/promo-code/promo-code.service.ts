@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PlanTier } from '../../../generated/prisma/enums';
 import { PromoCodeModel as PromoCode } from '../../../generated/prisma/models';
 import { NoRowsAffectedError } from '../../common/errors/no-rows-affected.error';
 import { BillingRepository } from '../billing.repository';
@@ -32,6 +33,7 @@ export class PromoCodeService {
     const code = await this.resolveCode(dto.code);
     return this.repository.create({
       code,
+      planTier: dto.planTier,
       durationDays: dto.durationDays,
       maxRedemptions: dto.maxRedemptions,
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
@@ -60,11 +62,12 @@ export class PromoCodeService {
     }
   }
 
-  // Applies the code's durationDays to the redeeming company's
-  // premiumGrantedUntil — the exact same mechanism an admin's manual grant
-  // uses (BillingRepository.grantPremiumDays), so a promo code is really
-  // just a self-service, rate-limited way to trigger that same grant.
-  async redeem(companyId: string, rawCode: string): Promise<Date> {
+  // Applies the code's durationDays/planTier to the redeeming company's
+  // premiumGrantedUntil/grantedPlanTier — the exact same mechanism an
+  // admin's manual grant uses (BillingRepository.grantPlanDays), so a promo
+  // code is really just a self-service, rate-limited way to trigger that
+  // same grant.
+  async redeem(companyId: string, rawCode: string): Promise<{ until: Date; tier: PlanTier }> {
     const code = normalizeCode(rawCode);
     const promoCode = await this.repository.findByCode(code);
     if (!promoCode || !promoCode.active) {
@@ -91,7 +94,11 @@ export class PromoCodeService {
     // *different* companies, an acceptable soft cap for an internal
     // promo tool, not a payment-critical guarantee.
     await this.repository.recordRedemption(promoCode.id, companyId);
-    return this.billingRepository.grantPremiumDays(companyId, promoCode.durationDays);
+    return this.billingRepository.grantPlanDays(
+      companyId,
+      promoCode.planTier,
+      promoCode.durationDays,
+    );
   }
 
   private async resolveCode(requested?: string): Promise<string> {

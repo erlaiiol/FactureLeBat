@@ -8,6 +8,7 @@ import {
   PromoCode,
   PushDeviceList,
 } from '../models/admin.model';
+import { PlanTier } from '../models/billing.model';
 import { SiteLegalInfo, UpdateSiteLegalInfoRequest } from '../models/site-legal.model';
 
 @Injectable({ providedIn: 'root' })
@@ -23,10 +24,14 @@ export class AdminService {
     return this.http.get<AdminUserList>(`${this.baseUrl}/users`, { params });
   }
 
-  grantPremium(companyId: string, days: number): Observable<{ premiumGrantedUntil: string }> {
-    return this.http.post<{ premiumGrantedUntil: string }>(
+  grantPremium(
+    companyId: string,
+    tier: PlanTier,
+    days: number,
+  ): Observable<{ premiumGrantedUntil: string; grantedPlanTier: PlanTier }> {
+    return this.http.post<{ premiumGrantedUntil: string; grantedPlanTier: PlanTier }>(
       `${this.baseUrl}/users/${companyId}/grant-premium`,
-      { days },
+      { tier, days },
     );
   }
 

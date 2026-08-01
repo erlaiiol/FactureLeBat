@@ -1,4 +1,4 @@
-import { SubscriptionStatus } from '../../generated/prisma/enums';
+import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { BillingFields, BillingRepository } from './billing.repository';
 import { BillingService } from './billing.service';
 import { StripeClientService } from './stripe/stripe-client.service';
@@ -8,15 +8,19 @@ function billingFields(overrides: Partial<BillingFields> = {}): BillingFields {
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     subscriptionStatus: SubscriptionStatus.NONE,
+    subscriptionPlanTier: null,
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
     premiumGrantedUntil: null,
+    grantedPlanTier: null,
     pendingReferralDiscount: false,
     ...overrides,
   };
 }
 
-function buildService(options: { fields?: BillingFields; stripeConfigured?: boolean } = {}) {
+function buildService(
+  options: { fields?: BillingFields; stripeConfigured?: boolean; launchOfferActive?: boolean } = {},
+) {
   const getBillingFields = jest.fn().mockResolvedValue(options.fields ?? billingFields());
   const setPendingReferralDiscount = jest.fn().mockResolvedValue(undefined);
   const setStripeCustomerId = jest.fn().mockResolvedValue(undefined);
@@ -25,10 +29,14 @@ function buildService(options: { fields?: BillingFields; stripeConfigured?: bool
     setPendingReferralDiscount,
     setStripeCustomerId,
     countInvoices: jest.fn().mockResolvedValue(0),
+    countCustomers: jest.fn().mockResolvedValue(0),
+    countCatalogItems: jest.fn().mockResolvedValue(0),
   } as unknown as BillingRepository;
 
   const isConfigured = jest.fn().mockReturnValue(options.stripeConfigured ?? true);
-  const ensureReferralDiscountCoupon = jest.fn().mockResolvedValue('referral-filleul-5eur-1mois');
+  const ensureReferralDiscountCoupon = jest.fn().mockResolvedValue('referral-filleul-30pct-1mois');
+  const ensureLaunchOfferCoupon = jest.fn().mockResolvedValue('launch-offer-premium-2mois');
+  const isLaunchOfferActive = jest.fn().mockReturnValue(options.launchOfferActive ?? false);
   const applyCouponToSubscription = jest.fn().mockResolvedValue(undefined);
   const createCheckoutSession = jest
     .fn()
@@ -36,6 +44,8 @@ function buildService(options: { fields?: BillingFields; stripeConfigured?: bool
   const stripeClient = {
     isConfigured,
     ensureReferralDiscountCoupon,
+    ensureLaunchOfferCoupon,
+    isLaunchOfferActive,
     applyCouponToSubscription,
     createCheckoutSession,
     createCustomer: jest.fn(),
@@ -48,6 +58,7 @@ function buildService(options: { fields?: BillingFields; stripeConfigured?: bool
     getBillingFields,
     setPendingReferralDiscount,
     ensureReferralDiscountCoupon,
+    ensureLaunchOfferCoupon,
     applyCouponToSubscription,
     createCheckoutSession,
     isConfigured,
@@ -71,12 +82,13 @@ describe('BillingService.grantReferralDiscount', () => {
       fields: billingFields({
         stripeSubscriptionId: 'sub_123',
         subscriptionStatus: SubscriptionStatus.ACTIVE,
+        subscriptionPlanTier: PlanTier.PRO,
       }),
     });
     await service.grantReferralDiscount(COMPANY_ID);
     expect(applyCouponToSubscription).toHaveBeenCalledWith(
       'sub_123',
-      'referral-filleul-5eur-1mois',
+      'referral-filleul-30pct-1mois',
     );
     expect(setPendingReferralDiscount).not.toHaveBeenCalled();
   });
@@ -86,12 +98,13 @@ describe('BillingService.grantReferralDiscount', () => {
       fields: billingFields({
         stripeSubscriptionId: 'sub_456',
         subscriptionStatus: SubscriptionStatus.PAST_DUE,
+        subscriptionPlanTier: PlanTier.ESSENTIEL,
       }),
     });
     await service.grantReferralDiscount(COMPANY_ID);
     expect(applyCouponToSubscription).toHaveBeenCalledWith(
       'sub_456',
-      'referral-filleul-5eur-1mois',
+      'referral-filleul-30pct-1mois',
     );
   });
 
@@ -117,22 +130,46 @@ describe('BillingService.grantReferralDiscount', () => {
   });
 });
 
-describe('BillingService.createCheckoutSession — referral discount pickup', () => {
-  it('attaches the referral coupon when pendingReferralDiscount is set', async () => {
+describe('BillingService.createCheckoutSession — discount priority', () => {
+  it('attaches the referral coupon when pendingReferralDiscount is set, even on Premium with an active launch offer', async () => {
     const { service, createCheckoutSession } = buildService({
       fields: billingFields({ stripeCustomerId: 'cus_1', pendingReferralDiscount: true }),
+      launchOfferActive: true,
     });
-    await service.createCheckoutSession('company-1', 'artisan@example.com');
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PREMIUM);
     expect(createCheckoutSession).toHaveBeenCalledWith(
-      expect.objectContaining({ discountCouponId: 'referral-filleul-5eur-1mois' }),
+      expect.objectContaining({ discountCouponId: 'referral-filleul-30pct-1mois' }),
     );
   });
 
-  it('never attaches a coupon when no discount is pending', async () => {
+  it('attaches the launch offer coupon on a Premium checkout with no pending referral discount', async () => {
     const { service, createCheckoutSession } = buildService({
       fields: billingFields({ stripeCustomerId: 'cus_1', pendingReferralDiscount: false }),
+      launchOfferActive: true,
     });
-    await service.createCheckoutSession('company-1', 'artisan@example.com');
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PREMIUM);
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ discountCouponId: 'launch-offer-premium-2mois' }),
+    );
+  });
+
+  it('never attaches the launch offer coupon on a non-Premium checkout', async () => {
+    const { service, createCheckoutSession } = buildService({
+      fields: billingFields({ stripeCustomerId: 'cus_1', pendingReferralDiscount: false }),
+      launchOfferActive: true,
+    });
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PRO);
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ discountCouponId: undefined }),
+    );
+  });
+
+  it('never attaches a coupon when no discount is pending and no launch offer is active', async () => {
+    const { service, createCheckoutSession } = buildService({
+      fields: billingFields({ stripeCustomerId: 'cus_1', pendingReferralDiscount: false }),
+      launchOfferActive: false,
+    });
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PREMIUM);
     expect(createCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({ discountCouponId: undefined }),
     );

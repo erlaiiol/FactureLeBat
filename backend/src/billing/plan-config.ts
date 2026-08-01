@@ -1,0 +1,100 @@
+import { PlanTier } from '../../generated/prisma/enums';
+
+// Phase 30: single source of truth for the 3 subscription tiers — price,
+// catalog caps, and feature flags. Every other module (GET /billing/plans
+// for the frontend pricing UI, PlanGateService, AdminService/PromoCodeService
+// for tier-aware grants) reads from here rather than duplicating a number,
+// same "one place, never copied" convention as common/unit.util.ts's
+// UNIT_LABELS. See docs/roadmap.md Phase 30 for the decoy-pricing rationale
+// behind these specific numbers.
+export interface PlanDefinition {
+  tier: PlanTier;
+  name: string;
+  priceEuros: number;
+  tagline: string;
+  // null = unlimited. Deliberately never gates devis/factures themselves —
+  // see docs/roadmap.md Phase 30's "Decided with the user" section.
+  customerLimit: number | null;
+  catalogItemLimit: number | null; // Product + Service combined
+  features: {
+    analytics: boolean; // Phase 17 "Statistiques d'activité" (never the quarterly declaration — that stays free on every tier)
+    aiSourcing: boolean; // Phase 10 "Assistant fournisseurs"
+  };
+  prioritySupport: boolean;
+  highlight: boolean; // marketing badge ("Meilleure valeur") on the pricing UI
+}
+
+// Ascending order — array index doubles as a rank, see isTierAtLeast/
+// higherTier below. Never reorder without checking every caller that
+// compares tiers positionally.
+export const PLAN_TIER_ORDER: readonly PlanTier[] = [
+  PlanTier.ESSENTIEL,
+  PlanTier.PRO,
+  PlanTier.PREMIUM,
+];
+
+export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
+  [PlanTier.ESSENTIEL]: {
+    tier: PlanTier.ESSENTIEL,
+    name: 'Essentiel',
+    priceEuros: 7,
+    tagline: 'Pour démarrer sereinement, sans complexité inutile.',
+    customerLimit: 20,
+    catalogItemLimit: 30,
+    features: { analytics: false, aiSourcing: false },
+    prioritySupport: false,
+    highlight: false,
+  },
+  [PlanTier.PRO]: {
+    tier: PlanTier.PRO,
+    name: 'Pro',
+    priceEuros: 12,
+    tagline: 'Pour une activité qui grandit : plus de place, vos statistiques.',
+    customerLimit: 150,
+    catalogItemLimit: 150,
+    features: { analytics: true, aiSourcing: false },
+    prioritySupport: false,
+    highlight: false,
+  },
+  [PlanTier.PREMIUM]: {
+    tier: PlanTier.PREMIUM,
+    name: 'Premium',
+    priceEuros: 15,
+    tagline: 'Tout, sans limite, avec l’assistant IA fournisseurs.',
+    customerLimit: null,
+    catalogItemLimit: null,
+    features: { analytics: true, aiSourcing: true },
+    prioritySupport: true,
+    highlight: true,
+  },
+};
+
+export type CatalogKind = 'customer' | 'catalogItem';
+export type GatedFeature = 'analytics' | 'aiSourcing';
+
+// Short labels for GET /billing/plans and lock-screen copy — kept here
+// alongside PLAN_DEFINITIONS rather than duplicated in the two gate
+// exceptions that also need them.
+export const CATALOG_KIND_LABELS: Record<CatalogKind, string> = {
+  customer: 'clients enregistrés',
+  catalogItem: 'articles au catalogue (produits + prestations)',
+};
+
+export const GATED_FEATURE_LABELS: Record<GatedFeature, string> = {
+  analytics: "statistiques d'activité",
+  aiSourcing: 'assistant IA fournisseurs',
+};
+
+export function isTierAtLeast(tier: PlanTier, required: PlanTier): boolean {
+  return PLAN_TIER_ORDER.indexOf(tier) >= PLAN_TIER_ORDER.indexOf(required);
+}
+
+// Used to make a stacked grant never downgrade a tier already in effect
+// (see BillingRepository.grantPlanDays) and to resolve "Stripe subscription
+// tier OR grant tier, whichever is better" (see PlanGateService.
+// getEffectivePlanTier) — both are the same "take the higher one" rule.
+export function higherTier(a: PlanTier | null, b: PlanTier | null): PlanTier | null {
+  if (!a) return b;
+  if (!b) return a;
+  return isTierAtLeast(a, b) ? a : b;
+}

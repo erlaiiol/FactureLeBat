@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BillingModule } from '../billing/billing.module';
 import { ProductController } from './product.controller';
 import { ProductService } from './product.service';
 import { ProductRepository } from './product.repository';
@@ -7,6 +8,7 @@ import { ProductImportService } from './import/product-import.service';
 import { SafeFetcherService } from './import/safe-fetcher.service';
 
 @Module({
+  imports: [BillingModule],
   controllers: [ProductController],
   providers: [
     ProductService,

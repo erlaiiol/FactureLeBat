@@ -1,5 +1,12 @@
+<!-- bottom reads the `--invoice-footer-height` CSS variable (published by
+     InvoiceCreateShellPage/InvoiceCreateManualPage) rather than a flat
+     bottom-4: those pages' own fixed totals/preview bar sits at the exact
+     same viewport edge, and a flat offset let toasts land inside that bar's
+     opaque footprint instead of above it, even though z-50 already painted
+     them on top — same `--nav-height` pattern as app.html's #topBar, just
+     for the bottom edge. Falls back to 0px on every other page. -->
 <div
-  class="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col items-center gap-2 sm:inset-x-auto sm:right-4 sm:items-end"
+  class="pointer-events-none fixed inset-x-4 bottom-[calc(var(--invoice-footer-height,0px)_+_1rem)] z-50 flex flex-col items-center gap-2 sm:inset-x-auto sm:right-4 sm:items-end"
 >
   @for (toast of toastService.toasts(); track toast.id) {
     <div

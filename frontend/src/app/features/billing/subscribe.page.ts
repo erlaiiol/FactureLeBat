@@ -4,6 +4,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { PlanCatalog, PlanTier } from '../../core/models/billing.model';
 import { BillingService } from '../../core/services/billing.service';
 import { ReferralStatus } from '../../core/models/referral.model';
 import { PlatformService } from '../../core/services/platform.service';
@@ -26,6 +27,11 @@ function extractErrorMessage(error: HttpErrorResponse, fallback: string): string
 // ?success=1/?canceled=1), which is why loadStatus() is re-run after both a
 // redirect-back and a promo redemption rather than trusting any locally
 // held state to still be accurate.
+//
+// Phase 30: the single "S'abonner — 15€/mois" button became 3 pricing
+// cards, fetched from GET /billing/plans (never hardcoded here — see
+// docs/roadmap.md Phase 30) so the decoy-pricing card order/highlight and
+// the launch-offer banner stay driven entirely by the backend.
 @Component({
   selector: 'app-subscribe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,7 +51,8 @@ export class SubscribePage {
   // Alias, not a copy — reads the app-shell-wide signal (see BillingService
   // and app.ts's navbar button) so this page and the navbar never disagree.
   protected readonly status = this.billingService.status;
-  protected readonly checkoutLoading = signal(false);
+  protected readonly plans = signal<PlanCatalog | null>(null);
+  protected readonly checkoutLoading = signal<PlanTier | null>(null);
   protected readonly checkoutError = signal<string | null>(null);
   protected readonly portalLoading = signal(false);
   protected readonly portalError = signal<string | null>(null);
@@ -69,6 +76,10 @@ export class SubscribePage {
 
   constructor() {
     this.loadStatus();
+    this.billingService
+      .getPlans()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (catalog) => this.plans.set(catalog) });
     // Independent of billing status — a referral code exists for every
     // company regardless of premium state, so this loads unconditionally
     // rather than nested inside loadStatus().
@@ -105,11 +116,11 @@ export class SubscribePage {
       });
   }
 
-  protected subscribe(): void {
-    this.checkoutLoading.set(true);
+  protected subscribe(tier: PlanTier): void {
+    this.checkoutLoading.set(tier);
     this.checkoutError.set(null);
     this.billingService
-      .createCheckoutSession()
+      .createCheckoutSession(tier)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         // A real browser navigation, not a router link — Stripe Checkout is
@@ -118,7 +129,7 @@ export class SubscribePage {
           window.location.href = url;
         },
         error: (error: HttpErrorResponse) => {
-          this.checkoutLoading.set(false);
+          this.checkoutLoading.set(null);
           this.checkoutError.set(
             extractErrorMessage(error, "Impossible de démarrer l'abonnement pour le moment."),
           );

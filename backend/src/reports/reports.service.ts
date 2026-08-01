@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ActivityCategory, LegalStatus } from '../../generated/prisma/enums';
 import { CompanyModel } from '../../generated/prisma/models';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
 import { InvoiceWithTotals } from '../invoice/entities/invoice.entity';
 import { InvoiceMapper } from '../invoice/invoice.mapper';
@@ -50,6 +51,7 @@ export class ReportsService {
     private readonly invoiceRepository: InvoiceRepository,
     private readonly invoiceMapper: InvoiceMapper,
     private readonly companyService: CompanyService,
+    private readonly planGateService: PlanGateService,
   ) {}
 
   async getQuarterlyReport(companyId: string, from: Date, to: Date): Promise<QuarterlyReport> {
@@ -88,7 +90,12 @@ export class ReportsService {
     };
   }
 
+  // Phase 30: the only part of Phase 17 that's gated — see
+  // ReportsController's class comment and docs/roadmap.md Phase 30 for why
+  // getQuarterlyReport (the URSSAF declaration) deliberately stays free on
+  // every tier while this pure-business-insight view doesn't.
   async getActivityAnalytics(companyId: string): Promise<ActivityAnalytics> {
+    await this.planGateService.assertFeatureAccess(companyId, 'analytics');
     const now = new Date();
     const windowStart = startOfMonthsAgo(now, ANALYTICS_WINDOW_MONTHS - 1);
 

@@ -12,13 +12,15 @@ import {
 } from '../../core/models/unit.model';
 import { ProductService } from '../../core/services/product.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AdvancedSettingsComponent } from '../../shared/components/advanced-settings.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
+import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 
 @Component({
   selector: 'app-product-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
+  imports: [ReactiveFormsModule, AdvancedSettingsComponent, BigButtonComponent, FieldHintComponent],
   templateUrl: './product-form.page.html',
 })
 export class ProductFormPage {
@@ -38,6 +40,9 @@ export class ProductFormPage {
   protected readonly loading = signal(this.isEditing);
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  // Phase 30: catalog-size cap reached (Essentiel/Pro, products + services
+  // combined) — see CustomerFormPage's equivalent signal.
+  protected readonly catalogLimitReached = signal(false);
 
   // Import-from-URL is only offered on first entry — editing an existing
   // product is already a deliberate, reviewed action.
@@ -182,6 +187,7 @@ export class ProductFormPage {
 
     this.saving.set(true);
     this.errorMessage.set(null);
+    this.catalogLimitReached.set(false);
 
     const request = this.productId
       ? this.productService.update(this.productId, payload)
@@ -195,12 +201,22 @@ export class ProductFormPage {
       },
       error: (error: HttpErrorResponse) => {
         this.saving.set(false);
-        this.errorMessage.set(
-          error.status === 409
-            ? 'Ce code produit est déjà utilisé par un autre produit.'
-            : 'Erreur lors de l’enregistrement. Veuillez réessayer.',
-        );
+        const limitMessage = catalogLimitMessage(error);
+        if (limitMessage) {
+          this.catalogLimitReached.set(true);
+          this.errorMessage.set(limitMessage);
+        } else {
+          this.errorMessage.set(
+            error.status === 409
+              ? 'Ce code produit est déjà utilisé par un autre produit.'
+              : 'Erreur lors de l’enregistrement. Veuillez réessayer.',
+          );
+        }
       },
     });
+  }
+
+  protected goToSubscribe(): void {
+    void this.router.navigateByUrl('/abonnement');
   }
 }

@@ -19,6 +19,9 @@
           >
             {{ sharingInvoiceId() === facture.id ? 'Partage…' : 'Partager' }}
           </app-big-button>
+          <p class="mt-1 text-center text-xs text-ink-soft">
+            Envoie le PDF par email, directement depuis votre téléphone
+          </p>
         </div>
       </div>
     }
@@ -77,6 +80,9 @@
         >
           {{ sharingInvoiceId() === invoice.id ? 'Partage…' : 'Partager' }}
         </app-big-button>
+        <p class="mt-1 text-center text-xs text-ink-soft">
+          Envoie le PDF par email, directement depuis votre téléphone
+        </p>
       </div>
       <div class="w-full max-w-sm">
         <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">

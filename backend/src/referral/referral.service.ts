@@ -1,7 +1,9 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { PlanTier } from '../../generated/prisma/enums';
 import { BillingRepository } from '../billing/billing.repository';
 import { BillingService } from '../billing/billing.service';
-import { REFERRAL_PARRAIN_REWARD_DAYS } from './referral.constants';
+import { PlanGateService } from '../billing/plan-gate.service';
+import { REFERRAL_PARRAIN_REWARD_DAYS_BY_TIER } from './referral.constants';
 import { generateReferralCode } from './referral-code-generator.util';
 import { ReferralRepository } from './referral.repository';
 
@@ -21,6 +23,7 @@ export class ReferralService {
     private readonly repository: ReferralRepository,
     private readonly billingRepository: BillingRepository,
     private readonly billingService: BillingService,
+    private readonly planGateService: PlanGateService,
   ) {}
 
   // Called once, at Company creation time (UserRepository.createWithCompany
@@ -64,26 +67,33 @@ export class ReferralService {
   // registration is this feature's one anti-abuse speed bump against
   // bulk-fake-account farming (see docs/roadmap.md Phase 29). Idempotent:
   // a Referral's rewardGrantedAt is only ever set once. The reward is
-  // asymmetric: the parrain gets a straight free month (stacks additively,
-  // same mechanism as an admin grant/promo code), the filleul gets 5€ off
-  // their first billing cycle instead (BillingService.grantReferralDiscount
-  // — a Stripe coupon, not free days, since they're the one being
-  // converted into a paying customer).
+  // asymmetric: the parrain gets a grant of Premium days, scaled by their
+  // own current plan tier at this exact moment (Phase 30 — see
+  // REFERRAL_PARRAIN_REWARD_DAYS_BY_TIER), the filleul gets -30% off their
+  // first billing cycle instead (BillingService.grantReferralDiscount — a
+  // Stripe coupon, not free days, since they're the one being converted
+  // into a paying customer).
   async grantRewardForVerifiedEmail(referredCompanyId: string): Promise<void> {
     const referral = await this.repository.findByReferredCompanyId(referredCompanyId);
     if (!referral || referral.rewardGrantedAt) {
       return;
     }
+    const referrerTier =
+      (await this.planGateService.getEffectivePlanTier(referral.referrerCompanyId)) ??
+      PlanTier.ESSENTIEL;
+    const rewardDays = REFERRAL_PARRAIN_REWARD_DAYS_BY_TIER[referrerTier];
+
     await Promise.all([
-      this.billingRepository.grantPremiumDays(
+      this.billingRepository.grantPlanDays(
         referral.referrerCompanyId,
-        REFERRAL_PARRAIN_REWARD_DAYS,
+        PlanTier.PREMIUM,
+        rewardDays,
       ),
       this.billingService.grantReferralDiscount(referral.referredCompanyId),
     ]);
-    await this.repository.markRewardGranted(referral.id);
+    await this.repository.markRewardGranted(referral.id, rewardDays);
     this.logger.log(
-      `Referral reward granted: parrain ${referral.referrerCompanyId} (+${REFERRAL_PARRAIN_REWARD_DAYS}j) / filleul ${referral.referredCompanyId} (remise)`,
+      `Referral reward granted: parrain ${referral.referrerCompanyId} (+${rewardDays}j Premium, tier at grant time: ${referrerTier}) / filleul ${referral.referredCompanyId} (remise -30%)`,
     );
   }
 
@@ -92,14 +102,11 @@ export class ReferralService {
     confirmedReferrals: number;
     rewardDaysEarned: number;
   }> {
-    const [code, confirmedReferrals] = await Promise.all([
+    const [code, confirmedReferrals, rewardDaysEarned] = await Promise.all([
       this.repository.getCompanyReferralCode(companyId),
       this.repository.countConfirmedReferrals(companyId),
+      this.repository.sumRewardDaysGranted(companyId),
     ]);
-    return {
-      code,
-      confirmedReferrals,
-      rewardDaysEarned: confirmedReferrals * REFERRAL_PARRAIN_REWARD_DAYS,
-    };
+    return { code, confirmedReferrals, rewardDaysEarned };
   }
 }

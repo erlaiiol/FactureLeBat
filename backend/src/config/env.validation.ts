@@ -182,13 +182,19 @@ class EnvironmentVariables {
   @IsString()
   SYSTEM_MAIL_FROM_ADDRESS?: string;
 
-  // Phase 14 Stripe subscription billing. Optional as a trio, same "boots
-  // fine without it" posture as GROQ_API_KEY/APP_ENCRYPTION_KEY: the app
-  // starts with no Stripe key set, BillingService just reports the feature
-  // unavailable (503) on checkout/portal/webhook routes until all three are
-  // configured. STRIPE_PRICE_ID is the recurring 15€/month Price id created
-  // in the Stripe dashboard/CLI — never hardcoded, since it differs between
-  // test and live mode.
+  // Phase 14 Stripe subscription billing, extended by Phase 30 to 3 tiers.
+  // Optional as a group, same "boots fine without it" posture as
+  // GROQ_API_KEY/APP_ENCRYPTION_KEY: the app starts with no Stripe key set,
+  // BillingService just reports the feature unavailable (503) on checkout/
+  // portal/webhook routes until STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
+  // and at least one price id are configured. STRIPE_PRICE_ID_ESSENTIEL/
+  // _PRO/_PREMIUM are each independently optional — a deployment can ship
+  // with only STRIPE_PRICE_ID_PREMIUM set (the pre-Phase-30 15€ price,
+  // renamed from the old single STRIPE_PRICE_ID — same Stripe Price
+  // object, zero Stripe-side change) and light up Essentiel/Pro later with
+  // an env change + restart, no redeploy. Never hardcoded, since price ids
+  // differ between test and live mode — see docs/roadmap.md Phase 30's
+  // "Stripe dashboard setup" section.
   @IsOptional()
   @IsString()
   STRIPE_SECRET_KEY?: string;
@@ -199,7 +205,23 @@ class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
-  STRIPE_PRICE_ID?: string;
+  STRIPE_PRICE_ID_ESSENTIEL?: string;
+
+  @IsOptional()
+  @IsString()
+  STRIPE_PRICE_ID_PRO?: string;
+
+  @IsOptional()
+  @IsString()
+  STRIPE_PRICE_ID_PREMIUM?: string;
+
+  // Phase 30: time-boxed "offre de lancement" cutoff (ISO 8601) — Premium
+  // checkout gets 15€ -> 10€ for 2 months while `now < this date`. Unset by
+  // default (no deployment silently discounts itself); see
+  // docs/roadmap.md Phase 30.
+  @IsOptional()
+  @IsString()
+  LAUNCH_OFFER_EXPIRES_AT?: string;
 
   // Phase 22 push notifications (FCM, both iOS and Android — see
   // push-notification/push-sender.service.ts for why iOS goes through FCM

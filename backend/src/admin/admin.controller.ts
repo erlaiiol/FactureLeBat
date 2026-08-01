@@ -11,7 +11,7 @@ import {
   Query,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { UserRole } from '../../generated/prisma/enums';
+import { PlanTier, UserRole } from '../../generated/prisma/enums';
 import { PromoCodeModel } from '../../generated/prisma/models';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreatePromoCodeDto } from '../billing/dto/create-promo-code.dto';
@@ -54,9 +54,9 @@ export class AdminController {
   async grantPremium(
     @Param('companyId') companyId: string,
     @Body() dto: GrantPremiumDto,
-  ): Promise<{ premiumGrantedUntil: Date }> {
-    const premiumGrantedUntil = await this.adminService.grantPremiumDays(companyId, dto.days);
-    return { premiumGrantedUntil };
+  ): Promise<{ premiumGrantedUntil: Date; grantedPlanTier: PlanTier }> {
+    const { until, tier } = await this.adminService.grantPlanDays(companyId, dto.tier, dto.days);
+    return { premiumGrantedUntil: until, grantedPlanTier: tier };
   }
 
   @Get('promo-codes')

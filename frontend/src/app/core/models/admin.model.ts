@@ -1,5 +1,5 @@
 import { UserRole } from './auth.model';
-import { SubscriptionStatus } from './billing.model';
+import { PlanTier, SubscriptionStatus } from './billing.model';
 
 // Mirrors the backend's AdminUserSummary (admin/entities/admin-user-summary.entity.ts).
 export interface AdminUserSummary {
@@ -11,6 +11,7 @@ export interface AdminUserSummary {
   createdAt: string;
   subscriptionStatus: SubscriptionStatus;
   hasPremiumAccess: boolean;
+  planTier: PlanTier | null;
   premiumGrantedUntil: string | null;
   invoiceCount: number;
 }
@@ -25,6 +26,7 @@ export interface AdminUserList {
 export interface PromoCode {
   id: string;
   code: string;
+  planTier: PlanTier;
   durationDays: number;
   maxRedemptions: number | null;
   redemptionsCount: number;
@@ -36,6 +38,7 @@ export interface PromoCode {
 
 export interface CreatePromoCodeRequest {
   code?: string;
+  planTier: PlanTier;
   durationDays: number;
   maxRedemptions?: number;
   expiresAt?: string;

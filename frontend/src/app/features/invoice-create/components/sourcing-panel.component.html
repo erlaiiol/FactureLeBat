@@ -34,9 +34,15 @@
         <p class="text-ink-soft">Recherche en cours…</p>
       } @else if (errorMessage()) {
         <p class="text-danger">{{ errorMessage() }}</p>
-        <app-big-button variant="secondary" tone="subtle" (click)="search()"
-          >Réessayer</app-big-button
-        >
+        @if (locked()) {
+          <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()"
+            >Voir les offres</app-big-button
+          >
+        } @else {
+          <app-big-button variant="secondary" tone="subtle" (click)="search()"
+            >Réessayer</app-big-button
+          >
+        }
       } @else if (result()) {
         @if (result()!.results.length === 0) {
           <p class="text-ink-soft">Aucun fournisseur trouvé pour cette recherche.</p>

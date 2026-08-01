@@ -1,5 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
+import { PlanTier } from '../../../generated/prisma/enums';
 
 // code is optional on input — PromoCodeService generates a random one when
 // omitted (see promo-code-generator.util.ts) so an admin can create a code
@@ -13,6 +23,11 @@ export class CreatePromoCodeDto {
       'Le code doit contenir 4 à 32 caractères parmi lettres majuscules, chiffres et tirets.',
   })
   code?: string;
+
+  // Phase 30: which tier this code grants — no default, an admin must
+  // choose explicitly (the frontend form preselects Premium).
+  @IsEnum(PlanTier)
+  planTier: PlanTier;
 
   @Type(() => Number)
   @IsInt()

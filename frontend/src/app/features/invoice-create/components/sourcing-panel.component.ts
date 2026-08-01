@@ -9,6 +9,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import {
   ComplementarySuggestion,
   SourcingSearchResult,
@@ -41,6 +42,7 @@ interface ExtraSearchState {
 export class SourcingPanelComponent {
   private readonly sourcingService = inject(SourcingService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   readonly productName = input.required<string>();
   readonly quantity = input.required<number>();
@@ -52,6 +54,11 @@ export class SourcingPanelComponent {
 
   protected readonly loading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  // Phase 30: distinguishes "not on a Premium plan" (retrying is pointless,
+  // the CTA should go to /abonnement) from every other transient failure
+  // (429/503/network — retrying is the right action) — see
+  // friendlyErrorMessage below.
+  protected readonly locked = signal(false);
   protected readonly result = signal<SourcingSearchResult<SupplierCandidate> | null>(null);
 
   protected readonly suggestionsLoading = signal(false);
@@ -79,6 +86,7 @@ export class SourcingPanelComponent {
     }
     this.loading.set(true);
     this.errorMessage.set(null);
+    this.locked.set(false);
 
     this.sourcingService
       .searchSuppliers({
@@ -96,9 +104,14 @@ export class SourcingPanelComponent {
         },
         error: (error: unknown) => {
           this.loading.set(false);
+          this.locked.set(this.isPlanLocked(error));
           this.errorMessage.set(this.friendlyErrorMessage(error));
         },
       });
+  }
+
+  protected goToSubscribe(): void {
+    void this.router.navigateByUrl('/abonnement');
   }
 
   protected loadSuggestions(): void {
@@ -170,8 +183,19 @@ export class SourcingPanelComponent {
     return this.extraSearches()[name];
   }
 
+  private isPlanLocked(error: unknown): boolean {
+    if (!(error instanceof HttpErrorResponse) || error.status !== 402) {
+      return false;
+    }
+    const body = error.error as { error?: string } | null;
+    return body?.error === 'PlanFeatureLocked';
+  }
+
   private friendlyErrorMessage(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
+      if (this.isPlanLocked(error)) {
+        return "L'assistant fournisseurs est réservé à l'offre Premium.";
+      }
       if (error.status === 429) {
         return 'Quota quotidien de recherches fournisseurs atteint — réessayez demain.';
       }

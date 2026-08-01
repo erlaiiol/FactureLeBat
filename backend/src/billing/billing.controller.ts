@@ -13,9 +13,12 @@ import type { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import type { PlanTier } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
 import { BillingService } from './billing.service';
 import { BillingStatus } from './entities/billing-status.entity';
+import type { PlanCatalog } from './entities/plan-catalog.entity';
+import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { RedeemPromoCodeDto } from './dto/redeem-promo-code.dto';
 import { NoBillingCustomerError } from './no-billing-customer.error';
 import { PromoCodeService } from './promo-code/promo-code.service';
@@ -28,15 +31,26 @@ export class BillingController {
     private readonly promoCodeService: PromoCodeService,
   ) {}
 
+  // Public — pricing/feature-per-tier is not sensitive, and a logged-out
+  // landing page could show it too. See docs/roadmap.md Phase 30.
+  @Public()
+  @Get('plans')
+  getPlans(): PlanCatalog {
+    return this.billingService.getPlanCatalog();
+  }
+
   @Get('status')
   getStatus(@CurrentUser() user: AuthenticatedUser): Promise<BillingStatus> {
     return this.billingService.getStatus(user.companyId);
   }
 
   @Post('checkout-session')
-  async createCheckoutSession(@CurrentUser() user: AuthenticatedUser): Promise<{ url: string }> {
+  async createCheckoutSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateCheckoutSessionDto,
+  ): Promise<{ url: string }> {
     try {
-      return await this.billingService.createCheckoutSession(user.companyId, user.email);
+      return await this.billingService.createCheckoutSession(user.companyId, user.email, dto.tier);
     } catch (error) {
       throw mapStripeError(error);
     }
@@ -55,9 +69,9 @@ export class BillingController {
   async redeemPromo(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: RedeemPromoCodeDto,
-  ): Promise<{ premiumGrantedUntil: Date }> {
-    const premiumGrantedUntil = await this.promoCodeService.redeem(user.companyId, dto.code);
-    return { premiumGrantedUntil };
+  ): Promise<{ premiumGrantedUntil: Date; grantedPlanTier: PlanTier }> {
+    const { until, tier } = await this.promoCodeService.redeem(user.companyId, dto.code);
+    return { premiumGrantedUntil: until, grantedPlanTier: tier };
   }
 
   // Stripe posts here on every subscription lifecycle event. Signature

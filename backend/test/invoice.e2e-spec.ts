@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
 import { App } from 'supertest/types';
+import { PlanTier } from '../generated/prisma/enums';
 import { PrismaService } from '../src/database/prisma.service';
 import { InvoiceWithTotals } from '../src/invoice/entities/invoice.entity';
 import { authedRequest, registerTestUser, TestSession } from './utils/auth';
@@ -30,10 +31,13 @@ describe('Invoice pipeline (e2e)', () => {
     // (the same field an admin grant/promo-code redemption would set) opts
     // this company out of the free-trial gate so those tests aren't
     // coupled to it. The gate itself is covered separately, in its own
-    // fresh-company test below and in premium-gate.service.spec.ts.
+    // fresh-company test below and in plan-gate.service.spec.ts.
     await prisma.company.update({
       where: { id: session.companyId },
-      data: { premiumGrantedUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) },
+      data: {
+        premiumGrantedUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        grantedPlanTier: PlanTier.PREMIUM,
+      },
     });
   });
 

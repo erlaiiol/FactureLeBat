@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  inject,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -50,6 +59,11 @@ export class InvoiceCreateManualPage {
   private readonly destroyRef = inject(DestroyRef);
   protected readonly store = inject(ManualInvoiceDraftStore);
 
+  // Same `--invoice-footer-height` measure-and-publish as
+  // InvoiceCreateShellPage's identical footer bar — see there for why.
+  @ViewChild('footerBar') private readonly footerBarRef?: ElementRef<HTMLElement>;
+  private footerHeightObserver?: ResizeObserver;
+
   protected readonly previewing = signal(false);
   protected readonly previewError = signal<string | null>(null);
   protected readonly previewPdfUrl = signal<string | null>(null);
@@ -75,6 +89,12 @@ export class InvoiceCreateManualPage {
 
   constructor() {
     this.destroyRef.onDestroy(() => this.revokeCurrentPreviewUrl());
+
+    afterNextRender(() => this.observeFooterHeight());
+    this.destroyRef.onDestroy(() => {
+      this.footerHeightObserver?.disconnect();
+      document.documentElement.style.removeProperty('--invoice-footer-height');
+    });
 
     // Subscribed (not just the constructor-time snapshot) — see
     // InvoiceCreateShellPage's identical reasoning: this page can be
@@ -336,5 +356,21 @@ export class InvoiceCreateManualPage {
     if (url) {
       URL.revokeObjectURL(url);
     }
+  }
+
+  private observeFooterHeight(): void {
+    const element = this.footerBarRef?.nativeElement;
+    if (!element) {
+      return;
+    }
+    const updateFooterHeight = () => {
+      document.documentElement.style.setProperty(
+        '--invoice-footer-height',
+        `${element.getBoundingClientRect().height}px`,
+      );
+    };
+    updateFooterHeight();
+    this.footerHeightObserver = new ResizeObserver(updateFooterHeight);
+    this.footerHeightObserver.observe(element);
   }
 }

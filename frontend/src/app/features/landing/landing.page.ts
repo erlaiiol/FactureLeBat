@@ -17,11 +17,11 @@ export class LandingPage {
   private readonly meta = inject(Meta);
 
   constructor() {
-    this.title.setTitle('FactureLe — Devis et factures en un clic pour les artisans du bâtiment');
+    this.title.setTitle('FactureLe — Devis et factures en un clic, quoi que vous fassiez');
     this.meta.updateTag({
       name: 'description',
       content:
-        'Configurez une seule fois vos clients, produits et prestations, puis créez vos devis et factures en un clic, directement chez le client. Essai gratuit, sans carte bancaire.',
+        'Que vous vendiez, répariez, enseigniez ou créiez, la question reste la même : je facture comment ? Configurez une seule fois vos clients, produits et prestations, puis créez vos devis et factures en un clic, directement devant le client. Essai gratuit, sans carte bancaire.',
     });
   }
 }

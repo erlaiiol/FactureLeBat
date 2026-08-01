@@ -13,6 +13,14 @@ import { PaywallService } from '../services/paywall.service';
 // own `if (error.status === 402) { ...; return; }` for whatever else it
 // still needs to do locally (e.g. loadPreview's persistFreeEntities call,
 // or simply skipping a generic error message).
+//
+// Phase 30 added two more 402 exceptions (CatalogLimitExceeded,
+// PlanFeatureLocked) that are NOT the free-trial-invoice wall — this modal's
+// copy ("Facture gratuite déjà utilisée") would be flatly wrong for a
+// customer/product/service form hitting its catalog cap, or a sourcing/
+// analytics screen locked behind a tier. Only the 'PremiumRequired'
+// discriminator opens this modal; the other two are handled locally by
+// their own screens (see e.g. customer-form's catalog-limit banner).
 export const premiumGateInterceptor: HttpInterceptorFn = (req, next) => {
   const paywallService = inject(PaywallService);
 
@@ -23,7 +31,10 @@ export const premiumGateInterceptor: HttpInterceptorFn = (req, next) => {
   return next(req).pipe(
     catchError((error: unknown) => {
       if (error instanceof HttpErrorResponse && error.status === 402) {
-        paywallService.show();
+        const body = error.error as { error?: string } | null;
+        if (body?.error === 'PremiumRequired') {
+          paywallService.show();
+        }
       }
       return throwError(() => error);
     }),

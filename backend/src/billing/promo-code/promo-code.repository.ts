@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
+import { PlanTier } from '../../../generated/prisma/enums';
 import { PromoCodeModel as PromoCode } from '../../../generated/prisma/models';
 import { PrismaService } from '../../database/prisma.service';
 import { NoRowsAffectedError } from '../../common/errors/no-rows-affected.error';
 
 export interface CreatePromoCodeData {
   code: string;
+  planTier: PlanTier;
   durationDays: number;
   maxRedemptions?: number;
   expiresAt?: Date;

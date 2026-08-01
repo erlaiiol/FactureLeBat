@@ -139,9 +139,11 @@
             type="button"
             [disabled]="sharing()"
             (click)="share.emit(); toggleActionsMenu.emit()"
+            title="Envoyer par email depuis votre téléphone"
             class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
           >
-            {{ sharing() ? 'Partage…' : 'Partager' }}
+            <span class="block">{{ sharing() ? 'Partage…' : 'Partager' }}</span>
+            <span class="block text-xs font-normal text-ink-soft">Envoyer par email</span>
           </button>
         </div>
       }

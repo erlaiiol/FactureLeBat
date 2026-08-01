@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { ServiceCatalogRepository } from './service-catalog.repository';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -8,7 +9,10 @@ import { ServiceProfile } from './entities/service.entity';
 
 @Injectable()
 export class ServiceCatalogService {
-  constructor(private readonly serviceCatalogRepository: ServiceCatalogRepository) {}
+  constructor(
+    private readonly serviceCatalogRepository: ServiceCatalogRepository,
+    private readonly planGateService: PlanGateService,
+  ) {}
 
   findAll(companyId: string, search?: string): Promise<ServiceProfile[]> {
     return this.serviceCatalogRepository.findAll(companyId, search);
@@ -22,7 +26,10 @@ export class ServiceCatalogService {
     return service;
   }
 
+  // Phase 30: catalog-size cap (products + services combined) — see
+  // docs/roadmap.md Phase 30 and CustomerService.create's equivalent check.
   async create(companyId: string, dto: CreateServiceDto): Promise<ServiceProfile> {
+    await this.planGateService.assertCatalogCapacity(companyId, 'catalogItem');
     try {
       return await this.serviceCatalogRepository.create(companyId, dto);
     } catch (error) {

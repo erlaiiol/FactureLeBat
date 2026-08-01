@@ -6,6 +6,7 @@ import { CustomerService } from '../../core/services/customer.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
+import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 
 @Component({
   selector: 'app-customer-form-page',
@@ -27,6 +28,10 @@ export class CustomerFormPage {
   protected readonly loading = signal(this.isEditing);
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  // Phase 30: catalog-size cap reached (Essentiel/Pro) — distinct from
+  // errorMessage so the template can offer a "Voir les offres" CTA instead
+  // of a plain "réessayer" framing, since retrying changes nothing here.
+  protected readonly catalogLimitReached = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
@@ -86,6 +91,7 @@ export class CustomerFormPage {
 
     this.saving.set(true);
     this.errorMessage.set(null);
+    this.catalogLimitReached.set(false);
 
     const request = this.customerId
       ? this.customerService.update(this.customerId, payload)
@@ -97,10 +103,20 @@ export class CustomerFormPage {
         this.toastService.success(this.isEditing ? 'Client modifié.' : 'Client enregistré.');
         void this.router.navigate(['/clients']);
       },
-      error: () => {
+      error: (error: unknown) => {
         this.saving.set(false);
-        this.errorMessage.set('Erreur lors de l’enregistrement. Veuillez réessayer.');
+        const limitMessage = catalogLimitMessage(error);
+        if (limitMessage) {
+          this.catalogLimitReached.set(true);
+          this.errorMessage.set(limitMessage);
+        } else {
+          this.errorMessage.set('Erreur lors de l’enregistrement. Veuillez réessayer.');
+        }
       },
     });
+  }
+
+  protected goToSubscribe(): void {
+    void this.router.navigateByUrl('/abonnement');
   }
 }

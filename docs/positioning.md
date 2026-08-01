@@ -4,7 +4,19 @@ This document records the messaging/positioning decisions for FactureLe's public
 
 ## Who this is for
 
-Construction artisans and independent contractors (see roadmap.md's Product Vision) — flooring installers first, broader trades over time. This is the primary, most obvious target and the one the landing page speaks to directly; the product itself is scaling beyond this niche (see roadmap.md), but the pitch below stays artisan-specific because a landing page that tries to speak to everyone convinces no one. Not technical, judged on a job site rather than at a desk: the pitch has to land in a few seconds of scrolling on a phone, standing in a van between two appointments.
+Anyone who does something for someone else and then has to turn that into a bill: construction artisans and independent contractors first (see roadmap.md's Product Vision — flooring installers were the original niche, broader trades came next), but also the freelance developer, the driving instructor, the dog walker, the conference speaker, the mechanic. What they share isn't a trade, it's a moment: the job is done, the value has been delivered, and now there's a second job — the paperwork — standing between them and getting paid. That second job is what the product removes.
+
+This broadens who the landing page's *hero* speaks to (Phase 13.3's litany, see below), but doesn't change who its UX is designed around: per roadmap.md, artisans stay the default persona for UX decisions (simple, fast, big buttons, minimal typing) — the pitch widens without the product pretending to be built for a desk-bound office user. Not technical, judged in the field rather than at a desk: the pitch has to land in a few seconds of scrolling on a phone, standing in a van (or a garage, or a classroom) between two appointments.
+
+## The hero: a philosophy, not a feature list
+
+The landing page's hero is a short, one-shot animated litany (`heroLitany`, see [design-system.md](design-system.md)'s Motion section) rather than a static headline:
+
+> Tu as vendu ? FactureLe. Tu as créé un site ? FactureLe. Tu as réparé une voiture ? FactureLe. Tu as donné un cours ? FactureLe. Tu as promené un chien ? FactureLe. Tu as fait une conférence ? FactureLe. Il reste une chose. FactureLe. → **FactureLe en 1 clic.**
+
+The point isn't the list of trades — it's the shape: whatever you do, there is always exactly one thing left afterward, and it's always the same thing. The product isn't "invoicing software for artisans," it's the answer to the moment every kind of work eventually collapses into. This is why the hero is allowed to be the one place on the public site with real motion (see the `heroLitany` exception in design-system.md) — it plays once, states the idea, and resolves permanently to "FactureLe en 1 clic," never looping, never asking the visitor to wait on it.
+
+Below the litany, the page immediately grounds that idea back in the provable, concrete promise (next section) — the philosophy opens the pitch, it doesn't replace the proof.
 
 ## The core promise
 
@@ -25,8 +37,8 @@ A fourth claim underlies all three, and it's the one the app has to keep proving
 ## Messaging pillars (for CTA/section copy)
 
 - **Vitesse** — devis et factures en un clic, pas de ressaisie.
-- **Environnement configuré** — vos clients, vos produits, vos services, une bonne fois pour toutes.
-- **Confiance sur le chantier** — le prix s'affiche devant le client, tout de suite, pas de rendez-vous supplémentaire.
+- **Environnement configuré** — vos clients, vos produits, vos services, une bonne fois pour toutes. (La taille du catalogue dépend du palier depuis Phase 30 — Essentiel/Pro restent largement suffisants pour un usage normal, seul un volume important d'un coup nécessite Premium ; la promesse porte sur ne jamais ressaisir, pas sur un volume illimité à tous les paliers.)
+- **Confiance immédiate** — le prix s'affiche devant le client, tout de suite, pas de rendez-vous supplémentaire.
 - **Contrôle du détail** — vous choisissez ce qui apparaît sur la facture, selon vos propres critères (cross-references Phase 15's per-field show/hide).
 - **Rien ne se perd** — chaque devis et chaque facture reste suivi jusqu'au paiement, relances comprises (Phase 16) — pas de client oublié, pas d'impayé qui traîne.
 
@@ -40,6 +52,6 @@ The landing page is the application *talking about* the artisan's business, not 
 
 ## What this page is not
 
-- Not a pricing page — no tiers exist to describe before Phase 14 (Stripe) defines them.
+- Not a pricing page — the landing page doesn't need to sell the 3 tiers (Essentiel/Pro/Premium, see roadmap.md Phase 30) itself; that's `/abonnement`'s job. If a public pricing section is ever added here, it should pull from `GET /billing/plans` like `/abonnement` does, never hardcode the cards.
 - Not a blog or content-marketing surface — one well-crafted landing page, not a CMS.
 - Not a place to over-promise reliability the product can't back up, matching the same honesty principle already applied to Phase 10 (sourcing) and Phase 12 (mail delivery): claims here should stay provable by the product as it exists, not aspirational.

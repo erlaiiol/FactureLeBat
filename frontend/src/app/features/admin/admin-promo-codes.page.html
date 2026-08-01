@@ -40,6 +40,17 @@
       />
     </label>
     <label class="flex flex-col gap-1 text-sm text-ink-soft">
+      Palier
+      <select
+        formControlName="planTier"
+        class="rounded-lg border border-line bg-bg px-3 py-2 text-ink"
+      >
+        @for (tier of planTierOptions; track tier) {
+          <option [value]="tier">{{ tier }}</option>
+        }
+      </select>
+    </label>
+    <label class="flex flex-col gap-1 text-sm text-ink-soft">
       Durée (jours)
       <input
         formControlName="durationDays"
@@ -83,6 +94,7 @@
         <thead class="bg-secondary-subtle text-ink-soft">
           <tr>
             <th class="p-3">Code</th>
+            <th class="p-3">Palier</th>
             <th class="p-3">Durée</th>
             <th class="p-3">Utilisations</th>
             <th class="p-3">Expire le</th>
@@ -94,6 +106,7 @@
           @for (code of codes(); track code.id) {
             <tr class="border-t border-line">
               <td class="p-3 font-mono">{{ code.code }}</td>
+              <td class="p-3">{{ code.planTier }}</td>
               <td class="p-3">{{ code.durationDays }} j</td>
               <td class="p-3">
                 {{ code.redemptionsCount

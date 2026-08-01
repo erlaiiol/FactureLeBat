@@ -1,46 +1,115 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import { PlanTier } from '../../../generated/prisma/enums';
+import { PLAN_TIER_ORDER } from '../plan-config';
 import { StripeUnavailableError } from './stripe-unavailable.error';
 
-// Phase 29: the filleul's referral reward — 5€ off (15€ -> 10€) their first
-// billing cycle. A fixed amount_off rather than percent_off so the actual
-// discounted price is exactly 10€ regardless of how Stripe would round a
-// percentage — see docs/roadmap.md Phase 29. One shared, well-known coupon
-// (fixed id) reused by every filleul, not minted per-referral: there is
-// nothing per-company to encode in it, unlike a PromoCode.
-const REFERRAL_DISCOUNT_COUPON_ID = 'referral-filleul-5eur-1mois';
-const REFERRAL_DISCOUNT_AMOUNT_CENTS = 500;
+// Phase 30: the filleul's referral reward — -30% on their first billing
+// cycle, whichever of the 3 tiers they choose. Was a flat 5€ off (Phase 29)
+// when there was only one possible price to discount; a percentage is what
+// keeps the reward proportionate now that Essentiel/Pro/Premium all exist —
+// see docs/roadmap.md Phase 30. New coupon id (the old fixed-amount one is
+// left orphaned in Stripe, harmless, `duration: 'once'` means it only ever
+// affected an invoice at the time it was applied).
+const REFERRAL_DISCOUNT_COUPON_ID = 'referral-filleul-30pct-1mois';
+export const REFERRAL_DISCOUNT_PERCENT_OFF = 30;
+
+// Phase 30: time-boxed "offre de lancement" on Premium only — 15€ → 10€ for
+// the first 2 months of a Premium subscription, active only while
+// LAUNCH_OFFER_EXPIRES_AT is set and in the future. See docs/roadmap.md
+// Phase 30 for why this is Premium-only and calendar-boxed rather than a
+// sitewide or redemption-counted promotion.
+const LAUNCH_OFFER_COUPON_ID = 'launch-offer-premium-2mois';
+const LAUNCH_OFFER_AMOUNT_OFF_CENTS = 500;
+const LAUNCH_OFFER_DURATION_MONTHS = 2;
+
+const PRICE_ID_ENV_KEY_BY_TIER: Record<PlanTier, string> = {
+  [PlanTier.ESSENTIEL]: 'STRIPE_PRICE_ID_ESSENTIEL',
+  [PlanTier.PRO]: 'STRIPE_PRICE_ID_PRO',
+  [PlanTier.PREMIUM]: 'STRIPE_PRICE_ID_PREMIUM',
+};
+
+export interface LaunchOfferInfo {
+  active: boolean;
+  expiresAt: Date | null;
+  amountOffCents: number;
+  durationMonths: number;
+}
 
 // Isolated from BillingService on purpose, same "isolate the risky external
 // boundary" split as GroqClientService/MailerService: this class only ever
 // knows about the raw Stripe SDK calls (customer, checkout, portal,
-// webhook signature verification) — never Company rows, premium-access
-// rules, or promo codes. STRIPE_SECRET_KEY/STRIPE_PRICE_ID/
-// STRIPE_WEBHOOK_SECRET are optional like GROQ_API_KEY (see
-// docs/roadmap.md Phase 14): the app boots fine with none of them set,
-// every method here just throws StripeUnavailableError until all three are
-// configured.
+// webhook signature verification) — never Company rows, plan-access rules,
+// or promo codes. STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET are optional like
+// GROQ_API_KEY (see docs/roadmap.md Phase 14): the app boots fine with none
+// of them set, every method here just throws StripeUnavailableError.
+//
+// Phase 30: a single STRIPE_PRICE_ID became 3 (STRIPE_PRICE_ID_ESSENTIEL/
+// _PRO/_PREMIUM), each independently optional — isConfigured() only
+// requires the secret key + webhook secret + at least one tier's price id,
+// so a deployment can ship with just STRIPE_PRICE_ID_PREMIUM (the pre-Phase-
+// 30 price, renamed) and light up Essentiel/Pro later with no redeploy, see
+// isTierAvailable/availableTiers.
 @Injectable()
 export class StripeClientService {
   private readonly logger = new Logger(StripeClientService.name);
   private readonly client?: Stripe;
-  private readonly priceId?: string;
   private readonly webhookSecret?: string;
+  private readonly priceIdByTier: Partial<Record<PlanTier, string>> = {};
+  private readonly tierByPriceId = new Map<string, PlanTier>();
+  private readonly launchOfferExpiresAt: Date | null;
 
   constructor(config: ConfigService) {
     const secretKey = config.get<string>('STRIPE_SECRET_KEY');
     this.client = secretKey ? new Stripe(secretKey) : undefined;
-    this.priceId = config.get<string>('STRIPE_PRICE_ID');
     this.webhookSecret = config.get<string>('STRIPE_WEBHOOK_SECRET');
+
+    for (const tier of PLAN_TIER_ORDER) {
+      const priceId = config.get<string>(PRICE_ID_ENV_KEY_BY_TIER[tier]);
+      if (priceId) {
+        this.priceIdByTier[tier] = priceId;
+        this.tierByPriceId.set(priceId, tier);
+      }
+    }
+
+    const launchOfferExpiresAt = config.get<string>('LAUNCH_OFFER_EXPIRES_AT');
+    this.launchOfferExpiresAt = launchOfferExpiresAt ? new Date(launchOfferExpiresAt) : null;
   }
 
-  // Checkout/portal need the client + a price to sell; the webhook needs
-  // the client + a secret to verify signatures — reported as one combined
-  // flag since a deployment configuring Stripe billing at all should set
-  // every one of the three together (see .env.example).
+  // Billing subsystem operational at all — checkout/portal/webhook routes
+  // report 503 until this is true. Deliberately does not require every
+  // tier's price id (see isTierAvailable/availableTiers above).
   isConfigured(): boolean {
-    return Boolean(this.client && this.priceId && this.webhookSecret);
+    return Boolean(this.client && this.webhookSecret && Object.keys(this.priceIdByTier).length > 0);
+  }
+
+  isTierAvailable(tier: PlanTier): boolean {
+    return Boolean(this.client && this.webhookSecret && this.priceIdByTier[tier]);
+  }
+
+  availableTiers(): PlanTier[] {
+    return PLAN_TIER_ORDER.filter((tier) => this.isTierAvailable(tier));
+  }
+
+  // Resolves a live Stripe subscription's price id back to one of our 3
+  // tiers — see BillingService.applySubscriptionEvent. Null if the price id
+  // doesn't match any configured tier (never guessed at in that case).
+  resolveTierFromPriceId(priceId: string | undefined): PlanTier | null {
+    return priceId ? (this.tierByPriceId.get(priceId) ?? null) : null;
+  }
+
+  isLaunchOfferActive(): boolean {
+    return Boolean(this.launchOfferExpiresAt && this.launchOfferExpiresAt > new Date());
+  }
+
+  launchOfferInfo(): LaunchOfferInfo {
+    return {
+      active: this.isLaunchOfferActive(),
+      expiresAt: this.launchOfferExpiresAt,
+      amountOffCents: LAUNCH_OFFER_AMOUNT_OFF_CENTS,
+      durationMonths: LAUNCH_OFFER_DURATION_MONTHS,
+    };
   }
 
   private requireClient(): Stripe {
@@ -60,6 +129,7 @@ export class StripeClientService {
   // stripeCustomerId, in case a customer is ever reused across a scenario
   // metadata lookup handles more directly.
   async createCheckoutSession(params: {
+    tier: PlanTier;
     customerId: string;
     successUrl: string;
     cancelUrl: string;
@@ -68,14 +138,17 @@ export class StripeClientService {
     discountCouponId?: string;
   }): Promise<Stripe.Checkout.Session> {
     const client = this.requireClient();
-    if (!this.priceId) {
-      throw new StripeUnavailableError('STRIPE_PRICE_ID is not configured');
+    const priceId = this.priceIdByTier[params.tier];
+    if (!priceId) {
+      throw new StripeUnavailableError(
+        `${PRICE_ID_ENV_KEY_BY_TIER[params.tier]} is not configured`,
+      );
     }
     return client.checkout.sessions.create(
       {
         mode: 'subscription',
         customer: params.customerId,
-        line_items: [{ price: this.priceId, quantity: 1 }],
+        line_items: [{ price: priceId, quantity: 1 }],
         success_url: params.successUrl,
         cancel_url: params.cancelUrl,
         subscription_data: { metadata: { companyId: params.companyId } },
@@ -88,10 +161,10 @@ export class StripeClientService {
     );
   }
 
-  // Phase 29: idempotent by construction — a fixed coupon id is looked up
-  // first, and only created on a genuine 404. A concurrent creator racing
-  // this exact id is harmless: Stripe rejects the loser's create call,
-  // which is treated the same as "it already existed".
+  // Idempotent by construction: a fixed coupon id is looked up first, and
+  // only created on a genuine 404. A concurrent creator racing this exact
+  // id is harmless: Stripe rejects the loser's create call, treated the
+  // same as "it already existed".
   async ensureReferralDiscountCoupon(): Promise<string> {
     const client = this.requireClient();
     try {
@@ -101,14 +174,35 @@ export class StripeClientService {
       try {
         await client.coupons.create({
           id: REFERRAL_DISCOUNT_COUPON_ID,
-          amount_off: REFERRAL_DISCOUNT_AMOUNT_CENTS,
-          currency: 'eur',
+          percent_off: REFERRAL_DISCOUNT_PERCENT_OFF,
           duration: 'once',
         });
       } catch (error) {
         this.logger.debug(`Referral discount coupon create raced or failed: ${String(error)}`);
       }
       return REFERRAL_DISCOUNT_COUPON_ID;
+    }
+  }
+
+  // Same idempotent-by-construction pattern as the referral coupon above.
+  async ensureLaunchOfferCoupon(): Promise<string> {
+    const client = this.requireClient();
+    try {
+      await client.coupons.retrieve(LAUNCH_OFFER_COUPON_ID);
+      return LAUNCH_OFFER_COUPON_ID;
+    } catch {
+      try {
+        await client.coupons.create({
+          id: LAUNCH_OFFER_COUPON_ID,
+          amount_off: LAUNCH_OFFER_AMOUNT_OFF_CENTS,
+          currency: 'eur',
+          duration: 'repeating',
+          duration_in_months: LAUNCH_OFFER_DURATION_MONTHS,
+        });
+      } catch (error) {
+        this.logger.debug(`Launch offer coupon create raced or failed: ${String(error)}`);
+      }
+      return LAUNCH_OFFER_COUPON_ID;
     }
   }
 

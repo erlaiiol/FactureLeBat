@@ -14,11 +14,13 @@ import { WasteSurcharge } from '../../../core/models/invoice.model';
 import { ActivityCategory } from '../../../core/models/report.model';
 import {
   isAreaUnit,
+  QUANTITY_LABELS,
   Unit,
   UNIT_LABELS,
   UNIT_OPTIONS,
   UNIT_PRICE_BUTTON_LABELS,
 } from '../../../core/models/unit.model';
+import { AdvancedSettingsComponent } from '../../../shared/components/advanced-settings.component';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { IconCheckComponent } from '../../../shared/components/icon-check.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
@@ -51,6 +53,7 @@ export type InvoiceLineFormGroup = FormGroup<{
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
+    AdvancedSettingsComponent,
     FieldHintComponent,
     IconCheckComponent,
     SourcingPanelComponent,
@@ -75,6 +78,7 @@ export class InvoiceLineFormComponent {
 
   protected readonly unitOptions = UNIT_OPTIONS;
   protected readonly unitLabels = UNIT_LABELS;
+  protected readonly quantityLabels = QUANTITY_LABELS;
 
   // Phase 7: the calculation mode is no longer a separate choice — picking
   // a unit that has area semantics (m²) is what turns on waste-surcharge
@@ -107,9 +111,15 @@ export class InvoiceLineFormComponent {
   }
 
   protected saveToCatalogLabel(): string {
-    return this.isCatalogLinked()
-      ? 'Mettre à jour ce produit dans le catalogue'
-      : 'Enregistrer ce produit dans mon catalogue';
+    const willSave = this.group().controls.saveAsNewProduct.value;
+    if (this.isCatalogLinked()) {
+      return willSave
+        ? 'Mettre à jour ce produit dans le catalogue'
+        : 'Ne pas mettre à jour dans le catalogue';
+    }
+    return willSave
+      ? 'Enregistrer ce produit dans mon catalogue'
+      : 'Ne pas enregistrer dans mon catalogue';
   }
 
   protected toggleSaveToCatalog(): void {

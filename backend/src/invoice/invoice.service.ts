@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { DocumentType, InvoiceEntryMode, InvoiceStatus } from '../../generated/prisma/enums';
-import { PremiumGateService } from '../billing/premium-gate.service';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
@@ -36,14 +36,14 @@ export class InvoiceService {
     private readonly customerService: CustomerService,
     private readonly serviceCatalogService: ServiceCatalogService,
     private readonly mapper: InvoiceMapper,
-    private readonly premiumGate: PremiumGateService,
+    private readonly premiumGate: PlanGateService,
   ) {}
 
   async create(companyId: string, dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
     // Phase 14: the free trial covers exactly one invoice per company —
     // checked first, before any other work, so a company past its trial
     // never even reaches customer/service-catalog lookups for a doomed
-    // request. See docs/roadmap.md Phase 14 and PremiumGateService.
+    // request. See docs/roadmap.md Phase 14 and PlanGateService.
     await this.premiumGate.assertCanCreateInvoice(companyId);
 
     const company = await this.companyService.getProfile(companyId);

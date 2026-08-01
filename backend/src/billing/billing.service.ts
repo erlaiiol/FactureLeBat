@@ -1,13 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { SubscriptionStatus } from '../../generated/prisma/enums';
+import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
 import { BillingRepository } from './billing.repository';
 import { BillingStatus } from './entities/billing-status.entity';
+import { PlanCatalog } from './entities/plan-catalog.entity';
 import { NoBillingCustomerError } from './no-billing-customer.error';
-import { hasPremiumAccess } from './premium-gate.service';
-import { StripeClientService } from './stripe/stripe-client.service';
+import { PLAN_DEFINITIONS, PLAN_TIER_ORDER } from './plan-config';
+import { getEffectivePlanTier } from './plan-gate.service';
+import { REFERRAL_DISCOUNT_PERCENT_OFF, StripeClientService } from './stripe/stripe-client.service';
 import { mapStripeSubscriptionStatus } from './stripe/subscription-status.util';
 
 // Same idempotency key for every checkout-session request from a given
@@ -17,12 +19,13 @@ import { mapStripeSubscriptionStatus } from './stripe/subscription-status.util';
 // complete two of them and end up with two subscriptions. Wide enough to
 // absorb a slow reload, short enough that a genuinely later, deliberate
 // subscribe attempt (e.g. after actually canceling first) still gets its
-// own session.
+// own session. Keyed by tier too — switching tiers mid-window still starts
+// a fresh session rather than replaying a stale one for the wrong price.
 const CHECKOUT_IDEMPOTENCY_WINDOW_MS = 5 * 60 * 1000;
 
-function buildCheckoutIdempotencyKey(companyId: string): string {
+function buildCheckoutIdempotencyKey(companyId: string, tier: PlanTier): string {
   const windowIndex = Math.floor(Date.now() / CHECKOUT_IDEMPOTENCY_WINDOW_MS);
-  return `checkout:${companyId}:${windowIndex}`;
+  return `checkout:${companyId}:${tier}:${windowIndex}`;
 }
 
 // Orchestration only, same split as InvoiceService: StripeClientService owns
@@ -42,34 +45,86 @@ export class BillingService {
   }
 
   async getStatus(companyId: string): Promise<BillingStatus> {
-    const [fields, invoiceCount] = await Promise.all([
+    const [fields, invoiceCount, customerCount, catalogItemCount] = await Promise.all([
       this.repository.getBillingFields(companyId),
       this.repository.countInvoices(companyId),
+      this.repository.countCustomers(companyId),
+      this.repository.countCatalogItems(companyId),
     ]);
+    const planTier = getEffectivePlanTier(fields);
+    const capsTier = planTier ?? PlanTier.ESSENTIEL;
     return {
       subscriptionStatus: fields.subscriptionStatus,
-      hasPremiumAccess: hasPremiumAccess(fields),
+      hasPremiumAccess: planTier !== null,
+      planTier,
       currentPeriodEnd: fields.currentPeriodEnd,
       cancelAtPeriodEnd: fields.cancelAtPeriodEnd,
       premiumGrantedUntil: fields.premiumGrantedUntil,
+      grantedPlanTier: fields.grantedPlanTier,
       freeInvoiceUsed: invoiceCount >= 1,
       stripeConfigured: this.stripeClient.isConfigured(),
+      customerCount,
+      customerLimit: PLAN_DEFINITIONS[capsTier].customerLimit,
+      catalogItemCount,
+      catalogItemLimit: PLAN_DEFINITIONS[capsTier].catalogItemLimit,
     };
+  }
+
+  // Phase 30: the 3 tier definitions the frontend pricing UI renders,
+  // enriched with which ones are actually purchasable here (Stripe price
+  // configured) and today's launch-offer state — see plan-config.ts and
+  // StripeClientService.
+  getPlanCatalog(): PlanCatalog {
+    const availableTiers = new Set(this.stripeClient.availableTiers());
+    const plans = PLAN_TIER_ORDER.map((tier) => {
+      const definition = PLAN_DEFINITIONS[tier];
+      return {
+        tier,
+        name: definition.name,
+        priceEuros: definition.priceEuros,
+        tagline: definition.tagline,
+        customerLimit: definition.customerLimit,
+        catalogItemLimit: definition.catalogItemLimit,
+        features: definition.features,
+        prioritySupport: definition.prioritySupport,
+        highlight: definition.highlight,
+        available: availableTiers.has(tier),
+      };
+    });
+
+    const offer = this.stripeClient.launchOfferInfo();
+    const launchOffer = offer.expiresAt
+      ? {
+          tier: PlanTier.PREMIUM,
+          active: offer.active,
+          expiresAt: offer.expiresAt,
+          discountedPriceEuros:
+            PLAN_DEFINITIONS[PlanTier.PREMIUM].priceEuros - offer.amountOffCents / 100,
+          durationMonths: offer.durationMonths,
+        }
+      : null;
+
+    return { plans, launchOffer, referralFilleulDiscountPercent: REFERRAL_DISCOUNT_PERCENT_OFF };
   }
 
   // Reuses an existing Stripe Customer if this company already has one
   // (e.g. a lapsed/canceled subscriber resubscribing) rather than creating
   // a duplicate — Stripe has no natural dedupe key for this, so
   // stripeCustomerId is the one this app owns and persists on first use.
-  async createCheckoutSession(companyId: string, email: string): Promise<{ url: string }> {
+  async createCheckoutSession(
+    companyId: string,
+    email: string,
+    tier: PlanTier,
+  ): Promise<{ url: string }> {
     const fields = await this.repository.getBillingFields(companyId);
 
     // A subscription already exists on this customer (paying fine, or
     // paying but currently failing) — starting a second Checkout Session
     // would risk a second, parallel Stripe subscription and a real double
     // charge, not just a UI inconsistency. PAST_DUE is fixed through the
-    // billing portal (update payment method on the existing subscription),
-    // never by subscribing again.
+    // billing portal (update payment method on the existing subscription,
+    // or a tier change through the same portal), never by subscribing
+    // again.
     if (
       fields.subscriptionStatus === SubscriptionStatus.ACTIVE ||
       fields.subscriptionStatus === SubscriptionStatus.PAST_DUE
@@ -84,21 +139,26 @@ export class BillingService {
       await this.repository.setStripeCustomerId(companyId, customerId);
     }
 
-    // Phase 29: a filleul whose referral reward fired before they ever
+    // Phase 29/30: a filleul whose referral reward fired before they ever
     // subscribed (the normal case) has pendingReferralDiscount set — attach
-    // the coupon to this checkout rather than losing the reward. Left set
-    // until BillingService.applySubscriptionEvent confirms the resulting
-    // subscription, so an abandoned checkout doesn't burn it.
-    const discountCouponId = fields.pendingReferralDiscount
-      ? await this.stripeClient.ensureReferralDiscountCoupon()
-      : undefined;
+    // the coupon to this checkout rather than losing the reward, regardless
+    // of which tier they pick (the coupon is a percentage, see
+    // StripeClientService). A specific, earned reward like this outranks
+    // the generic launch offer below.
+    let discountCouponId: string | undefined;
+    if (fields.pendingReferralDiscount) {
+      discountCouponId = await this.stripeClient.ensureReferralDiscountCoupon();
+    } else if (tier === PlanTier.PREMIUM && this.stripeClient.isLaunchOfferActive()) {
+      discountCouponId = await this.stripeClient.ensureLaunchOfferCoupon();
+    }
 
     const session = await this.stripeClient.createCheckoutSession({
+      tier,
       customerId,
       companyId,
       successUrl: `${this.frontendUrl}/abonnement?success=1`,
       cancelUrl: `${this.frontendUrl}/abonnement?canceled=1`,
-      idempotencyKey: buildCheckoutIdempotencyKey(companyId),
+      idempotencyKey: buildCheckoutIdempotencyKey(companyId, tier),
       discountCouponId,
     });
 
@@ -108,10 +168,11 @@ export class BillingService {
     return { url: session.url };
   }
 
-  // Lets a subscribed artisan manage/cancel their subscription through
-  // Stripe's own hosted portal instead of this app reimplementing
-  // cancellation UI — requires an existing customer (a company that has
-  // never started a checkout has nothing to manage yet).
+  // Lets a subscribed artisan manage/cancel their subscription (and, via
+  // Stripe's own portal configuration, switch tiers) through Stripe's own
+  // hosted portal instead of this app reimplementing that UI — requires an
+  // existing customer (a company that has never started a checkout has
+  // nothing to manage yet).
   async createPortalSession(companyId: string): Promise<{ url: string }> {
     const fields = await this.repository.getBillingFields(companyId);
     if (!fields.stripeCustomerId) {
@@ -128,13 +189,13 @@ export class BillingService {
     return this.stripeClient.isConfigured();
   }
 
-  // Phase 29: the filleul side of the referral reward — 5€ off their first
-  // billing cycle. A no-op deployment with no Stripe configured has no
-  // subscription price to discount in the first place, same "optional
-  // feature, boots fine without it" posture as the rest of billing/. Called
-  // from ReferralService.grantRewardForVerifiedEmail, which already
-  // guarantees this fires at most once per company (Referral.
-  // referredCompanyId is @@unique).
+  // Phase 29/30: the filleul side of the referral reward — -30% off their
+  // first billing cycle, whichever tier they choose. A no-op deployment
+  // with no Stripe configured has no subscription price to discount in the
+  // first place, same "optional feature, boots fine without it" posture as
+  // the rest of billing/. Called from ReferralService.
+  // grantRewardForVerifiedEmail, which already guarantees this fires at
+  // most once per company (Referral.referredCompanyId is @@unique).
   async grantReferralDiscount(companyId: string): Promise<void> {
     if (!this.stripeClient.isConfigured()) {
       return;
@@ -189,10 +250,19 @@ export class BillingService {
       return;
     }
 
-    const currentPeriodEndUnix = subscription.items.data[0]?.current_period_end;
+    const item = subscription.items.data[0];
+    const currentPeriodEndUnix = item?.current_period_end;
+    const priceId = typeof item?.price === 'string' ? item.price : item?.price?.id;
+    const subscriptionPlanTier = this.stripeClient.resolveTierFromPriceId(priceId);
+    if (!subscriptionPlanTier) {
+      this.logger.warn(
+        `Stripe subscription ${subscription.id} price id ${priceId ?? '(none)'} does not match any configured tier — subscriptionPlanTier left unresolved.`,
+      );
+    }
     await this.repository.applySubscriptionUpdate(companyId, {
       stripeSubscriptionId: subscription.id,
       subscriptionStatus: mapStripeSubscriptionStatus(subscription.status),
+      subscriptionPlanTier,
       currentPeriodEnd: currentPeriodEndUnix ? new Date(currentPeriodEndUnix * 1000) : null,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     });

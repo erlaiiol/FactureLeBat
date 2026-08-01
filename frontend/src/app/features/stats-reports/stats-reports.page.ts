@@ -1,4 +1,5 @@
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -16,6 +17,7 @@ import {
 } from '../../core/models/report.model';
 import { CompanyService } from '../../core/services/company.service';
 import { ReportsService } from '../../core/services/reports.service';
+import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { RevenueBarChartComponent } from '../../shared/components/revenue-bar-chart.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
@@ -43,7 +45,13 @@ type StatsReportsTab = 'apercu' | 'rapport';
 @Component({
   selector: 'app-stats-reports-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CentsToEurosPipe, DatePipe, RevenueBarChartComponent, TourAnchorDirective],
+  imports: [
+    CentsToEurosPipe,
+    DatePipe,
+    RevenueBarChartComponent,
+    TourAnchorDirective,
+    BigButtonComponent,
+  ],
   templateUrl: './stats-reports.page.html',
 })
 export class StatsReportsPage {
@@ -77,6 +85,10 @@ export class StatsReportsPage {
   protected readonly analyticsLoading = signal(true);
   protected readonly analyticsShowSkeleton = delayedSkeleton(this.analyticsLoading);
   protected readonly analyticsError = signal(false);
+  // Phase 30: analytics is Pro+/Premium-only (see PlanFeatureLockedException)
+  // — distinct from analyticsError so the tab shows an upsell CTA instead of
+  // a generic "couldn't load" message when that's actually what happened.
+  protected readonly analyticsLocked = signal(false);
 
   // --- Rapport & déclaration (former ReportsPage) ---
 
@@ -130,9 +142,19 @@ export class StatsReportsPage {
           this.analyticsLoading.set(false);
           this.analytics.set(analytics);
         },
-        error: () => {
+        error: (error: unknown) => {
           this.analyticsLoading.set(false);
-          this.analyticsError.set(true);
+          const body =
+            error instanceof HttpErrorResponse ? (error.error as { error?: string } | null) : null;
+          if (
+            error instanceof HttpErrorResponse &&
+            error.status === 402 &&
+            body?.error === 'PlanFeatureLocked'
+          ) {
+            this.analyticsLocked.set(true);
+          } else {
+            this.analyticsError.set(true);
+          }
         },
       });
 
@@ -148,6 +170,10 @@ export class StatsReportsPage {
         },
         error: () => this.loadReport(),
       });
+  }
+
+  protected goToSubscribe(): void {
+    void this.router.navigateByUrl('/abonnement');
   }
 
   protected previousPeriod(): void {

@@ -1,6 +1,8 @@
 import { ConflictException } from '@nestjs/common';
+import { PlanTier } from '../../generated/prisma/enums';
 import { BillingRepository } from '../billing/billing.repository';
 import { BillingService } from '../billing/billing.service';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { ReferralRepository } from './referral.repository';
 import { ReferralService } from './referral.service';
 
@@ -9,6 +11,7 @@ function buildService(
     referralCodeExists?: boolean[];
     findCompanyIdByReferralCode?: string | null;
     findByReferredCompanyId?: unknown;
+    referrerTier?: PlanTier | null;
   } = {},
 ) {
   const referralCodeExists = jest.fn();
@@ -24,6 +27,7 @@ function buildService(
     .mockResolvedValue(options.findCompanyIdByReferralCode ?? null);
   const getCompanyReferralCode = jest.fn().mockResolvedValue('MYCODE1');
   const countConfirmedReferrals = jest.fn().mockResolvedValue(0);
+  const sumRewardDaysGranted = jest.fn().mockResolvedValue(0);
   const findByReferredCompanyId = jest
     .fn()
     .mockResolvedValue(options.findByReferredCompanyId ?? null);
@@ -34,25 +38,33 @@ function buildService(
     findCompanyIdByReferralCode,
     getCompanyReferralCode,
     countConfirmedReferrals,
+    sumRewardDaysGranted,
     findByReferredCompanyId,
     create,
     markRewardGranted,
   } as unknown as ReferralRepository;
 
-  const grantPremiumDays = jest.fn().mockResolvedValue(new Date('2027-01-01'));
-  const billingRepository = { grantPremiumDays } as unknown as BillingRepository;
+  const grantPlanDays = jest
+    .fn()
+    .mockResolvedValue({ until: new Date('2027-01-01'), tier: PlanTier.PREMIUM });
+  const billingRepository = { grantPlanDays } as unknown as BillingRepository;
 
   const grantReferralDiscount = jest.fn().mockResolvedValue(undefined);
   const billingService = { grantReferralDiscount } as unknown as BillingService;
 
+  const getEffectivePlanTier = jest.fn().mockResolvedValue(options.referrerTier ?? null);
+  const planGateService = { getEffectivePlanTier } as unknown as PlanGateService;
+
   return {
-    service: new ReferralService(repository, billingRepository, billingService),
+    service: new ReferralService(repository, billingRepository, billingService, planGateService),
     referralCodeExists,
     findCompanyIdByReferralCode,
     create,
     markRewardGranted,
-    grantPremiumDays,
+    sumRewardDaysGranted,
+    grantPlanDays,
     grantReferralDiscount,
+    getEffectivePlanTier,
   };
 }
 
@@ -110,16 +122,16 @@ describe('ReferralService.attributeReferral', () => {
 
 describe('ReferralService.grantRewardForVerifiedEmail', () => {
   it('does nothing when there is no pending referral', async () => {
-    const { service, grantPremiumDays, grantReferralDiscount } = buildService({
+    const { service, grantPlanDays, grantReferralDiscount } = buildService({
       findByReferredCompanyId: null,
     });
     await service.grantRewardForVerifiedEmail('company-1');
-    expect(grantPremiumDays).not.toHaveBeenCalled();
+    expect(grantPlanDays).not.toHaveBeenCalled();
     expect(grantReferralDiscount).not.toHaveBeenCalled();
   });
 
   it('is idempotent once the reward was already granted', async () => {
-    const { service, grantPremiumDays, grantReferralDiscount } = buildService({
+    const { service, grantPlanDays, grantReferralDiscount } = buildService({
       findByReferredCompanyId: {
         id: 'referral-1',
         referrerCompanyId: 'referrer-1',
@@ -128,23 +140,56 @@ describe('ReferralService.grantRewardForVerifiedEmail', () => {
       },
     });
     await service.grantRewardForVerifiedEmail('company-1');
-    expect(grantPremiumDays).not.toHaveBeenCalled();
+    expect(grantPlanDays).not.toHaveBeenCalled();
     expect(grantReferralDiscount).not.toHaveBeenCalled();
   });
 
-  it('grants the parrain 30 free days and the filleul a Stripe discount, then marks the reward granted', async () => {
-    const { service, grantPremiumDays, grantReferralDiscount, markRewardGranted } = buildService({
+  it('grants a referrer with no active plan the Essentiel-floor 10 days, always as Premium', async () => {
+    const { service, grantPlanDays, grantReferralDiscount, markRewardGranted } = buildService({
       findByReferredCompanyId: {
         id: 'referral-1',
         referrerCompanyId: 'referrer-1',
         referredCompanyId: 'company-1',
         rewardGrantedAt: null,
       },
+      referrerTier: null,
     });
     await service.grantRewardForVerifiedEmail('company-1');
-    expect(grantPremiumDays).toHaveBeenCalledWith('referrer-1', 30);
-    expect(grantPremiumDays).not.toHaveBeenCalledWith('company-1', expect.anything());
+    expect(grantPlanDays).toHaveBeenCalledWith('referrer-1', PlanTier.PREMIUM, 10);
+    expect(grantPlanDays).not.toHaveBeenCalledWith(
+      'company-1',
+      expect.anything(),
+      expect.anything(),
+    );
     expect(grantReferralDiscount).toHaveBeenCalledWith('company-1');
-    expect(markRewardGranted).toHaveBeenCalledWith('referral-1');
+    expect(markRewardGranted).toHaveBeenCalledWith('referral-1', 10);
+  });
+
+  it('grants a Pro referrer 20 days', async () => {
+    const { service, grantPlanDays } = buildService({
+      findByReferredCompanyId: {
+        id: 'referral-1',
+        referrerCompanyId: 'referrer-1',
+        referredCompanyId: 'company-1',
+        rewardGrantedAt: null,
+      },
+      referrerTier: PlanTier.PRO,
+    });
+    await service.grantRewardForVerifiedEmail('company-1');
+    expect(grantPlanDays).toHaveBeenCalledWith('referrer-1', PlanTier.PREMIUM, 20);
+  });
+
+  it('grants a Premium referrer the full 30 days', async () => {
+    const { service, grantPlanDays } = buildService({
+      findByReferredCompanyId: {
+        id: 'referral-1',
+        referrerCompanyId: 'referrer-1',
+        referredCompanyId: 'company-1',
+        rewardGrantedAt: null,
+      },
+      referrerTier: PlanTier.PREMIUM,
+    });
+    await service.grantRewardForVerifiedEmail('company-1');
+    expect(grantPlanDays).toHaveBeenCalledWith('referrer-1', PlanTier.PREMIUM, 30);
   });
 });

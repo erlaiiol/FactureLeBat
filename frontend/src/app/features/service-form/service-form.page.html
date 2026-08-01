@@ -23,27 +23,6 @@
     <app-field-hint text="Le nom affiché quand vous choisissez cette prestation sur une facture." />
   </label>
 
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">Code prestation</span>
-    <input
-      formControlName="code"
-      type="text"
-      placeholder="Ex : MO-POSE"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
-    />
-    <app-field-hint text="Facultatif — votre propre référence pour cette prestation." />
-  </label>
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">Description</span>
-    <textarea
-      formControlName="description"
-      rows="3"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
-    ></textarea>
-    <app-field-hint text="Facultatif — des précisions internes sur cette prestation." />
-  </label>
-
   <div class="flex flex-col gap-1">
     <span class="text-sm font-medium text-ink">Tarification</span>
     <div class="flex overflow-hidden rounded-lg border border-line">
@@ -116,27 +95,55 @@
     />
   </label>
 
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">Catégorie d'activité (URSSAF)</span>
-    <select
-      formControlName="activityCategory"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
-    >
-      <option [ngValue]="null">Non catégorisé</option>
-      @for (option of activityCategoryOptions; track option.value) {
-        <option [ngValue]="option.value">{{ option.label }}</option>
-      }
-    </select>
-    <app-field-hint
-      text="Facultatif — utilisé pour répartir votre chiffre d'affaires dans le rapport trimestriel."
-    />
-  </label>
+  <app-advanced-settings>
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Code prestation</span>
+      <input
+        formControlName="code"
+        type="text"
+        placeholder="Ex : MO-POSE"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint text="Facultatif — votre propre référence pour cette prestation." />
+    </label>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Description</span>
+      <textarea
+        formControlName="description"
+        rows="3"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      ></textarea>
+      <app-field-hint text="Facultatif — des précisions internes sur cette prestation." />
+    </label>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Catégorie d'activité (URSSAF)</span>
+      <select
+        formControlName="activityCategory"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      >
+        <option [ngValue]="null">Non catégorisé</option>
+        @for (option of activityCategoryOptions; track option.value) {
+          <option [ngValue]="option.value">{{ option.label }}</option>
+        }
+      </select>
+      <app-field-hint
+        text="Facultatif — utilisé pour répartir votre chiffre d'affaires dans le rapport trimestriel."
+      />
+    </label>
+  </app-advanced-settings>
 
   @if (errorMessage(); as message) {
     <p class="text-center font-medium text-danger">{{ message }}</p>
   }
-
-  <app-big-button type="submit" [disabled]="saving()">
-    {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
-  </app-big-button>
+  @if (catalogLimitReached()) {
+    <app-big-button type="button" variant="primary" tone="solid" (click)="goToSubscribe()">
+      Voir les offres
+    </app-big-button>
+  } @else {
+    <app-big-button type="submit" [disabled]="saving()">
+      {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+    </app-big-button>
+  }
 </form>

@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AdminUserSummary } from '../../core/models/admin.model';
+import { PlanTier } from '../../core/models/billing.model';
 import { AdminService } from '../../core/services/admin.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
@@ -48,7 +49,9 @@ export class AdminUsersPage {
   // its own loading/error state — keyed by companyId so several rows never
   // fight over one shared piece of state.
   protected readonly grantOpenFor = signal<string | null>(null);
+  protected readonly planTierOptions: PlanTier[] = ['ESSENTIEL', 'PRO', 'PREMIUM'];
   protected readonly grantForm = this.fb.nonNullable.group({
+    tier: this.fb.nonNullable.control<PlanTier>('PREMIUM'),
     days: [30, [Validators.required, Validators.min(1)]],
   });
   protected readonly grantLoading = signal(false);
@@ -94,7 +97,7 @@ export class AdminUsersPage {
   protected openGrant(companyId: string): void {
     this.grantOpenFor.set(companyId);
     this.grantError.set(null);
-    this.grantForm.setValue({ days: 30 });
+    this.grantForm.setValue({ tier: 'PREMIUM', days: 30 });
   }
 
   protected closeGrant(): void {
@@ -106,22 +109,22 @@ export class AdminUsersPage {
       this.grantForm.markAllAsTouched();
       return;
     }
-    const days = this.grantForm.getRawValue().days;
+    const { tier, days } = this.grantForm.getRawValue();
     this.grantLoading.set(true);
     this.grantError.set(null);
     this.adminService
-      .grantPremium(companyId, days)
+      .grantPremium(companyId, tier, days)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.grantLoading.set(false);
           this.grantOpenFor.set(null);
-          this.toastService.success(`Accès premium accordé pour ${days} jours.`);
+          this.toastService.success(`Accès ${tier} accordé pour ${days} jours.`);
           this.load();
         },
         error: () => {
           this.grantLoading.set(false);
-          this.grantError.set("Impossible d'accorder l'accès premium pour le moment.");
+          this.grantError.set("Impossible d'accorder l'accès pour le moment.");
         },
       });
   }

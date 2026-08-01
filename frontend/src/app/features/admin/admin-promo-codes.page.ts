@@ -5,6 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { PromoCode } from '../../core/models/admin.model';
+import { PlanTier } from '../../core/models/billing.model';
 import { AdminService } from '../../core/services/admin.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
@@ -37,11 +38,16 @@ export class AdminPromoCodesPage {
   protected readonly creating = signal(false);
   protected readonly createError = signal<string | null>(null);
 
+  protected readonly planTierOptions: PlanTier[] = ['ESSENTIEL', 'PRO', 'PREMIUM'];
+
   // code is left blank by default — PromoCodeService generates one
   // server-side when omitted, so a single click ("Créer") is enough for the
   // common case, same "click more, type less" spirit as the rest of the app.
+  // planTier defaults to PREMIUM — the pre-Phase-30 only possible meaning of
+  // a promo code, still the most common marketing use case.
   protected readonly form = this.fb.nonNullable.group({
     code: [''],
+    planTier: this.fb.nonNullable.control<PlanTier>('PREMIUM'),
     durationDays: [30, [Validators.required, Validators.min(1)]],
     maxRedemptions: [null as number | null],
     expiresAt: [''],
@@ -79,6 +85,7 @@ export class AdminPromoCodesPage {
     this.adminService
       .createPromoCode({
         code: raw.code || undefined,
+        planTier: raw.planTier,
         durationDays: raw.durationDays,
         maxRedemptions: raw.maxRedemptions ?? undefined,
         expiresAt: raw.expiresAt || undefined,
@@ -87,7 +94,13 @@ export class AdminPromoCodesPage {
       .subscribe({
         next: () => {
           this.creating.set(false);
-          this.form.reset({ code: '', durationDays: 30, maxRedemptions: null, expiresAt: '' });
+          this.form.reset({
+            code: '',
+            planTier: 'PREMIUM',
+            durationDays: 30,
+            maxRedemptions: null,
+            expiresAt: '',
+          });
           this.toastService.success('Code promo créé.');
           this.load();
         },

@@ -30,17 +30,6 @@
     }
   </label>
 
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">Code produit</span>
-    <input
-      formControlName="productCode"
-      type="text"
-      placeholder="Ex : UC204850"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
-    />
-    <app-field-hint text="Facultatif — la référence de ce produit chez votre fournisseur." />
-  </label>
-
   <div class="flex gap-3">
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-ink">Unité</span>
@@ -56,7 +45,7 @@
 
     <label class="flex flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-ink">
-        {{ isAreaMode() ? 'Surface du chantier (m²)' : 'Quantité du chantier' }}
+        {{ quantityLabels[group().controls.unit.value] }}
       </span>
       <input
         formControlName="quantity"
@@ -75,35 +64,44 @@
     </label>
   </div>
 
-  @if (isAreaMode()) {
-    <label class="flex flex-col gap-1">
-      <span class="text-sm font-medium text-ink">Chutes (matière en plus)</span>
-      <select
-        formControlName="wasteSurcharge"
-        class="rounded-lg border border-line px-4 py-3 text-lg"
-      >
-        <option value="NONE">Aucune</option>
-        <option value="TEN">+10 %</option>
-        <option value="TWENTY">+20 %</option>
-      </select>
-      <app-field-hint
-        text="Ajoute de la matière à couvrir pour compenser les découpes perdues, avant l'éventuel arrondi au conditionnement ci-dessous."
-      />
-    </label>
-  }
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">{{ unitPriceButtonLabel() }} (€)</span>
+    <input
+      formControlName="unitPriceEuros"
+      type="number"
+      step="0.01"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+  </label>
 
-  <div class="flex flex-col gap-3 rounded-lg border border-line p-3">
-    <span class="text-sm font-semibold text-ink">Prix du matériau</span>
-
+  <app-advanced-settings>
     <label class="flex flex-col gap-1">
-      <span class="text-sm font-medium text-ink">{{ unitPriceButtonLabel() }} (€)</span>
+      <span class="text-sm font-medium text-ink">Code produit</span>
       <input
-        formControlName="unitPriceEuros"
-        type="number"
-        step="0.01"
+        formControlName="productCode"
+        type="text"
+        placeholder="Ex : UC204850"
         class="rounded-lg border border-line px-4 py-3 text-lg"
       />
+      <app-field-hint text="Facultatif — la référence de ce produit chez votre fournisseur." />
     </label>
+
+    @if (isAreaMode()) {
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Chutes (matière en plus)</span>
+        <select
+          formControlName="wasteSurcharge"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        >
+          <option value="NONE">Aucune</option>
+          <option value="TEN">+10 %</option>
+          <option value="TWENTY">+20 %</option>
+        </select>
+        <app-field-hint
+          text="Ajoute de la matière à couvrir pour compenser les découpes perdues, avant l'éventuel arrondi au conditionnement ci-dessous."
+        />
+      </label>
+    }
 
     @if (packagingEnabled()) {
       <div class="flex flex-col gap-3 rounded-lg border border-line bg-bg p-3">
@@ -180,7 +178,7 @@
         + Vendu par conditionnement (boîte, palette...)
       </button>
     }
-  </div>
+  </app-advanced-settings>
 
   <app-field-hint
     text="Seules les infos réutilisables (nom, unité, prix, conditionnement, code) sont enregistrées — la quantité et l'arrondi restent propres à ce chantier."
@@ -210,9 +208,9 @@
       type="button"
       (click)="toggleSaveToCatalog()"
       class="flex-1 rounded-xl border px-4 py-4 text-sm font-semibold shadow-sm transition"
-      [class.border-primary-subtle-border]="!group().controls.saveAsNewProduct.value"
-      [class.bg-primary-subtle]="!group().controls.saveAsNewProduct.value"
-      [class.text-primary-subtle-fg]="!group().controls.saveAsNewProduct.value"
+      [class.border-line]="!group().controls.saveAsNewProduct.value"
+      [class.bg-bg]="!group().controls.saveAsNewProduct.value"
+      [class.text-ink-soft]="!group().controls.saveAsNewProduct.value"
       [class.border-primary]="group().controls.saveAsNewProduct.value"
       [class.bg-primary]="group().controls.saveAsNewProduct.value"
       [class.text-primary-fg]="group().controls.saveAsNewProduct.value"

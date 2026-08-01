@@ -1,6 +1,8 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SourcingSearchKind, Unit } from '../../generated/prisma/enums';
+import { PlanFeatureLockedException } from '../billing/plan-feature-locked.exception';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { GroqClientService } from './groq/groq-client.service';
 import { GroqUnavailableError } from './groq/groq-unavailable.error';
 import { SourcingRepository } from './sourcing.repository';
@@ -13,6 +15,7 @@ function buildService(options: {
   groqConfigured?: boolean;
   groqResponse?: string;
   groqError?: Error;
+  planAllowed?: boolean;
 }) {
   const findFresh = jest.fn().mockResolvedValue(options.cachedResult ?? null);
   const countToday = jest.fn().mockResolvedValue(options.usedToday ?? 0);
@@ -25,11 +28,20 @@ function buildService(options: {
     : jest.fn().mockResolvedValue(options.groqResponse ?? JSON.stringify({ candidates: [] }));
   const groqClient = { isConfigured, complete } as unknown as GroqClientService;
 
+  const assertFeatureAccess = jest
+    .fn()
+    .mockImplementation(() =>
+      (options.planAllowed ?? true)
+        ? Promise.resolve()
+        : Promise.reject(new PlanFeatureLockedException('aiSourcing')),
+    );
+  const planGateService = { assertFeatureAccess } as unknown as PlanGateService;
+
   const configGet = jest.fn().mockReturnValue(options.cap ?? 20);
   const config = { get: configGet } as unknown as ConfigService;
 
-  const service = new SourcingService(repository, groqClient, config);
-  return { service, findFresh, countToday, save, isConfigured, complete };
+  const service = new SourcingService(repository, groqClient, planGateService, config);
+  return { service, findFresh, countToday, save, isConfigured, complete, assertFeatureAccess };
 }
 
 const COMPANY_ID = 'company-1';
@@ -104,6 +116,15 @@ describe('SourcingService.searchSuppliers', () => {
     await expect(service.searchSuppliers(COMPANY_ID, searchDto())).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
+  });
+
+  it('blocks a company whose tier does not include the AI assistant, before even checking the cache', async () => {
+    const { service, findFresh } = buildService({ planAllowed: false });
+
+    await expect(service.searchSuppliers(COMPANY_ID, searchDto())).rejects.toBeInstanceOf(
+      PlanFeatureLockedException,
+    );
+    expect(findFresh).not.toHaveBeenCalled();
   });
 
   it('never counts a cache hit against the daily cap', async () => {

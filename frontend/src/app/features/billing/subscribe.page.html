@@ -1,4 +1,4 @@
-<div class="mx-auto flex max-w-xl flex-col gap-6">
+<div class="mx-auto flex max-w-4xl flex-col gap-6">
   <h1 class="font-heading text-2xl font-bold tracking-wide text-ink uppercase">Mon abonnement</h1>
 
   @if (redirectNotice === 'success') {
@@ -23,7 +23,15 @@
         <div class="flex items-center justify-between gap-2">
           <h2 class="font-heading text-lg font-bold text-ink uppercase">Statut</h2>
           @if (s.hasPremiumAccess) {
-            <app-badge variant="success" tone="solid">Premium actif</app-badge>
+            <app-badge variant="success" tone="solid">
+              {{
+                s.planTier === 'ESSENTIEL'
+                  ? 'Essentiel actif'
+                  : s.planTier === 'PRO'
+                    ? 'Pro actif'
+                    : 'Premium actif'
+              }}
+            </app-badge>
           } @else if (s.freeInvoiceUsed) {
             <app-badge variant="danger" tone="solid">Facture gratuite utilisée</app-badge>
           } @else {
@@ -34,7 +42,8 @@
         @if (!s.freeInvoiceUsed && !s.hasPremiumAccess) {
           <p class="text-ink-soft">
             Vous pouvez créer votre première facture gratuitement, sans abonnement. Un abonnement
-            sera nécessaire à partir de la deuxième.
+            sera nécessaire à partir de la deuxième — devis et factures restent ensuite illimités,
+            quel que soit le palier choisi.
           </p>
         }
 
@@ -54,9 +63,31 @@
         }
         @if (s.premiumGrantedUntil) {
           <p class="text-ink-soft">
-            Accès premium offert (code promo / support) jusqu'au
+            Accès
+            {{
+              s.grantedPlanTier === 'PRO'
+                ? 'Pro'
+                : s.grantedPlanTier === 'ESSENTIEL'
+                  ? 'Essentiel'
+                  : 'Premium'
+            }}
+            offert (code promo / parrainage / support) jusqu'au
             {{ s.premiumGrantedUntil | date: 'longDate' }}.
           </p>
+        }
+
+        @if (s.customerLimit !== null || s.catalogItemLimit !== null) {
+          <div class="flex flex-col gap-1 text-sm text-ink-soft">
+            @if (s.customerLimit !== null) {
+              <p>Clients enregistrés : {{ s.customerCount }} / {{ s.customerLimit }}</p>
+            }
+            @if (s.catalogItemLimit !== null) {
+              <p>
+                Articles au catalogue (produits + prestations) : {{ s.catalogItemCount }} /
+                {{ s.catalogItemLimit }}
+              </p>
+            }
+          </div>
         }
 
         @if (platformService.isIosApp()) {
@@ -68,16 +99,12 @@
           <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
             Rendez-vous sur facturele.net depuis un navigateur pour gérer votre abonnement.
           </p>
-        } @else if (!s.stripeConfigured) {
-          <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
-            L'abonnement par carte n'est pas encore configuré sur ce déploiement — utilisez un code
-            promo ci-dessous, ou contactez le support.
-          </p>
         } @else if (s.subscriptionStatus === 'ACTIVE' || s.subscriptionStatus === 'PAST_DUE') {
           <!-- PAST_DUE already has a Stripe subscription (payment just
           failed) — routes to the portal to fix the payment method, same as
-          ACTIVE, never back through subscribe()/checkout which the backend
-          now refuses for both statuses to avoid a second subscription. -->
+          ACTIVE. Changing tier also happens through this same portal now
+          (Phase 30) — never back through subscribe()/checkout, which the
+          backend refuses for both statuses to avoid a second subscription. -->
           <app-big-button
             variant="secondary"
             tone="subtle"
@@ -86,21 +113,6 @@
           >
             {{ portalLoading() ? 'Ouverture…' : 'Gérer mon abonnement' }}
           </app-big-button>
-        } @else {
-          <app-big-button
-            variant="primary"
-            tone="solid"
-            [disabled]="checkoutLoading()"
-            (click)="subscribe()"
-          >
-            {{ checkoutLoading() ? 'Redirection…' : "S'abonner — 15 € / mois" }}
-          </app-big-button>
-        }
-        @if (checkoutLoading()) {
-          <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
-            Redirection vers l'espace de paiement sécurisé Stripe… Merci de patienter quelques
-            secondes et de ne pas recharger la page.
-          </p>
         }
         @if (portalLoading()) {
           <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
@@ -108,13 +120,122 @@
             pas recharger la page.
           </p>
         }
-        @if (checkoutError(); as message) {
-          <p class="text-sm font-medium text-danger">{{ message }}</p>
-        }
         @if (portalError(); as message) {
           <p class="text-sm font-medium text-danger">{{ message }}</p>
         }
       </section>
+
+      @if (
+        !platformService.isIosApp() &&
+          s.subscriptionStatus !== 'ACTIVE' &&
+          s.subscriptionStatus !== 'PAST_DUE' &&
+          plans();
+        as catalog
+      ) {
+        <section class="flex flex-col gap-4">
+          @if (catalog.launchOffer; as offer) {
+            @if (offer.active) {
+              <p
+                class="rounded-xl bg-primary-subtle p-4 text-center text-sm font-medium text-primary-subtle-fg"
+              >
+                🎉 Offre de lancement : Premium à {{ offer.discountedPriceEuros }} € / mois pendant
+                {{ offer.durationMonths }} mois (au lieu de 15 €), jusqu'au
+                {{ offer.expiresAt | date: 'longDate' }}.
+              </p>
+            }
+          }
+
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            @for (plan of catalog.plans; track plan.tier) {
+              <div
+                class="flex flex-col gap-3 rounded-2xl border p-5"
+                [class]="
+                  plan.highlight
+                    ? 'border-primary bg-primary-subtle/40 shadow-lg'
+                    : 'border-line bg-surface'
+                "
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="font-heading text-lg font-bold text-ink uppercase">{{ plan.name }}</h3>
+                  @if (plan.highlight) {
+                    <app-badge variant="primary" tone="solid">Meilleure valeur</app-badge>
+                  }
+                  @if (s.planTier === plan.tier) {
+                    <app-badge variant="success" tone="subtle">Palier actuel</app-badge>
+                  }
+                </div>
+
+                <p class="text-3xl font-bold text-ink">
+                  {{
+                    plan.tier === 'PREMIUM' && catalog.launchOffer?.active
+                      ? catalog.launchOffer!.discountedPriceEuros
+                      : plan.priceEuros
+                  }}
+                  €
+                  <span class="text-sm font-normal text-ink-soft">/ mois</span>
+                </p>
+                @if (plan.tier === 'PREMIUM' && catalog.launchOffer?.active) {
+                  <p class="text-xs text-ink-soft line-through">{{ plan.priceEuros }} € / mois</p>
+                }
+
+                <p class="text-sm text-ink-soft">{{ plan.tagline }}</p>
+
+                <ul class="flex flex-1 flex-col gap-1.5 text-sm text-ink">
+                  <li>✓ Devis &amp; factures illimités</li>
+                  <li>
+                    {{
+                      plan.customerLimit === null
+                        ? '✓ Clients illimités'
+                        : '✓ Jusqu’à ' + plan.customerLimit + ' clients'
+                    }}
+                  </li>
+                  <li>
+                    {{
+                      plan.catalogItemLimit === null
+                        ? '✓ Catalogue illimité'
+                        : '✓ Jusqu’à ' + plan.catalogItemLimit + ' produits/prestations'
+                    }}
+                  </li>
+                  <li [class.text-ink-soft]="!plan.features.analytics">
+                    {{ plan.features.analytics ? '✓' : '✗' }} Statistiques d'activité
+                  </li>
+                  <li [class.text-ink-soft]="!plan.features.aiSourcing">
+                    {{ plan.features.aiSourcing ? '✓' : '✗' }} Assistant IA fournisseurs
+                  </li>
+                  <li [class.text-ink-soft]="!plan.prioritySupport">
+                    {{ plan.prioritySupport ? '✓ Support prioritaire' : '✓ Support standard' }}
+                  </li>
+                </ul>
+
+                @if (!s.stripeConfigured || !plan.available) {
+                  <p class="rounded-lg bg-secondary-subtle p-3 text-xs text-ink-soft">
+                    Bientôt disponible — utilisez un code promo ci-dessous, ou contactez le support.
+                  </p>
+                } @else {
+                  <app-big-button
+                    [variant]="plan.highlight ? 'primary' : 'secondary'"
+                    [tone]="plan.highlight ? 'solid' : 'subtle'"
+                    [disabled]="checkoutLoading() !== null"
+                    (click)="subscribe(plan.tier)"
+                  >
+                    {{ checkoutLoading() === plan.tier ? 'Redirection…' : 'Choisir ' + plan.name }}
+                  </app-big-button>
+                }
+              </div>
+            }
+          </div>
+
+          @if (checkoutLoading()) {
+            <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
+              Redirection vers l'espace de paiement sécurisé Stripe… Merci de patienter quelques
+              secondes et de ne pas recharger la page.
+            </p>
+          }
+          @if (checkoutError(); as message) {
+            <p class="text-sm font-medium text-danger">{{ message }}</p>
+          }
+        </section>
+      }
 
       @if (!platformService.isIosApp()) {
         <section class="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
@@ -146,9 +267,7 @@
             <p class="text-sm font-medium text-danger">{{ message }}</p>
           }
           @if (redeemSuccess()) {
-            <p class="text-sm font-medium text-success">
-              Code activé, votre accès premium est à jour !
-            </p>
+            <p class="text-sm font-medium text-success">Code activé, votre accès est à jour !</p>
           }
         </section>
 
@@ -157,8 +276,11 @@
             <h2 class="font-heading text-lg font-bold text-ink uppercase">Parrainage</h2>
             <p class="text-ink-soft">
               Invitez un autre artisan avec votre lien : dès que son compte est vérifié, vous gagnez
-              1 mois de premium offert et il/elle bénéficie de 5 € de réduction sur son premier mois
-              d'abonnement (15 € → 10 €).
+              des jours de Premium offerts (10 à 30 jours selon votre propre palier au moment du
+              parrainage — plus votre abonnement est élevé, plus vous gagnez) et il/elle bénéficie
+              de
+              {{ plans()?.referralFilleulDiscountPercent ?? 30 }}&nbsp;% de réduction sur son
+              premier mois, quel que soit l'abonnement choisi.
             </p>
             <div class="flex flex-col gap-3 sm:flex-row">
               <input

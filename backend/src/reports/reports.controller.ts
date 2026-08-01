@@ -9,10 +9,15 @@ import { ReportPeriodQueryDto } from './dto/report-period-query.dto';
 import { ActivityAnalytics, QuarterlyReport } from './entities/report.entity';
 import { ReportsService } from './reports.service';
 
-// Phase 17: no premium gate — decided explicitly with the user, unlike
-// InvoiceService's per-invoice gate (see PremiumGateService). An artisan
-// must be able to produce their own turnover declaration regardless of
-// subscription status.
+// Phase 17: the quarterly declaration (getQuarterly/getQuarterlyPdf/
+// getQuarterlyCsv below) has no premium gate — decided explicitly with the
+// user, unlike InvoiceService's per-invoice gate (see PlanGateService). An
+// artisan must be able to produce their own turnover declaration regardless
+// of subscription status. Phase 30 gates only getAnalytics (pure business
+// insight, nothing tax-relevant) behind PlanGateService.assertFeatureAccess
+// — see ReportsService.getActivityAnalytics and docs/roadmap.md Phase 30;
+// this narrower reading was a deliberate choice specifically so Phase 30
+// never contradicts this comment's original promise.
 @Controller('reports')
 export class ReportsController {
   constructor(

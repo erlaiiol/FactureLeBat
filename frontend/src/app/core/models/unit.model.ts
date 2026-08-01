@@ -63,3 +63,33 @@ export const UNIT_PRICE_BUTTON_LABELS: Record<Unit, string> = {
   LITER: 'Prix au litre',
   CUBIC_METER: 'Prix au m³',
 };
+
+// The quantity field's own label — "Surface du chantier" only makes sense
+// for an m² line; billing someone's time (HOUR) or a flat rate (LUMP_SUM)
+// has nothing to do with a chantier's surface. Standalone version (used
+// where the unit isn't shown anywhere else nearby, e.g. the expanded line
+// form) versus the SHORT version (used next to a separate unit badge, e.g.
+// the collapsed gallery card) — only differ by the parenthetical unit hint.
+export const QUANTITY_LABELS: Record<Unit, string> = {
+  SQUARE_METER: 'Surface du chantier (m²)',
+  LINEAR_METER: 'Longueur du chantier (ml)',
+  UNIT: 'Quantité',
+  LUMP_SUM: 'Nombre de forfaits',
+  HOUR: "Nombre d'heures",
+  DAY: 'Nombre de jours',
+  KILOGRAM: 'Poids (kg)',
+  LITER: 'Volume (litres)',
+  CUBIC_METER: 'Volume (m³)',
+};
+
+export const QUANTITY_LABELS_SHORT: Record<Unit, string> = {
+  SQUARE_METER: 'Surface du chantier',
+  LINEAR_METER: 'Longueur du chantier',
+  UNIT: 'Quantité',
+  LUMP_SUM: 'Nombre de forfaits',
+  HOUR: "Nombre d'heures",
+  DAY: 'Nombre de jours',
+  KILOGRAM: 'Poids',
+  LITER: 'Volume',
+  CUBIC_METER: 'Volume',
+};

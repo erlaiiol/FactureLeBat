@@ -61,7 +61,7 @@
               <td class="p-3">{{ user.role }}</td>
               <td class="p-3">
                 @if (user.hasPremiumAccess) {
-                  <app-badge variant="success" tone="solid">Premium</app-badge>
+                  <app-badge variant="success" tone="solid">{{ user.planTier }}</app-badge>
                 } @else {
                   <app-badge variant="secondary" tone="subtle">{{
                     user.subscriptionStatus
@@ -81,6 +81,14 @@
                     (ngSubmit)="submitGrant(user.companyId)"
                     class="flex items-center gap-2"
                   >
+                    <select
+                      formControlName="tier"
+                      class="rounded-lg border border-line bg-bg px-2 py-1"
+                    >
+                      @for (tier of planTierOptions; track tier) {
+                        <option [value]="tier">{{ tier }}</option>
+                      }
+                    </select>
                     <input
                       formControlName="days"
                       type="number"
@@ -108,7 +116,7 @@
                     (click)="openGrant(user.companyId)"
                     class="rounded-lg border border-line px-3 py-1 text-sm hover:bg-secondary-subtle"
                   >
-                    Accorder premium
+                    Accorder un accès
                   </button>
                 }
               </td>

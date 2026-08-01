@@ -29,6 +29,7 @@ import { IconEyeComponent } from '../../../shared/components/icon-eye.component'
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
 import { LineBadgeComponent } from '../../../shared/components/line-badge.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
+import { QuantityLabelPipe } from '../../../shared/pipes/quantity-label.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { TourService } from '../../../shared/tour/tour.service';
@@ -68,6 +69,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
     IconEyeOffComponent,
     LineBadgeComponent,
     CentsToEurosPipe,
+    QuantityLabelPipe,
     UnitLabelPipe,
     InvoiceLineFormComponent,
     InvoiceServiceLineFormComponent,

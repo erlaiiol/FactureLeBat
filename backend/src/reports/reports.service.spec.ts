@@ -1,4 +1,5 @@
 import { CompanyModel } from '../../generated/prisma/models';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { InvoiceCalculationService } from '../invoice/calculation/invoice-calculation.service';
 import { InvoiceMapper } from '../invoice/invoice.mapper';
 import { InvoiceRepository, InvoiceWithLines } from '../invoice/invoice.repository';
@@ -30,9 +31,11 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     subscriptionStatus: 'NONE',
+    subscriptionPlanTier: null,
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
     premiumGrantedUntil: null,
+    grantedPlanTier: null,
     referralCode: 'REFCODE1',
     pendingReferralDiscount: false,
     declarationFrequency: 'TRIMESTRIELLE',
@@ -114,9 +117,12 @@ describe('ReportsService', () => {
     const companyService = {
       getProfile: jest.fn(),
     } as unknown as jest.Mocked<CompanyService>;
+    const planGateService = {
+      assertFeatureAccess: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<PlanGateService>;
     const mapper = new InvoiceMapper(new InvoiceCalculationService());
-    const service = new ReportsService(invoiceRepository, mapper, companyService);
-    return { service, invoiceRepository, companyService };
+    const service = new ReportsService(invoiceRepository, mapper, companyService, planGateService);
+    return { service, invoiceRepository, companyService, planGateService };
   }
 
   describe('getQuarterlyReport', () => {

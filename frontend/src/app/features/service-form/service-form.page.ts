@@ -7,13 +7,15 @@ import { ACTIVITY_CATEGORY_OPTIONS, ActivityCategory } from '../../core/models/r
 import { ServicePricingMode, ServiceVisibility } from '../../core/models/service.model';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AdvancedSettingsComponent } from '../../shared/components/advanced-settings.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
+import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 
 @Component({
   selector: 'app-service-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
+  imports: [ReactiveFormsModule, AdvancedSettingsComponent, BigButtonComponent, FieldHintComponent],
   templateUrl: './service-form.page.html',
 })
 export class ServiceFormPage {
@@ -32,6 +34,9 @@ export class ServiceFormPage {
   protected readonly loading = signal(this.isEditing);
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  // Phase 30: catalog-size cap reached (Essentiel/Pro, products + services
+  // combined) — see CustomerFormPage's equivalent signal.
+  protected readonly catalogLimitReached = signal(false);
 
   // Phase 13.5: FIXED (default) is today's typed-euro-amount behavior;
   // PERCENTAGE lets the artisan define e.g. a reusable "Marge 30%" service
@@ -120,6 +125,7 @@ export class ServiceFormPage {
 
     this.saving.set(true);
     this.errorMessage.set(null);
+    this.catalogLimitReached.set(false);
 
     const request = this.serviceId
       ? this.serviceCatalogService.update(this.serviceId, payload)
@@ -135,12 +141,22 @@ export class ServiceFormPage {
       },
       error: (error: HttpErrorResponse) => {
         this.saving.set(false);
-        this.errorMessage.set(
-          error.status === 409
-            ? 'Ce code de prestation est déjà utilisé par une autre prestation.'
-            : 'Erreur lors de l’enregistrement. Veuillez réessayer.',
-        );
+        const limitMessage = catalogLimitMessage(error);
+        if (limitMessage) {
+          this.catalogLimitReached.set(true);
+          this.errorMessage.set(limitMessage);
+        } else {
+          this.errorMessage.set(
+            error.status === 409
+              ? 'Ce code de prestation est déjà utilisé par une autre prestation.'
+              : 'Erreur lors de l’enregistrement. Veuillez réessayer.',
+          );
+        }
       },
     });
+  }
+
+  protected goToSubscribe(): void {
+    void this.router.navigateByUrl('/abonnement');
   }
 }

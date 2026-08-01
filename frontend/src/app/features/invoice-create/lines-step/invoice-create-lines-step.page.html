@@ -283,7 +283,9 @@
               class="flex items-center gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm"
               (click)="$event.stopPropagation()"
             >
-              <span class="font-medium text-ink-soft">Surface du chantier</span>
+              <span class="font-medium text-ink-soft">
+                {{ line.controls.unit.value | quantityLabel }}
+              </span>
               <input
                 type="number"
                 step="0.01"

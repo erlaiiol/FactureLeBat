@@ -505,3 +505,73 @@ button:not(:disabled) {
 .anim-tour-completion-glow {
   animation: tour-completion-glow 900ms var(--ease-out-sharp);
 }
+
+/* design-system.md's `heroLitany`: the landing page hero (Phase 13.3,
+   "Atelier sobre"'s fourth spot). A one-shot sequential text reveal that
+   plays once on page load and settles permanently on "FactureLe en 1 clic"
+   — never loops, never restarts, so it doesn't break the "no idle/ambient
+   motion" rule (the state change is "the hero has mounted," same
+   justification as `scrollReveal` firing once per element). Each line gets
+   its own animation-delay (set inline in the template, spaced by
+   --duration-litany-slot) rather than one long keyframe timeline, so the
+   sequence length stays a single number to tune in one place. */
+:root {
+  --duration-litany-slot: 1500ms;
+}
+@keyframes hero-litany-line {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-hero-litany-line {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation-name: hero-litany-line;
+  animation-duration: var(--duration-litany-slot);
+  animation-timing-function: var(--ease-out-sharp);
+  animation-fill-mode: both;
+}
+@keyframes hero-litany-final {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-hero-litany-final {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  animation: hero-litany-final var(--duration-materialize) var(--ease-out-sharp) forwards;
+}
+/* Reduced motion: the global rule above still leaves each line's
+   animation-delay intact (only duration/iteration-count are zeroed), which
+   would otherwise freeze the stage on an invisible frame for several
+   seconds before the delay elapses. Skip the sequence outright and show the
+   resting state immediately instead. */
+@media (prefers-reduced-motion: reduce) {
+  .anim-hero-litany-line {
+    display: none;
+  }
+  .anim-hero-litany-final {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}

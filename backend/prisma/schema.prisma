@@ -171,6 +171,17 @@ enum SubscriptionStatus {
   CANCELED
 }
 
+// Phase 30: the three subscription tiers (7€/12€/15€), replacing the
+// single flat "premium" plan from Phase 14 — see billing/plan-config.ts for
+// the price/cap/feature definition per tier, docs/roadmap.md Phase 30 for
+// the decoy-pricing rationale. Declared in ascending order so array index
+// doubles as a rank comparison (see PLAN_TIER_ORDER in plan-config.ts).
+enum PlanTier {
+  ESSENTIEL
+  PRO
+  PREMIUM
+}
+
 model Company {
   id String @id @default(uuid())
 
@@ -238,14 +249,26 @@ model Company {
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean            @default(false)
 
+  // Phase 30: which of the 3 tiers the active Stripe subscription above is
+  // for, resolved from the subscription's Stripe price id against
+  // STRIPE_PRICE_ID_ESSENTIEL/_PRO/_PREMIUM on every webhook event (see
+  // BillingService.applySubscriptionEvent) — never trusted from the
+  // checkout redirect, same reasoning as subscriptionStatus itself. Null
+  // whenever subscriptionStatus is NONE/CANCELED, or if a subscription
+  // exists on a price id that doesn't match any configured tier (never
+  // downgraded/guessed in that case — see PlanGateService).
+  subscriptionPlanTier PlanTier?
+
   // Premium access granted outside Stripe — an admin's manual grant or a
-  // redeemed PromoCode, both funnel through the same field (see
-  // BillingService.grantPremiumDays). Independent of subscriptionStatus:
-  // an artisan can have both an active subscription AND a promo grant
-  // layered on top (e.g. a free month applied while already paying), so
-  // PremiumGateService checks "is either one currently valid", never one
-  // exclusively.
+  // redeemed PromoCode, both funnel through these two fields together (see
+  // BillingRepository.grantPlanDays). Independent of subscriptionStatus: an
+  // artisan can have both an active subscription AND a grant layered on
+  // top (e.g. a referral bonus applied while already paying), so
+  // PlanGateService.getEffectivePlanTier takes the higher of the two,
+  // never one exclusively. grantedPlanTier is only meaningful while
+  // premiumGrantedUntil is still in the future.
   premiumGrantedUntil DateTime?
+  grantedPlanTier     PlanTier?
 
   // Phase 29: referral program. The reward is asymmetric — the parrain
   // (referralsMade side) gets a straight 30-day premiumGrantedUntil grant (a
@@ -934,6 +957,11 @@ model PromoCode {
   id String @id @default(uuid())
 
   code             String    @unique
+  // Phase 30: which tier this code grants — defaults every pre-existing
+  // code to PREMIUM (their only possible meaning before tiers existed), so
+  // a code issued before this phase keeps granting exactly what it always
+  // granted.
+  planTier         PlanTier  @default(PREMIUM)
   durationDays     Int
   maxRedemptions   Int?
   redemptionsCount Int       @default(0)
@@ -980,6 +1008,12 @@ model Referral {
   referredCompany   Company @relation("Referred", fields: [referredCompanyId], references: [id], onDelete: Cascade)
 
   rewardGrantedAt DateTime?
+  // Phase 30: the actual number of Premium days granted to the parrain for
+  // this specific referral — varies with the parrain's own plan tier at
+  // the moment the reward fired (see REFERRAL_PARRAIN_REWARD_DAYS_BY_TIER),
+  // so it has to be recorded per-row rather than recomputed from a single
+  // flat constant. Null until rewardGrantedAt is set.
+  rewardDaysGranted Int?
 
   createdAt DateTime @default(now())
 
