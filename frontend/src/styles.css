@@ -320,7 +320,19 @@ button:not(:disabled) {
   grid-template-columns: 3.5rem 0rem;
   transition: grid-template-columns var(--duration-entrance) var(--ease-out-sharp);
 }
-.fixed-add-button:hover,
+/* hover: hover — a touchscreen tap still matches a bare `:hover` and, with
+   no real pointer to trigger mouseleave, that state sticks until the next
+   tap lands somewhere else. Since the tap that opens the flyout is a tap on
+   this very button, that stuck :hover kept it pinned open (full-width
+   colour + label) after closePanelOnMobileAfterPick had already flipped
+   is-open back off, independently of the Angular state. Scoping to real
+   hover devices leaves is-open as the only thing that can expand the
+   button on touch. */
+@media (hover: hover) {
+  .fixed-add-button:hover {
+    grid-template-columns: 3.5rem 14.5rem;
+  }
+}
 .fixed-add-button.is-open {
   /* 14.5rem, not the original 12rem: "Ajouter une prestation" (the longer
      of the two labels) measures ~216px in Barlow Condensed 700 uppercase
