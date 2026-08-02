@@ -74,6 +74,7 @@
               "index": "src/index.dev.html"
             },
             "capacitor-dev": {
+              "index": "src/index.capacitor-dev.html",
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
