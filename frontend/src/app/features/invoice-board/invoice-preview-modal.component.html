@@ -24,8 +24,12 @@
         </button>
       </div>
 
-      @if (safeUrl(); as url) {
-        <iframe [src]="url" class="min-h-0 flex-1" title="Aperçu du document"></iframe>
+      @if (pdfBlobUrl(); as url) {
+        @if (useCanvasViewer) {
+          <app-pdf-canvas-viewer [blobUrl]="url" class="flex min-h-0 flex-1 flex-col" />
+        } @else if (safeUrl(); as safe) {
+          <iframe [src]="safe" class="min-h-0 flex-1" title="Aperçu du document"></iframe>
+        }
       } @else {
         <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-ink-soft">
           <div

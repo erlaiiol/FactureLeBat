@@ -157,29 +157,29 @@ export class InvoiceCreateLinesStepPage {
     this.linesValue().map((line, index) => line.description || `Ligne ${index + 1}`),
   );
 
-  // Phase 13.5: which catalog Product/Service currently has an active line,
-  // and at which index — this is what lets the flyout's catalog list render
-  // an "activé" state and know which line to remove on a second click,
-  // without a separate hand-maintained id→index map that could drift out of
-  // sync with the FormArrays themselves (see catalogProductId/catalogServiceId).
-  protected readonly activeProductLineIndex = computed(() => {
-    const map = new Map<string, number>();
-    this.linesValue().forEach((line, index) => {
+  // Phase 13.5: which catalog Products/Services have at least one active
+  // line — purely a badge/checkmark signal for the flyout's catalog list
+  // (see pickProduct/pickService below for why this can no longer double as
+  // "which line to remove on a second click": clicking a catalog row now
+  // always adds another line, never removes one).
+  protected readonly activeProductIds = computed(() => {
+    const ids = new Set<string>();
+    this.linesValue().forEach((line) => {
       if (line.catalogProductId) {
-        map.set(line.catalogProductId, index);
+        ids.add(line.catalogProductId);
       }
     });
-    return map;
+    return ids;
   });
 
-  protected readonly activeServiceLineIndex = computed(() => {
-    const map = new Map<string, number>();
-    this.serviceLinesValue().forEach((serviceLine, index) => {
+  protected readonly activeServiceIds = computed(() => {
+    const ids = new Set<string>();
+    this.serviceLinesValue().forEach((serviceLine) => {
       if (serviceLine.catalogServiceId) {
-        map.set(serviceLine.catalogServiceId, index);
+        ids.add(serviceLine.catalogServiceId);
       }
     });
-    return map;
+    return ids;
   });
 
   // Live amount for every current service line, in the same order as
@@ -307,6 +307,16 @@ export class InvoiceCreateLinesStepPage {
   // styles.css) turns that mini-input red immediately, rather than waiting
   // for a blur/submit the artisan has no other reason to trigger here.
   private addProductFromCatalog(product: ProductProfile): void {
+    // Only the first line for a given catalog Product stays "linked" to it
+    // (catalogProductId set) — a second pick of the same product prefills
+    // an independent line instead, since only one line can ever be the
+    // thing "Mettre à jour ce produit dans le catalogue" updates in place
+    // (see persistFreeEntities in InvoiceDraftStore, which fires one update
+    // request per distinct catalogProductId). Leaving it unlinked here means
+    // InvoiceLineFormComponent.isCatalogLinked() is false on it, so it reads
+    // — and, if saved, behaves — as a fresh line that creates a new catalog
+    // entry rather than colliding with the first one's update.
+    const alreadyLinked = this.activeProductIds().has(product.id);
     const group = this.createLineGroup({
       description: product.name,
       unit: product.unit,
@@ -316,7 +326,7 @@ export class InvoiceCreateLinesStepPage {
       packagingQuantity: product.packagingQuantity ? Number(product.packagingQuantity) : null,
       roundUpToPackaging: true,
       productCode: product.code,
-      catalogProductId: product.id,
+      catalogProductId: alreadyLinked ? null : product.id,
       activityCategory: product.activityCategory,
     });
     this.lines.push(group);
@@ -332,20 +342,18 @@ export class InvoiceCreateLinesStepPage {
     this.uncollapseLine(group);
   }
 
-  // Phase 13.5: the catalog flyout's single entry point for a Product row —
-  // flips it on (adds a line) or off (removes its line) depending on
-  // whether one is already active, so the template only ever needs one
-  // click handler per row instead of separate add/remove bindings. The
-  // flyout itself stays open afterwards so several materials can be picked
-  // in one go — desktop only, see closePanelOnMobileAfterPick.
-  protected toggleProduct(product: ProductProfile): void {
-    const activeIndex = this.activeProductLineIndex().get(product.id);
-    if (activeIndex != null) {
-      this.removeLine(activeIndex);
-      return;
-    }
+  // Phase 13.5: the catalog flyout's entry point for a Product row — always
+  // adds another line (never removes one; that's the card's own "Supprimer"
+  // button, see removeLine). Picking the same product twice in a row means
+  // two lines, same as picking two different products — a checkmark badge
+  // (see activeProductIds) still shows the product has at least one active
+  // line, but clicking it again is never interpreted as "undo that". Closes
+  // the flyout right after, matching addFreeLine/addFreeServiceLine: an
+  // artisan who wants a second unit reopens the "+" button, they don't get
+  // it for free by the flyout staying open.
+  protected pickProduct(product: ProductProfile): void {
     this.addProductFromCatalog(product);
-    this.closePanelOnMobileAfterPick();
+    this.closePanels();
   }
 
   private createServiceLineGroup(initial?: {
@@ -456,6 +464,12 @@ export class InvoiceCreateLinesStepPage {
   // it's picked (name/amount both prefilled), so there's no reason to make
   // the artisan open the full form just to see it.
   private addServiceFromCatalog(service: ServiceProfile): void {
+    // Same "only the first pick stays linked" rule as addProductFromCatalog
+    // above, for the same reason: persistFreeEntities fires one update
+    // request per distinct catalogServiceId, so a second line for the same
+    // Service must create a new one instead of racing the first line's
+    // update.
+    const alreadyLinked = this.activeServiceIds().has(service.id);
     const group = this.createServiceLineGroup({
       serviceId: service.id,
       name: service.name,
@@ -466,7 +480,7 @@ export class InvoiceCreateLinesStepPage {
       weights: [],
       pricingMode: service.pricingMode,
       percentageBasisPoints: service.percentageBasisPoints,
-      catalogServiceId: service.id,
+      catalogServiceId: alreadyLinked ? null : service.id,
       activityCategory: service.activityCategory,
     });
     this.serviceLines.push(group);
@@ -490,27 +504,11 @@ export class InvoiceCreateLinesStepPage {
     this.uncollapseServiceLine(group);
   }
 
-  // Phase 13.5: same flyout toggle entry point as toggleProduct, for a Service.
-  protected toggleService(service: ServiceProfile): void {
-    const activeIndex = this.activeServiceLineIndex().get(service.id);
-    if (activeIndex != null) {
-      this.removeServiceLine(activeIndex);
-      return;
-    }
+  // Phase 13.5: same flyout entry point as pickProduct, for a Service —
+  // always adds another line and closes the flyout.
+  protected pickService(service: ServiceProfile): void {
     this.addServiceFromCatalog(service);
-    this.closePanelOnMobileAfterPick();
-  }
-
-  // Below the `sm` breakpoint (matching introExpanded and .fixed-add-flyout
-  // in styles.css) the catalog flyout is a full-screen bottom sheet, so
-  // leaving it open after a pick — the desktop multi-pick behaviour above —
-  // would keep hiding the card just added, including the quantity field the
-  // artisan needs to fill in next. Closing it here reveals that card; the
-  // artisan can still tap the "+" button again to pick another item.
-  private closePanelOnMobileAfterPick(): void {
-    if (!window.matchMedia('(min-width: 640px)').matches) {
-      this.closePanels();
-    }
+    this.closePanels();
   }
 
   // Phase 13.5 gallery redesign: opening one flyout closes the other, so

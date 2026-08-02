@@ -40,7 +40,12 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      CORS_ORIGIN: http://localhost:${FRONTEND_PORT}
+      # http://10.0.2.2 is the Android emulator's fixed alias for the host
+      # machine (see frontend/scripts/run-android.sh / `make android-dev`,
+      # `make android-demo`) — added unconditionally since it's meaningless
+      # outside an emulator's own virtual network, nothing else can ever
+      # send it as an Origin.
+      CORS_ORIGIN: http://localhost:${FRONTEND_PORT},http://10.0.2.2
       PORT: 3000
       # Unset/false for every normal `make dev` — `make demo` (Makefile) is
       # the only caller that sets DEMO_MODE=true in its own shell env before

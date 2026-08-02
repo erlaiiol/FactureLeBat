@@ -14,6 +14,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import { PlatformService } from '../../../core/services/platform.service';
 import { ReferralService } from '../../../core/services/referral.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
+import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
 import { ReferralCodePromptComponent } from '../../../shared/components/referral-code-prompt.component';
 
 function passwordsMatchValidator(group: AbstractControl): ValidationErrors | null {
@@ -25,7 +27,14 @@ function passwordsMatchValidator(group: AbstractControl): ValidationErrors | nul
 @Component({
   selector: 'app-register-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, ReferralCodePromptComponent],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BigButtonComponent,
+    ReferralCodePromptComponent,
+    IconEyeComponent,
+    IconEyeOffComponent,
+  ],
   templateUrl: './register.page.html',
 })
 export class RegisterPage {
@@ -40,6 +49,8 @@ export class RegisterPage {
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly googleLoginUrl = this.authService.googleLoginUrl();
+  protected readonly passwordVisible = signal(false);
+  protected readonly confirmPasswordVisible = signal(false);
 
   // Phase 29: a tapped referral link (web share, or a mobile Universal/App
   // Link — see app.component's appUrlOpen listener) carries ?ref=CODE.

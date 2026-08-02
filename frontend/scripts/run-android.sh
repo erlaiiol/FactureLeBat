@@ -11,10 +11,13 @@
 #
 # dev mode temporarily enables a cleartext-HTTP exception for your LAN IP
 # (AndroidManifest.xml + res/xml/network_security_config.xml, both normally
-# inert/commented — see the warnings inline in those files) so the emulator
-# can reach a backend running on your own machine, then reverts both files
-# on exit no matter how the script ends. Requires a clean git tree for
-# those two files going in, so a failed/interrupted run can never leave
+# inert/commented — see the warnings inline in those files) and points the
+# built app's apiBaseUrl at that same LAN IP on port 3000
+# (src/environments/environment.capacitor-dev.ts, ships with an inert
+# placeholder — see the comment in that file for why a relative apiBaseUrl,
+# as used in prod, resolves to the wrong port here), then reverts all three
+# files on exit no matter how the script ends. Requires a clean git tree for
+# those three files going in, so a failed/interrupted run can never leave
 # your working copy stuck mid-patch.
 #
 #   sh scripts/run-android.sh dev [local-host-ip]   # backend on your machine
@@ -36,6 +39,7 @@ command -v adb >/dev/null 2>&1 || {
 
 MANIFEST=android/app/src/main/AndroidManifest.xml
 NETSEC=android/app/src/main/res/xml/network_security_config.xml
+ENVFILE=src/environments/environment.capacitor-dev.ts
 
 if [ "$MODE" = "dev" ]; then
 	LOCAL_HOST=${2:-$(ipconfig getifaddr en0 2>/dev/null || true)}
@@ -44,15 +48,15 @@ if [ "$MODE" = "dev" ]; then
 		exit 1
 	fi
 
-	if [ -n "$(git status --porcelain -- "$MANIFEST" "$NETSEC" 2>/dev/null)" ]; then
-		echo "==> $MANIFEST ou $NETSEC a des changements non commités — commit/stash d'abord (ce script les modifie temporairement puis les restaure via 'git checkout')." >&2
+	if [ -n "$(git status --porcelain -- "$MANIFEST" "$NETSEC" "$ENVFILE" 2>/dev/null)" ]; then
+		echo "==> $MANIFEST, $NETSEC ou $ENVFILE a des changements non commités — commit/stash d'abord (ce script les modifie temporairement puis les restaure via 'git checkout')." >&2
 		exit 1
 	fi
 
 	echo "==> Build dev — API sur http://$LOCAL_HOST:3000 (backend/.env doit avoir CORS_ORIGIN incluant cette IP)"
 
 	restore_manifest_files() {
-		git checkout -- "$MANIFEST" "$NETSEC"
+		git checkout -- "$MANIFEST" "$NETSEC" "$ENVFILE"
 	}
 	trap restore_manifest_files EXIT
 
@@ -64,8 +68,9 @@ if [ "$MODE" = "dev" ]; then
 	sed -i '' 's#^    <application$#    <application\
         android:networkSecurityConfig="@xml/network_security_config"#' "$MANIFEST"
 	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$NETSEC"
+	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$ENVFILE"
 
-	npx ng build --configuration production
+	npx ng build --configuration production,capacitor-dev
 	CAPACITOR_LOCAL_HOST="$LOCAL_HOST" npx cap sync android
 else
 	echo "==> Build prod — API sur https://facturele.net (voir capacitor.config.ts)"

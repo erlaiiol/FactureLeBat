@@ -8,7 +8,9 @@ import {
   output,
 } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { needsCanvasPdfViewer } from '../utils/pdf-viewer-support.util';
 import { IconCloseComponent } from './icon-close.component';
+import { PdfCanvasViewerComponent } from './pdf-canvas-viewer.component';
 
 // A closable modal showing the "simili-pdf" in place, replacing the earlier
 // window.open(blobUrl, '_blank') popup — popups are blocked by some browsers
@@ -24,7 +26,7 @@ import { IconCloseComponent } from './icon-close.component';
 @Component({
   selector: 'app-pdf-preview-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconCloseComponent],
+  imports: [IconCloseComponent, PdfCanvasViewerComponent],
   templateUrl: './pdf-preview-modal.component.html',
 })
 export class PdfPreviewModalComponent {
@@ -35,6 +37,11 @@ export class PdfPreviewModalComponent {
   readonly closed = output<void>();
 
   protected readonly isOpen = computed(() => this.loading() || this.pdfBlobUrl() !== null);
+  // Native <iframe src="blob:...">, the cheap default, everywhere except
+  // Safari/iOS — see needsCanvasPdfViewer's own comment for why those need
+  // pdf.js instead. Read once: a mid-session engine switch isn't a real
+  // scenario worth reacting to.
+  protected readonly useCanvasViewer = needsCanvasPdfViewer();
 
   // iframe `src` is a sanitized context in Angular — bypassed here because
   // the URL is always one we created ourselves from a same-origin API blob

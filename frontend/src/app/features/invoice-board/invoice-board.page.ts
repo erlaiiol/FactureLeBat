@@ -168,15 +168,14 @@ export class InvoiceBoardPage {
   // pair at a time, cleared by clicking the same devis's link again.
   protected readonly highlightedPair = signal<{ devisId: string; factureId: string } | null>(null);
   // Client-repertory entry point: CustomerListPage's "Documents" button
-  // navigates here with ?clientId=&clientName= so the artisan lands on
-  // their full, unfiltered document list with that client's rows tinted
-  // (see isClientHighlighted/InvoiceListRowComponent.clientHighlighted) —
-  // deliberately not a hard filter, so re-sorting/re-filtering afterwards
-  // still shows which rows belong to that client rather than losing the
-  // context. Cleared only by dismissClientHighlight (the chip's close
-  // button next to the date filters), never by sorting/filtering.
-  protected readonly highlightedClientId = signal<string | null>(null);
-  protected readonly highlightedClientName = signal<string | null>(null);
+  // navigates here with ?clientId=&clientName= — scopes the list to that
+  // client's own devis/factures, same as search/dateFrom/dateTo below (see
+  // `filtered`), so it stays useful once an artisan has enough documents
+  // that a plain highlight would get lost in the list. Combines with
+  // search/date/sort like any other filter and only clears via
+  // clearClientFilter (the chip's close button next to the date filters).
+  protected readonly clientFilterId = signal<string | null>(null);
+  protected readonly clientFilterName = signal<string | null>(null);
   // Phase 23: which single facture row's status menu is open — at most one
   // at a time.
   protected readonly statusMenuInvoiceId = signal<string | null>(null);
@@ -195,7 +194,11 @@ export class InvoiceBoardPage {
     const search = this.search().trim().toLowerCase();
     const from = this.dateFrom();
     const to = this.dateTo();
+    const clientId = this.clientFilterId();
     return this.invoices().filter((invoice) => {
+      if (clientId && invoice.customerId !== clientId) {
+        return false;
+      }
       if (search && !invoice.customerName.toLowerCase().includes(search)) {
         return false;
       }
@@ -240,28 +243,11 @@ export class InvoiceBoardPage {
     return pair !== null && (pair.devisId === invoice.id || pair.factureId === invoice.id);
   }
 
-  protected isClientHighlighted(invoice: InvoiceWithTotals): boolean {
-    const clientId = this.highlightedClientId();
-    return clientId !== null && invoice.customerId === clientId;
-  }
-
-  // The chip next to the date filters — the only way this highlight ever
-  // clears, since sorting/filtering must leave it in place (see
-  // highlightedClientId's doc comment above).
-  protected dismissClientHighlight(): void {
-    this.highlightedClientId.set(null);
-    this.highlightedClientName.set(null);
-  }
-
-  private scrollToClientRow(): void {
-    const clientId = this.highlightedClientId();
-    if (!clientId) {
-      return;
-    }
-    const match = this.rows().find((invoice) => invoice.customerId === clientId);
-    if (match) {
-      this.scrollRowIntoView(match.id);
-    }
+  // The chip next to the date filters — the only way to remove the client
+  // filter once it's set, same as clearing search/dateFrom/dateTo would.
+  protected clearClientFilter(): void {
+    this.clientFilterId.set(null);
+    this.clientFilterName.set(null);
   }
 
   // Phase 26: toggles the shared highlight for a devis and the facture it
@@ -318,8 +304,8 @@ export class InvoiceBoardPage {
     const queryParams = this.route.snapshot.queryParamMap;
     const clientId = queryParams.get('clientId');
     if (clientId) {
-      this.highlightedClientId.set(clientId);
-      this.highlightedClientName.set(queryParams.get('clientName'));
+      this.clientFilterId.set(clientId);
+      this.clientFilterName.set(queryParams.get('clientName'));
     }
 
     this.invoiceService
@@ -329,11 +315,6 @@ export class InvoiceBoardPage {
         next: (invoices) => {
           this.invoices.set(invoices);
           this.loading.set(false);
-          if (this.highlightedClientId()) {
-            // Rows render on the next change-detection pass after the
-            // signal write above — the target row isn't in the DOM yet.
-            setTimeout(() => this.scrollToClientRow(), 0);
-          }
         },
         error: () => {
           this.loading.set(false);

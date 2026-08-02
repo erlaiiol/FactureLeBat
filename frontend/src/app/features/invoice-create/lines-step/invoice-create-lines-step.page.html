@@ -69,13 +69,13 @@
         @if (draftStore.products().length > 0) {
           <ul class="flex flex-col gap-2">
             @for (product of draftStore.products(); track product.id) {
-              @let activeIndex = activeProductLineIndex().get(product.id);
+              @let isActive = activeProductIds().has(product.id);
               <li>
                 <button
                   type="button"
-                  (click)="toggleProduct(product)"
+                  (click)="pickProduct(product)"
                   class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-primary-subtle/30"
-                  [class.bg-primary-subtle]="activeIndex != null"
+                  [class.bg-primary-subtle]="isActive"
                 >
                   <span>
                     <span class="block text-sm font-medium text-ink">{{ product.name }}</span>
@@ -83,7 +83,7 @@
                       {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
                     </span>
                   </span>
-                  @if (activeIndex != null) {
+                  @if (isActive) {
                     <span class="text-primary"><app-icon-check [size]="14" /></span>
                   }
                 </button>
@@ -139,13 +139,13 @@
         @if (draftStore.services().length > 0) {
           <ul class="flex flex-col gap-2">
             @for (service of draftStore.services(); track service.id) {
-              @let activeServiceIndex = activeServiceLineIndex().get(service.id);
+              @let isActive = activeServiceIds().has(service.id);
               <li>
                 <button
                   type="button"
-                  (click)="toggleService(service)"
+                  (click)="pickService(service)"
                   class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-info-subtle/30"
-                  [class.bg-info-subtle]="activeServiceIndex != null"
+                  [class.bg-info-subtle]="isActive"
                 >
                   <span>
                     <span class="block text-sm font-medium text-ink">{{ service.name }}</span>
@@ -157,7 +157,7 @@
                       }
                     </span>
                   </span>
-                  @if (activeServiceIndex != null) {
+                  @if (isActive) {
                     <span class="text-info"><app-icon-check [size]="14" /></span>
                   }
                 </button>

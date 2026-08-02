@@ -58,15 +58,15 @@
         </div>
       </div>
     </div>
-    @if (highlightedClientId()) {
+    @if (clientFilterId()) {
       <button
         type="button"
-        (click)="dismissClientHighlight()"
-        title="Désactiver le surlignage client"
+        (click)="clearClientFilter()"
+        title="Afficher tous les documents"
         class="flex items-center gap-1.5 rounded-lg border border-primary-subtle-border bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-fg hover:brightness-95"
       >
         <span>{{
-          highlightedClientName() ? 'Client : ' + highlightedClientName() : 'Client surligné'
+          clientFilterName() ? 'Client : ' + clientFilterName() : 'Filtré par client'
         }}</span>
         <app-icon-close [size]="14" />
       </button>
@@ -155,7 +155,6 @@
               [invoice]="item"
               [attachedFactureNumber]="attachedFactureOf(item)?.number ?? null"
               [highlighted]="isHighlighted(item)"
-              [clientHighlighted]="isClientHighlighted(item)"
               [converting]="convertingDevisId() === item.id"
               [sharing]="sharingInvoiceId() === item.id"
               [statusMenuOpen]="isStatusMenuOpen(item.id)"

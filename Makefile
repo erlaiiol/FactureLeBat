@@ -1,4 +1,4 @@
-.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-dev android-prod ios-dev ios-prod
+.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-dev android-prod android-demo ios-dev ios-prod
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build -V
@@ -116,15 +116,34 @@ android: mobile-build
 # `ios`/`android`, an already-booted (or bootable) emulator/simulator, and
 # for *-dev, a backend actually reachable on your LAN — see the scripts'
 # own comments for exactly what each mode does.
-#   make android-dev [LOCAL_HOST=192.168.1.23]   # backend on your machine
+#   make android-dev LOCAL_HOST=10.0.2.2   # backend on your machine
 #   make android-prod                            # real API domain
-#   make ios-dev [LOCAL_HOST=192.168.1.23]
+#   make ios-dev LOCAL_HOST=10.0.2.2
 #   make ios-prod
 android-dev:
 	sh frontend/scripts/run-android.sh dev $(LOCAL_HOST)
 
 android-prod:
 	sh frontend/scripts/run-android.sh prod
+
+# Screenshot/walkthrough build: brings up the throwaway `make demo` stack
+# (facturele-demo project, seeded with the two fictitious tenants — see
+# infra/demo-seed.sh) and installs a dev-mode build of the app on the
+# emulator pointed at it, so the login page's one-click "Démo — accès en un
+# clic" buttons (DEMO_MODE=true) are there immediately — no typing
+# credentials before every round of screenshots.
+#
+# Defaults LOCAL_HOST to 10.0.2.2, the Android emulator's fixed alias for
+# the host machine — unlike android-dev's LOCAL_HOST, this one doesn't need
+# to be your real LAN IP, since the emulator that's screenshotting the demo
+# and the backend it's hitting are both always on this same machine. Override
+# it only if you're pointing a physical device at the demo stack instead
+# (needs that IP added to infra/docker-compose.yml's CORS_ORIGIN too).
+# `make demo-down` when you're done — see that target's own comment.
+#   make android-demo LOCAL_HOST=10.0.2.2
+android-demo:
+	$(MAKE) demo
+	sh frontend/scripts/run-android.sh dev $(if $(LOCAL_HOST),$(LOCAL_HOST),10.0.2.2)
 
 ios-dev:
 	sh frontend/scripts/run-ios.sh dev $(LOCAL_HOST)

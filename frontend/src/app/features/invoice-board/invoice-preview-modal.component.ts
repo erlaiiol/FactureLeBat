@@ -11,6 +11,8 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { IconCloseComponent } from '../../shared/components/icon-close.component';
+import { PdfCanvasViewerComponent } from '../../shared/components/pdf-canvas-viewer.component';
+import { needsCanvasPdfViewer } from '../../shared/utils/pdf-viewer-support.util';
 
 // Opened by clicking a row in InvoiceBoardPage's list (see
 // InvoiceListRowComponent.rowClick) — combines what used to be two separate,
@@ -29,7 +31,7 @@ import { IconCloseComponent } from '../../shared/components/icon-close.component
 @Component({
   selector: 'app-invoice-preview-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconCloseComponent],
+  imports: [IconCloseComponent, PdfCanvasViewerComponent],
   templateUrl: './invoice-preview-modal.component.html',
 })
 export class InvoicePreviewModalComponent {
@@ -47,6 +49,8 @@ export class InvoicePreviewModalComponent {
   readonly createFromDevis = output<void>();
 
   protected readonly isDevis = computed(() => this.invoice()?.documentType === 'DEVIS');
+  // See PdfPreviewModalComponent's identical field for why.
+  protected readonly useCanvasViewer = needsCanvasPdfViewer();
 
   protected readonly safeUrl = computed<SafeResourceUrl | null>(() => {
     const url = this.pdfBlobUrl();

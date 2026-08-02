@@ -6,12 +6,21 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DemoProfile } from '../../../core/models/auth.model';
 import { PlatformService } from '../../../core/services/platform.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
+import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
 import { ReferralCodePromptComponent } from '../../../shared/components/referral-code-prompt.component';
 
 @Component({
   selector: 'app-login-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, BigButtonComponent, ReferralCodePromptComponent],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BigButtonComponent,
+    ReferralCodePromptComponent,
+    IconEyeComponent,
+    IconEyeOffComponent,
+  ],
   templateUrl: './login.page.html',
 })
 export class LoginPage {
@@ -24,6 +33,7 @@ export class LoginPage {
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly googleLoginUrl = this.authService.googleLoginUrl();
+  protected readonly passwordVisible = signal(false);
 
   // Empty on every real deployment (DEMO_MODE unset server-side, see
   // AuthService.getDemoProfiles on the backend) — the section below simply

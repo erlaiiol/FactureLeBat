@@ -24,6 +24,10 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "pdf.worker.min.mjs",
+                "input": "node_modules/pdfjs-dist/build"
               }
             ],
             "styles": [
@@ -68,6 +72,14 @@
               "extractLicenses": false,
               "sourceMap": true,
               "index": "src/index.dev.html"
+            },
+            "capacitor-dev": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.capacitor-dev.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
