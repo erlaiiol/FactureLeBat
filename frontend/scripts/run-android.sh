@@ -12,12 +12,14 @@
 # dev mode temporarily enables a cleartext-HTTP exception for your LAN IP
 # (AndroidManifest.xml + res/xml/network_security_config.xml, both normally
 # inert/commented — see the warnings inline in those files), points the
-# built app's apiBaseUrl at that same LAN IP on port 3000
-# (src/environments/environment.capacitor-dev.ts, ships with an inert
-# placeholder — see the comment in that file for why a relative apiBaseUrl,
-# as used in prod, resolves to the wrong port here), and relaxes the app's
-# CSP connect-src to allow that same origin (src/index.capacitor-dev.html —
-# the WebView's own origin and the local API are NOT same-origin here, unlike
+# built app's apiBaseUrl at that same LAN IP on port 3000 and reflects
+# whether google-services.json exists (src/environments/environment.capacitor-dev.ts,
+# ships with inert placeholders — see the comments in that file for both:
+# why a relative apiBaseUrl, as used in prod, resolves to the wrong port
+# here, and why calling PushNotifications.register() without a real Firebase
+# config crashes the whole app natively), and relaxes the app's CSP
+# connect-src to allow that same origin (src/index.capacitor-dev.html — the
+# WebView's own origin and the local API are NOT same-origin here, unlike
 # real prod/store builds, which is what index.html's stricter CSP assumes),
 # then reverts all four files on exit no matter how the script ends. Requires
 # a clean git tree for those four files going in, so a failed/interrupted run
@@ -74,6 +76,9 @@ if [ "$MODE" = "dev" ]; then
 	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$NETSEC"
 	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$ENVFILE"
 	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$INDEXFILE"
+	if [ -f android/app/google-services.json ]; then
+		sed -i '' 's#pushNotificationsAvailable: false#pushNotificationsAvailable: true#' "$ENVFILE"
+	fi
 
 	npx ng build --configuration production,capacitor-dev
 	# The application builder keeps the source index filename as-is in dist/

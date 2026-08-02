@@ -23,6 +23,17 @@ export class PushRegistrationService {
     if (!Capacitor.isNativePlatform()) {
       return;
     }
+    // environment.*.ts sets this from whether google-services.json/
+    // GoogleService-Info.plist was ever dropped in (see that file's own
+    // comment) — without it, Firebase is never initialized natively, and
+    // PushNotifications.register() below throws an uncaught native exception
+    // that kills the whole app. The try/catch below can't reach it: Capacitor's
+    // own Bridge.java re-throws any exception a plugin method raises
+    // synchronously on its own handler thread, crashing the process before it
+    // ever becomes a rejected promise.
+    if (!environment.pushNotificationsAvailable) {
+      return;
+    }
     try {
       const permission = await PushNotifications.requestPermissions();
       if (permission.receive !== 'granted') {

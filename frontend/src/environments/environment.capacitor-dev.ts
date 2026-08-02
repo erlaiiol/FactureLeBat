@@ -12,4 +12,16 @@
 // resolve to the wrong port and every request would fail to connect.
 export const environment = {
   apiBaseUrl: 'http://REPLACE_WITH_CAPACITOR_LOCAL_HOST:3000/api',
+  // android/app/build.gradle only applies the google-services Gradle plugin
+  // (which is what actually calls FirebaseApp.initializeApp() at startup)
+  // when android/app/google-services.json exists — itself only ever dropped
+  // in by hand, see docs/deployment.md. Without it, PushNotifications.register()
+  // (see push-registration.service.ts) throws an uncaught native
+  // IllegalStateException that kills the whole app — a JS try/catch can't
+  // reach it, since Capacitor's own Bridge.java re-throws any exception a
+  // plugin method raises synchronously on its own handler thread, crashing
+  // the process before it ever becomes a rejected promise. Ships false here
+  // (safe default for a machine that hasn't done that one-time setup);
+  // scripts/run-android.sh (dev mode) flips it to true when the file exists.
+  pushNotificationsAvailable: false,
 };
