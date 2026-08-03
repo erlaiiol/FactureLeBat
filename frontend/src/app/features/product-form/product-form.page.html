@@ -33,6 +33,29 @@
     @if (importErrorMessage(); as message) {
       <p class="text-sm font-medium text-danger">{{ message }}</p>
     }
+    @if (showHtmlFallback()) {
+      <div class="mt-2 flex flex-col gap-2 border-t border-line pt-3">
+        <p class="text-xs text-ink-soft">
+          Ouvrez la page produit dans votre navigateur, faites un clic droit &rarr; « Afficher le
+          code source de la page » (ou Ctrl+U / Cmd+Option+U), puis copiez-collez tout le contenu
+          ici.
+        </p>
+        <textarea
+          [formControl]="importHtml"
+          rows="4"
+          placeholder="Collez ici le code source de la page produit"
+          class="w-full rounded-lg border border-line px-4 py-3 font-mono text-xs"
+        ></textarea>
+        <button
+          type="button"
+          [disabled]="importing()"
+          (click)="importFromPastedHtml()"
+          class="self-start rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-fg hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {{ importing() ? 'Extraction…' : 'Extraire depuis ce code source' }}
+        </button>
+      </div>
+    }
   </div>
 }
 

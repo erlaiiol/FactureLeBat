@@ -18,7 +18,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 // an explicit `assets` entry in angular.json (pdf.worker.min.mjs -> /).
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
-// The Safari/iOS fallback for PdfPreviewModalComponent/
+// The Safari/iOS/Capacitor-native fallback for PdfPreviewModalComponent/
 // InvoicePreviewModalComponent's native `<iframe src="blob:...">` — see
 // needsCanvasPdfViewer's own comment for why. Decodes the exact same PDF
 // bytes PdfService generated and paints each page onto its own <canvas>,

@@ -31,8 +31,12 @@ export class ProductController {
   // tenant-scoped — this never touches Prisma, see ProductImportService.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('import')
-  importFromUrl(@Body() dto: ImportProductDto): Promise<ImportedProductDraft> {
-    return this.productImportService.importFromUrl(dto.url);
+  importFromUrl(
+    @Body() dto: ImportProductDto,
+  ): Promise<ImportedProductDraft> | ImportedProductDraft {
+    return dto.html
+      ? this.productImportService.importFromHtml(dto.url, dto.html)
+      : this.productImportService.importFromUrl(dto.url);
   }
 
   @Get(':id')

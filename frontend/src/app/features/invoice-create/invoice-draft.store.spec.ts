@@ -25,6 +25,7 @@ const companyFixture: CompanyProfile = {
   cotisationPrestationBicBasisPoints: 2120,
   cotisationPrestationBncBasisPoints: 2110,
   versementLiberatoireOptIn: false,
+  hasLogo: false,
 };
 
 const customerFixture: InvoiceCustomerDraft = {

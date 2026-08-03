@@ -34,8 +34,11 @@ export class ProductService {
     return this.getAll().pipe(tap((products) => this._all.set(products)));
   }
 
-  importFromUrl(url: string): Observable<ImportedProductDraft> {
-    return this.http.post<ImportedProductDraft>(`${this.baseUrl}/import`, { url });
+  // `html` is the fallback path for sites (leroymerlin.fr, sfic.com...)
+  // whose bot protection blocks the backend's own fetch — the caller's
+  // browser fetched the page instead and pastes its source here.
+  importFromUrl(url: string, html?: string): Observable<ImportedProductDraft> {
+    return this.http.post<ImportedProductDraft>(`${this.baseUrl}/import`, { url, html });
   }
 
   getById(id: string): Observable<ProductProfile> {

@@ -131,5 +131,34 @@ describe('Product pipeline (e2e)', () => {
     ])('rejects a request targeting a blocked address: %s (%s)', (url) => {
       return authedRequest(app, session).post('/api/products/import').send({ url }).expect(400);
     });
+
+    // Fallback for sites whose bot protection (DataDome, WAF...) blocks the
+    // server-side fetch above — the artisan's own browser fetched the page
+    // instead, so no network call happens here at all, just extraction.
+    it('extracts a draft from pasted HTML without making any network call', async () => {
+      const html = `
+        <html>
+          <head>
+            <title>Colle carrelage sol et mur intérieur gris 5 kg</title>
+            <script type="application/ld+json">
+              {"@type":"Product","name":"Colle carrelage sol et mur intérieur gris 5 kg",
+               "description":"Mortier colle sol interieur Gris 5kg",
+               "offers":{"@type":"Offer","price":"8.96","priceCurrency":"EUR"}}
+            </script>
+          </head>
+          <body></body>
+        </html>
+      `;
+
+      const response = await authedRequest(app, session)
+        .post('/api/products/import')
+        .send({ url: 'https://www.castorama.fr/some-product.prd', html })
+        .expect(201);
+
+      const draft = response.body as { name: string; priceCents: number; supplierUrl: string };
+      expect(draft.name).toBe('Colle carrelage sol et mur intérieur gris 5 kg');
+      expect(draft.priceCents).toBe(896);
+      expect(draft.supplierUrl).toBe('https://www.castorama.fr/some-product.prd');
+    });
   });
 });

@@ -33,4 +33,20 @@ export class ProductImportService {
       );
     }
   }
+
+  // No network call at all — the HTML was already fetched by the artisan's
+  // own browser (which sites like leroymerlin.fr/sfic.com don't block the
+  // way they block SafeFetcherService's server-side fetch), so there's
+  // nothing here for SafeFetcherService/ip-guard to protect against. Pure
+  // delegation to the same extractor importFromUrl uses.
+  importFromHtml(url: string, html: string): ImportedProductDraft {
+    try {
+      return this.extractor.extract(html, url);
+    } catch (error) {
+      this.logger.error(`Unexpected error extracting pasted product HTML: ${String(error)}`);
+      throw new BadRequestException(
+        "Impossible d'extraire les informations de ce code source. Vous pouvez remplir le formulaire manuellement.",
+      );
+    }
+  }
 }

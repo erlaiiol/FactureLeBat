@@ -3,8 +3,18 @@
 dev:
 	docker compose -f infra/docker-compose.yml up --build -V
 
+# Also seeds a real Play Store / App Store reviewer login into the
+# production database (infra/playstore-demo-seed.sh, backend/prisma/
+# seed-playstore-demo.ts) — Google Play's pre-launch review and Apple's App
+# Review both require working demo credentials, which this account provides
+# via the app's normal email/password login (never DEMO_MODE, which stays
+# off in production — see `demo` below). One-time in practice: the seed
+# no-ops once the account exists, and it then survives every later `make
+# deploy` since that never touches the database. See android-prod/ios-prod
+# below for where this account actually gets reviewed.
 prod:
 	docker compose -f infra/docker-compose.prod.yml up --build -d
+	sh infra/playstore-demo-seed.sh
 
 # Throwaway sales-demo stack — same dev image/mounts as `make dev` (infra/
 # docker-compose.yml), just brought up under its own compose project name
@@ -120,6 +130,12 @@ android: mobile-build
 #   make android-prod                            # real API domain
 #   make ios-dev LOCAL_HOST=10.0.2.2
 #   make ios-prod
+#
+# *-prod builds point at the real API domain, which is what Google
+# Play/Apple actually review — that's the account `make prod` seeds (see
+# above): store-review@facturele.app, typed into the app's normal login
+# form, entered as the reviewer credentials in Play Console's "app access"
+# section / App Store Connect's review notes.
 android-dev:
 	sh frontend/scripts/run-android.sh dev $(LOCAL_HOST)
 

@@ -49,6 +49,12 @@ export class ProductFormPage {
   protected readonly importUrl = this.fb.nonNullable.control('');
   protected readonly importing = signal(false);
   protected readonly importErrorMessage = signal<string | null>(null);
+  // Revealed when the automatic fetch fails — some sites' bot protection
+  // (DataDome, WAF...) blocks the backend's server-side fetch but not the
+  // artisan's own browser, so they can paste the page source they already
+  // have open instead of giving up to a fully manual form.
+  protected readonly showHtmlFallback = signal(false);
+  protected readonly importHtml = this.fb.nonNullable.control('');
 
   // Used to phrase the packaging field's hint in the unit the artisan just
   // picked (e.g. "Vendu par colis de ... m²").
@@ -124,6 +130,18 @@ export class ProductFormPage {
   }
 
   protected importFromUrl(): void {
+    this.runImport(undefined);
+  }
+
+  protected importFromPastedHtml(): void {
+    const html = this.importHtml.value.trim();
+    if (!html) {
+      return;
+    }
+    this.runImport(html);
+  }
+
+  private runImport(html: string | undefined): void {
     if (this.importing()) {
       return; // already in flight — ignore a fast double click/tap
     }
@@ -136,11 +154,12 @@ export class ProductFormPage {
     this.importErrorMessage.set(null);
 
     this.productService
-      .importFromUrl(url)
+      .importFromUrl(url, html)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (draft) => {
           this.importing.set(false);
+          this.showHtmlFallback.set(false);
           // Autofill only — every field stays fully editable afterward, and
           // nothing here is saved until the artisan submits the form (see
           // conventions.md's "autofill, not a lock" rule).
@@ -156,9 +175,16 @@ export class ProductFormPage {
         },
         error: () => {
           this.importing.set(false);
-          this.importErrorMessage.set(
-            "Impossible d'extraire les informations de cette page — vous pouvez remplir le formulaire à la main.",
-          );
+          if (html) {
+            this.importErrorMessage.set(
+              "Impossible d'extraire les informations de ce code source — vous pouvez remplir le formulaire à la main.",
+            );
+          } else {
+            this.importErrorMessage.set(
+              "Ce site bloque l'import automatique. Vous pouvez coller le code source de la page ci-dessous, ou remplir le formulaire à la main.",
+            );
+            this.showHtmlFallback.set(true);
+          }
         },
       });
   }
