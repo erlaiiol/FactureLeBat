@@ -128,6 +128,7 @@ describe('ManualInvoiceDraftStore', () => {
       const store = createStore();
       store.addCustomColumn();
       const customColumnId = store.columns()[4].id;
+      store.setCellValue(store.rows()[0].id, descriptionColumnId(store), 'Parquet chêne massif');
       store.setCellValue(store.rows()[0].id, customColumnId, 'Chantier Dupont');
 
       const request = store.buildInvoiceRequest();

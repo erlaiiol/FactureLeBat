@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "211973026193",
+    "project_id": "facturele-e7c16",
+    "storage_bucket": "facturele-e7c16.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:211973026193:android:9449074153b647d5a8aa30",
+        "android_client_info": {
+          "package_name": "fr.facturele.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB70Tl0PxpCOXXrVrpCbgbZ70kwIys7wqE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

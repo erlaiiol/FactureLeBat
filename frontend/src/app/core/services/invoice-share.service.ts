@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { InvoiceWithTotals } from '../models/invoice.model';
 import { InvoiceService } from './invoice.service';
 import { MailSettingsService } from './mail-settings.service';
+import { RatingPromptService } from './rating-prompt.service';
 import { ToastService } from './toast.service';
 
 // 'compose-email' means the caller must open its own
@@ -25,6 +26,7 @@ export class InvoiceShareService {
   private readonly http = inject(HttpClient);
   private readonly invoiceService = inject(InvoiceService);
   private readonly mailSettingsService = inject(MailSettingsService);
+  private readonly ratingPromptService = inject(RatingPromptService);
   private readonly toastService = inject(ToastService);
 
   async share(invoice: InvoiceWithTotals): Promise<ShareOutcome> {
@@ -37,6 +39,7 @@ export class InvoiceShareService {
     if ('canShare' in navigator && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: fileName });
+        void this.ratingPromptService.notifyInvoiceShared();
         return 'shared';
       } catch (error) {
         if ((error as Error)?.name === 'AbortError') {
@@ -61,6 +64,7 @@ export class InvoiceShareService {
       `&body=${encodeURIComponent(template.text)}`;
     window.location.href = mailto;
     this.toastService.success('PDF téléchargé — joignez-le à l’email qui vient de s’ouvrir.');
+    void this.ratingPromptService.notifyInvoiceShared();
     return 'mailto-fallback';
   }
 

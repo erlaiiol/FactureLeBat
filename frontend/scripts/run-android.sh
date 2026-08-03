@@ -5,9 +5,11 @@
 # when you actually need the debugger attached).
 #
 # "release" here means the release *build type* (minify/proguard rules
-# apply, android:debuggable=false) signed with the debug keystore Gradle
-# auto-generates (see ../android/app/build.gradle) — installable on an
-# emulator with zero signing setup, but NOT a store-distribution artifact.
+# apply, android:debuggable=false), signed with the real release key via
+# ../android/keystore.properties (gitignored — fill in storePassword/
+# keyPassword there once; see ../android/app/build.gradle). Installing over
+# a copy previously signed with the old debug keystore fails with an
+# INSTALL_FAILED_UPDATE_INCOMPATIBLE signature mismatch — uninstall first.
 #
 # dev mode temporarily enables a cleartext-HTTP exception for your LAN IP
 # (AndroidManifest.xml + res/xml/network_security_config.xml, both normally

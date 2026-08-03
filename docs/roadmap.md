@@ -1631,3 +1631,28 @@ Replace the single flat 15€/month "Premium" plan (Phase 14) with three tiers �
 - **`sourcing-panel.component.ts`'s `friendlyErrorMessage` and `stats-reports.page.ts`'s `analyticsLocked` signal use the same 402+discriminator detection as the form pages but render a "Voir les offres" CTA instead of a "Réessayer" button** — retrying a locked-feature call can never succeed, so offering to retry would be actively misleading; both navigate to `/abonnement` on click.
 - **Existing e2e/seed fixtures needed `grantedPlanTier` alongside `premiumGrantedUntil`** wherever they write it directly rather than through `grantPlanDays` — `test/invoice.e2e-spec.ts`'s shared-company setup and `prisma/seed-demo.ts`'s two demo tenants both set `grantedPlanTier: PlanTier.PREMIUM` now, otherwise `getEffectivePlanTier` would resolve them to no plan at all (a valid `premiumGrantedUntil` with a `null` tier grants nothing, by design — see the schema comment on `Company.grantedPlanTier`).
 - **One pre-existing, unrelated test failure was found while verifying this phase** (`manual-invoice-draft.store.spec.ts`'s "appends a CUSTOM column positionally" test) — confirmed via `git diff HEAD` on that file (empty) that it predates this phase's changes entirely; left as-is, out of scope here.
+---
+
+# Phase 31 — Store Rating Prompt (In-App Review)
+
+## Objective
+
+Nudge an artisan on iOS/Android toward leaving an App Store/Play Store rating at a genuine positive moment, using each platform's native in-app review dialog (`SKStoreReviewController` on iOS, the Play In-App Review API on Android) instead of a custom modal or a link out to the store listing. Mobile-only (Phase 22's Capacitor shell) — no equivalent on web, since there's no store listing to rate there.
+
+## Features
+
+- [x] `@capacitor-community/in-app-review` added and synced into both native shells (`npx cap sync` — plugin registration only, no manual Xcode/Android Studio wiring needed since neither platform's review API requires an entitlement or permission)
+- [x] `RatingPromptService` (`core/services/rating-prompt.service.ts`, `providedIn: 'root'`) — a no-op on web (`Capacitor.isNativePlatform()` guard, same precedent as `PushRegistrationService`/`PlatformService`)
+- [x] `InvoiceShareService.share()` calls `RatingPromptService.notifyInvoiceShared()` after a real completed send (`'shared'` or `'mailto-fallback'` outcome) — the moment an artisan has actually gotten an invoice out the door to a client, the same "positive moment" reasoning as Phase 22.5's rewarded-ads note that a subscribe path is offered rather than blocked. A `'compose-email'` outcome doesn't count — it only opens the existing SMTP compose modal and hasn't sent anything yet.
+- [x] Own-device trigger heuristic (localStorage, key `facturele.ratingPrompt.v1`, same "own key" precedent as `ManualInvoiceDraftStore`): asks no earlier than the 3rd completed share, at most 3 times ever, at least 90 days apart
+
+## Non-goals
+
+- No custom "are you enjoying FactureLe?" pre-screen that only calls `requestReview()`/the Play API for artisans who answer positively. Apple's guideline 2.3.1 treats gating the native review dialog behind your own happy-path filter as manipulative; this phase calls the native API directly at the trigger point above and leaves the actual display decision entirely to iOS/Android's own frequency throttling (a few times a year, not observable or controllable from this app).
+- No backend involvement at all — unlike Phase 8's onboarding-tour state (which lives on the `Company` singleton so it follows the artisan across devices), a rating-prompt nudge is a one-off, device-local nicety with no cross-device value, so it stays in `localStorage` exactly like `ManualInvoiceDraftStore`'s draft state.
+- No way to detect whether the OS actually showed a dialog or what the artisan did with it — `requestReview()` resolves `Promise<void>` regardless, by both platforms' design (Apple explicitly hides this to stop apps from gaming the signal).
+
+## Notes
+
+- Depends on Phase 22 (Capacitor mobile shell) and reuses `InvoiceShareService` (pre-existing, not introduced by this phase).
+- Not exercised on a real device (no Xcode/Android Studio in this environment) — same honest caveat Phase 22/29 already carry for native-only behavior. `npx cap sync` completed cleanly and registered the plugin in both `Package.swift` and the Android Gradle project; the two respective native review flows themselves (and their own real-world frequency throttling) can only be verified on a physical/simulated device signed into a real Play Store/App Store test track.

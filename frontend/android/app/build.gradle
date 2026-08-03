@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "fr.facturele.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,23 +22,27 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            // Signed with the debug keystore Gradle auto-generates
-            // (~/.android/debug.keystore) purely so `assembleRelease` is
-            // installable on an emulator via `make android-dev`/`android-prod`
-            // (frontend/scripts/run-android.sh) without any signing setup.
-            // This is NOT a store-distribution signature — before ever
-            // uploading to the Play Store, generate a real release keystore
-            // and point this at it instead (`keytool -genkey -v -keystore
-            // release.keystore -keyalg RSA -keysize 2048 -validity 10000
-            // -alias facturele`, kept outside git, referenced via
-            // gradle.properties), or the app couldn't receive updates after
-            // the first ever upload since Play requires the same signature
-            // release over release.
-            signingConfig signingConfigs.debug
+            // Real release-signing key, loaded from keystore.properties
+            // (gitignored, not committed). See android/keystore.properties
+            // for the store path/alias — fill in storePassword/keyPassword
+            // there before running bundleRelease. Play requires the same
+            // signature release over release, so this key must never be
+            // regenerated or lost once the first version is uploaded.
+            signingConfig signingConfigs.release
         }
     }
 }
