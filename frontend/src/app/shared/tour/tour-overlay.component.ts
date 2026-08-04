@@ -88,7 +88,7 @@ export class TourOverlayComponent {
     };
     const popoverSize = this.measuredPopoverSize() ?? POPOVER_ESTIMATE;
     if (this.tourService.currentStep()?.popoverPlacement === 'corner') {
-      return computeCornerPosition(popoverSize, viewport);
+      return computeCornerPosition(popoverSize, viewport, this.targetRect());
     }
     return computePopoverPosition(this.targetRect(), popoverSize, viewport);
   });
@@ -213,7 +213,16 @@ export class TourOverlayComponent {
   private scrollToCurrentAnchorAndMeasure(): void {
     const anchorId = this.tourService.currentStep()?.anchorId;
     const element = anchorId ? this.anchorRegistry.get(anchorId)?.nativeElement : undefined;
-    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // 'nearest' (not 'center'): a target already fully visible isn't moved
+    // at all, so a search field that already sits near the top of the page
+    // just stays there — leaving the popover the full remaining height to
+    // place itself in. Forcibly centering used to squeeze the target into
+    // the exact middle of a short/keyboard-shrunk viewport, which can leave
+    // LESS room on both sides than the popover needs on either — the
+    // computeCornerPosition fallback then has nowhere left to put it that
+    // doesn't cover the target, which is exactly the "bulle qui gêne le
+    // typing" bug this works around at the source instead.
+    element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     this.recomputeTargetRect();
     this.keepMeasuringWhileSettling();
   }

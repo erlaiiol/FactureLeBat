@@ -63,4 +63,33 @@ describe('computeCornerPosition', () => {
     expect(position.top).toBeGreaterThanOrEqual(0);
     expect(position.left).toBeGreaterThanOrEqual(0);
   });
+
+  it('still pins bottom-right when a target is given but the default corner already clears it', () => {
+    const target = { top: 20, left: 20, width: 100, height: 40 };
+    const position = computeCornerPosition(POPOVER, VIEWPORT, target);
+    expect(position).toEqual(computeCornerPosition(POPOVER, VIEWPORT));
+  });
+
+  it('picks a different corner when the target overlaps the default bottom-right one', () => {
+    // A search input near the bottom of a short/keyboard-shrunk mobile
+    // viewport — pinning the popover to its usual bottom-right corner would
+    // cover the very input the step wants typed into (e.g.
+    // 'catalog-search' in tour-definitions.ts), so it should hop to a
+    // corner that actually clears it instead.
+    const shortViewport = { width: 360, height: 320 };
+    const target = { top: 250, left: 100, width: 100, height: 60 };
+    const defaultCorner = computeCornerPosition(POPOVER, shortViewport);
+
+    const position = computeCornerPosition(POPOVER, shortViewport, target);
+
+    expect(position).not.toEqual(defaultCorner);
+    expect(position.left).toBe(defaultCorner.left); // still right-aligned — only top needed to move
+    expect(position.top).toBe(12); // hops to the top-right corner
+  });
+
+  it('falls back to the default bottom-right corner when every corner overlaps a near-full-viewport target', () => {
+    const target = { top: 0, left: 0, width: VIEWPORT.width, height: VIEWPORT.height };
+    const position = computeCornerPosition(POPOVER, VIEWPORT, target);
+    expect(position).toEqual(computeCornerPosition(POPOVER, VIEWPORT));
+  });
 });

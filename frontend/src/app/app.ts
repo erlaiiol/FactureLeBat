@@ -91,6 +91,14 @@ export class App {
   @ViewChild('mobileNavRoot') private readonly mobileNavRootRef?: ElementRef<HTMLElement>;
   protected readonly mobileMenuOpen = signal(false);
 
+  // Set only by the tour-reveal effect below (constructor), never by
+  // toggleMobileMenu/closeMobileMenu — tracks "the tour is the one that
+  // opened this, not the artisan" so the effect knows whether it's safe to
+  // close the panel again once the step moves on. If the artisan opened it
+  // themselves (this stays false), the tour leaves it exactly as they left
+  // it instead of yanking it shut on them.
+  private tourOpenedMobileMenu = false;
+
   // Measured and republished as the `--nav-height` CSS variable — see
   // observeTopBarHeight below and app.html's #topBar.
   @ViewChild('topBar') private readonly topBarRef?: ElementRef<HTMLElement>;
@@ -183,6 +191,32 @@ export class App {
       }
       untracked(() => {
         setTimeout(() => this.observeTopBarHeight());
+      });
+    });
+
+    // The 'menu' step (tour-definitions.ts) spotlights "Mes documents" in
+    // the nav — on a narrow viewport that link only exists inside the
+    // collapsible hamburger panel (app.html), closed by default. Without
+    // this, TourOverlayComponent had nothing real to measure there and the
+    // spotlight rendered as a stray box (see TourAnchorRegistryService's
+    // own comment on why more than one element can share an anchor id).
+    // Reads/writes mobileMenuOpen only inside untracked() so this effect
+    // reacts solely to the tour stepping, never to the artisan's own
+    // hamburger taps — otherwise closing it by hand mid-step would
+    // immediately trigger the effect again and force it back open, which
+    // is exactly the "énervant" behavior to avoid.
+    effect(() => {
+      const anchorId = this.tourService.currentStep()?.anchorId;
+      untracked(() => {
+        if (anchorId === 'nav-my-documents') {
+          if (!this.mobileMenuOpen()) {
+            this.mobileMenuOpen.set(true);
+            this.tourOpenedMobileMenu = true;
+          }
+        } else if (this.tourOpenedMobileMenu) {
+          this.mobileMenuOpen.set(false);
+          this.tourOpenedMobileMenu = false;
+        }
       });
     });
 

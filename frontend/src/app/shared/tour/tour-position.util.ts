@@ -75,7 +75,7 @@ export function computePopoverPosition(
   // whenever the generic math produces an overlap covers every OTHER step
   // that could hit this without needing its own hardcoded escape hatch.
   if (rectsOverlap({ ...position, ...popover }, target)) {
-    return computeCornerPosition(popover, viewport);
+    return computeCornerPosition(popover, viewport, target);
   }
 
   return position;
@@ -89,9 +89,43 @@ export function computePopoverPosition(
 // the step is asking for. Pinning to a fixed, anchor-independent corner
 // (see TourStepDefinition.popoverPlacement) sidesteps that entirely: the
 // spotlight still highlights the real anchor, only the text card moves.
-export function computeCornerPosition(popover: TourSize, viewport: TourSize): TourPoint {
-  return {
+//
+// `target`, when given, is used to pick WHICH corner: bottom-right first
+// (unchanged default/back-compat when omitted — see the 'independent of
+// any target' spec), falling through the other three corners for one that
+// actually clears it. A target near the top of a short, keyboard-shrunk
+// mobile viewport (e.g. a search field right under the page header — see
+// 'catalog-search'/'customers-search'/'prestations-search' in
+// tour-definitions.ts) can otherwise still get covered by a blindly-fixed
+// bottom-right popover once there just isn't much vertical room left at
+// all, which is exactly what made the card sit on top of the very input
+// the step was asking the artisan to type into.
+export function computeCornerPosition(
+  popover: TourSize,
+  viewport: TourSize,
+  target?: TourRect | null,
+): TourPoint {
+  const bottomRight: TourPoint = {
     top: clamp(viewport.height - popover.height - MARGIN, MARGIN, viewport.height - MARGIN),
     left: clamp(viewport.width - popover.width - MARGIN, MARGIN, viewport.width - MARGIN),
   };
+  if (!target) {
+    return bottomRight;
+  }
+
+  const top = clamp(viewport.height - popover.height - MARGIN, MARGIN, viewport.height - MARGIN);
+  const left = clamp(viewport.width - popover.width - MARGIN, MARGIN, viewport.width - MARGIN);
+  const candidates: TourPoint[] = [
+    bottomRight,
+    { top: MARGIN, left }, // top-right
+    { top, left: MARGIN }, // bottom-left
+    { top: MARGIN, left: MARGIN }, // top-left
+  ];
+  // If nothing clears the target (it fills most of a tiny viewport),
+  // bottom-right is as good a fallback as any — same as before this
+  // function knew about targets at all.
+  return (
+    candidates.find((candidate) => !rectsOverlap({ ...candidate, ...popover }, target)) ??
+    bottomRight
+  );
 }
