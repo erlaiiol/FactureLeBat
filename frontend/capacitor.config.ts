@@ -32,6 +32,15 @@ const PROD_HOSTNAME = 'facturele.net';
 // CORS_ORIGIN to include http://<that-ip>:3000 for local API calls.
 const localHost = process.env.CAPACITOR_LOCAL_HOST;
 
+// Opt-in remote debugging (chrome://inspect on the machine the phone is
+// USB-connected to — shows this WebView's real Console/Network tabs) — off
+// by default even on a release build type, since Capacitor only reads this
+// from config (not BuildConfig.DEBUG) once explicitly set. Never set for a
+// real `android-bundle` Play Store build; only for a one-off diagnostic
+// sideload:
+//   CAPACITOR_DEBUG=1 make android-prod
+const debugWebContents = process.env.CAPACITOR_DEBUG === '1';
+
 const config: CapacitorConfig = {
   appId: 'fr.facturele.app',
   appName: 'FactureLe',
@@ -39,6 +48,9 @@ const config: CapacitorConfig = {
   server: localHost
     ? { hostname: localHost, androidScheme: 'http', iosScheme: 'http' }
     : { hostname: PROD_HOSTNAME, androidScheme: 'https', iosScheme: 'https' },
+  android: {
+    webContentsDebuggingEnabled: debugWebContents,
+  },
   plugins: {
     // Only Google sign-in is wired up (see GoogleNativeLoginService) —
     // disabling the other providers keeps their SDKs (and Facebook's
