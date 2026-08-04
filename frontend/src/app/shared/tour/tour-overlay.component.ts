@@ -41,8 +41,13 @@ const SPOTLIGHT_MIN_SIZE = 48;
 // onViewportChange) — polling for a bounded window is what converges the
 // spotlight on the real, settled position regardless of which of those
 // caused the movement, instead of freezing on a stale rect that can end up
-// anywhere, including off-screen.
-const SETTLE_DURATION_MS = 600;
+// anywhere, including off-screen. 750ms (not the flyout's own ~550ms
+// sheet-in duration, styles.css's --duration-materialize) leaves real
+// margin for Angular's signal-write-to-render flush landing before the
+// transition even starts, which on a slower Android device can otherwise
+// eat past a tighter deadline and leave the spotlight a frame or two behind
+// the flyout's fully-settled position.
+const SETTLE_DURATION_MS = 750;
 
 // Phase 8 onboarding tour: the overlay itself. Renders only while
 // TourService has an active step — an SVG mask "spotlights" the current
@@ -77,7 +82,10 @@ export class TourOverlayComponent {
   private popoverResizeObserver: ResizeObserver | null = null;
 
   protected readonly popoverPosition = computed(() => {
-    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const viewport = {
+      width: window.visualViewport?.width ?? window.innerWidth,
+      height: window.visualViewport?.height ?? window.innerHeight,
+    };
     const popoverSize = this.measuredPopoverSize() ?? POPOVER_ESTIMATE;
     if (this.tourService.currentStep()?.popoverPlacement === 'corner') {
       return computeCornerPosition(popoverSize, viewport);
@@ -92,8 +100,8 @@ export class TourOverlayComponent {
   // shape is actually painted, and the punched-out hole never is. A mask
   // only affects rendering, not hit-testing, so it couldn't do this alone.
   protected readonly spotlightPathD = computed(() => {
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
     const outer = `M0,0 H${viewportWidth} V${viewportHeight} H0 Z`;
     const rect = this.targetRect();
     if (!rect) {
@@ -162,12 +170,32 @@ export class TourOverlayComponent {
       this.popoverResizeObserver.observe(element);
     });
 
+    // Android's on-screen keyboard opening/closing (e.g. tapping into the
+    // quantity input on a lines-step tour anchor) shrinks/pans the *visual*
+    // viewport without firing 'resize' or 'scroll' on window — index.html's
+    // viewport meta doesn't opt out of the modern default
+    // interactive-widget=resizes-visual, so window.innerWidth/innerHeight
+    // (what @HostListener('window:resize') below reacts to, and what
+    // spotlightPathD/popoverPosition used to read directly) stay frozen at
+    // the pre-keyboard layout size while the actually-visible area shrinks
+    // underneath — the spotlight/popover then just sit at stale coordinates
+    // until the keyboard closes again. visualViewport is the one API that
+    // reports this. window.visualViewport is undefined on older WebViews;
+    // the `?.` above and here just leaves the previous window-only behavior
+    // in place for those.
+    const visualViewport = window.visualViewport;
+    const onVisualViewportChange = (): void => this.recomputeTargetRect();
+    visualViewport?.addEventListener('resize', onVisualViewportChange);
+    visualViewport?.addEventListener('scroll', onVisualViewportChange);
+
     this.destroyRef.onDestroy(() => {
       this.advanceListenerCleanup?.();
       if (this.settleRafHandle !== null) {
         cancelAnimationFrame(this.settleRafHandle);
       }
       this.popoverResizeObserver?.disconnect();
+      visualViewport?.removeEventListener('resize', onVisualViewportChange);
+      visualViewport?.removeEventListener('scroll', onVisualViewportChange);
     });
   }
 
