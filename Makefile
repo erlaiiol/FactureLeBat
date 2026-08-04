@@ -1,4 +1,4 @@
-.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-dev android-prod android-demo ios-dev ios-prod
+.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build -V
@@ -117,6 +117,47 @@ ios: mobile-build
 # activates once that file exists (frontend/android/app/build.gradle).
 android: mobile-build
 	cd frontend && npx cap open android
+
+# Builds the signed .aab straight from the CLI — no Android Studio detour
+# needed (`android` above only opens the IDE and leaves Build > Generate
+# Signed App Bundle as a manual click). Same release signingConfig as
+# android-prod's assembleRelease below (frontend/android/app/build.gradle,
+# keyed off frontend/android/keystore.properties — gitignored, must already
+# have storePassword/keyPassword filled in), but the bundleRelease Gradle
+# task instead of assembleRelease: Play Console only accepts the .aab
+# format, never a plain APK. Always the real API domain (facturele.net),
+# same as `android`/`android-prod` — a Play Store upload can only ever be
+# the production build, so there's no LOCAL_HOST variant of this target.
+#
+# Gradle's own output path (frontend/android/app/build/outputs/bundle/
+# release/app-release.aab) sits inside the gitignored build/ dir and moves
+# around with Gradle/AGP versions — copied here to a fixed, predictable
+# path instead, so "the file to upload to Play Console" is always the same
+# location.
+#
+# JAVA_HOME is forced to JDK 21 (macOS's own `java_home` picker, falling
+# back to whatever was already set if 21 isn't installed) rather than
+# trusting whatever `java` happens to resolve on PATH: this Gradle version
+# (8.14.3, frontend/android/gradle/wrapper/gradle-wrapper.properties) can't
+# parse build.gradle at all under a too-new JDK — fails with "BUG!
+# exception in phase 'semantic analysis' ... Unsupported class file major
+# version" — and which JDK is "default" on a machine with several installed
+# isn't reliably the same one build to build. 21 matches Android Studio's
+# own bundled JBR, so CLI builds behave the same as IDE ones.
+#
+# Play Console rejects re-uploading a versionCode it's already seen, and
+# every android-bundle run is meant to be uploaded — so this bumps
+# defaultConfig.versionCode/versionName in frontend/android/app/build.gradle
+# itself first (frontend/scripts/bump-android-version.sh) rather than
+# leaving that as a manual step to remember. That's a real edit to a
+# committed file — `git status` will show it after this runs; commit it as
+# part of shipping that release.
+android-bundle: mobile-build
+	sh frontend/scripts/bump-android-version.sh
+	cd frontend/android && JAVA_HOME=$$(/usr/libexec/java_home -v 21 2>/dev/null || echo "$$JAVA_HOME") ./gradlew bundleRelease
+	mkdir -p frontend/android/releases
+	cp frontend/android/app/build/outputs/bundle/release/app-release.aab frontend/android/releases/app-release.aab
+	@echo "==> .aab prêt à uploader : frontend/android/releases/app-release.aab"
 
 # Same app as `ios`/`android` above, but built and installed straight onto a
 # running emulator/simulator (frontend/scripts/run-{android,ios}.sh) — no
