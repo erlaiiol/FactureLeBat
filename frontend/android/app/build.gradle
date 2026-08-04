@@ -13,8 +13,8 @@ android {
         applicationId "fr.facturele.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "4"
+        versionCode 5
+        versionName "5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -43,6 +43,18 @@ android {
             // signature release over release, so this key must never be
             // regenerated or lost once the first version is uploaded.
             signingConfig signingConfigs.release
+            // Makes Gradle generate and embed native debug symbols (from
+            // the .so files pulled in by AndroidX/Firebase/plugin deps —
+            // this app has no native code of its own) straight into the
+            // .aab, so Play Console's Android Vitals can symbolicate native
+            // crashes/ANRs without a separate manual upload step. FULL
+            // (vs. SYMBOL_TABLE) keeps inlined-function/line info too, at
+            // the cost of a larger set of symbol files — doesn't affect
+            // what actually installs on a user's device either way, only
+            // what Play stores for crash analysis.
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
     }
 }

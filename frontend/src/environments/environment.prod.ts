@@ -14,5 +14,5 @@ export const environment = {
   // docs/deployment.md. GoogleNativeLoginService passes this to the native
   // Sign-In SDK as `webClientId`, which is what makes the ID token's `aud`
   // claim match what AuthService.googleTokenLogin verifies server-side.
-  googleWebClientId: 'REPLACE_WITH_GOOGLE_WEB_CLIENT_ID',
+  googleWebClientId: '522849402842-im45kelpe7oin95e6j3mn764p13vcb3b.apps.googleusercontent.com',
 };

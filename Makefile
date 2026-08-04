@@ -1,4 +1,4 @@
-.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod
+.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod logs-prod logs-backend-prod logs-frontend-prod logs-caddy-prod logs-postgres-prod mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build -V
@@ -64,6 +64,29 @@ logs-files-prod:
 
 logs-errors-prod:
 	docker compose -f infra/docker-compose.prod.yml exec backend tail -f logs/error-*.log
+
+# Docker's own log driver for the prod stack (same idea as `logs` above,
+# just pointed at docker-compose.prod.yml) — only goes back as far as
+# Docker's retention and disappears if a container is recreated, unlike
+# logs-files-prod/logs-errors-prod above (backend's own rotated files, which
+# survive that). Still the only log source at all for postgres/frontend/
+# caddy, which don't write their own log files anywhere else. Run these on
+# the VPS itself, against a repo checkout already running `make prod` — same
+# as `deploy`/`backup` below.
+logs-prod:
+	docker compose -f infra/docker-compose.prod.yml logs -f
+
+logs-backend-prod:
+	docker compose -f infra/docker-compose.prod.yml logs -f backend
+
+logs-frontend-prod:
+	docker compose -f infra/docker-compose.prod.yml logs -f frontend
+
+logs-caddy-prod:
+	docker compose -f infra/docker-compose.prod.yml logs -f caddy
+
+logs-postgres-prod:
+	docker compose -f infra/docker-compose.prod.yml logs -f postgres
 
 # Real-server commands (see docs/deployment.md) — run these against a repo
 # checkout already running `make prod`, e.g. on the OVH VPS.

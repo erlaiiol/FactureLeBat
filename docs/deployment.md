@@ -137,9 +137,12 @@ Restoring into a database that already has data will conflict on primary keys â€
 ## Logs
 
 ```bash
-make logs                                                    # dev stack, all services
-docker compose -f infra/docker-compose.prod.yml logs -f                  # prod, all services
-docker compose -f infra/docker-compose.prod.yml logs -f backend          # prod, one service
+make logs                # dev stack, all services
+make logs-prod           # prod, all services
+make logs-backend-prod   # prod, one service at a time
+make logs-frontend-prod
+make logs-caddy-prod
+make logs-postgres-prod
 ```
 
 The commands above are Docker's own log driver â€” they only go back as far as Docker's retention and disappear if a container is recreated. The backend also writes colored, leveled, rotated log files to a `backend_logs` named volume (`combined-YYYY-MM-DD.log`, everything; `error-YYYY-MM-DD.log`, failures only, kept longer) that survive restarts/redeploys independently of Docker's log driver:
