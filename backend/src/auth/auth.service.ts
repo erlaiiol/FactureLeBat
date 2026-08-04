@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import type { StringValue } from 'ms';
 import { AuthTokenPurpose } from '../../generated/prisma/enums';
 import {
@@ -84,6 +85,17 @@ export class AuthService {
   private readonly systemMailFromAddress?: string;
   private readonly demoModeEnabled: boolean;
 
+  // Same client ID as GoogleStrategy's web OAuth client (below), doing
+  // double duty as the audience for native ID tokens too — the frontend's
+  // native Sign-In SDK is configured with this exact value as its
+  // `webClientId` (see docs/deployment.md), which is what makes Google mint
+  // ID tokens whose `aud` claim matches what verifyIdToken checks here. No
+  // separate "Android client ID" env var needed: that client only ever
+  // exists in Google Cloud Console, matched by package name + signing
+  // certificate, and is never referenced in code.
+  private readonly googleClientId?: string;
+  private readonly googleOAuthClient: OAuth2Client;
+
   constructor(
     private readonly userRepository: UserRepository,
     private readonly refreshTokenRepository: RefreshTokenRepository,
@@ -125,6 +137,9 @@ export class AuthService {
     this.systemMailFromAddress = fromAddress;
 
     this.demoModeEnabled = config.get<boolean>('DEMO_MODE', false);
+
+    this.googleClientId = config.get<string>('GOOGLE_CLIENT_ID');
+    this.googleOAuthClient = new OAuth2Client(this.googleClientId);
   }
 
   async register(dto: RegisterDto): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
@@ -241,6 +256,31 @@ export class AuthService {
 
     const tokens = await this.issueTokens(user, true);
     return { user: toPublicUser(user), tokens };
+  }
+
+  // Native mobile counterpart to handleGoogleLogin above — Android's
+  // Credential Manager (see frontend's GoogleNativeLoginService) never goes
+  // through googleAuth/googleCallback's browser-redirect dance, since Google
+  // actively blocks that redirect flow inside an embedded WebView. It
+  // returns a Google-signed ID token straight to the app instead; this
+  // verifies it server-side (signature, issuer, audience, expiry all
+  // checked by verifyIdToken — never trust a client-supplied token as-is)
+  // before reusing the exact same account-linking logic.
+  async googleTokenLogin(idToken: string): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
+    let payload: TokenPayload | undefined;
+    try {
+      const ticket = await this.googleOAuthClient.verifyIdToken({
+        idToken,
+        audience: this.googleClientId,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Jeton Google invalide.');
+    }
+    if (!payload?.sub || !payload.email) {
+      throw new UnauthorizedException('Jeton Google invalide.');
+    }
+    return this.handleGoogleLogin({ googleId: payload.sub, email: payload.email });
   }
 
   async refresh(rawRefreshToken: string | undefined): Promise<{

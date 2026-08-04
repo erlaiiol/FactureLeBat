@@ -33,6 +33,7 @@ function samplePdfData(): InvoicePdfData {
       },
     ],
     serviceLines: [],
+    discountLines: [],
     simplifiedDisplay: false,
     vatApplicable: false,
     vatRateBasisPoints: 2000,
@@ -56,6 +57,18 @@ describe('PdfService', () => {
     const data = {
       ...samplePdfData(),
       serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000 }],
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer when a discount line is present', async () => {
+    const service = new PdfService();
+    const data = {
+      ...samplePdfData(),
+      discountLines: [{ name: 'Remise fidélité', amountCents: 5000 }],
     };
     const buffer = await service.generateInvoicePdf(data);
 

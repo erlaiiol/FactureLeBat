@@ -76,6 +76,16 @@ export interface InvoiceServiceLineWithAmounts {
   distribution?: ServiceLineDistributionEntry[];
 }
 
+// Phase 32: a remise applied to the invoice — always folds its amountCents
+// straight into subtotalExclVatCents as a reduction, no visibility/
+// redistribution concept (see schema.prisma's comment on InvoiceDiscountLine).
+export interface InvoiceDiscountLineWithAmount {
+  id: string;
+  position: number;
+  name: string;
+  amountCents: number;
+}
+
 // Phase 9.5 manual mode — see ManualColumnRole (schema.prisma) for what each
 // role means for pricing.
 export interface ManualInvoiceColumnWithId {
@@ -142,7 +152,16 @@ export interface InvoiceWithTotals {
   entryMode: InvoiceEntryMode;
   lines: InvoiceLineWithTotal[];
   serviceLines: InvoiceServiceLineWithAmounts[];
+  // Phase 32: always empty for entryMode MANUAL (see
+  // ManualModeFieldsConsistency, which forbids discountLines there) — always
+  // present, never undefined, same convention as lines/serviceLines above.
+  discountLines: InvoiceDiscountLineWithAmount[];
   manualTable?: ManualInvoiceTableWithTotals;
+  // Phase 32: already net of every discountLines' amountCents (folded in the
+  // same way visible service lines add to it) — subtotalExclVatCents +
+  // vatAmountCents === totalInclVatCents always holds, so a discount is
+  // never a separate subtraction consumers need to remember to apply.
+  // Floored at 0 — see InvoiceMapper.
   subtotalExclVatCents: number;
   vatAmountCents: number;
   totalInclVatCents: number;

@@ -166,6 +166,23 @@ Both need `frontend/ios/`/`frontend/android/` (already committed) and, for push 
 make ios LOCAL_HOST=192.168.1.23
 ```
 
+### Native Google Sign-In (Android)
+
+The login page's "Continuer avec Google" button never uses the backend's browser-redirect `/auth/google` flow inside the app shell — Google actively blocks that redirect from completing inside an embedded WebView. Instead, the native build signs in via Android's Credential Manager (`GoogleNativeLoginService`, `@capgo/capacitor-social-login`), which hands a Google-signed ID token straight to `AuthService.googleTokenLogin` for the backend to verify (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in `infra/.env` — same env vars the web flow already uses, no new ones). This needs its own one-time Google Cloud Console setup, separate from `infra/.env`:
+
+1. **Reuse the existing Web OAuth client.** Google Cloud Console → APIs & Services → Credentials → your **Web application** client (the one whose ID/secret are already `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`). Copy its client ID — it's not secret (unlike the client secret), so it's safe to embed in the app.
+2. **Set that client ID in the frontend build.** `frontend/src/environments/environment.prod.ts`'s `googleWebClientId` ships as a placeholder (`REPLACE_WITH_GOOGLE_WEB_CLIENT_ID`) — edit it to the value from step 1 before running `make android`/`make android-prod`. This is what makes the native SDK mint ID tokens whose `aud` claim matches what the backend verifies.
+3. **Create a new Android OAuth client**, in the *same* Google Cloud project as the Web client (Credentials → Create Credentials → OAuth client ID → Android):
+   - Package name: `fr.facturele.app` (must match `applicationId` in `frontend/android/app/build.gradle` exactly).
+   - SHA-1 certificate fingerprint — see below. **Do not** put this client's ID anywhere in app config; Google matches it purely by package name + SHA-1, invisibly, at sign-in time.
+4. **Register the right SHA-1(s).** A build only works if its actual signing certificate's SHA-1 is registered:
+   - Debug builds (`make android-dev`, Android Studio's default Run): `cd frontend/android && ./gradlew signingReport`.
+   - A signed release APK/AAB you install directly: `keytool -printcert -jarfile app-release.apk`.
+   - **Play Store installs — the one that matters for the reviewer/real users**: Play Console → your app → Setup → **App integrity** → **App signing key certificate**, copy its SHA-1. This is Google Play's own re-signing certificate, not `facturele-release.jks`'s — required even if the upload-key SHA-1 is already registered, since that's not the certificate installed on end-user devices once Play App Signing has re-signed the bundle.
+5. **OAuth consent screen** (Console → OAuth consent screen): must be **External** (Internal blocks regular `@gmail.com` accounts, including your own test account). If it's still in **Testing** mode, add every Google account you test with under Audience → Test users — publishing to Production isn't required just for the `email`/`profile` scopes this app requests.
+
+No Digital Asset Links (`assetlinks.json`) step is needed for this — that file already exists for an unrelated purpose (Phase 29's referral deep links) and Credential Manager doesn't use it. Console changes can take a few hours to propagate; a device restart alone isn't enough. If sign-in fails with `[28444] Developer console is not set up correctly` or `[16] Account reauth failed`, `node_modules/@capgo/capacitor-social-login/README.md`'s own troubleshooting section (search "Android troubleshooting") walks through the exact package-name/SHA-1/webClientId checklist — read the failing device's Logcat filtered on `GoogleProvider` first, it logs the package name and SHA-1 the app actually presented.
+
 **Installing straight onto an emulator/simulator**, instead of opening Xcode/Android Studio and hitting Run by hand:
 
 ```bash

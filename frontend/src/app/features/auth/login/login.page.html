@@ -68,12 +68,26 @@
     hiding Google here on iOS (email/password stays available) keeps this
     app out of that requirement instead of building Sign in with Apple.
     See docs/roadmap.md Phase 22. -->
-    <a
-      [href]="googleLoginUrl"
-      class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
-    >
-      Continuer avec Google
-    </a>
+    @if (platformService.isNativeApp()) {
+      <!-- Android app: native Credential Manager sign-in, not the browser
+      redirect below — Google blocks that redirect inside an embedded
+      WebView. See GoogleNativeLoginService. -->
+      <button
+        type="button"
+        (click)="googleLoginNative()"
+        [disabled]="saving()"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle disabled:opacity-50"
+      >
+        Continuer avec Google
+      </button>
+    } @else {
+      <a
+        [href]="googleLoginUrl"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
+      >
+        Continuer avec Google
+      </a>
+    }
   }
 
   @if (demoProfiles().length > 0) {

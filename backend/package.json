@@ -47,6 +47,7 @@
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "firebase-admin": "^14.2.0",
+    "google-auth-library": "^11.0.0",
     "helmet": "^8.3.0",
     "nest-winston": "^1.10.2",
     "nodemailer": "^9.0.3",

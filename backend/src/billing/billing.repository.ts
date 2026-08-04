@@ -52,18 +52,20 @@ export class BillingRepository {
   }
 
   // Phase 30: catalog-capacity checks (PlanGateService.assertCatalogCapacity)
-  // — a "catalog item" is a Product or a Service, counted together since
-  // PLAN_DEFINITIONS caps them as one combined number (see plan-config.ts).
+  // — a "catalog item" is a Product, a Service, or (Phase 32) a Discount,
+  // counted together since PLAN_DEFINITIONS caps them as one combined number
+  // (see plan-config.ts).
   countCustomers(companyId: string): Promise<number> {
     return this.prisma.customer.count({ where: { companyId } });
   }
 
   async countCatalogItems(companyId: string): Promise<number> {
-    const [productCount, serviceCount] = await Promise.all([
+    const [productCount, serviceCount, discountCount] = await Promise.all([
       this.prisma.product.count({ where: { companyId } }),
       this.prisma.service.count({ where: { companyId } }),
+      this.prisma.discount.count({ where: { companyId } }),
     ]);
-    return productCount + serviceCount;
+    return productCount + serviceCount + discountCount;
   }
 
   setStripeCustomerId(companyId: string, stripeCustomerId: string): Promise<void> {

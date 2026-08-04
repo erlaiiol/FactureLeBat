@@ -17,6 +17,7 @@ import {
   ServiceLineVisibility,
   WasteSurcharge,
 } from '../../../core/models/invoice.model';
+import { DiscountProfile, DiscountType } from '../../../core/models/discount.model';
 import { ProductProfile } from '../../../core/models/product.model';
 import { ActivityCategory } from '../../../core/models/report.model';
 import { ServicePricingMode, ServiceProfile } from '../../../core/models/service.model';
@@ -34,6 +35,10 @@ import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { TourService } from '../../../shared/tour/tour.service';
 import { computeLineTotalPreviewCents } from '../calculation-preview';
+import {
+  InvoiceDiscountLineFormComponent,
+  InvoiceDiscountLineFormGroup,
+} from '../components/invoice-discount-line-form.component';
 import {
   InvoiceLineFormComponent,
   InvoiceLineFormGroup,
@@ -73,6 +78,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
     UnitLabelPipe,
     InvoiceLineFormComponent,
     InvoiceServiceLineFormComponent,
+    InvoiceDiscountLineFormComponent,
     TourAnchorDirective,
   ],
   templateUrl: './invoice-create-lines-step.page.html',
@@ -86,10 +92,12 @@ export class InvoiceCreateLinesStepPage {
   private readonly tourService = inject(TourService);
 
   protected readonly errorMessage = signal<string | null>(null);
-  // Phase 13.5 gallery redesign: which of the two fixed "+" flyouts is open
-  // — mutually exclusive, opening one closes the other.
+  // Phase 13.5 gallery redesign: which of the three fixed "+" flyouts is
+  // open — mutually exclusive, opening one closes the other two.
   protected readonly productPanelOpen = signal(false);
   protected readonly servicePanelOpen = signal(false);
+  // Phase 32.
+  protected readonly discountPanelOpen = signal(false);
 
   // The guided tour's 'add-line' step targets these buttons while they're
   // collapsed to their bare "+" circle — its label span is a 0fr grid track
@@ -108,6 +116,9 @@ export class InvoiceCreateLinesStepPage {
   );
   protected readonly serviceButtonTourHighlighted = computed(
     () => this.tourService.currentStep()?.anchorId === 'invoice-add-service-button',
+  );
+  protected readonly discountButtonTourHighlighted = computed(
+    () => this.tourService.currentStep()?.anchorId === 'invoice-add-discount-button',
   );
 
   // Holds both "+" buttons open on first mount so their "Ajouter un
@@ -139,6 +150,16 @@ export class InvoiceCreateLinesStepPage {
     initialValue: this.serviceLines.getRawValue(),
   });
 
+  protected readonly discountLines = this.fb.array<InvoiceDiscountLineFormGroup>(
+    this.draftStore
+      .discountLines()
+      .map((discountLine) => this.createDiscountLineGroup(discountLine)),
+  );
+
+  private readonly discountLinesValue = toSignal(this.discountLines.valueChanges, {
+    initialValue: this.discountLines.getRawValue(),
+  });
+
   // Phase 13.5 gallery redesign: cards collapsed into their compact gallery
   // form. A group only ever enters this set via collapseLine/collapseService
   // Line ("Valider") — a freshly added line/service-line (catalog pick,
@@ -151,6 +172,9 @@ export class InvoiceCreateLinesStepPage {
   );
   protected readonly collapsedServiceLines = signal<ReadonlySet<InvoiceServiceLineFormGroup>>(
     new Set(this.serviceLines.controls.filter((group) => group.valid)),
+  );
+  protected readonly collapsedDiscountLines = signal<ReadonlySet<InvoiceDiscountLineFormGroup>>(
+    new Set(this.discountLines.controls.filter((group) => group.valid)),
   );
 
   protected readonly lineLabels = computed(() =>
@@ -182,6 +206,16 @@ export class InvoiceCreateLinesStepPage {
     return ids;
   });
 
+  protected readonly activeDiscountIds = computed(() => {
+    const ids = new Set<string>();
+    this.discountLinesValue().forEach((discountLine) => {
+      if (discountLine.catalogDiscountId) {
+        ids.add(discountLine.catalogDiscountId);
+      }
+    });
+    return ids;
+  });
+
   // Live amount for every current service line, in the same order as
   // serviceLines.controls — reads through InvoiceDraftStore so a
   // PERCENTAGE line's amount always reflects the current base (see
@@ -191,6 +225,14 @@ export class InvoiceCreateLinesStepPage {
     this.draftStore
       .serviceLines()
       .map((serviceLine) => this.draftStore.resolvedServiceAmountCents(serviceLine)),
+  );
+
+  // Same "always reflects the current base, never a stale snapshot" role as
+  // serviceLineAmountsCents above, for discount lines.
+  protected readonly discountLineAmountsCents = computed(() =>
+    this.draftStore
+      .discountLines()
+      .map((discountLine) => this.draftStore.resolvedDiscountAmountCents(discountLine)),
   );
 
   // Live per-line total for the gallery's compact card and expanded-form
@@ -219,6 +261,9 @@ export class InvoiceCreateLinesStepPage {
     });
     this.serviceLines.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.draftStore.setServiceLines(this.serviceLines.getRawValue());
+    });
+    this.discountLines.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.draftStore.setDiscountLines(this.discountLines.getRawValue());
     });
 
     if (this.introExpanded()) {
@@ -511,21 +556,158 @@ export class InvoiceCreateLinesStepPage {
     this.closePanels();
   }
 
-  // Phase 13.5 gallery redesign: opening one flyout closes the other, so
+  private createDiscountLineGroup(initial?: {
+    discountId: string | null;
+    name: string;
+    discountType?: DiscountType;
+    fixedAmountEuros: number;
+    percentageBasisPoints?: number | null;
+    catalogDiscountId?: string | null;
+  }): InvoiceDiscountLineFormGroup {
+    const group = this.fb.nonNullable.group({
+      discountId: this.fb.control<string | null>(initial?.discountId ?? null),
+      name: this.fb.nonNullable.control(initial?.name ?? '', Validators.required),
+      discountType: this.fb.nonNullable.control<DiscountType>(initial?.discountType ?? 'FIXED'),
+      fixedAmountEuros: this.fb.nonNullable.control(initial?.fixedAmountEuros ?? 0, [
+        Validators.required,
+        Validators.min(0),
+      ]),
+      percentageBasisPoints: this.fb.control<number | null>(initial?.percentageBasisPoints ?? null),
+      // Phase 32, UI-only: see InvoiceDiscountLineDraft.catalogDiscountId.
+      catalogDiscountId: this.fb.control<string | null>(initial?.catalogDiscountId ?? null),
+      // UI-only: whether to save/update this line's catalog Discount on
+      // submit — never sent as-is to the invoice-creation request, mirrors
+      // the service line's saveAsNewService.
+      saveAsNewDiscount: this.fb.nonNullable.control(false),
+    });
+    this.syncDiscountLinePricingValidators(group);
+    group.controls.discountType.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.syncDiscountLinePricingValidators(group));
+    return group;
+  }
+
+  // Same "swap which of the two carries the required validator" rule as
+  // syncServiceLinePricingValidators above.
+  private syncDiscountLinePricingValidators(group: InvoiceDiscountLineFormGroup): void {
+    const fixedAmountEuros = group.controls.fixedAmountEuros;
+    const percentageBasisPoints = group.controls.percentageBasisPoints;
+    if (group.controls.discountType.value === 'PERCENTAGE') {
+      fixedAmountEuros.clearValidators();
+      percentageBasisPoints.setValidators([Validators.required, Validators.min(1)]);
+    } else {
+      fixedAmountEuros.setValidators([Validators.required, Validators.min(0)]);
+      percentageBasisPoints.clearValidators();
+    }
+    fixedAmountEuros.updateValueAndValidity({ emitEvent: false });
+    percentageBasisPoints.updateValueAndValidity({ emitEvent: false });
+  }
+
+  // Phase 32 gallery redesign: the "+ Nouvelle remise" flyout entry — a
+  // blank card, never tied to a catalog Discount.
+  protected addFreeDiscountLine(): void {
+    this.discountLines.push(this.createDiscountLineGroup());
+    this.discountPanelOpen.set(false);
+  }
+
+  // Same "only the first pick stays linked" rule as addProductFromCatalog/
+  // addServiceFromCatalog above, for the same reason: persistFreeEntities
+  // fires one update request per distinct catalogDiscountId.
+  private addDiscountFromCatalog(discount: DiscountProfile): void {
+    const alreadyLinked = this.activeDiscountIds().has(discount.id);
+    const group = this.createDiscountLineGroup({
+      discountId: discount.id,
+      name: discount.name,
+      discountType: discount.discountType,
+      fixedAmountEuros:
+        discount.discountType === 'FIXED' ? (discount.fixedAmountCents ?? 0) / 100 : 0,
+      percentageBasisPoints: discount.percentageBasisPoints,
+      catalogDiscountId: alreadyLinked ? null : discount.id,
+    });
+    this.discountLines.push(group);
+    this.collapsedDiscountLines.update((set) => new Set(set).add(group));
+  }
+
+  protected removeDiscountLine(index: number): void {
+    const group = this.discountLines.at(index);
+    this.discountLines.removeAt(index);
+    this.uncollapseDiscountLine(group);
+  }
+
+  // Same flyout entry point as pickProduct/pickService, for a Discount —
+  // always adds another line and closes the flyout.
+  protected pickDiscount(discount: DiscountProfile): void {
+    this.addDiscountFromCatalog(discount);
+    this.closePanels();
+  }
+
+  protected collapseDiscountLine(group: InvoiceDiscountLineFormGroup): void {
+    if (group.invalid) {
+      group.markAllAsTouched();
+      return;
+    }
+    this.morphCard(
+      this.morphId(group),
+      () => {
+        this.collapsedDiscountLines.update((set) => new Set(set).add(group));
+      },
+      true,
+    );
+  }
+
+  protected expandDiscountLine(group: InvoiceDiscountLineFormGroup): void {
+    this.morphCard(
+      this.morphId(group),
+      () => {
+        this.collapsedDiscountLines.update((set) => {
+          const next = new Set(set);
+          next.delete(group);
+          return next;
+        });
+      },
+      false,
+    );
+  }
+
+  protected isDiscountLineCollapsed(group: InvoiceDiscountLineFormGroup): boolean {
+    return this.collapsedDiscountLines().has(group);
+  }
+
+  private uncollapseDiscountLine(group: InvoiceDiscountLineFormGroup): void {
+    if (!this.collapsedDiscountLines().has(group)) {
+      return;
+    }
+    this.collapsedDiscountLines.update((set) => {
+      const next = new Set(set);
+      next.delete(group);
+      return next;
+    });
+  }
+
+  // Phase 13.5 gallery redesign: opening one flyout closes the other two, so
   // only one catalog list is ever open at a time.
   protected toggleProductPanel(): void {
     this.servicePanelOpen.set(false);
+    this.discountPanelOpen.set(false);
     this.productPanelOpen.update((open) => !open);
   }
 
   protected toggleServicePanel(): void {
     this.productPanelOpen.set(false);
+    this.discountPanelOpen.set(false);
     this.servicePanelOpen.update((open) => !open);
+  }
+
+  protected toggleDiscountPanel(): void {
+    this.productPanelOpen.set(false);
+    this.servicePanelOpen.set(false);
+    this.discountPanelOpen.update((open) => !open);
   }
 
   protected closePanels(): void {
     this.productPanelOpen.set(false);
     this.servicePanelOpen.set(false);
+    this.discountPanelOpen.set(false);
   }
 
   // cardMorph (design-system.md): a real FLIP transition between a card's
@@ -841,10 +1023,12 @@ export class InvoiceCreateLinesStepPage {
       !this.draftStore.canPreview() ||
       this.lines.invalid ||
       this.serviceLines.invalid ||
+      this.discountLines.invalid ||
       this.draftStore.customer().customerName.trim().length === 0
     ) {
       this.lines.markAllAsTouched();
       this.serviceLines.markAllAsTouched();
+      this.discountLines.markAllAsTouched();
       this.errorMessage.set(
         'Merci de renseigner un client et au moins une ligne complète avant de voir l’aperçu.',
       );
@@ -857,6 +1041,7 @@ export class InvoiceCreateLinesStepPage {
     // themselves are gone once InvoiceCreateLinesStepPage is destroyed.
     this.draftStore.setLines(this.lines.getRawValue());
     this.draftStore.setServiceLines(this.serviceLines.getRawValue());
+    this.draftStore.setDiscountLines(this.discountLines.getRawValue());
     this.errorMessage.set(null);
     this.router.navigate(['/factures/nouvelle/rapide/apercu']);
   }

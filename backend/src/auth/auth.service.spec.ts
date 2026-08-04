@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException, UnauthorizedException } from '@n
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { OAuth2Client } from 'google-auth-library';
 import { AuthTokenPurpose, UserRole } from '../../generated/prisma/enums';
 import { UserModel as User } from '../../generated/prisma/models';
 import { MailerService } from '../mailer/mailer.service';
@@ -117,6 +118,7 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
     service,
     findByEmail,
     findById,
+    findByGoogleId,
     createWithCompany,
     deleteAccountFn,
     updatePasswordHash,
@@ -256,6 +258,53 @@ describe('AuthService.login', () => {
     await expect(
       service.login({ email: 'artisan@example.com', password: 'wrong-password' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe('AuthService.googleTokenLogin', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('verifies the ID token then logs into the linked account, same as the redirect flow', async () => {
+    const { service, findByGoogleId, refreshCreate } = buildService({
+      GOOGLE_CLIENT_ID: 'web-client-id',
+    });
+    const user = buildUser({ googleId: 'google-123', emailVerifiedAt: new Date() });
+    findByGoogleId.mockResolvedValue(user);
+    jest.spyOn(OAuth2Client.prototype, 'verifyIdToken').mockResolvedValue({
+      getPayload: () => ({ sub: 'google-123', email: user.email }),
+    } as Awaited<ReturnType<OAuth2Client['verifyIdToken']>>);
+
+    const result = await service.googleTokenLogin('raw-id-token');
+
+    expect(result.user.email).toBe(user.email);
+    expect(refreshCreate).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
+      expect.any(Date),
+      true,
+    );
+  });
+
+  it('rejects a token that fails signature/audience verification', async () => {
+    const { service } = buildService({ GOOGLE_CLIENT_ID: 'web-client-id' });
+    jest.spyOn(OAuth2Client.prototype, 'verifyIdToken').mockRejectedValue(new Error('bad token'));
+
+    await expect(service.googleTokenLogin('raw-id-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects a verified token missing an email claim', async () => {
+    const { service } = buildService({ GOOGLE_CLIENT_ID: 'web-client-id' });
+    jest.spyOn(OAuth2Client.prototype, 'verifyIdToken').mockResolvedValue({
+      getPayload: () => ({ sub: 'google-123' }),
+    } as Awaited<ReturnType<OAuth2Client['verifyIdToken']>>);
+
+    await expect(service.googleTokenLogin('raw-id-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 });
 

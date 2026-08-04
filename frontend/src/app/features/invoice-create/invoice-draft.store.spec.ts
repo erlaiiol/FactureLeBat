@@ -78,6 +78,7 @@ describe('InvoiceDraftStore', () => {
     httpMock.expectOne(`${environment.apiBaseUrl}/customers`).flush([]);
     httpMock.expectOne(`${environment.apiBaseUrl}/products`).flush([]);
     httpMock.expectOne(`${environment.apiBaseUrl}/services`).flush([]);
+    httpMock.expectOne(`${environment.apiBaseUrl}/discounts`).flush([]);
     return store;
   }
 
@@ -296,6 +297,83 @@ describe('InvoiceDraftStore', () => {
 
       expect(request.serviceLines?.[0].amountCents).toBe(13_500); // 30% of 45000
       expect(request.serviceLines?.[1].amountCents).toBe(4_500); // 10% of 45000, not of 45000+13500
+    });
+  });
+
+  describe('Phase 32 — discount line resolution', () => {
+    it('sends a FIXED discount amount straight through', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]); // 45000 cents
+      store.setDiscountLines([
+        {
+          discountId: null,
+          catalogDiscountId: null,
+          saveAsNewDiscount: false,
+          name: 'Remise fidélité',
+          discountType: 'FIXED',
+          fixedAmountEuros: 50,
+          percentageBasisPoints: null,
+        },
+      ]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.discountLines).toEqual([
+        { discountId: undefined, name: 'Remise fidélité', amountCents: 5000 },
+      ]);
+    });
+
+    it('computes a PERCENTAGE discount amount from the product lines total, not a typed amount', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]); // 10 x 45€ = 45000 cents
+      store.setDiscountLines([
+        {
+          discountId: 'discount-1',
+          catalogDiscountId: 'discount-1',
+          saveAsNewDiscount: false,
+          name: 'Remise 10%',
+          discountType: 'PERCENTAGE',
+          fixedAmountEuros: 0,
+          percentageBasisPoints: 1000, // 10%
+        },
+      ]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.discountLines?.[0].amountCents).toBe(4_500); // 10% of 45000
+      expect(store.totalsPreview().subtotalExclVatCents).toBe(45000 - 4500);
+    });
+
+    it('never lets discountAmountCents push the previewed subtotal below 0', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]); // 45000 cents
+      store.setDiscountLines([
+        {
+          discountId: null,
+          catalogDiscountId: null,
+          saveAsNewDiscount: false,
+          name: 'Remise énorme',
+          discountType: 'FIXED',
+          fixedAmountEuros: 9999,
+          percentageBasisPoints: null,
+        },
+      ]);
+
+      expect(store.totalsPreview().subtotalExclVatCents).toBe(0);
+      expect(store.totalsPreview().totalInclVatCents).toBe(0);
+    });
+
+    it('omits discountLines entirely from the request when there are none', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.discountLines).toBeUndefined();
     });
   });
 

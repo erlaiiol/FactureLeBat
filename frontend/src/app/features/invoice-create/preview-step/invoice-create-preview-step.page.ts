@@ -96,6 +96,13 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly visibleServiceLines = computed(() =>
     (this.previewData()?.serviceLines ?? []).filter((line) => line.visibility === 'VISIBLE'),
   );
+  protected readonly previewDiscountLines = computed(() => this.previewData()?.discountLines ?? []);
+  // Same "reconstruct the pre-discount figure for display" approach as
+  // InvoiceTotalsSummaryComponent — subtotalExclVatCents is already net of
+  // every discount line.
+  protected readonly discountTotalCents = computed(() =>
+    this.previewDiscountLines().reduce((sum, discount) => sum + discount.amountCents, 0),
+  );
 
   protected readonly creating = signal(false);
   protected readonly errorMessage = signal<string | null>(null);

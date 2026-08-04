@@ -39,6 +39,20 @@ const config: CapacitorConfig = {
   server: localHost
     ? { hostname: localHost, androidScheme: 'http', iosScheme: 'http' }
     : { hostname: PROD_HOSTNAME, androidScheme: 'https', iosScheme: 'https' },
+  plugins: {
+    // Only Google sign-in is wired up (see GoogleNativeLoginService) —
+    // disabling the other providers keeps their SDKs (and Facebook's
+    // AD_ID-permission baggage, see the plugin's own README troubleshooting
+    // section) out of the shipped APK entirely rather than bundled unused.
+    SocialLogin: {
+      providers: {
+        google: true,
+        facebook: false,
+        apple: false,
+        twitter: false,
+      },
+    },
+  },
 };
 
 export default config;

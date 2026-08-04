@@ -177,6 +177,79 @@
       </div>
     }
   </div>
+
+  <div class="relative">
+    <button
+      type="button"
+      appTourAnchor="invoice-add-discount-button"
+      (click)="toggleDiscountPanel()"
+      class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-warning text-warning-fg shadow-lg"
+      [class.is-open]="discountPanelOpen() || discountButtonTourHighlighted() || introExpanded()"
+      aria-label="Ajouter une remise"
+    >
+      <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+        +
+      </span>
+      <span
+        class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+        [class.opacity-100]="
+          discountPanelOpen() || discountButtonTourHighlighted() || introExpanded()
+        "
+      >
+        Ajouter une remise
+      </span>
+    </button>
+
+    @if (discountPanelOpen()) {
+      <div class="fixed inset-0 z-40 bg-ink/30 sm:bg-transparent" (click)="closePanels()"></div>
+      <div
+        appTourAnchor="invoice-discount-flyout"
+        class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-warning-subtle-border bg-surface p-4 shadow-xl"
+      >
+        <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+          Mes remises
+        </span>
+        @if (draftStore.discounts().length > 0) {
+          <ul class="flex flex-col gap-2">
+            @for (discount of draftStore.discounts(); track discount.id) {
+              @let isActive = activeDiscountIds().has(discount.id);
+              <li>
+                <button
+                  type="button"
+                  (click)="pickDiscount(discount)"
+                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-warning-subtle/30"
+                  [class.bg-warning-subtle]="isActive"
+                >
+                  <span>
+                    <span class="block text-sm font-medium text-ink">{{ discount.name }}</span>
+                    <span class="block text-xs text-ink-soft">
+                      @if (discount.discountType === 'PERCENTAGE') {
+                        {{ discount.percentageBasisPoints! / 100 }}% du total
+                      } @else {
+                        {{ discount.fixedAmountCents | centsToEuros }}
+                      }
+                    </span>
+                  </span>
+                  @if (isActive) {
+                    <span class="text-warning"><app-icon-check [size]="14" /></span>
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="text-sm text-ink-soft">Aucune remise enregistrée pour l’instant.</p>
+        }
+        <button
+          type="button"
+          (click)="addFreeDiscountLine()"
+          class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-warning hover:bg-warning-subtle/30"
+        >
+          + Nouvelle remise
+        </button>
+      </div>
+    }
+  </div>
 </div>
 
 <!-- Plain div, not <form>: lines/serviceLines are two independent
@@ -186,7 +259,11 @@
        here would silently fall back to the browser's default full-page
        GET-and-reload submit. -->
 <div class="flex flex-col gap-6 pl-16">
-  @if (lines.controls.length === 0 && serviceLines.controls.length === 0) {
+  @if (
+    lines.controls.length === 0 &&
+    serviceLines.controls.length === 0 &&
+    discountLines.controls.length === 0
+  ) {
     <p class="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-soft">
       Utilisez les boutons + à gauche pour ajouter un matériau ou une prestation à cette facture.
     </p>
@@ -230,6 +307,28 @@
               Valider
             </app-big-button>
           </app-invoice-service-line-form>
+        </div>
+      </div>
+    }
+  }
+  @for (discountLine of discountLines.controls; track discountLine; let i = $index) {
+    @if (!isDiscountLineCollapsed(discountLine)) {
+      <div class="anim-line-in" [attr.data-morph-id]="morphId(discountLine)">
+        <div class="morph-content">
+          <app-invoice-discount-line-form
+            [group]="discountLine"
+            [index]="i"
+            [discounts]="draftStore.discounts()"
+            (remove)="removeDiscountLine(i)"
+          >
+            <app-big-button
+              variant="success"
+              type="button"
+              (click)="collapseDiscountLine(discountLine)"
+            >
+              Valider
+            </app-big-button>
+          </app-invoice-discount-line-form>
         </div>
       </div>
     }
@@ -370,6 +469,41 @@
               } @else {
                 <app-icon-eye-off [size]="14" /> Non visible
               }
+            </button>
+          </div>
+        </div>
+      }
+    }
+
+    @for (discountLine of discountLines.controls; track discountLine; let i = $index) {
+      @if (isDiscountLineCollapsed(discountLine)) {
+        <div
+          class="anim-line-in rounded-xl border border-line bg-surface p-4 shadow-sm hover:border-warning-subtle-border"
+          [attr.data-morph-id]="morphId(discountLine)"
+        >
+          <div class="morph-content flex flex-col gap-2">
+            <button
+              type="button"
+              (click)="expandDiscountLine(discountLine)"
+              class="flex w-full flex-col gap-1 text-left"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <span class="font-medium text-ink">{{ discountLine.controls.name.value }}</span>
+                <span
+                  (click)="$event.stopPropagation(); removeDiscountLine(i)"
+                  class="text-danger hover:underline"
+                >
+                  <app-icon-close [size]="14" />
+                </span>
+              </div>
+              @if (discountLine.controls.discountType.value === 'PERCENTAGE') {
+                <app-badge variant="warning" tone="subtle">
+                  {{ discountLine.controls.percentageBasisPoints.value! / 100 }}% du total
+                </app-badge>
+              }
+              <span class="mt-1 font-mono text-lg font-semibold text-danger">
+                − {{ discountLineAmountsCents()[i] | centsToEuros }}
+              </span>
             </button>
           </div>
         </div>

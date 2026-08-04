@@ -15,7 +15,7 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'entryMode GUIDED requires at least one line, no manualTable, and no totals/VAT override; entryMode MANUAL requires a manualTable and no lines/serviceLines',
+          'entryMode GUIDED requires at least one line, no manualTable, and no totals/VAT override; entryMode MANUAL requires a manualTable and no lines/serviceLines/discountLines',
         ...options,
       },
       validator: {
@@ -38,7 +38,8 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
           return (
             !!dto.manualTable &&
             !(dto.lines && dto.lines.length > 0) &&
-            !(dto.serviceLines && dto.serviceLines.length > 0)
+            !(dto.serviceLines && dto.serviceLines.length > 0) &&
+            !(dto.discountLines && dto.discountLines.length > 0)
           );
         },
       },

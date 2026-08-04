@@ -16,6 +16,7 @@ import { UNIT_LABELS } from '../common/unit.util';
 import { InvoiceCalculationService } from './calculation/invoice-calculation.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import {
+  InvoiceDiscountLineWithAmount,
   InvoiceLineWithTotal,
   InvoiceServiceLineWithAmounts,
   InvoiceWithTotals,
@@ -67,11 +68,15 @@ export class InvoiceMapper {
     context: string;
     rawLineTotalsCents: number[];
     allServiceLineAmountsCents: number[];
+    discountLineAmountsCents: number[];
     subtotalExclVatCents: number;
   }): void {
-    const expectedSubtotalExclVatCents =
+    const expectedSubtotalExclVatCents = Math.max(
+      0,
       params.rawLineTotalsCents.reduce((sum, cents) => sum + cents, 0) +
-      params.allServiceLineAmountsCents.reduce((sum, cents) => sum + cents, 0);
+        params.allServiceLineAmountsCents.reduce((sum, cents) => sum + cents, 0) -
+        params.discountLineAmountsCents.reduce((sum, cents) => sum + cents, 0),
+    );
     if (expectedSubtotalExclVatCents !== params.subtotalExclVatCents) {
       InvoiceMapper.logger.warn(
         `Invoice totals do not reconcile for ${params.context}: sum of lines + services = ` +
@@ -191,14 +196,33 @@ export class InvoiceMapper {
       };
     });
 
-    const subtotalExclVatCents =
-      lines.reduce((sum, line) => sum + line.lineTotalExclVatCents, 0) + visibleServiceAmountCents;
+    // Phase 32: remises always fold straight into the subtotal, same
+    // "always increases/decreases the total by its full amount" treatment
+    // as a visible service line — floored at 0 so an over-discounted invoice
+    // never shows a negative HT amount (see CreateInvoiceDiscountLineDto's
+    // own bound, which only rejects an individual line's amount, not the sum).
+    const discountLines: InvoiceDiscountLineWithAmount[] = invoice.discountLines.map(
+      (discountLine) => ({
+        id: discountLine.id,
+        position: discountLine.position,
+        name: discountLine.name,
+        amountCents: discountLine.amountCents,
+      }),
+    );
+    const discountTotalCents = discountLines.reduce((sum, d) => sum + d.amountCents, 0);
+    const subtotalExclVatCents = Math.max(
+      0,
+      lines.reduce((sum, line) => sum + line.lineTotalExclVatCents, 0) +
+        visibleServiceAmountCents -
+        discountTotalCents,
+    );
     this.logIfTotalsDoNotReconcile({
       context: `invoice ${invoice.id}`,
       rawLineTotalsCents: [...rawLineTotalsById.values()],
       allServiceLineAmountsCents: invoice.serviceLines.map(
         (serviceLine) => serviceLine.amountCents,
       ),
+      discountLineAmountsCents: discountLines.map((d) => d.amountCents),
       subtotalExclVatCents,
     });
     const vatAmountCents = this.calculationService.computeVatAmountCents(
@@ -225,6 +249,7 @@ export class InvoiceMapper {
       entryMode: InvoiceEntryMode.GUIDED,
       lines,
       serviceLines,
+      discountLines,
       subtotalExclVatCents,
       vatAmountCents,
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
@@ -307,6 +332,7 @@ export class InvoiceMapper {
       entryMode: InvoiceEntryMode.MANUAL,
       lines: [],
       serviceLines: [],
+      discountLines: [],
       manualTable,
       subtotalExclVatCents,
       vatAmountCents,
@@ -366,6 +392,10 @@ export class InvoiceMapper {
       serviceLines: withTotals.serviceLines
         .filter((serviceLine) => serviceLine.visibility === 'VISIBLE')
         .map((serviceLine) => ({ name: serviceLine.name, amountCents: serviceLine.amountCents })),
+      discountLines: withTotals.discountLines.map((discountLine) => ({
+        name: discountLine.name,
+        amountCents: discountLine.amountCents,
+      })),
       simplifiedDisplay: withTotals.simplifiedDisplay,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
@@ -410,6 +440,7 @@ export class InvoiceMapper {
       entryMode: InvoiceEntryMode.MANUAL,
       lines: [],
       serviceLines: [],
+      discountLines: [],
       manualTable: {
         columns: table.columns
           .filter((_, index) => index !== lineTotalIndex)
@@ -536,14 +567,31 @@ export class InvoiceMapper {
       };
     });
 
-    const subtotalExclVatCents =
-      lineTotalsCents.reduce((sum, cents) => sum + cents, 0) + visibleServiceAmountCents;
+    // Phase 32: same positional-synthetic-id treatment as lines/serviceLines
+    // above — no ids exist yet for a not-yet-persisted draft.
+    const discountLines: InvoiceDiscountLineWithAmount[] = (dto.discountLines ?? []).map(
+      (discountLine, index) => ({
+        id: String(index),
+        position: index,
+        name: discountLine.name,
+        amountCents: discountLine.amountCents,
+      }),
+    );
+    const discountTotalCents = discountLines.reduce((sum, d) => sum + d.amountCents, 0);
+
+    const subtotalExclVatCents = Math.max(
+      0,
+      lineTotalsCents.reduce((sum, cents) => sum + cents, 0) +
+        visibleServiceAmountCents -
+        discountTotalCents,
+    );
     this.logIfTotalsDoNotReconcile({
       context: 'invoice preview',
       rawLineTotalsCents,
       allServiceLineAmountsCents: (dto.serviceLines ?? []).map(
         (serviceLine) => serviceLine.amountCents,
       ),
+      discountLineAmountsCents: discountLines.map((d) => d.amountCents),
       subtotalExclVatCents,
     });
     const vatAmountCents = this.calculationService.computeVatAmountCents(
@@ -574,6 +622,7 @@ export class InvoiceMapper {
       entryMode: InvoiceEntryMode.GUIDED,
       lines,
       serviceLines,
+      discountLines,
       subtotalExclVatCents,
       vatAmountCents,
       totalInclVatCents: subtotalExclVatCents + vatAmountCents,
@@ -651,6 +700,7 @@ export class InvoiceMapper {
       entryMode: InvoiceEntryMode.MANUAL,
       lines: [],
       serviceLines: [],
+      discountLines: [],
       manualTable: {
         columns: table.columns.map((column, index) => ({
           id: String(index),
@@ -707,6 +757,7 @@ export class InvoiceMapper {
         entryMode: InvoiceEntryMode.MANUAL,
         lines: [],
         serviceLines: [],
+        discountLines: [],
         manualTable: {
           columns: table.columns.map((column) => ({ label: column.label })),
           rows: table.rows.map((row) => ({
@@ -748,6 +799,10 @@ export class InvoiceMapper {
       serviceLines: withTotals.serviceLines
         .filter((serviceLine) => serviceLine.visibility === 'VISIBLE')
         .map((serviceLine) => ({ name: serviceLine.name, amountCents: serviceLine.amountCents })),
+      discountLines: withTotals.discountLines.map((discountLine) => ({
+        name: discountLine.name,
+        amountCents: discountLine.amountCents,
+      })),
       simplifiedDisplay: withTotals.simplifiedDisplay,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,

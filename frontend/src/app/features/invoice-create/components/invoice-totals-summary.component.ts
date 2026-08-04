@@ -46,6 +46,24 @@ function formatRateLabel(basisPoints: number): string {
   imports: [CentsToEurosPipe],
   template: `
     <div class="flex flex-col items-end gap-1 rounded-xl bg-secondary-subtle p-4">
+      <!-- Phase 32: only shown in the non-editable (quick mode) case, and
+           only once at least one remise is on the draft — otherwise this
+           block stays exactly as it always has (a single "Sous-total HT"
+           row). discountAmountCents() is already folded into totals()
+           .subtotalExclVatCents, so "before remise" is reconstructed by
+           adding it back for display, never a second source of truth. -->
+      @if (!editable() && discountAmountCents() > 0) {
+        <div class="flex w-56 justify-between text-ink-soft">
+          <span>Sous-total avant remise</span>
+          <span class="font-mono">
+            {{ totals().subtotalExclVatCents + discountAmountCents() | centsToEuros }}
+          </span>
+        </div>
+        <div class="flex w-56 justify-between text-danger">
+          <span>Remises</span>
+          <span class="font-mono">− {{ discountAmountCents() | centsToEuros }}</span>
+        </div>
+      }
       <div class="flex w-56 justify-between text-ink">
         <span>Sous-total HT</span>
         @if (editable()) {
@@ -132,6 +150,11 @@ function formatRateLabel(basisPoints: number): string {
 export class InvoiceTotalsSummaryComponent {
   readonly totals = input.required<TotalsPreview>();
   readonly vatApplicable = input.required<boolean>();
+  // Phase 32: already-summed magnitude of every remise on the draft (see
+  // InvoiceDraftStore.discountAmountCents) — GUIDED/quick mode only, purely
+  // a display breakdown of totals().subtotalExclVatCents (which is already
+  // net of it). Not read at all in manual mode (editable()).
+  readonly discountAmountCents = input(0);
 
   // Manual mode only (see docs/roadmap.md Phase 9.5 bis) — mode rapide's
   // totals stay a pure computed display, entirely derived from the

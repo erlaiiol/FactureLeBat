@@ -149,4 +149,18 @@ export class AuthService {
   googleLoginUrl(): string {
     return `${this.baseUrl}/google`;
   }
+
+  // Native counterpart to googleLoginUrl's browser-redirect flow — see
+  // GoogleNativeLoginService for why the native app takes a completely
+  // different path (its own ID token, not a redirect the WebView would
+  // navigate to) to reach the exact same backend account-linking logic.
+  googleTokenLogin(idToken: string): Observable<PublicUser> {
+    return this.http
+      .post<PublicUser>(
+        `${this.baseUrl}/google/token-login`,
+        { idToken },
+        { withCredentials: true },
+      )
+      .pipe(tap((user) => this.currentUser.set(user)));
+  }
 }

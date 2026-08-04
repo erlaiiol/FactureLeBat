@@ -88,6 +88,18 @@ export interface CreateInvoiceServiceLineRequest {
   activityCategory?: ActivityCategory;
 }
 
+// Phase 32: a remise applied to the invoice. Unlike
+// CreateInvoiceServiceLineRequest, there is no discountType/
+// percentageBasisPoints here — a PERCENTAGE discount is resolved to a
+// concrete amountCents client-side, at the moment it's added to the draft
+// (see InvoiceDraftStore.resolvedDiscountAmountCents), same "computed at
+// build time, not typed per invoice" precedent as a PERCENTAGE service line.
+export interface CreateInvoiceDiscountLineRequest {
+  discountId?: string;
+  name: string;
+  amountCents: number;
+}
+
 // A freehand extra client field (e.g. label "SIRET", value "123 456 789
 // 00012") — no fixed vocabulary, the artisan names the field themselves.
 export interface CreateInvoiceCustomerFieldRequest {
@@ -112,6 +124,10 @@ export interface CreateInvoiceRequest {
   // mirrors the backend's ManualModeFieldsConsistency cross-field rule.
   lines?: CreateInvoiceLineRequest[];
   serviceLines?: CreateInvoiceServiceLineRequest[];
+  // Phase 32: remises applied to the invoice — optional, defaults to none.
+  // Forbidden for entryMode MANUAL, mirrors the backend's
+  // ManualModeFieldsConsistency rule.
+  discountLines?: CreateInvoiceDiscountLineRequest[];
   // Required for entryMode MANUAL, forbidden for GUIDED.
   manualTable?: CreateManualTableRequest;
   // Phase 9.5 bis: manual mode's freely overridable aggregate figures — same
@@ -184,6 +200,16 @@ export interface InvoiceServiceLineWithAmounts {
   distribution?: { invoiceLineId: string; amountCents: number }[];
 }
 
+// Phase 32: a remise applied to the invoice — always folds its amountCents
+// straight into subtotalExclVatCents as a reduction, no visibility/
+// redistribution concept.
+export interface InvoiceDiscountLineWithAmount {
+  id: string;
+  position: number;
+  name: string;
+  amountCents: number;
+}
+
 export interface ManualInvoiceColumnWithId {
   id: string;
   position: number;
@@ -240,7 +266,12 @@ export interface InvoiceWithTotals {
   entryMode: InvoiceEntryMode;
   lines: InvoiceLineWithTotal[];
   serviceLines: InvoiceServiceLineWithAmounts[];
+  // Phase 32: always empty for entryMode MANUAL, same convention as
+  // lines/serviceLines above.
+  discountLines: InvoiceDiscountLineWithAmount[];
   manualTable?: ManualInvoiceTableWithTotals;
+  // Phase 32: already net of every discountLines' amountCents — subtotalExclVatCents
+  // + vatAmountCents === totalInclVatCents always holds.
   subtotalExclVatCents: number;
   vatAmountCents: number;
   totalInclVatCents: number;

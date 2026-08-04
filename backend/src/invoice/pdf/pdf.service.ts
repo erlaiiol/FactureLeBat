@@ -7,6 +7,7 @@ const roboto = require('pdfmake/fonts/Roboto') as Record<string, unknown>;
 import { FACTURELE_WATERMARK_LOGO_BASE64 } from './facturele-watermark-logo';
 import {
   InvoicePdfData,
+  InvoicePdfDiscountLine,
   InvoicePdfLine,
   InvoicePdfManualRow,
   InvoicePdfServiceLine,
@@ -443,8 +444,28 @@ export class PdfService {
     };
   }
 
+  // Phase 32: when there's at least one remise, the block grows from
+  // "Sous-total HT" straight to "TVA"/"Total TTC" into "Sous-total HT" (the
+  // pre-discount sum of lines/services), one row per named remise, and a
+  // "Total HT" row (post-discount, the real base VAT is computed on) — kept
+  // out of the way entirely (single "Sous-total HT" row, unchanged) for the
+  // common case of an invoice with no discount at all.
   private buildTotals(data: InvoicePdfData): Content {
-    const rows: [string, string][] = [['Sous-total HT', centsToEuros(data.subtotalExclVatCents)]];
+    const discountTotalCents = data.discountLines.reduce(
+      (sum, discount: InvoicePdfDiscountLine) => sum + discount.amountCents,
+      0,
+    );
+
+    const rows: [string, string][] = [];
+    if (discountTotalCents > 0) {
+      rows.push(['Sous-total HT', centsToEuros(data.subtotalExclVatCents + discountTotalCents)]);
+      for (const discount of data.discountLines) {
+        rows.push([discount.name, centsToEuros(-discount.amountCents)]);
+      }
+      rows.push(['Total HT', centsToEuros(data.subtotalExclVatCents)]);
+    } else {
+      rows.push(['Sous-total HT', centsToEuros(data.subtotalExclVatCents)]);
+    }
 
     if (data.vatApplicable) {
       const vatRate = (data.vatRateBasisPoints / 100).toFixed(2);

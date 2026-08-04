@@ -118,6 +118,21 @@ const protectedRoutes: Routes = [
     loadComponent: () =>
       import('./features/service-form/service-form.page').then((m) => m.ServiceFormPage),
   },
+  {
+    path: 'remises',
+    loadComponent: () =>
+      import('./features/discount-list/discount-list.page').then((m) => m.DiscountListPage),
+  },
+  {
+    path: 'remises/nouvelle',
+    loadComponent: () =>
+      import('./features/discount-form/discount-form.page').then((m) => m.DiscountFormPage),
+  },
+  {
+    path: 'remises/:id',
+    loadComponent: () =>
+      import('./features/discount-form/discount-form.page').then((m) => m.DiscountFormPage),
+  },
   // Phase 18: "Rapports" and "Statistiques" merged into one page with two
   // in-page tabs (see StatsReportsPage) so related figures stop being split
   // across two separate nav clicks. The old '/rapports' URL redirects

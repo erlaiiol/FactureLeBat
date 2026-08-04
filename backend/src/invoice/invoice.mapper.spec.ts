@@ -116,6 +116,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
       },
     ],
     serviceLines: [],
+    discountLines: [],
     manualColumns: [],
     manualRows: [],
     customerFields: [],
@@ -199,6 +200,51 @@ describe('InvoiceMapper', () => {
       ]);
       // Invoice total increases by exactly the service amount added.
       expect(result.subtotalExclVatCents).toBe(45000 + 10000);
+    });
+
+    it('subtracts every discount line from the subtotal, exposing each by name/amount', () => {
+      const invoice = invoiceWithLines({
+        discountLines: [
+          {
+            id: 'disc-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            discountId: null,
+            name: 'Remise fidélité',
+            amountCents: 5000,
+            createdAt: new Date('2026-01-15'),
+          },
+        ],
+      });
+      const result = mapper.toInvoiceWithTotals(invoice);
+
+      expect(result.lines[0].lineTotalExclVatCents).toBe(45000);
+      expect(result.discountLines).toEqual([
+        expect.objectContaining({ name: 'Remise fidélité', amountCents: 5000 }),
+      ]);
+      expect(result.subtotalExclVatCents).toBe(45000 - 5000);
+      expect(result.totalInclVatCents).toBe(result.subtotalExclVatCents + result.vatAmountCents);
+    });
+
+    it('floors the subtotal at 0 when discounts exceed the lines/services total, rather than going negative', () => {
+      const invoice = invoiceWithLines({
+        discountLines: [
+          {
+            id: 'disc-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            discountId: null,
+            name: 'Remise énorme',
+            amountCents: 999_999,
+            createdAt: new Date('2026-01-15'),
+          },
+        ],
+      });
+      const result = mapper.toInvoiceWithTotals(invoice);
+
+      expect(result.subtotalExclVatCents).toBe(0);
+      expect(result.vatAmountCents).toBe(0);
+      expect(result.totalInclVatCents).toBe(0);
     });
 
     it('folds a REDISTRIBUTED service line into the referenced lines, matching the total increase invariant', () => {
@@ -471,6 +517,17 @@ describe('InvoiceMapper', () => {
       expect(preview.lines[0].totalCents).toBe(45000);
       expect(preview.serviceLines).toEqual([{ name: "Main-d'œuvre", amountCents: 10000 }]);
       expect(preview.subtotalExclVatCents).toBe(45000 + 10000);
+    });
+
+    it('subtracts a discount line from the subtotal, on the not-yet-persisted draft path', () => {
+      const dto = createInvoiceDtoFixture({
+        discountLines: [{ name: 'Remise fidélité', amountCents: 5000 }],
+      });
+      const preview = mapper.toPreviewPdfData(dto, companyFixture());
+
+      expect(preview.lines[0].totalCents).toBe(45000);
+      expect(preview.discountLines).toEqual([{ name: 'Remise fidélité', amountCents: 5000 }]);
+      expect(preview.subtotalExclVatCents).toBe(45000 - 5000);
     });
 
     it('folds an EQUAL REDISTRIBUTED service line evenly across every draft line, matching the persisted expansion rule', () => {

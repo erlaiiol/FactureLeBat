@@ -65,6 +65,11 @@ export function computeLineTotalPreviewCents(line: LinePreviewInput): number {
 // ONLY, same carve-out as the rest of this file: the concrete amountCents
 // this produces is what actually gets submitted as the service line's
 // amount, so the backend never needs to know a line was percentage-derived.
+// Phase 32: the exact same basis-point-of-a-base formula also resolves a
+// PERCENTAGE discount's amountCents (see
+// InvoiceDraftStore.resolvedDiscountAmountCents) — reused as-is rather than
+// duplicated under a second name, since neither the math nor its "resolved
+// once, not a live formula" framing differs between the two.
 export function computePercentageServiceAmountCents(
   baseCents: number,
   percentageBasisPoints: number,
@@ -84,14 +89,25 @@ export interface TotalsPreview {
 // breakdown a REDISTRIBUTED line produces, since this screen shows no
 // per-line totals to begin with. No need to duplicate the weighted-split
 // math here just for a running total.
+//
+// Phase 32: discountAmountCents is the already-summed magnitude of every
+// remise on the draft (see InvoiceDraftStore.discountAmountCents) — folded
+// into the subtotal the same way serviceAmountCents adds to it, just
+// subtracted, and floored at 0 so an over-discounted draft never previews a
+// negative HT amount.
 export function computeTotalsPreview(
   lines: readonly LinePreviewInput[],
   vatApplicable: boolean,
   vatRateBasisPoints: number,
   serviceAmountCents = 0,
+  discountAmountCents = 0,
 ): TotalsPreview {
-  const subtotalExclVatCents =
-    lines.reduce((sum, line) => sum + computeLineTotalPreviewCents(line), 0) + serviceAmountCents;
+  const subtotalExclVatCents = Math.max(
+    0,
+    lines.reduce((sum, line) => sum + computeLineTotalPreviewCents(line), 0) +
+      serviceAmountCents -
+      discountAmountCents,
+  );
   const vatAmountCents = vatApplicable
     ? Math.round((subtotalExclVatCents * vatRateBasisPoints) / 10000)
     : 0;

@@ -2,8 +2,13 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DemoProfile } from '../../../core/models/auth.model';
+import {
+  GoogleNativeLoginCancelledError,
+  GoogleNativeLoginService,
+} from '../../../core/services/google-native-login.service';
 import { PlatformService } from '../../../core/services/platform.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
@@ -25,6 +30,7 @@ import { ReferralCodePromptComponent } from '../../../shared/components/referral
 })
 export class LoginPage {
   private readonly authService = inject(AuthService);
+  private readonly googleNativeLoginService = inject(GoogleNativeLoginService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -66,6 +72,29 @@ export class LoginPage {
   // referral link would (see register.page.ts's refCodeFromQuery/autofill).
   protected onReferralCodeConfirmed(code: string): void {
     void this.router.navigate(['/inscription'], { queryParams: { ref: code } });
+  }
+
+  // Native counterpart to the [href]="googleLoginUrl" anchor rendered on
+  // web (see login.page.html) — the app shell can't use that browser
+  // redirect at all, see GoogleNativeLoginService for why.
+  protected async googleLoginNative(): Promise<void> {
+    if (this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const idToken = await this.googleNativeLoginService.login();
+      await firstValueFrom(this.authService.googleTokenLogin(idToken));
+      void this.router.navigateByUrl('/');
+    } catch (error) {
+      if (!(error instanceof GoogleNativeLoginCancelledError)) {
+        this.errorMessage.set('Connexion avec Google indisponible.');
+      }
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   protected demoLogin(key: string): void {

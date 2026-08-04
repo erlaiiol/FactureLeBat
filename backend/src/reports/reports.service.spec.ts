@@ -101,6 +101,7 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
       },
     ],
     serviceLines: [],
+    discountLines: [],
     manualColumns: [],
     manualRows: [],
     customerFields: [],

@@ -41,6 +41,18 @@ enum ServiceVisibility {
   REDISTRIBUTED
 }
 
+// Phase 32: which of the two a catalog Discount/InvoiceDiscountLine's value
+// means — a plain euro amount (FIXED) or a share of the invoice's product +
+// visible-service subtotal, before VAT (PERCENTAGE). Same "resolved once at
+// add-time, never a live formula" precedent as Service.pricingMode
+// PERCENTAGE: a PERCENTAGE discount is converted to a concrete amountCents
+// client-side the moment it's added to an invoice draft, and
+// InvoiceDiscountLine below only ever stores that resolved amountCents.
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
 // Phase 13.5: how a catalog Service's contribution to an invoice is priced.
 // FIXED (default, pre-existing behavior) is a typed euro amount (priceCents).
 // PERCENTAGE stores a share of the invoice instead (percentageBasisPoints,
@@ -334,6 +346,7 @@ model Company {
   customers        Customer[]
   products         Product[]
   services         Service[]
+  discounts        Discount[]
   promoRedemptions PromoCodeRedemption[]
 
   // Company logo (top-right corner of every invoice/devis PDF), kept in its
@@ -572,8 +585,9 @@ model Invoice {
   convertedFromDevis   Invoice? @relation("DevisConversion", fields: [convertedFromDevisId], references: [id], onDelete: SetNull)
   convertedToFacture   Invoice? @relation("DevisConversion")
 
-  lines        InvoiceLine[]
-  serviceLines InvoiceServiceLine[]
+  lines         InvoiceLine[]
+  serviceLines  InvoiceServiceLine[]
+  discountLines InvoiceDiscountLine[]
 
   manualColumns ManualInvoiceColumn[]
   manualRows    ManualInvoiceRow[]
@@ -758,6 +772,33 @@ model Service {
   @@index([companyId])
 }
 
+// Phase 32: catalog entry for a reusable named discount/remise — the quick
+// mode's third button, alongside Product/Service. Deliberately a shorter
+// shape than Product/Service (no code/description/activityCategory): name +
+// type + value only, matching the artisan-facing form. See DiscountType
+// above for what fixedAmountCents/percentageBasisPoints mean and why only
+// InvoiceDiscountLine's already-resolved amountCents (never a rate) is
+// persisted once a discount is actually applied to an invoice.
+model Discount {
+  id String @id @default(uuid())
+
+  name String
+
+  discountType          DiscountType @default(FIXED)
+  fixedAmountCents      Int?
+  percentageBasisPoints Int?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  invoiceDiscountLines InvoiceDiscountLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+}
+
 model InvoiceLine {
   id String @id @default(uuid())
 
@@ -856,6 +897,33 @@ model InvoiceServiceLine {
   // is no separate "strategy" column, weighted distribution is the only
   // math the read path needs (see InvoiceCalculationService.computeWeightedSplit).
   weights InvoiceServiceLineWeight[]
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+// Phase 32: a remise applied to an invoice/devis (GUIDED mode only — see
+// ManualModeFieldsConsistency, which forbids this for MANUAL) — always folds
+// its resolved amountCents straight into the subtotal as a reduction, no
+// visibility/redistribution concept (a discount never targets specific
+// lines, unlike InvoiceServiceLine). Soft reference to a saved Discount, same
+// "autofill, not a lock" rule as InvoiceServiceLine.serviceId — amountCents
+// is always the source of truth for this invoice, never re-read from
+// `discount` after creation, and (same as a PERCENTAGE service line) the
+// original discountType/rate is not retained once persisted.
+model InvoiceDiscountLine {
+  id String @id @default(uuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position  Int
+
+  discountId String?
+  discount   Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+
+  name        String
+  amountCents Int
 
   createdAt DateTime @default(now())
 

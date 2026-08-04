@@ -10,6 +10,7 @@ import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
+import { DiscountService } from '../discount/discount.service';
 import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
@@ -17,6 +18,7 @@ import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceMapper } from './invoice.mapper';
 import {
   CreateInvoiceData,
+  CreateInvoiceDiscountLineData,
   CreateInvoiceServiceLineData,
   InvoiceRepository,
   InvoiceWithLines,
@@ -35,6 +37,7 @@ export class InvoiceService {
     private readonly companyService: CompanyService,
     private readonly customerService: CustomerService,
     private readonly serviceCatalogService: ServiceCatalogService,
+    private readonly discountService: DiscountService,
     private readonly mapper: InvoiceMapper,
     private readonly premiumGate: PlanGateService,
   ) {}
@@ -87,6 +90,15 @@ export class InvoiceService {
     for (const serviceLine of serviceLineDtos) {
       if (serviceLine.serviceId) {
         await this.serviceCatalogService.findById(companyId, serviceLine.serviceId);
+      }
+    }
+
+    // Phase 32: same soft-reference existence check, for a discount line's
+    // discountId — there is no DELETE /discounts endpoint either.
+    const discountLineDtos = entryMode === InvoiceEntryMode.GUIDED ? (dto.discountLines ?? []) : [];
+    for (const discountLine of discountLineDtos) {
+      if (discountLine.discountId) {
+        await this.discountService.findById(companyId, discountLine.discountId);
       }
     }
 
@@ -146,6 +158,11 @@ export class InvoiceService {
           activityCategory: serviceLine.activityCategory,
         };
       }),
+      discountLines: discountLineDtos.map((discountLine): CreateInvoiceDiscountLineData => ({
+        discountId: discountLine.discountId,
+        name: discountLine.name,
+        amountCents: discountLine.amountCents,
+      })),
       // ManualModeFieldsConsistency guarantees `manualTable` is present
       // whenever entryMode is MANUAL (the only branch that reads it below).
       manualColumns:
@@ -229,6 +246,11 @@ export class InvoiceService {
                   0,
               )
             : undefined,
+      })),
+      discountLines: devis.discountLines.map((discountLine): CreateInvoiceDiscountLineData => ({
+        discountId: discountLine.discountId ?? undefined,
+        name: discountLine.name,
+        amountCents: discountLine.amountCents,
       })),
       manualColumns:
         devis.entryMode === InvoiceEntryMode.MANUAL

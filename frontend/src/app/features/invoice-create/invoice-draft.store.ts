@@ -2,7 +2,9 @@ import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angul
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { CompanyProfile } from '../../core/models/company.model';
+import { DiscountType } from '../../core/models/discount.model';
 import {
+  CreateInvoiceDiscountLineRequest,
   CreateInvoiceLineRequest,
   CreateInvoiceRequest,
   CreateInvoiceServiceLineRequest,
@@ -17,6 +19,7 @@ import { ServicePricingMode } from '../../core/models/service.model';
 import { isAreaUnit, Unit } from '../../core/models/unit.model';
 import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
+import { DiscountService } from '../../core/services/discount.service';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { ProductService } from '../../core/services/product.service';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
@@ -96,6 +99,25 @@ export interface InvoiceServiceLineDraft {
   activityCategory: ActivityCategory | null;
 }
 
+// Phase 32: a remise on the draft — mirrors InvoiceServiceLineDraft's shape,
+// minus visibility/redistribution (a discount always folds straight into
+// the subtotal, never targets specific lines) and minus activityCategory (a
+// discount isn't a URSSAF-categorized sale).
+export interface InvoiceDiscountLineDraft {
+  discountId: string | null;
+  name: string;
+  discountType: DiscountType;
+  // Authoritative for discountType FIXED (freely typed/edited). Ignored for
+  // PERCENTAGE — see InvoiceDraftStore.resolvedDiscountAmountCents, which
+  // recomputes that line's real amount live instead.
+  fixedAmountEuros: number;
+  percentageBasisPoints: number | null;
+  // Same UI-only toggle-tracking role as InvoiceServiceLineDraft.catalogServiceId.
+  catalogDiscountId: string | null;
+  // Same UI-only toggle-tracking role as InvoiceServiceLineDraft.saveAsNewService.
+  saveAsNewDiscount: boolean;
+}
+
 const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
   customerId: null,
   customerName: '',
@@ -133,12 +155,26 @@ const EMPTY_SERVICE_LINE_DEFAULTS = {
   activityCategory: null as ActivityCategory | null,
 };
 
+// Phase 32: defaults for a discount line draft — same "merge under a
+// hydrated draft" role as EMPTY_SERVICE_LINE_DEFAULTS, so a draft persisted
+// before this phase (no discountLines at all) still hydrates cleanly.
+const EMPTY_DISCOUNT_LINE_DEFAULTS: InvoiceDiscountLineDraft = {
+  discountId: null,
+  name: '',
+  discountType: 'FIXED',
+  fixedAmountEuros: 0,
+  percentageBasisPoints: null,
+  catalogDiscountId: null,
+  saveAsNewDiscount: false,
+};
+
 const DRAFT_STORAGE_KEY = 'facturele.invoiceDraft.v1';
 
 interface PersistedDraft {
   customer: InvoiceCustomerDraft;
   lines: InvoiceLineDraft[];
   serviceLines: InvoiceServiceLineDraft[];
+  discountLines: InvoiceDiscountLineDraft[];
   documentType: DocumentType;
   simplifiedDisplay: boolean;
   sourceDevisId: string | null;
@@ -159,16 +195,19 @@ export class InvoiceDraftStore {
   private readonly invoiceService = inject(InvoiceService);
   private readonly productService = inject(ProductService);
   private readonly serviceCatalogService = inject(ServiceCatalogService);
+  private readonly discountService = inject(DiscountService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly company = signal<CompanyProfile | null>(null);
   // Delegate to each service's shared, app-wide cache (see
   // CustomerService.all) rather than holding a local snapshot — a customer/
-  // product/service created or edited on any screen becomes selectable here
-  // immediately, without needing this store (or the page) to be reloaded.
+  // product/service/discount created or edited on any screen becomes
+  // selectable here immediately, without needing this store (or the page)
+  // to be reloaded.
   readonly customers = computed(() => this.customerService.all() ?? []);
   readonly products = computed(() => this.productService.all() ?? []);
   readonly services = computed(() => this.serviceCatalogService.all() ?? []);
+  readonly discounts = computed(() => this.discountService.all() ?? []);
   // The customer-step grid needs to tell "still loading" apart from
   // "loaded, zero customers" (an empty grid is a valid, non-transient state
   // that shouldn't show a skeleton) — `all()` is only ever null before the
@@ -203,6 +242,7 @@ export class InvoiceDraftStore {
   // adds one via a fixed "+" button (see InvoiceCreateLinesStepPage).
   readonly lines = signal<InvoiceLineDraft[]>([]);
   readonly serviceLines = signal<InvoiceServiceLineDraft[]>([]);
+  readonly discountLines = signal<InvoiceDiscountLineDraft[]>([]);
   // Phase 23: document-level toggle set from the "Personnaliser l'affichage"
   // step — hides the whole Quantité/Prix unitaire columns on the rendered
   // document, leaving only description + line total.
@@ -264,6 +304,34 @@ export class InvoiceDraftStore {
     ),
   );
 
+  // Phase 32: same "computed at build time, not typed per invoice" precedent
+  // as resolvedServiceAmountCents above — FIXED just returns the typed
+  // amount; PERCENTAGE recomputes it live as a share of percentageBaseCents
+  // (product lines + FIXED visible service lines, before this discount and
+  // before VAT — see the Q&A that settled this base). Used for both the
+  // running total below and the actual create/preview request
+  // (buildInvoiceRequest), so they can never disagree.
+  resolvedDiscountAmountCents(discountLine: InvoiceDiscountLineDraft): number {
+    if (discountLine.discountType === 'FIXED') {
+      const cents = Math.round(discountLine.fixedAmountEuros * 100);
+      return Number.isFinite(cents) && cents > 0 ? cents : 0;
+    }
+    return computePercentageServiceAmountCents(
+      this.percentageBaseCents(),
+      discountLine.percentageBasisPoints ?? 0,
+    );
+  }
+
+  // Public: also read directly by invoice-create-shell.page.html (via
+  // app-invoice-totals-summary's discountAmountCents input) to render the
+  // "Sous-total avant remise / Remises" breakdown.
+  readonly discountAmountCents = computed(() =>
+    this.discountLines().reduce(
+      (sum, discountLine) => sum + this.resolvedDiscountAmountCents(discountLine),
+      0,
+    ),
+  );
+
   readonly totalsPreview = computed<TotalsPreview>(() => {
     const company = this.company();
     return computeTotalsPreview(
@@ -271,6 +339,7 @@ export class InvoiceDraftStore {
       this.vatApplicable(),
       company?.vatRateBasisPoints ?? 0,
       this.serviceAmountCents(),
+      this.discountAmountCents(),
     );
   });
 
@@ -299,12 +368,14 @@ export class InvoiceDraftStore {
     this.customerService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
     this.productService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
     this.serviceCatalogService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+    this.discountService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
 
     effect(() => {
       const snapshot: PersistedDraft = {
         customer: this.customer(),
         lines: this.lines(),
         serviceLines: this.serviceLines(),
+        discountLines: this.discountLines(),
         documentType: this.documentType(),
         simplifiedDisplay: this.simplifiedDisplay(),
         sourceDevisId: this.sourceDevisId(),
@@ -359,6 +430,10 @@ export class InvoiceDraftStore {
     this.serviceLines.set(serviceLines);
   }
 
+  setDiscountLines(discountLines: InvoiceDiscountLineDraft[]): void {
+    this.discountLines.set(discountLines);
+  }
+
   // Phase 15: flips one line's PDF-detail toggle from the mandatory preview
   // screen. A pure display choice — never touches quantity/price/totals —
   // so it's safe to mutate directly on the store rather than round-tripping
@@ -378,6 +453,7 @@ export class InvoiceDraftStore {
     this.customer.set(EMPTY_CUSTOMER);
     this.lines.set([]);
     this.serviceLines.set([]);
+    this.discountLines.set([]);
     this.documentType.set('FACTURE');
     this.simplifiedDisplay.set(false);
     this.sourceDevisId.set(null);
@@ -452,6 +528,23 @@ export class InvoiceDraftStore {
       })),
     );
 
+    // Phase 32: same "loses its rate, keeps its resolved amount" treatment
+    // as a service line above — a persisted invoice never retained whether
+    // this remise was originally FIXED or PERCENTAGE (see
+    // InvoiceDiscountLine, schema.prisma), so it's rebuilt as a plain FIXED
+    // line at the amount it actually resolved to.
+    this.discountLines.set(
+      source.discountLines.map((discountLine) => ({
+        discountId: null,
+        name: discountLine.name,
+        discountType: 'FIXED',
+        fixedAmountEuros: discountLine.amountCents / 100,
+        percentageBasisPoints: null,
+        catalogDiscountId: null,
+        saveAsNewDiscount: false,
+      })),
+    );
+
     this.documentType.set('FACTURE');
     this.simplifiedDisplay.set(source.simplifiedDisplay);
     this.sourceDevisId.set(source.id);
@@ -509,6 +602,14 @@ export class InvoiceDraftStore {
       },
     );
 
+    const discountLines: CreateInvoiceDiscountLineRequest[] = this.discountLines().map(
+      (discountLine) => ({
+        discountId: discountLine.discountId ?? undefined,
+        name: discountLine.name,
+        amountCents: this.resolvedDiscountAmountCents(discountLine),
+      }),
+    );
+
     return {
       customerName: customer.customerName,
       customerAddress: customer.customerAddress || undefined,
@@ -518,6 +619,7 @@ export class InvoiceDraftStore {
       documentType: this.documentType(),
       lines,
       serviceLines: serviceLines.length > 0 ? serviceLines : undefined,
+      discountLines: discountLines.length > 0 ? discountLines : undefined,
       simplifiedDisplay: this.simplifiedDisplay(),
       convertedFromDevisId: this.sourceDevisId() ?? undefined,
       number: this.number().trim() || undefined,
@@ -583,6 +685,31 @@ export class InvoiceDraftStore {
         );
       });
 
+    const discountSaves = this.discountLines()
+      .map((discountLine, index) => ({ discountLine, index }))
+      .filter(({ discountLine }) => discountLine.saveAsNewDiscount)
+      .map(({ discountLine, index }) => {
+        const payload = {
+          name: discountLine.name,
+          discountType: discountLine.discountType,
+          fixedAmountCents:
+            discountLine.discountType === 'FIXED'
+              ? Math.round(discountLine.fixedAmountEuros * 100)
+              : undefined,
+          percentageBasisPoints:
+            discountLine.discountType === 'PERCENTAGE'
+              ? (discountLine.percentageBasisPoints ?? undefined)
+              : undefined,
+        };
+        const save$ = discountLine.catalogDiscountId
+          ? this.discountService.update(discountLine.catalogDiscountId, payload)
+          : this.discountService.create(payload);
+        return save$.pipe(
+          map((discount) => ({ index, id: discount.id })),
+          catchError(() => of(null)),
+        );
+      });
+
     const customer = this.customer();
     const savingNewCustomer = customer.saveAsNewCustomer && !customer.customerId;
     const customerSave$ = savingNewCustomer
@@ -599,14 +726,19 @@ export class InvoiceDraftStore {
           )
       : of(null);
 
-    const hadAnyToSave = productSaves.length > 0 || serviceSaves.length > 0 || savingNewCustomer;
+    const hadAnyToSave =
+      productSaves.length > 0 ||
+      serviceSaves.length > 0 ||
+      discountSaves.length > 0 ||
+      savingNewCustomer;
 
     return forkJoin([
       productSaves.length > 0 ? forkJoin(productSaves) : of([]),
       serviceSaves.length > 0 ? forkJoin(serviceSaves) : of([]),
+      discountSaves.length > 0 ? forkJoin(discountSaves) : of([]),
       customerSave$,
     ]).pipe(
-      map(([productResults, serviceResults, customerId]) => {
+      map(([productResults, serviceResults, discountResults, customerId]) => {
         if (productResults.length > 0) {
           this.lines.update((currentLines) =>
             currentLines.map((line, index) => {
@@ -624,6 +756,16 @@ export class InvoiceDraftStore {
               return result
                 ? { ...serviceLine, catalogServiceId: result.id, saveAsNewService: false }
                 : serviceLine;
+            }),
+          );
+        }
+        if (discountResults.length > 0) {
+          this.discountLines.update((currentDiscountLines) =>
+            currentDiscountLines.map((discountLine, index) => {
+              const result = discountResults.find((r) => r?.index === index);
+              return result
+                ? { ...discountLine, catalogDiscountId: result.id, saveAsNewDiscount: false }
+                : discountLine;
             }),
           );
         }
@@ -655,6 +797,14 @@ export class InvoiceDraftStore {
           parsed.serviceLines.map((serviceLine) => ({
             ...EMPTY_SERVICE_LINE_DEFAULTS,
             ...serviceLine,
+          })),
+        );
+      }
+      if (Array.isArray(parsed.discountLines)) {
+        this.discountLines.set(
+          parsed.discountLines.map((discountLine) => ({
+            ...EMPTY_DISCOUNT_LINE_DEFAULTS,
+            ...discountLine,
           })),
         );
       }

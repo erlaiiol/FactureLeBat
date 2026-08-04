@@ -14,6 +14,7 @@ import { CompanyModule } from './company/company.module';
 import { validateEnv } from './config/env.validation';
 import { CustomerModule } from './customer/customer.module';
 import { DatabaseModule } from './database/database.module';
+import { DiscountModule } from './discount/discount.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { MailSettingsModule } from './mail-settings/mail-settings.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
@@ -39,6 +40,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     AuthModule,
     CompanyModule,
     CustomerModule,
+    DiscountModule,
     InvoiceModule,
     MailSettingsModule,
     OnboardingModule,

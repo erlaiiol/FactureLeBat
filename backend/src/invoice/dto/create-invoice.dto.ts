@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { DocumentType, InvoiceEntryMode } from '../../../generated/prisma/enums';
 import { CreateInvoiceCustomerFieldDto } from './create-invoice-customer-field.dto';
+import { CreateInvoiceDiscountLineDto } from './create-invoice-discount-line.dto';
 import { CreateInvoiceLineDto } from './create-invoice-line.dto';
 import { CreateInvoiceServiceLineDto } from './create-invoice-service-line.dto';
 import { CreateManualTableDto } from './manual/create-manual-table.dto';
@@ -29,6 +30,8 @@ import { ServiceLineWeightsMatchLines } from './service-line-weights-match-lines
 const MAX_LINES = 200;
 // Same reasoning, applied to Phase 5 service lines.
 const MAX_SERVICE_LINES = 50;
+// Same reasoning, applied to Phase 32 discount lines.
+const MAX_DISCOUNT_LINES = 50;
 // Same reasoning, applied to freehand extra client fields.
 const MAX_CUSTOMER_FIELDS = 20;
 // Same generous-but-finite bound as a manual-table cell value (see
@@ -114,6 +117,16 @@ export class CreateInvoiceDto {
   @Type(() => CreateInvoiceServiceLineDto)
   @ServiceLineWeightsMatchLines()
   serviceLines?: CreateInvoiceServiceLineDto[];
+
+  // Phase 32: remises applied to the invoice — see CreateInvoiceDiscountLineDto.
+  // Optional and defaults to none — most invoices carry no discount at all.
+  // Forbidden for entryMode MANUAL (see ManualModeFieldsConsistency).
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_DISCOUNT_LINES)
+  @ValidateNested({ each: true })
+  @Type(() => CreateInvoiceDiscountLineDto)
+  discountLines?: CreateInvoiceDiscountLineDto[];
 
   // Phase 9.5 manual mode's whole body — required exactly when entryMode is
   // MANUAL, forbidden otherwise (see ManualModeFieldsConsistency).

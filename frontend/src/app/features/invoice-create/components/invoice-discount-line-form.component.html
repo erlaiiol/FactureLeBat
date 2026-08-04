@@ -1,0 +1,129 @@
+<div [formGroup]="group()" class="flex flex-col gap-3 rounded-xl border border-line p-4">
+  <div class="flex items-center justify-between">
+    <span class="font-semibold text-ink">Remise {{ index() + 1 }}</span>
+    <button
+      type="button"
+      (click)="remove.emit()"
+      class="text-sm font-medium text-danger hover:underline"
+    >
+      Supprimer
+    </button>
+  </div>
+
+  @if (discounts().length > 0 && !isCatalogLinked()) {
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Remise enregistrée</span>
+      <select
+        (change)="onDiscountSelected($any($event.target).value)"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      >
+        <option value="">— Sélectionner —</option>
+        @for (discount of discounts(); track discount.id) {
+          <option [value]="discount.id">{{ discount.name }}</option>
+        }
+      </select>
+    </label>
+  }
+
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Nom</span>
+    <input
+      formControlName="name"
+      type="text"
+      [readonly]="isCatalogLinked()"
+      placeholder="Ex : Remise fidélité"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+      [class.bg-bg]="isCatalogLinked()"
+      [class.text-ink-soft]="isCatalogLinked()"
+    />
+    @if (isCatalogLinked()) {
+      <app-field-hint
+        text="Cette remise vient de votre catalogue — renommez-la depuis « Mes remises » si besoin."
+      />
+    } @else {
+      <app-field-hint text="Ce qui sera écrit sur la facture pour cette remise." />
+    }
+  </label>
+
+  <div class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Type</span>
+    <div class="flex overflow-hidden rounded-lg border border-line">
+      <button
+        type="button"
+        (click)="group().controls.discountType.setValue('FIXED')"
+        [class.bg-warning]="!isPercentageMode()"
+        [class.text-warning-fg]="!isPercentageMode()"
+        class="flex-1 px-4 py-3 text-sm font-semibold"
+      >
+        Montant fixe
+      </button>
+      <button
+        type="button"
+        (click)="group().controls.discountType.setValue('PERCENTAGE')"
+        [class.bg-warning]="isPercentageMode()"
+        [class.text-warning-fg]="isPercentageMode()"
+        class="flex-1 px-4 py-3 text-sm font-semibold"
+      >
+        Pourcentage du total
+      </button>
+    </div>
+    <app-field-hint
+      text="Pourcentage : calculé automatiquement sur le total des produits et prestations visibles de la facture, hors TVA."
+    />
+  </div>
+
+  @if (isPercentageMode()) {
+    <div class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Pourcentage (%)</span>
+      <input
+        type="number"
+        step="0.01"
+        min="0"
+        max="100"
+        [value]="displayPercentage()"
+        (input)="onPercentageInput($any($event.target).value)"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint
+        text="Montant calculé automatiquement : {{
+          resolvedAmountCents() / 100 | number: '1.2-2'
+        }} €."
+      />
+    </div>
+  } @else {
+    <label class="flex flex-1 flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Montant (€)</span>
+      <input
+        formControlName="fixedAmountEuros"
+        type="number"
+        step="0.01"
+        min="0"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint text="Le montant total de cette remise." />
+    </label>
+  }
+
+  <!-- Same "Valider" ng-content slot as InvoiceLineFormComponent/InvoiceServiceLineFormComponent. -->
+  <div class="flex gap-3">
+    <button
+      type="button"
+      (click)="toggleSaveToCatalog()"
+      class="flex-1 rounded-xl border px-4 py-4 text-sm font-semibold shadow-sm transition"
+      [class.border-line]="!group().controls.saveAsNewDiscount.value"
+      [class.bg-bg]="!group().controls.saveAsNewDiscount.value"
+      [class.text-ink-soft]="!group().controls.saveAsNewDiscount.value"
+      [class.border-warning]="group().controls.saveAsNewDiscount.value"
+      [class.bg-warning]="group().controls.saveAsNewDiscount.value"
+      [class.text-warning-fg]="group().controls.saveAsNewDiscount.value"
+    >
+      @if (group().controls.saveAsNewDiscount.value) {
+        <app-icon-check [size]="14" />
+      }
+      {{ saveToCatalogLabel() }}
+    </button>
+    <div class="flex-1">
+      <ng-content />
+    </div>
+  </div>
+</div>

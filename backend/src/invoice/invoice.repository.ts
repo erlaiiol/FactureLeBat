@@ -6,6 +6,7 @@ import {
   InvoiceLineModel as InvoiceLine,
   InvoiceServiceLineModel as InvoiceServiceLine,
   InvoiceServiceLineWeightModel as InvoiceServiceLineWeight,
+  InvoiceDiscountLineModel as InvoiceDiscountLine,
   ManualInvoiceColumnModel as ManualInvoiceColumn,
   ManualInvoiceRowModel as ManualInvoiceRow,
   ManualInvoiceCellModel as ManualInvoiceCell,
@@ -27,6 +28,7 @@ import { computeNextDocumentNumber } from './next-number.util';
 export type InvoiceWithLines = Invoice & {
   lines: InvoiceLine[];
   serviceLines: (InvoiceServiceLine & { weights: InvoiceServiceLineWeight[] })[];
+  discountLines: InvoiceDiscountLine[];
   manualColumns: ManualInvoiceColumn[];
   manualRows: (ManualInvoiceRow & { cells: ManualInvoiceCell[] })[];
   customerFields: InvoiceCustomerField[];
@@ -71,6 +73,14 @@ export interface CreateInvoiceServiceLineData {
   activityCategory?: ActivityCategory;
 }
 
+// Phase 32: a remise applied to the invoice — see schema.prisma's comment on
+// InvoiceDiscountLine.
+export interface CreateInvoiceDiscountLineData {
+  discountId?: string;
+  name: string;
+  amountCents: number;
+}
+
 // Phase 9.5: one column of a MANUAL invoice's free-form table. Positional
 // cells on CreateManualRowData below are aligned with this array's order.
 export interface CreateManualColumnData {
@@ -111,6 +121,9 @@ export interface CreateInvoiceData {
   entryMode: InvoiceEntryMode;
   lines: CreateInvoiceLineData[];
   serviceLines: CreateInvoiceServiceLineData[];
+  // Phase 32: always empty for entryMode MANUAL (enforced at the DTO
+  // boundary, see ManualModeFieldsConsistency).
+  discountLines: CreateInvoiceDiscountLineData[];
   // Only present for entryMode MANUAL — mutually exclusive with lines/
   // serviceLines above (enforced at the DTO boundary, see
   // ManualModeFieldsConsistency).
@@ -135,6 +148,7 @@ export interface CreateInvoiceData {
 const INVOICE_INCLUDE = {
   lines: { orderBy: { position: 'asc' } },
   serviceLines: { orderBy: { position: 'asc' }, include: { weights: true } },
+  discountLines: { orderBy: { position: 'asc' } },
   manualColumns: { orderBy: { position: 'asc' } },
   manualRows: { orderBy: { position: 'asc' }, include: { cells: true } },
   customerFields: { orderBy: { position: 'asc' } },
@@ -224,6 +238,14 @@ export class InvoiceRepository {
               showUnitDetail: line.showUnitDetail,
               showBillingDetail: line.showBillingDetail,
               activityCategory: line.activityCategory,
+            })),
+          },
+          discountLines: {
+            create: data.discountLines.map((discountLine, index) => ({
+              position: index,
+              discountId: discountLine.discountId,
+              name: discountLine.name,
+              amountCents: discountLine.amountCents,
             })),
           },
           manualColumns: {

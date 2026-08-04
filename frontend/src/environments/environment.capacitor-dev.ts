@@ -24,4 +24,11 @@ export const environment = {
   // (safe default for a machine that hasn't done that one-time setup);
   // scripts/run-android.sh (dev mode) flips it to true when the file exists.
   pushNotificationsAvailable: false,
+  // Google Cloud "Web application" OAuth client ID for local native testing
+  // (see environment.prod.ts's own comment on this field). Needs its own
+  // Android OAuth client (this app's debug-keystore SHA-1, see
+  // docs/deployment.md) registered in the same Google Cloud project before
+  // native Google Sign-In works against a local backend — leave blank to
+  // just not test that one flow locally.
+  googleWebClientId: '',
 };

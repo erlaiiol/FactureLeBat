@@ -23,6 +23,7 @@ import { clearAuthCookies, setAuthCookies } from './cookie.util';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { DemoLoginDto } from './dto/demo-login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleTokenLoginDto } from './dto/google-token-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -156,6 +157,23 @@ export class AuthController {
     const { tokens } = await this.authService.handleGoogleLogin(profile);
     setAuthCookies(res, tokens, this.isProduction);
     res.redirect(this.frontendUrl);
+  }
+
+  // Native mobile counterpart to googleAuth/googleCallback above — see
+  // AuthService.googleTokenLogin for why this exists as a separate route
+  // instead of reusing the browser-redirect flow.
+  @Public()
+  @UseGuards(GoogleOAuthEnabledGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('google/token-login')
+  @HttpCode(HttpStatus.OK)
+  async googleTokenLogin(
+    @Body() dto: GoogleTokenLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<PublicUser> {
+    const { user, tokens } = await this.authService.googleTokenLogin(dto.idToken);
+    setAuthCookies(res, tokens, this.isProduction);
+    return user;
   }
 
   @Public()

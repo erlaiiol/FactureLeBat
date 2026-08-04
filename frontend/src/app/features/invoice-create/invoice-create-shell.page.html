@@ -49,6 +49,7 @@
       appTourAnchor="invoice-total"
       [totals]="draftStore.totalsPreview()"
       [vatApplicable]="draftStore.vatApplicable()"
+      [discountAmountCents]="draftStore.discountAmountCents()"
     />
     @if (!isOnPreviewStep()) {
       <div class="w-full sm:w-64">

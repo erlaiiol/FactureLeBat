@@ -1,0 +1,94 @@
+<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
+  {{ isEditing ? 'Modifier la remise' : 'Nouvelle remise' }}
+</h1>
+
+@if (loading()) {
+  <p class="text-ink-soft">Chargement…</p>
+}
+
+<form
+  [formGroup]="form"
+  (ngSubmit)="submit()"
+  class="flex flex-col gap-4"
+  [class.hidden]="loading()"
+>
+  <label class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Nom de la remise</span>
+    <input
+      formControlName="name"
+      type="text"
+      placeholder="Ex : Remise fidélité"
+      class="rounded-lg border border-line px-4 py-3 text-lg"
+    />
+    <app-field-hint text="Le nom affiché quand vous choisissez cette remise sur une facture." />
+  </label>
+
+  <div class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-ink">Type</span>
+    <div class="flex overflow-hidden rounded-lg border border-line">
+      <button
+        type="button"
+        (click)="setDiscountType('FIXED')"
+        [class.bg-warning]="!isPercentageMode()"
+        [class.text-warning-fg]="!isPercentageMode()"
+        class="flex-1 px-4 py-3 text-sm font-semibold"
+      >
+        Montant fixe
+      </button>
+      <button
+        type="button"
+        (click)="setDiscountType('PERCENTAGE')"
+        [class.bg-warning]="isPercentageMode()"
+        [class.text-warning-fg]="isPercentageMode()"
+        class="flex-1 px-4 py-3 text-sm font-semibold"
+      >
+        Pourcentage du total
+      </button>
+    </div>
+    <app-field-hint
+      text="Pourcentage : calculé automatiquement sur le total des produits et prestations visibles de la facture, hors TVA — plus besoin de le recalculer à la main."
+    />
+  </div>
+
+  @if (!isPercentageMode()) {
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Montant (€)</span>
+      <input
+        formControlName="fixedAmountEuros"
+        type="number"
+        step="0.01"
+        min="0"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint text="Le montant total de cette remise, sera pré-rempli sur vos factures." />
+    </label>
+  } @else {
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Pourcentage (%)</span>
+      <input
+        formControlName="percentage"
+        type="number"
+        step="0.01"
+        min="0.01"
+        max="100"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint
+        text="Le montant retiré de la facture sera calculé automatiquement : ce pourcentage du total des produits et prestations visibles."
+      />
+    </label>
+  }
+
+  @if (errorMessage(); as message) {
+    <p class="text-center font-medium text-danger">{{ message }}</p>
+  }
+  @if (catalogLimitReached()) {
+    <app-big-button type="button" variant="primary" tone="solid" (click)="goToSubscribe()">
+      Voir les offres
+    </app-big-button>
+  } @else {
+    <app-big-button type="submit" [disabled]="saving()">
+      {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+    </app-big-button>
+  }
+</form>

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BillingModule } from '../billing/billing.module';
 import { CompanyModule } from '../company/company.module';
 import { CustomerModule } from '../customer/customer.module';
+import { DiscountModule } from '../discount/discount.module';
 import { MailSettingsModule } from '../mail-settings/mail-settings.module';
 import { MailerModule } from '../mailer/mailer.module';
 import { ServiceCatalogModule } from '../service-catalog/service-catalog.module';
@@ -17,6 +18,7 @@ import { PdfModule } from './pdf/pdf.module';
   imports: [
     CompanyModule,
     CustomerModule,
+    DiscountModule,
     ServiceCatalogModule,
     PdfModule,
     MailSettingsModule,

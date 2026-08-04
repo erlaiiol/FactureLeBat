@@ -20,6 +20,15 @@ export interface InvoicePdfServiceLine {
   amountCents: number;
 }
 
+// Phase 32: a remise — always subtracted from the subtotal, rendered as its
+// own row in PdfService.buildTotals rather than a separate table (unlike
+// service lines above, a discount isn't "a thing sold", just a price
+// adjustment). Empty for entryMode MANUAL, same convention as serviceLines.
+export interface InvoicePdfDiscountLine {
+  name: string;
+  amountCents: number;
+}
+
 // Phase 9.5 manual mode. `cells` holds the artisan's raw typed text for
 // every non-computed column (DESCRIPTION/QUANTITY/UNIT_PRICE/CUSTOM, in
 // column order) exactly as stored — money formatting is not reapplied here,
@@ -89,6 +98,7 @@ export interface InvoicePdfData {
   entryMode: InvoiceEntryMode;
   lines: InvoicePdfLine[];
   serviceLines: InvoicePdfServiceLine[];
+  discountLines: InvoicePdfDiscountLine[];
   manualTable?: InvoicePdfManualTable;
   // Phase 23: GUIDED-only — hides the whole Quantité/Prix unitaire columns
   // in PdfService.buildLinesTable, leaving only description + total. Always

@@ -1656,3 +1656,30 @@ Nudge an artisan on iOS/Android toward leaving an App Store/Play Store rating at
 
 - Depends on Phase 22 (Capacitor mobile shell) and reuses `InvoiceShareService` (pre-existing, not introduced by this phase).
 - Not exercised on a real device (no Xcode/Android Studio in this environment) — same honest caveat Phase 22/29 already carry for native-only behavior. `npx cap sync` completed cleanly and registered the plugin in both `Package.swift` and the Android Gradle project; the two respective native review flows themselves (and their own real-world frequency throttling) can only be verified on a physical/simulated device signed into a real Play Store/App Store test track.
+
+# Phase 32 — Remises (Invoice/Devis Discounts)
+
+## Objective
+
+A third catalog entity, alongside produit/prestation, reachable from mode rapide's lines step: a named discount that's either a fixed euro amount or a percentage of the invoice's product + visible-service subtotal (before VAT). Reusable across invoices/devis like a Product or Service, with its own "Mes remises" management page.
+
+## Features
+
+- [x] `Discount` model (`discount/`) — `name`, `discountType` (`FIXED`/`PERCENTAGE`), `fixedAmountCents`/`percentageBasisPoints` (exactly one, enforced by `DiscountConsistency`, same pattern as `ServicePricingConsistency`). Deliberately no `code`/`description`/`activityCategory` — a shorter form than Product/Service, matching what the quick-mode card asks for. Counted into the same combined `catalogItem` plan cap as products/services (`PlanGateService.assertCatalogCapacity`).
+- [x] `InvoiceDiscountLine` model — soft reference to `Discount` (`onDelete: SetNull`), snapshotted `name`/`amountCents`. No visibility/redistribution axis (unlike `InvoiceServiceLine`): always folds straight into the subtotal as a reduction. Forbidden for `entryMode` MANUAL (`ManualModeFieldsConsistency`).
+- [x] `InvoiceMapper` folds every discount line into `subtotalExclVatCents` (`sum(lines) + sum(visible services) - sum(discounts)`, floored at 0) across all four totals paths (persisted/preview × GUIDED/MANUAL) — `subtotalExclVatCents + vatAmountCents === totalInclVatCents` always holds, so every existing consumer (reports, board, PDF) needed zero changes.
+- [x] `PdfService.buildTotals` renders a "Sous-total HT / <remise name> / Total HT" breakdown only when at least one discount is present — otherwise the totals block is pixel-identical to before this phase.
+- [x] Quick mode's lines step gets a third fixed "+" button ("Ajouter une remise", `warning`/amber accent — `danger`/red was considered and rejected, it reads as an error state rather than a normal feature) with the same catalog-flyout / free-line / gallery-card / FLIP-morph treatment as produit/prestation.
+- [x] `InvoiceDraftStore.resolvedDiscountAmountCents` — a `PERCENTAGE` discount is resolved live against `percentageBaseCents` (the exact same base a `PERCENTAGE` service line uses), never a live formula the backend has to know about; only the resolved `amountCents` is ever submitted (same "computed at build time, not typed per invoice" precedent as Phase 13.5).
+- [x] "Mes remises" management page (`discount-list/`, `discount-form/`) mirroring `product-list`/`service-list`, `product-form`/`service-form` — a full CRUD screen, not just inline catalog persistence via the quick-mode card's "Enregistrer" toggle.
+
+## Non-goals
+
+- No manual-mode discounts — the free-form canvas has no separate-entity concept at all (an artisan doing a discount there just adds another row/adjusts a cell), same reasoning `ManualModeFieldsConsistency` already applies to serviceLines.
+- No integration with Phase 17's quarterly turnover report — a discount reduces `subtotalExclVatCents`/`totalInclVatCents` (and therefore every invoicing/board figure) but is not attributed to any `ActivityCategory` bucket, so the report's per-category breakdown doesn't (yet) reflect it. Flagged as a known gap rather than solved here, since redistributing a discount across categories would need the same weighted-split machinery as a `REDISTRIBUTED` service line, for a report screen nobody asked to extend in this phase.
+- No cross-field DTO validator capping total discounts against the lines/services subtotal (the way `ServiceLineWeightsMatchLines` validates weights against `dto.lines`) — `InvoiceMapper` just floors the post-discount subtotal at 0 instead. Simpler and sufficient: an over-discounted invoice reads as "0,00 € HT", never a negative total, and there's no realistic legitimate case for wanting the request itself rejected rather than clamped.
+
+## Notes
+
+- Percentage base decision: a `PERCENTAGE` discount is computed against the pre-tax product+visible-service subtotal (excluding other discounts, to avoid compounding), not the TTC total — the standard French invoicing treatment (a remise reduces the taxable base, VAT is then computed on the discounted amount), confirmed with the artisan before implementation.
+- `Discount`/`InvoiceDiscountLine` intentionally do not store a `code` field the way `Product`/`Service` do — no SKU-like use case was requested, and the whole point of this phase's form was to stay shorter than the other two.

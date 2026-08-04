@@ -1,0 +1,43 @@
+<div class="mb-6 flex items-center justify-between gap-4">
+  <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-ink">Mes remises</h1>
+  <a routerLink="/remises/nouvelle" class="shrink-0">
+    <app-big-button variant="warning">+ Nouvelle remise</app-big-button>
+  </a>
+</div>
+
+<input
+  [formControl]="search"
+  type="text"
+  placeholder="Rechercher une remise…"
+  class="mb-6 w-full rounded-lg border border-line px-4 py-3 text-lg"
+/>
+
+@if (loading()) {
+  @if (showSkeleton()) {
+    <app-skeleton-rows />
+  }
+} @else if (errorMessage(); as message) {
+  <p class="font-medium text-danger">{{ message }}</p>
+} @else if (discounts().length === 0) {
+  <p class="text-ink-soft">Aucune remise pour le moment.</p>
+} @else {
+  <ul class="anim-preview-in flex flex-col gap-3">
+    @for (discount of discounts(); track discount.id) {
+      <li>
+        <a
+          [routerLink]="['/remises', discount.id]"
+          class="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 hover:bg-bg"
+        >
+          <p class="font-semibold text-ink">{{ discount.name }}</p>
+          <span class="text-lg font-semibold text-ink font-mono">
+            @if (discount.discountType === 'PERCENTAGE') {
+              {{ discount.percentageBasisPoints! / 100 }}%
+            } @else {
+              {{ discount.fixedAmountCents | centsToEuros }}
+            }
+          </span>
+        </a>
+      </li>
+    }
+  </ul>
+}

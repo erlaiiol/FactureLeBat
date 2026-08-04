@@ -319,12 +319,37 @@
       <div class="mt-4 flex justify-end">
         <table class="text-sm">
           <tbody>
-            <tr>
-              <td class="py-1 pr-4 text-ink-soft">Sous-total HT</td>
-              <td class="py-1 text-right font-mono text-ink">
-                {{ previewData()?.subtotalExclVatCents ?? 0 | centsToEuros }}
-              </td>
-            </tr>
+            @if (discountTotalCents() > 0) {
+              <tr>
+                <td class="py-1 pr-4 text-ink-soft">Sous-total HT</td>
+                <td class="py-1 text-right font-mono text-ink">
+                  {{
+                    (previewData()?.subtotalExclVatCents ?? 0) + discountTotalCents() | centsToEuros
+                  }}
+                </td>
+              </tr>
+              @for (discount of previewDiscountLines(); track discount.id) {
+                <tr>
+                  <td class="py-1 pr-4 text-danger">{{ discount.name }}</td>
+                  <td class="py-1 text-right font-mono text-danger">
+                    − {{ discount.amountCents | centsToEuros }}
+                  </td>
+                </tr>
+              }
+              <tr>
+                <td class="py-1 pr-4 text-ink-soft">Total HT</td>
+                <td class="py-1 text-right font-mono text-ink">
+                  {{ previewData()?.subtotalExclVatCents ?? 0 | centsToEuros }}
+                </td>
+              </tr>
+            } @else {
+              <tr>
+                <td class="py-1 pr-4 text-ink-soft">Sous-total HT</td>
+                <td class="py-1 text-right font-mono text-ink">
+                  {{ previewData()?.subtotalExclVatCents ?? 0 | centsToEuros }}
+                </td>
+              </tr>
+            }
             @if (previewData()?.vatApplicable) {
               <tr>
                 <td class="py-1 pr-4 text-ink-soft">TVA</td>
