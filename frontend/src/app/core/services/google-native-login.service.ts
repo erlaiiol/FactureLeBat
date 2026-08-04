@@ -36,9 +36,17 @@ export class GoogleNativeLoginService {
   async login(): Promise<string> {
     await this.initialize();
     try {
+      // No explicit `scopes` here on purpose: the plugin's Android side
+      // already requests email/profile/openid as default scopes, and
+      // passing custom ones instead requires MainActivity to implement its
+      // own ModifiedMainActivityForSocialLoginPlugin interface (see
+      // GoogleProvider.java) — "You CANNOT use scopes without modifying
+      // the main activity" otherwise. Since the defaults already cover
+      // everything AuthService.googleTokenLogin needs from the ID token,
+      // there's nothing a custom scope would add here.
       const { result } = await SocialLogin.login({
         provider: 'google',
-        options: { scopes: ['email', 'profile'] },
+        options: {},
       });
       if (result.responseType !== 'online' || !result.idToken) {
         throw new Error('Réponse Google inattendue : aucun jeton reçu.');

@@ -90,6 +90,14 @@ export class LoginPage {
       void this.router.navigateByUrl('/');
     } catch (error) {
       if (!(error instanceof GoogleNativeLoginCancelledError)) {
+        // The toast below is deliberately generic (Google Cloud Console
+        // misconfig vs a real outage look identical to an artisan) — this
+        // is the one place the real reason survives, visible via
+        // chrome://inspect (CAPACITOR_DEBUG=1 make android-prod) instead of
+        // guessing blind. See docs/deployment.md's Native Google Sign-In
+        // section for the Android OAuth client / SHA-1 checklist this
+        // usually turns out to be.
+        console.error('Google native login failed:', error);
         this.errorMessage.set('Connexion avec Google indisponible.');
       }
     } finally {
