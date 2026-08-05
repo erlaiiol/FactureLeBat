@@ -14,6 +14,7 @@ function billingFields(overrides: Partial<BillingFields> = {}): BillingFields {
     premiumGrantedUntil: null,
     grantedPlanTier: null,
     pendingReferralDiscount: false,
+    trialOfferExpiresAt: null,
     ...overrides,
   };
 }
@@ -36,6 +37,7 @@ function buildService(
   const isConfigured = jest.fn().mockReturnValue(options.stripeConfigured ?? true);
   const ensureReferralDiscountCoupon = jest.fn().mockResolvedValue('referral-filleul-30pct-1mois');
   const ensureLaunchOfferCoupon = jest.fn().mockResolvedValue('launch-offer-premium-2mois');
+  const ensureTrialOfferCoupon = jest.fn().mockResolvedValue('trial-offer-premium-1mois-2eur');
   const isLaunchOfferActive = jest.fn().mockReturnValue(options.launchOfferActive ?? false);
   const applyCouponToSubscription = jest.fn().mockResolvedValue(undefined);
   const createCheckoutSession = jest
@@ -45,6 +47,7 @@ function buildService(
     isConfigured,
     ensureReferralDiscountCoupon,
     ensureLaunchOfferCoupon,
+    ensureTrialOfferCoupon,
     isLaunchOfferActive,
     applyCouponToSubscription,
     createCheckoutSession,
@@ -59,6 +62,7 @@ function buildService(
     setPendingReferralDiscount,
     ensureReferralDiscountCoupon,
     ensureLaunchOfferCoupon,
+    ensureTrialOfferCoupon,
     applyCouponToSubscription,
     createCheckoutSession,
     isConfigured,
@@ -131,7 +135,7 @@ describe('BillingService.grantReferralDiscount', () => {
 });
 
 describe('BillingService.createCheckoutSession — discount priority', () => {
-  it('attaches the referral coupon when pendingReferralDiscount is set, even on Premium with an active launch offer', async () => {
+  it("attaches the referral coupon when pendingReferralDiscount is set, even on Premium with an active launch offer (Phase 30's deliberate rule: a specific, earned reward always beats the generic promo, even though the launch offer is nominally 50 centimes cheaper — 10 € vs 10,50 €)", async () => {
     const { service, createCheckoutSession } = buildService({
       fields: billingFields({ stripeCustomerId: 'cus_1', pendingReferralDiscount: true }),
       launchOfferActive: true,
@@ -172,6 +176,68 @@ describe('BillingService.createCheckoutSession — discount priority', () => {
     await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PREMIUM);
     expect(createCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({ discountCouponId: undefined }),
+    );
+  });
+
+  it('attaches the trial-offer coupon on Premium when the countdown is still running, even with the launch offer also active', async () => {
+    const future = new Date(Date.now() + 60_000);
+    const { service, createCheckoutSession } = buildService({
+      fields: billingFields({
+        stripeCustomerId: 'cus_1',
+        pendingReferralDiscount: false,
+        trialOfferExpiresAt: future,
+      }),
+      launchOfferActive: true,
+    });
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PREMIUM);
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ discountCouponId: 'trial-offer-premium-1mois-2eur' }),
+    );
+  });
+
+  it('never attaches the trial-offer coupon on a non-Premium checkout, even while the countdown is running', async () => {
+    const future = new Date(Date.now() + 60_000);
+    const { service, createCheckoutSession } = buildService({
+      fields: billingFields({
+        stripeCustomerId: 'cus_1',
+        pendingReferralDiscount: false,
+        trialOfferExpiresAt: future,
+      }),
+    });
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PRO);
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ discountCouponId: undefined }),
+    );
+  });
+
+  it('when both are active, the cheaper trial-offer coupon wins over the referral discount on Premium (2 € vs 10,50 €) — a referred filleul must never pay more than a non-referred artisan in the same trial window', async () => {
+    const future = new Date(Date.now() + 60_000);
+    const { service, createCheckoutSession } = buildService({
+      fields: billingFields({
+        stripeCustomerId: 'cus_1',
+        pendingReferralDiscount: true,
+        trialOfferExpiresAt: future,
+      }),
+    });
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PREMIUM);
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ discountCouponId: 'trial-offer-premium-1mois-2eur' }),
+    );
+  });
+
+  it('falls back to the launch offer once the trial-offer countdown has expired', async () => {
+    const past = new Date(Date.now() - 60_000);
+    const { service, createCheckoutSession } = buildService({
+      fields: billingFields({
+        stripeCustomerId: 'cus_1',
+        pendingReferralDiscount: false,
+        trialOfferExpiresAt: past,
+      }),
+      launchOfferActive: true,
+    });
+    await service.createCheckoutSession('company-1', 'artisan@example.com', PlanTier.PREMIUM);
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ discountCouponId: 'launch-offer-premium-2mois' }),
     );
   });
 });

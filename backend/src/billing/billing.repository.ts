@@ -17,6 +17,7 @@ export interface BillingFields {
   premiumGrantedUntil: Date | null;
   grantedPlanTier: PlanTier | null;
   pendingReferralDiscount: boolean;
+  trialOfferExpiresAt: Date | null;
 }
 
 const BILLING_FIELDS_SELECT = {
@@ -29,6 +30,7 @@ const BILLING_FIELDS_SELECT = {
   premiumGrantedUntil: true,
   grantedPlanTier: true,
   pendingReferralDiscount: true,
+  trialOfferExpiresAt: true,
 } as const;
 
 @Injectable()
@@ -145,5 +147,20 @@ export class BillingRepository {
       data: { premiumGrantedUntil: newUntil, grantedPlanTier: effectiveTier },
     });
     return { until: newUntil, tier: effectiveTier };
+  }
+
+  // Phase 33: starts the "1er mois à 2€" countdown — a conditional update
+  // (`where: trialOfferExpiresAt: null`) rather than a plain set, so this is
+  // safe to call more than once for the same company (PlanGateService.
+  // recordInvoiceCreated already guards on invoiceCount === 1, but two
+  // concurrent requests racing that check would otherwise both "win" and
+  // each compute their own expiry). The loser of the race simply updates
+  // zero rows.
+  async startTrialOfferWindow(companyId: string, windowHours: number): Promise<void> {
+    const expiresAt = new Date(Date.now() + windowHours * 60 * 60 * 1000);
+    await this.prisma.company.updateMany({
+      where: { id: companyId, trialOfferExpiresAt: null },
+      data: { trialOfferExpiresAt: expiresAt },
+    });
   }
 }

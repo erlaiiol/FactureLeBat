@@ -13,15 +13,18 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subscription, TimeoutError } from 'rxjs';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
+import { BillingService } from '../../../core/services/billing.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { KeyboardVisibilityService } from '../../../core/services/keyboard-visibility.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { TrialOfferService } from '../../../core/services/trial-offer.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
 import { IconTrashComponent } from '../../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
 import { InvoiceTotalsSummaryComponent } from '../components/invoice-totals-summary.component';
 import {
   ManualColumnDraft,
@@ -60,6 +63,8 @@ export class InvoiceCreateManualPage {
   private readonly route = inject(ActivatedRoute);
   private readonly invoiceService = inject(InvoiceService);
   private readonly toastService = inject(ToastService);
+  private readonly billingService = inject(BillingService);
+  private readonly trialOfferService = inject(TrialOfferService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly store = inject(ManualInvoiceDraftStore);
   protected readonly keyboardVisibility = inject(KeyboardVisibilityService);
@@ -340,6 +345,7 @@ export class InvoiceCreateManualPage {
           this.creating.set(false);
           this.createdInvoice.set(invoice);
           this.store.reset();
+          showTrialOfferAfterFirstInvoice(this.billingService, this.trialOfferService);
         },
         error: (error: HttpErrorResponse) => {
           this.creating.set(false);

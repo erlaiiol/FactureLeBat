@@ -2,7 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PlanTier } from '../../../generated/prisma/enums';
-import { PLAN_TIER_ORDER } from '../plan-config';
+import {
+  PLAN_DEFINITIONS,
+  PLAN_TIER_ORDER,
+  TRIAL_OFFER_PRICE_EUROS,
+  TRIAL_OFFER_TIER,
+} from '../plan-config';
 import { StripeUnavailableError } from './stripe-unavailable.error';
 
 // Phase 30: the filleul's referral reward — -30% on their first billing
@@ -23,6 +28,16 @@ export const REFERRAL_DISCOUNT_PERCENT_OFF = 30;
 const LAUNCH_OFFER_COUPON_ID = 'launch-offer-premium-2mois';
 const LAUNCH_OFFER_AMOUNT_OFF_CENTS = 500;
 const LAUNCH_OFFER_DURATION_MONTHS = 2;
+
+// Phase 33: the per-company "1er mois à 2€" trial-conversion offer — see
+// plan-config.ts's TRIAL_OFFER_* constants and PlanGateService.
+// isTrialOfferActive for when it's live. `duration: 'once'` (unlike the
+// launch offer's `repeating`): this is a door-opener for the first invoice
+// after the free trial, not a multi-month discount — from the 2nd billing
+// cycle onward the artisan pays Premium's normal price.
+const TRIAL_OFFER_COUPON_ID = 'trial-offer-premium-1mois-2eur';
+const TRIAL_OFFER_AMOUNT_OFF_CENTS =
+  (PLAN_DEFINITIONS[TRIAL_OFFER_TIER].priceEuros - TRIAL_OFFER_PRICE_EUROS) * 100;
 
 const PRICE_ID_ENV_KEY_BY_TIER: Record<PlanTier, string> = {
   [PlanTier.ESSENTIEL]: 'STRIPE_PRICE_ID_ESSENTIEL',
@@ -203,6 +218,27 @@ export class StripeClientService {
         this.logger.debug(`Launch offer coupon create raced or failed: ${String(error)}`);
       }
       return LAUNCH_OFFER_COUPON_ID;
+    }
+  }
+
+  // Same idempotent-by-construction pattern as the other two coupons above.
+  async ensureTrialOfferCoupon(): Promise<string> {
+    const client = this.requireClient();
+    try {
+      await client.coupons.retrieve(TRIAL_OFFER_COUPON_ID);
+      return TRIAL_OFFER_COUPON_ID;
+    } catch {
+      try {
+        await client.coupons.create({
+          id: TRIAL_OFFER_COUPON_ID,
+          amount_off: TRIAL_OFFER_AMOUNT_OFF_CENTS,
+          currency: 'eur',
+          duration: 'once',
+        });
+      } catch (error) {
+        this.logger.debug(`Trial offer coupon create raced or failed: ${String(error)}`);
+      }
+      return TRIAL_OFFER_COUPON_ID;
     }
   }
 

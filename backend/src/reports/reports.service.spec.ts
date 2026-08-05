@@ -38,6 +38,7 @@ function companyFixture(overrides: Partial<CompanyProfile> = {}): CompanyProfile
     grantedPlanTier: null,
     referralCode: 'REFCODE1',
     pendingReferralDiscount: false,
+    trialOfferExpiresAt: null,
     declarationFrequency: 'TRIMESTRIELLE',
     microEntrepreneurCeiling: null,
     cotisationVenteBasisPoints: 1230,

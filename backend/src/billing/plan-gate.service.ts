@@ -2,7 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { BillingFields, BillingRepository } from './billing.repository';
 import { CatalogLimitExceededException } from './catalog-limit-exceeded.exception';
-import { CatalogKind, GatedFeature, PLAN_DEFINITIONS, higherTier } from './plan-config';
+import {
+  CatalogKind,
+  GatedFeature,
+  PLAN_DEFINITIONS,
+  TRIAL_OFFER_WINDOW_HOURS,
+  higherTier,
+} from './plan-config';
 import { PlanFeatureLockedException } from './plan-feature-locked.exception';
 import { PremiumRequiredException } from './premium-required.exception';
 
@@ -38,6 +44,27 @@ export class PlanGateService {
       return;
     }
     throw new PremiumRequiredException();
+  }
+
+  // Phase 33: called right after InvoiceService.create()/convertToFacture()
+  // actually persists an invoice — never from assertCanCreateInvoice itself,
+  // which also runs on previewPdf/previewData where nothing is saved, and
+  // would otherwise start the clock on a preview that's never submitted.
+  // Starts the "1er mois à 2€" countdown exactly once, only for a company
+  // that just created its very first invoice ever (the free-trial one) and
+  // has no plan already — a paying company hitting invoiceCount === 1 right
+  // after subscribing gets no offer, it has nothing left to convert.
+  // Idempotent by construction (BillingRepository.startTrialOfferWindow is a
+  // conditional update), so a second, unrelated call here is harmless.
+  async recordInvoiceCreated(companyId: string): Promise<void> {
+    const [fields, invoiceCount] = await Promise.all([
+      this.repository.getBillingFields(companyId),
+      this.repository.countInvoices(companyId),
+    ]);
+    if (invoiceCount !== 1 || getEffectivePlanTier(fields)) {
+      return;
+    }
+    await this.repository.startTrialOfferWindow(companyId, TRIAL_OFFER_WINDOW_HOURS);
   }
 
   async getEffectivePlanTier(companyId: string): Promise<PlanTier | null> {
@@ -114,4 +141,20 @@ export function getEffectivePlanTier(fields: EffectiveTierFields): PlanTier | nu
 // the same way getEffectivePlanTier generalizes the tier itself.
 export function hasPremiumAccess(fields: EffectiveTierFields): boolean {
   return getEffectivePlanTier(fields) !== null;
+}
+
+// Phase 33: true while the per-company "1er mois à 2€" countdown
+// (Company.trialOfferExpiresAt, started once by recordInvoiceCreated above)
+// is still running AND the company hasn't already converted — a company
+// that subscribes or gets a grant mid-countdown stops seeing the offer even
+// though the timestamp itself is never cleared (see the schema comment on
+// trialOfferExpiresAt for why it's left in place).
+export function isTrialOfferActive(
+  fields: EffectiveTierFields & { trialOfferExpiresAt: Date | null },
+): boolean {
+  return (
+    fields.trialOfferExpiresAt !== null &&
+    fields.trialOfferExpiresAt > new Date() &&
+    !hasPremiumAccess(fields)
+  );
 }

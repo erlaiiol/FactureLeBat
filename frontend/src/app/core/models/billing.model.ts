@@ -4,6 +4,18 @@ export type SubscriptionStatus = 'NONE' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
 // (generated/prisma/enums.ts).
 export type PlanTier = 'ESSENTIEL' | 'PRO' | 'PREMIUM';
 
+// Phase 33: the per-company "1er mois à 2€" countdown — present only while
+// it's actually live, see PlanGateService.isTrialOfferActive on the
+// backend. expiresAt is a real, server-persisted deadline: the countdown
+// components below must render straight off it and never invent their own
+// timer, so a page reload can't reset it.
+export interface TrialOffer {
+  tier: PlanTier;
+  expiresAt: string;
+  discountedPriceEuros: number;
+  normalPriceEuros: number;
+}
+
 // Mirrors the backend's BillingStatus (billing/entities/billing-status.entity.ts).
 export interface BillingStatus {
   subscriptionStatus: SubscriptionStatus;
@@ -19,6 +31,7 @@ export interface BillingStatus {
   customerLimit: number | null;
   catalogItemCount: number;
   catalogItemLimit: number | null;
+  trialOffer: TrialOffer | null;
 }
 
 // Mirrors the backend's PlanCatalog (billing/entities/plan-catalog.entity.ts).

@@ -68,7 +68,10 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     tier: PlanTier.PREMIUM,
     name: 'Premium',
     priceEuros: 15,
-    tagline: 'Tout, sans limite, avec l’assistant IA fournisseurs.',
+    // Deliberately doesn't mention aiSourcing below — not mature enough to
+    // sell yet, so marketing copy leans on analytics instead. The feature
+    // itself stays gated and functional, just unadvertised.
+    tagline: 'Tout, sans limite, avec vos statistiques les plus complètes.',
     customerLimit: null,
     catalogItemLimit: null,
     features: { analytics: true, aiSourcing: true },
@@ -77,6 +80,18 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     removesWatermark: true,
   },
 };
+
+// Phase 33: limited-time "1er mois à 2€" Premium offer, started once per
+// company the moment their invoice count goes from 0 to 1 (see
+// PlanGateService.recordInvoiceCreated) and shown as a countdown CTA both
+// right after that first invoice and again on the paywall if they haven't
+// converted yet — see docs/roadmap.md Phase 33. Premium-only, same
+// reasoning as the sitewide launch offer above (discounting every tier at
+// once would blur the comparison the decoy pricing in Phase 30 relies on),
+// but this one is per-company and earned by usage rather than calendar-wide.
+export const TRIAL_OFFER_TIER = PlanTier.PREMIUM;
+export const TRIAL_OFFER_PRICE_EUROS = 2;
+export const TRIAL_OFFER_WINDOW_HOURS = 48;
 
 export type CatalogKind = 'customer' | 'catalogItem';
 export type GatedFeature = 'analytics' | 'aiSourcing';

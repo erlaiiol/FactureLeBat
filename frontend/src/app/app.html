@@ -34,10 +34,10 @@
                  verified against the real compiled CSS down to that width.
                  lg:hidden since the full desktop nav two divs down already
                  covers this above that width. -->
-            <div class="flex flex-1 items-center gap-1 lg:hidden">
+            <div class="flex flex-1 items-center gap-0.5 lg:hidden">
               <a
                 routerLink="/factures/nouvelle"
-                class="flex shrink-0 items-center rounded-lg bg-primary px-2.5 py-2 text-primary-fg hover:bg-primary/90"
+                class="flex shrink-0 items-center rounded-lg bg-primary px-2 py-2 text-primary-fg hover:bg-primary/90"
                 aria-label="Nouveau document"
                 title="Nouveau document"
               >
@@ -54,17 +54,23 @@
                   <path d="M12 5v14M5 12h14" />
                 </svg>
               </a>
+              <!-- Icon-only, same reasoning as Statistiques/Mon
+                   entreprise/Mes produits below — labels don't fit five of
+                   these side by side on a phone width, and a file icon
+                   reads clearly enough on its own right next to "+". -->
               <a
                 routerLink="/factures"
                 appTourAnchor="nav-my-documents"
                 routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
                 [routerLinkActiveOptions]="{ exact: true }"
-                class="font-heading flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-xs font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+                class="flex shrink-0 items-center rounded-lg px-2 py-2 text-ink hover:bg-secondary-subtle"
+                aria-label="Mes documents"
+                title="Mes documents"
               >
                 <svg
                   viewBox="0 0 24 24"
-                  width="14"
-                  height="14"
+                  width="16"
+                  height="16"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="2.5"
@@ -75,22 +81,21 @@
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <path d="M14 2v6h6" />
                 </svg>
-                Documents
               </a>
-              <!-- Icon-only, unlike Documents above — a third labeled pill
-                   no longer fits this row at a phone width (measured against
-                   the real compiled CSS down to 320px), and a bar-chart icon
-                   reads clearly enough on its own next to the two other,
-                   already-established icons. Always enabled, even on a
-                   tier without the paid "statistiques d'activité" feature —
-                   this same route's other tab (déclaration de TVA) stays
-                   free on every tier (see app.routes.ts), and the page
-                   itself already shows its own lock/upsell for the gated
-                   tab — see StatsReportsPage.analyticsLocked. -->
+              <!-- Icon-only — a labeled pill no longer fits this row at a
+                   phone width (measured against the real compiled CSS down
+                   to 320px), and a bar-chart icon reads clearly enough on
+                   its own next to the other, already-established icons.
+                   Always enabled, even on a tier without the paid
+                   "statistiques d'activité" feature — this same route's
+                   other tab (déclaration de TVA) stays free on every tier
+                   (see app.routes.ts), and the page itself already shows
+                   its own lock/upsell for the gated tab — see
+                   StatsReportsPage.analyticsLocked. -->
               <a
                 routerLink="/statistiques"
                 routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
-                class="flex shrink-0 items-center rounded-lg px-2.5 py-2 text-ink hover:bg-secondary-subtle"
+                class="flex shrink-0 items-center rounded-lg px-2 py-2 text-ink hover:bg-secondary-subtle"
                 aria-label="Statistiques"
                 title="Statistiques"
               >
@@ -105,6 +110,52 @@
                   aria-hidden="true"
                 >
                   <path d="M4 20V10M12 20V4M20 20v-7" />
+                </svg>
+              </a>
+              <a
+                routerLink="/entreprise"
+                routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                class="flex shrink-0 items-center rounded-lg px-2 py-2 text-ink hover:bg-secondary-subtle"
+                aria-label="Mon entreprise"
+                title="Mon entreprise"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 11L12 4l8 7" />
+                  <path d="M6 9.5V20a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9.5" />
+                  <path d="M10 21v-6h4v6" />
+                </svg>
+              </a>
+              <a
+                routerLink="/produits"
+                routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                class="flex shrink-0 items-center rounded-lg px-2 py-2 text-ink hover:bg-secondary-subtle"
+                aria-label="Mes produits"
+                title="Mes produits"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 8l-9-5-9 5 9 5 9-5z" />
+                  <path d="M3 8v8l9 5 9-5V8" />
+                  <path d="M12 13v8" />
                 </svg>
               </a>
               <a
@@ -598,4 +649,5 @@
 
 <app-tour-overlay />
 <app-paywall-modal />
+<app-trial-offer-modal />
 <app-toast-container />

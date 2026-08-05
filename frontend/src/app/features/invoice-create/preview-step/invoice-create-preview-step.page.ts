@@ -17,6 +17,7 @@ import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { TrialOfferService } from '../../../core/services/trial-offer.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
@@ -26,6 +27,7 @@ import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { delayedSkeleton } from '../../../shared/utils/delayed-skeleton';
+import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 15: the mandatory stop between "lignes" and a real, persisted
@@ -63,6 +65,7 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly companyService = inject(CompanyService);
   protected readonly billingService = inject(BillingService);
   private readonly toastService = inject(ToastService);
+  private readonly trialOfferService = inject(TrialOfferService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
   protected readonly draftStore = inject(InvoiceDraftStore);
@@ -387,6 +390,7 @@ export class InvoiceCreatePreviewStepPage {
           this.creating.set(false);
           this.createdInvoice.set(invoice);
           this.draftStore.reset();
+          showTrialOfferAfterFirstInvoice(this.billingService, this.trialOfferService);
         },
         error: (error: HttpErrorResponse) => {
           this.creating.set(false);

@@ -2,7 +2,7 @@ import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { BillingFields, BillingRepository } from './billing.repository';
 import { CatalogLimitExceededException } from './catalog-limit-exceeded.exception';
 import { PlanFeatureLockedException } from './plan-feature-locked.exception';
-import { PlanGateService } from './plan-gate.service';
+import { PlanGateService, isTrialOfferActive } from './plan-gate.service';
 import { PremiumRequiredException } from './premium-required.exception';
 
 function buildService(options: {
@@ -21,19 +21,27 @@ function buildService(options: {
     premiumGrantedUntil: null,
     grantedPlanTier: null,
     pendingReferralDiscount: false,
+    trialOfferExpiresAt: null,
     ...options.fields,
   };
   const getBillingFields = jest.fn().mockResolvedValue(fields);
   const countInvoices = jest.fn().mockResolvedValue(options.invoiceCount ?? 0);
   const countCustomers = jest.fn().mockResolvedValue(options.customerCount ?? 0);
   const countCatalogItems = jest.fn().mockResolvedValue(options.catalogItemCount ?? 0);
+  const startTrialOfferWindow = jest.fn().mockResolvedValue(undefined);
   const repository = {
     getBillingFields,
     countInvoices,
     countCustomers,
     countCatalogItems,
+    startTrialOfferWindow,
   } as unknown as BillingRepository;
-  return { service: new PlanGateService(repository), getBillingFields, countInvoices };
+  return {
+    service: new PlanGateService(repository),
+    getBillingFields,
+    countInvoices,
+    startTrialOfferWindow,
+  };
 }
 
 describe('PlanGateService.assertCanCreateInvoice', () => {
@@ -174,5 +182,63 @@ describe('PlanGateService.assertFeatureAccess', () => {
     await expect(service.assertFeatureAccess('company-1', 'analytics')).rejects.toBeInstanceOf(
       PlanFeatureLockedException,
     );
+  });
+});
+
+describe('PlanGateService.recordInvoiceCreated', () => {
+  it('starts the trial-offer window on a company’s very first invoice', async () => {
+    const { service, startTrialOfferWindow } = buildService({ invoiceCount: 1, fields: {} });
+    await service.recordInvoiceCreated('company-1');
+    expect(startTrialOfferWindow).toHaveBeenCalledWith('company-1', 48);
+  });
+
+  it('does nothing once the company already has more than one invoice', async () => {
+    const { service, startTrialOfferWindow } = buildService({ invoiceCount: 2, fields: {} });
+    await service.recordInvoiceCreated('company-1');
+    expect(startTrialOfferWindow).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a company that already has an active plan', async () => {
+    const { service, startTrialOfferWindow } = buildService({
+      invoiceCount: 1,
+      fields: { subscriptionStatus: SubscriptionStatus.ACTIVE, subscriptionPlanTier: PlanTier.PRO },
+    });
+    await service.recordInvoiceCreated('company-1');
+    expect(startTrialOfferWindow).not.toHaveBeenCalled();
+  });
+});
+
+describe('isTrialOfferActive', () => {
+  const base = {
+    subscriptionStatus: SubscriptionStatus.NONE,
+    subscriptionPlanTier: null,
+    premiumGrantedUntil: null,
+    grantedPlanTier: null,
+  };
+
+  it('is true while the deadline is in the future and no plan is active', () => {
+    const future = new Date(Date.now() + 60_000);
+    expect(isTrialOfferActive({ ...base, trialOfferExpiresAt: future })).toBe(true);
+  });
+
+  it('is false once the deadline has passed', () => {
+    const past = new Date(Date.now() - 60_000);
+    expect(isTrialOfferActive({ ...base, trialOfferExpiresAt: past })).toBe(false);
+  });
+
+  it('is false when no window was ever started', () => {
+    expect(isTrialOfferActive({ ...base, trialOfferExpiresAt: null })).toBe(false);
+  });
+
+  it('is false once the company has converted, even if the deadline is still in the future', () => {
+    const future = new Date(Date.now() + 60_000);
+    expect(
+      isTrialOfferActive({
+        ...base,
+        trialOfferExpiresAt: future,
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
+        subscriptionPlanTier: PlanTier.PREMIUM,
+      }),
+    ).toBe(false);
   });
 });

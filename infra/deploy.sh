@@ -35,11 +35,13 @@ docker compose -f infra/docker-compose.prod.yml up -d
 # Caddy has no `build:` (plain caddy:2-alpine, Caddyfile bind-mounted
 # read-only) — `up -d` above only recreates a container whose *compose*
 # config changed, so a Caddyfile-only edit lands on disk via git pull but
-# never reaches the running process. `caddy reload` re-reads the mounted
-# file and swaps the config with no dropped connections; harmless no-op if
-# the Caddyfile didn't actually change this deploy.
-echo "==> Reloading Caddy config"
-docker compose -f infra/docker-compose.prod.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
+# never reaches the running process. `caddy reload` (hot-swap via the admin
+# API) turned out unreliable in practice — observed in prod applying a
+# Caddyfile change (CSP connect-src) that a plain container restart then
+# picked up immediately. A restart is a few seconds of downtime but
+# guarantees the new file is actually read from disk.
+echo "==> Restarting Caddy to pick up config changes"
+docker compose -f infra/docker-compose.prod.yml restart caddy
 
 echo "==> Removing dangling images"
 docker image prune -f

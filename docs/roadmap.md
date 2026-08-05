@@ -1683,3 +1683,36 @@ A third catalog entity, alongside produit/prestation, reachable from mode rapide
 
 - Percentage base decision: a `PERCENTAGE` discount is computed against the pre-tax product+visible-service subtotal (excluding other discounts, to avoid compounding), not the TTC total — the standard French invoicing treatment (a remise reduces the taxable base, VAT is then computed on the discounted amount), confirmed with the artisan before implementation.
 - `Discount`/`InvoiceDiscountLine` intentionally do not store a `code` field the way `Product`/`Service` do — no SKU-like use case was requested, and the whole point of this phase's form was to stay shorter than the other two.
+
+# Phase 33 — Trial-Conversion Offer: "1er mois à 2€" Countdown CTA
+
+## Objective
+
+A personal, time-boxed conversion push at the single moment an artisan is most likely to subscribe: right after they've created their one free trial invoice (Phase 14). A real 48h countdown offers Premium's first month at 2€ (instead of 15€), shown as a full-screen CTA right after that invoice and again if they hit the paywall on a second one before converting — rather than only ever showing the generic, calendar-wide "offre de lancement" banner (Phase 30) or the blocking paywall's plain text.
+
+## Decided with the user before implementation
+
+- **Trigger at both moments**: proactively right after the free invoice is created (the artisan is at their most engaged), and again from the paywall if they come back later without having subscribed — same countdown, same deadline, not reset.
+- **48-hour window**, and — this was an explicit line — **a real, server-persisted deadline** (`Company.trialOfferExpiresAt`, set once), never a countdown recomputed from "now" on page load. A timer that silently resets every time the artisan revisits the page would be a dark pattern (and legally risky under French consumer-protection rules on fake urgency); this one genuinely expires, and the backend enforces that expiry at checkout time too (`PlanGateService.isTrialOfferActive`), so the CTA is never bluffing.
+- **Premium only, 2€ first month** (`duration: 'once'` Stripe coupon) — consistent with Phase 30's launch offer being Premium-only, for the same decoy-pricing reason (discounting Essentiel/Pro would blur the 3-card comparison). Reverts to 15€/month from the 2nd billing cycle.
+
+## Features
+
+- [x] `Company.trialOfferExpiresAt` (nullable `DateTime`) — set once via `BillingRepository.startTrialOfferWindow` (a conditional `updateMany` guarding against a double-set), triggered by `PlanGateService.recordInvoiceCreated`, called from `InvoiceService.create()`/`convertToFacture()` right after the row is actually persisted (never from the pre-creation gate check itself, which also runs on preview endpoints where nothing is saved).
+- [x] `PlanGateService.isTrialOfferActive` — true while the deadline is still in the future AND the company hasn't already converted (mirrors `getEffectivePlanTier`'s "higher of subscription/grant" reasoning, just as a boolean gate).
+- [x] `StripeClientService.ensureTrialOfferCoupon` — idempotent-by-construction coupon (`amount_off` computed from `PLAN_DEFINITIONS.PREMIUM.priceEuros - 2`, `duration: 'once'`), same creation pattern as the referral/launch-offer coupons.
+- [x] `BillingService.createCheckoutSession` discount stacking: the referral discount and the trial-offer coupon can both be active at once (a referred filleul who also just created their free-trial invoice) — whichever is actually cheaper for the artisan wins between those two specifically (10,50 € via -30% referral vs 2 € via the trial offer on Premium; picking a fixed order here left a referred filleul paying *more* than a non-referred artisan gets in the same trial-offer window). Phase 30's own referral-vs-launch-offer rule is untouched: referral still always outranks the generic launch offer regardless of the exact numbers, even where the launch offer is nominally a few centimes cheaper — that's a deliberate value judgment ("specific, earned reward beats generic promo"), not a price comparison, and Phase 33 doesn't re-litigate it. The launch offer is only ever reached as the fallback when neither specific reward applies.
+- [x] `GET /billing/status` gains `trialOffer: { tier, expiresAt, discountedPriceEuros, normalPriceEuros } | null` — present only while active, so the frontend never has to re-check the deadline itself.
+- [x] Frontend: `TrialOfferService` (visibility signal, same shape as `PaywallService`) + `TrialOfferModalComponent` (mounted once at app root next to `<app-paywall-modal />`) — big price, live `HH:MM:SS` countdown ticking off `trialOffer.expiresAt` (never a locally-invented timer), auto-dismisses at zero, respects the iOS app's Apple 3.1.1 no-tappable-payment-CTA constraint exactly like `PaywallModalComponent`.
+- [x] `showTrialOfferAfterFirstInvoice` util, called from both invoice-creation success paths (mode rapide's `InvoiceCreatePreviewStepPage` and mode manuel's `InvoiceCreateManualPage`) — re-fetches billing status and opens the modal if a `trialOffer` is now present.
+- [x] `premiumGateInterceptor` now opens the trial-offer modal instead of the generic paywall modal whenever `BillingService.status().trialOffer` is active, so the same offer follows the artisan from the first-invoice moment through to the paywall if they didn't convert.
+
+## Stripe dashboard setup (do this before deploying)
+
+- **No manual coupon setup needed** — same as the referral/launch-offer coupons, `ensureTrialOfferCoupon` creates `trial-offer-premium-1mois-2eur` on first use. Nothing to do in the Stripe Dashboard.
+- Requires `STRIPE_PRICE_ID_PREMIUM` to be configured (same price the launch offer and referral discount already discount against) — no new env var for this phase.
+
+## Notes
+
+- Depends on Phase 14 (the free-trial gate this hooks into) and Phase 30 (the 3-tier `PLAN_DEFINITIONS`/Stripe coupon patterns this reuses).
+- `convertToFacture()` also calls `recordInvoiceCreated` for consistency, but it's a no-op in practice there: reaching it requires an existing devis, which already means `invoiceCount >= 1` before this call, so it can never be the 0→1 transition the offer is keyed on.

@@ -307,6 +307,21 @@ model Company {
   // (and therefore only ever get this discount) once.
   pendingReferralDiscount Boolean @default(false)
 
+  // Phase 33: set once, the first time this company's invoice count goes
+  // from 0 to 1 (see PlanGateService.recordInvoiceCreated, called from
+  // InvoiceService.create()/convertToFacture()) — the deadline for the
+  // limited-time "1er mois à 2€" Premium offer shown right after the free
+  // trial invoice and again if the artisan hits the paywall before
+  // converting. A real, persisted deadline on purpose: never recomputed
+  // from "now" on each request, so the countdown the frontend renders
+  // can't be reset by revisiting the page — see docs/roadmap.md Phase 33.
+  // Never overwritten once set (BillingRepository.startTrialOfferWindow is
+  // a conditional update), and left untouched forever after — no need to
+  // clear it once it expires or once the company subscribes, since
+  // PlanGateService.isTrialOfferActive already checks both the expiry and
+  // getEffectivePlanTier.
+  trialOfferExpiresAt DateTime?
+
   // Phase 17: which period the quarterly report screen preselects — see
   // DeclarationFrequency above. microEntrepreneurCeiling (cents) is
   // deliberately artisan-editable, not a hardcoded legal constant: the real

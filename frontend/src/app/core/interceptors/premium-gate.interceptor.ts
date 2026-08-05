@@ -2,7 +2,9 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { BillingService } from '../services/billing.service';
 import { PaywallService } from '../services/paywall.service';
+import { TrialOfferService } from '../services/trial-offer.service';
 
 // Phase 22: centralizes what was 7 duplicated `if (error.status === 402)
 // this.paywallService.show()` call sites across invoice-create-preview-step
@@ -21,8 +23,17 @@ import { PaywallService } from '../services/paywall.service';
 // analytics screen locked behind a tier. Only the 'PremiumRequired'
 // discriminator opens this modal; the other two are handled locally by
 // their own screens (see e.g. customer-form's catalog-limit banner).
+//
+// Phase 33: an artisan who hit this wall without ever converting still has
+// a live trial-offer countdown (see BillingService.status().trialOffer,
+// kept fresh app-wide by app.ts) — shows that CTA instead of the generic
+// paywall so the "1er mois à 2€" offer follows them from the first-invoice
+// moment all the way to the point they actually get blocked, rather than
+// only ever appearing once.
 export const premiumGateInterceptor: HttpInterceptorFn = (req, next) => {
   const paywallService = inject(PaywallService);
+  const trialOfferService = inject(TrialOfferService);
+  const billingService = inject(BillingService);
 
   if (!req.url.startsWith(environment.apiBaseUrl)) {
     return next(req);
@@ -33,7 +44,11 @@ export const premiumGateInterceptor: HttpInterceptorFn = (req, next) => {
       if (error instanceof HttpErrorResponse && error.status === 402) {
         const body = error.error as { error?: string } | null;
         if (body?.error === 'PremiumRequired') {
-          paywallService.show();
+          if (billingService.status()?.trialOffer) {
+            trialOfferService.show();
+          } else {
+            paywallService.show();
+          }
         }
       }
       return throwError(() => error);

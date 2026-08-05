@@ -30,6 +30,7 @@ import { ToastService } from './core/services/toast.service';
 import { FooterComponent } from './shared/components/footer.component';
 import { PaywallModalComponent } from './shared/components/paywall-modal.component';
 import { ToastContainerComponent } from './shared/components/toast-container.component';
+import { TrialOfferModalComponent } from './shared/components/trial-offer-modal.component';
 import { TourAnchorDirective } from './shared/tour/tour-anchor.directive';
 import { TourService } from './shared/tour/tour.service';
 import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
@@ -85,6 +86,7 @@ const ENTER_TO_DISMISS_INPUT_TYPES = new Set([
     RouterLinkActive,
     TourOverlayComponent,
     PaywallModalComponent,
+    TrialOfferModalComponent,
     ToastContainerComponent,
     TourAnchorDirective,
     FooterComponent,

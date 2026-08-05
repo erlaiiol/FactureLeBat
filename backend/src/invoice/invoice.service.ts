@@ -179,6 +179,11 @@ export class InvoiceService {
           : undefined,
     });
 
+    // Phase 33: fire-and-observe after the row actually exists — checks its
+    // own idempotency (invoiceCount === 1, no plan already), so this is safe
+    // to call from both creation paths without duplicating that logic here.
+    await this.premiumGate.recordInvoiceCreated(companyId);
+
     return this.mapper.toInvoiceWithTotals(invoice);
   }
 
@@ -274,6 +279,12 @@ export class InvoiceService {
             }))
           : undefined,
     });
+
+    // Phase 33: see create() above — a no-op in practice here, since a
+    // company able to reach this point (an existing devis to convert)
+    // already has invoiceCount >= 1 from that devis alone, so this can never
+    // be the invoiceCount 0 -> 1 transition the trial offer is keyed on.
+    await this.premiumGate.recordInvoiceCreated(companyId);
 
     return this.mapper.toInvoiceWithTotals(invoice);
   }

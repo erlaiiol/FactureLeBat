@@ -4,11 +4,16 @@ import Stripe from 'stripe';
 import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
 import { BillingRepository } from './billing.repository';
-import { BillingStatus } from './entities/billing-status.entity';
+import { BillingStatus, TrialOffer } from './entities/billing-status.entity';
 import { PlanCatalog } from './entities/plan-catalog.entity';
 import { NoBillingCustomerError } from './no-billing-customer.error';
-import { PLAN_DEFINITIONS, PLAN_TIER_ORDER } from './plan-config';
-import { getEffectivePlanTier } from './plan-gate.service';
+import {
+  PLAN_DEFINITIONS,
+  PLAN_TIER_ORDER,
+  TRIAL_OFFER_PRICE_EUROS,
+  TRIAL_OFFER_TIER,
+} from './plan-config';
+import { getEffectivePlanTier, isTrialOfferActive } from './plan-gate.service';
 import { REFERRAL_DISCOUNT_PERCENT_OFF, StripeClientService } from './stripe/stripe-client.service';
 import { mapStripeSubscriptionStatus } from './stripe/subscription-status.util';
 
@@ -53,6 +58,14 @@ export class BillingService {
     ]);
     const planTier = getEffectivePlanTier(fields);
     const capsTier = planTier ?? PlanTier.ESSENTIEL;
+    const trialOffer: TrialOffer | null = isTrialOfferActive(fields)
+      ? {
+          tier: TRIAL_OFFER_TIER,
+          expiresAt: fields.trialOfferExpiresAt!,
+          discountedPriceEuros: TRIAL_OFFER_PRICE_EUROS,
+          normalPriceEuros: PLAN_DEFINITIONS[TRIAL_OFFER_TIER].priceEuros,
+        }
+      : null;
     return {
       subscriptionStatus: fields.subscriptionStatus,
       hasPremiumAccess: planTier !== null,
@@ -67,6 +80,7 @@ export class BillingService {
       customerLimit: PLAN_DEFINITIONS[capsTier].customerLimit,
       catalogItemCount,
       catalogItemLimit: PLAN_DEFINITIONS[capsTier].catalogItemLimit,
+      trialOffer,
     };
   }
 
@@ -140,16 +154,48 @@ export class BillingService {
       await this.repository.setStripeCustomerId(companyId, customerId);
     }
 
-    // Phase 29/30: a filleul whose referral reward fired before they ever
-    // subscribed (the normal case) has pendingReferralDiscount set — attach
-    // the coupon to this checkout rather than losing the reward, regardless
-    // of which tier they pick (the coupon is a percentage, see
-    // StripeClientService). A specific, earned reward like this outranks
-    // the generic launch offer below.
-    let discountCouponId: string | undefined;
-    if (fields.pendingReferralDiscount) {
-      discountCouponId = await this.stripeClient.ensureReferralDiscountCoupon();
+    // Phase 30 explicitly decided a referral discount always outranks the
+    // generic, calendar-wide launch offer, regardless of the exact numbers
+    // ("a specific, earned reward outranks a generic sitewide promotion") —
+    // that decision stands untouched here, on purpose: it's not a
+    // price-comparison problem, it's a value judgment already made with the
+    // user.
+    //
+    // Phase 33 adds a second specific/earned reward (the personal
+    // trial-offer countdown) that can now be active *at the same time* as
+    // the referral discount — a referred filleul who also just created
+    // their free-trial invoice has both pendingReferralDiscount AND
+    // isTrialOfferActive at once. There is no prior ordering decision
+    // between these two, and picking one arbitrarily is actively harmful:
+    // referral's -30% is 10,50 € on Premium, the trial offer is a flat 2 €
+    // — an arbitrary "referral always wins" would leave a referred filleul
+    // paying more than a stranger gets in the same trial-offer window,
+    // which defeats the point of being referred by a friend. So between
+    // these two specifically, whichever is actually cheaper for the
+    // artisan wins; the launch offer stays the fallback, only reached when
+    // neither of the two specific rewards applies.
+    const referralActive = fields.pendingReferralDiscount;
+    const trialActive = tier === TRIAL_OFFER_TIER && isTrialOfferActive(fields);
+
+    let discountKind: 'referral' | 'trial' | 'launch' | null = null;
+    if (referralActive && trialActive) {
+      const normalPriceEuros = PLAN_DEFINITIONS[tier].priceEuros;
+      const referralPriceEuros = normalPriceEuros * (1 - REFERRAL_DISCOUNT_PERCENT_OFF / 100);
+      discountKind = TRIAL_OFFER_PRICE_EUROS <= referralPriceEuros ? 'trial' : 'referral';
+    } else if (referralActive) {
+      discountKind = 'referral';
+    } else if (trialActive) {
+      discountKind = 'trial';
     } else if (tier === PlanTier.PREMIUM && this.stripeClient.isLaunchOfferActive()) {
+      discountKind = 'launch';
+    }
+
+    let discountCouponId: string | undefined;
+    if (discountKind === 'referral') {
+      discountCouponId = await this.stripeClient.ensureReferralDiscountCoupon();
+    } else if (discountKind === 'trial') {
+      discountCouponId = await this.stripeClient.ensureTrialOfferCoupon();
+    } else if (discountKind === 'launch') {
       discountCouponId = await this.stripeClient.ensureLaunchOfferCoupon();
     }
 
