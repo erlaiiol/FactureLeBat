@@ -20,11 +20,13 @@ import {
 } from '@angular/router';
 import { filter, Subscription, TimeoutError } from 'rxjs';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { KeyboardVisibilityService } from '../../core/services/keyboard-visibility.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { IconTrashComponent } from '../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../shared/components/pdf-preview-modal.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { ToastService } from '../../core/services/toast.service';
+import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summary.component';
 import { InvoiceDraftStore } from './invoice-draft.store';
 
@@ -49,6 +51,7 @@ import { InvoiceDraftStore } from './invoice-draft.store';
     PdfPreviewModalComponent,
     InvoiceTotalsSummaryComponent,
     TourAnchorDirective,
+    CentsToEurosPipe,
   ],
   templateUrl: './invoice-create-shell.page.html',
 })
@@ -59,6 +62,7 @@ export class InvoiceCreateShellPage {
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly draftStore = inject(InvoiceDraftStore);
+  protected readonly keyboardVisibility = inject(KeyboardVisibilityService);
 
   // Measured and republished as the `--invoice-footer-height` CSS variable —
   // see observeFooterHeight below and app-toast-container's identical

@@ -43,28 +43,56 @@
   }
 </div>
 
-<div #footerBar class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface p-4 shadow-lg">
-  <div class="mx-auto flex max-w-2xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-    <app-invoice-totals-summary
-      appTourAnchor="invoice-total"
-      [totals]="draftStore.totalsPreview()"
-      [vatApplicable]="draftStore.vatApplicable()"
-      [discountAmountCents]="draftStore.discountAmountCents()"
-    />
-    @if (!isOnPreviewStep()) {
-      <div class="w-full sm:w-64">
-        <app-big-button
-          variant="secondary"
-          tone="subtle"
-          appTourAnchor="invoice-preview"
+<div
+  #footerBar
+  class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface shadow-lg"
+  [class.p-4]="!keyboardVisibility.isOpen()"
+  [class.p-2]="keyboardVisibility.isOpen()"
+>
+  @if (keyboardVisibility.isOpen()) {
+    <!-- Keyboard-open compact bar: the full footer below sits fixed at the
+         viewport bottom, which the on-screen keyboard drags up over
+         whatever's being typed (see KeyboardVisibilityService) — this single
+         thin line stays out of the way while still surfacing the one number
+         and the one action worth keeping reachable mid-typing. -->
+    <div class="mx-auto flex max-w-2xl items-center justify-between gap-3 text-sm">
+      <span class="font-mono font-semibold text-ink">
+        Total TTC : {{ draftStore.totalsPreview().totalInclVatCents | centsToEuros }}
+      </span>
+      @if (!isOnPreviewStep()) {
+        <button
+          type="button"
+          class="font-medium text-primary hover:underline"
           [disabled]="!draftStore.canPreview() || loadingPdfPreview()"
           (click)="openPdfPreview()"
         >
-          {{ loadingPdfPreview() ? 'Génération…' : 'Aperçu de la facture' }}
-        </app-big-button>
-      </div>
-    }
-  </div>
+          {{ loadingPdfPreview() ? 'Génération…' : 'Aperçu' }}
+        </button>
+      }
+    </div>
+  } @else {
+    <div class="mx-auto flex max-w-2xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <app-invoice-totals-summary
+        appTourAnchor="invoice-total"
+        [totals]="draftStore.totalsPreview()"
+        [vatApplicable]="draftStore.vatApplicable()"
+        [discountAmountCents]="draftStore.discountAmountCents()"
+      />
+      @if (!isOnPreviewStep()) {
+        <div class="w-full sm:w-64">
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            appTourAnchor="invoice-preview"
+            [disabled]="!draftStore.canPreview() || loadingPdfPreview()"
+            (click)="openPdfPreview()"
+          >
+            {{ loadingPdfPreview() ? 'Génération…' : 'Aperçu de la facture' }}
+          </app-big-button>
+        </div>
+      }
+    </div>
+  }
 </div>
 
 <app-pdf-preview-modal

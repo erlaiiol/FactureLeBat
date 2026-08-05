@@ -23,6 +23,7 @@ import { filter, map } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { BillingService } from './core/services/billing.service';
 import { DeepLinkService } from './core/services/deep-link.service';
+import { PlatformService } from './core/services/platform.service';
 import { PushRegistrationService } from './core/services/push-registration.service';
 import { ThemeService } from './core/services/theme.service';
 import { ToastService } from './core/services/toast.service';
@@ -46,7 +47,34 @@ const BILLING_BUTTON_CLASSES: Record<BillingButtonState, string> = {
   trial: 'text-ink hover:bg-secondary-subtle',
 };
 
+// Same three states, condensed to a small dot for the native app's
+// always-visible compact nav row (see app.html) — a filled circle for the
+// two states worth flagging at a glance (green/red), a neutral outline for
+// "trial" so an artisan mid-trial doesn't read it as a warning.
+const BILLING_DOT_CLASSES: Record<BillingButtonState, string> = {
+  active: 'bg-success',
+  blocked: 'bg-danger',
+  trial: 'border border-ink-soft/50',
+};
+
 const DATA_SECTION_ROUTES = ['/clients', '/produits', '/prestations'];
+
+// Single-line text-entry <input> types — the ones a virtual keyboard's
+// return key can mean "I'm done with this field" for. Deliberately excludes
+// checkbox/radio/file/range/date/etc. (no virtual keyboard to dismiss) and,
+// by only matching HTMLInputElement, every <textarea> on the site (product/
+// service descriptions, "mon entreprise", email bodies) — those keep the
+// browser's default "return" hint and behavior since Enter there means
+// "new line", not "done".
+const ENTER_TO_DISMISS_INPUT_TYPES = new Set([
+  'text',
+  'email',
+  'tel',
+  'number',
+  'password',
+  'search',
+  'url',
+]);
 
 @Component({
   selector: 'app-root',
@@ -69,6 +97,7 @@ export class App {
   protected readonly tourService = inject(TourService);
   protected readonly authService = inject(AuthService);
   protected readonly billingService = inject(BillingService);
+  protected readonly platformService = inject(PlatformService);
   private readonly pushRegistrationService = inject(PushRegistrationService);
   private readonly deepLinkService = inject(DeepLinkService);
   private readonly toastService = inject(ToastService);
@@ -290,6 +319,33 @@ export class App {
     this.mobileMenuOpen.set(false);
   }
 
+  // Swaps the on-screen keyboard's return-key label from the default arrow
+  // ("go to a new line", which single-line inputs can't even do) to "OK"/
+  // "Terminé" on every plain text-entry field site-wide — delegated here
+  // rather than added to each of the site's many <input> templates one by
+  // one. See ENTER_TO_DISMISS_INPUT_TYPES for what's covered.
+  @HostListener('document:focusin', ['$event'])
+  protected onDocumentFocusIn(event: FocusEvent): void {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && ENTER_TO_DISMISS_INPUT_TYPES.has(target.type)) {
+      target.enterKeyHint = 'done';
+    }
+  }
+
+  // The other half of onDocumentFocusIn: actually dismisses the keyboard
+  // when that "OK" key is tapped. Only calls blur(), never
+  // preventDefault() — a text input inside a <form> (e.g. the login page)
+  // still submits on Enter exactly as it did before, this just also drops
+  // focus so the keyboard closes instead of lingering over a page that just
+  // navigated away.
+  @HostListener('document:keydown.enter')
+  protected onEnterKeydown(): void {
+    const target = document.activeElement;
+    if (target instanceof HTMLInputElement && ENTER_TO_DISMISS_INPUT_TYPES.has(target.type)) {
+      target.blur();
+    }
+  }
+
   protected billingButtonState(): BillingButtonState {
     const status = this.billingService.status();
     if (!status) {
@@ -306,6 +362,10 @@ export class App {
 
   protected billingButtonClasses(): string {
     return BILLING_BUTTON_CLASSES[this.billingButtonState()];
+  }
+
+  protected billingDotClasses(): string {
+    return BILLING_DOT_CLASSES[this.billingButtonState()];
   }
 
   protected billingButtonAriaLabel(): string {

@@ -20,6 +20,72 @@
               class="rounded-lg"
             />
           </a>
+          @if (platformService.isNativeApp()) {
+            <!-- Capacitor-only: "Nouveau document" and "Mes documents" are
+                 this app's two core actions, so on a phone they stay on the
+                 navbar row itself instead of one extra tap away behind the
+                 hamburger (where the desktop-width nav below still lives,
+                 and still fully covers both of these). "Nouveau document"
+                 drops to its icon alone — a colored "+" pill reads as
+                 "create new" on its own, same convention as any compose/FAB
+                 button, and freeing up its label's width is what keeps the
+                 rest of this row (Documents' icon+label, the subscription
+                 dot, the hamburger) from overflowing a ~320px-wide phone —
+                 verified against the real compiled CSS down to that width.
+                 lg:hidden since the full desktop nav two divs down already
+                 covers this above that width. -->
+            <div class="flex flex-1 items-center gap-1 lg:hidden">
+              <a
+                routerLink="/factures/nouvelle"
+                class="flex shrink-0 items-center rounded-lg bg-primary px-2.5 py-2 text-primary-fg hover:bg-primary/90"
+                aria-label="Nouveau document"
+                title="Nouveau document"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </a>
+              <a
+                routerLink="/factures"
+                appTourAnchor="nav-my-documents"
+                routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                [routerLinkActiveOptions]="{ exact: true }"
+                class="font-heading flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-xs font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6" />
+                </svg>
+                Documents
+              </a>
+              <a
+                routerLink="/abonnement"
+                class="ml-auto flex h-2.5 w-2.5 shrink-0 rounded-full"
+                [class]="billingDotClasses()"
+                [attr.aria-label]="billingButtonAriaLabel()"
+                title="Mon abonnement"
+              ></a>
+            </div>
+          }
           <div class="hidden flex-1 flex-wrap gap-2 lg:flex">
             <a
               routerLink="/factures/nouvelle"

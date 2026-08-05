@@ -526,41 +526,56 @@ button:not(:disabled) {
    justification as `scrollReveal` firing once per element). Each line gets
    its own animation-delay (set inline in the template, spaced by
    --duration-litany-slot) rather than one long keyframe timeline, so the
-   sequence length stays a single number to tune in one place. */
+   sequence length stays a single number to tune in one place.
+
+   Each line's question and its "FactureLe." answer are two separate flex
+   items (the question is one anonymous text-run item, `<strong>` is the
+   other) so the container can stack them — column on narrow phones, where
+   the question already wraps onto its own line and squeezing "FactureLe."
+   onto that same line either overflowed or crushed both, row again from
+   `sm` up where there's width for both on one line. */
 :root {
-  --duration-litany-slot: 1500ms;
+  --duration-litany-slot: 1100ms;
 }
 @keyframes hero-litany-line {
   0%,
   100% {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px) scale(0.96);
   }
-  10%,
-  80% {
+  14%,
+  76% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 .anim-hero-litany-line {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.1em;
   animation-name: hero-litany-line;
   animation-duration: var(--duration-litany-slot);
   animation-timing-function: var(--ease-out-sharp);
   animation-fill-mode: both;
 }
+@media (min-width: 640px) {
+  .anim-hero-litany-line {
+    flex-direction: row;
+    gap: 0.35em;
+  }
+}
 @keyframes hero-litany-final {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 .anim-hero-litany-final {

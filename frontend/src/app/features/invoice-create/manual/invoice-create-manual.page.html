@@ -358,36 +358,61 @@
 
   <div
     #footerBar
-    class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface p-4 shadow-lg"
+    class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface shadow-lg"
+    [class.p-4]="!keyboardVisibility.isOpen()"
+    [class.p-2]="keyboardVisibility.isOpen()"
   >
-    <div class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <app-invoice-totals-summary
-        appTourAnchor="manual-total"
-        [totals]="store.totalsPreview()"
-        [vatApplicable]="store.vatApplicable()"
-        [vatRateBasisPoints]="store.vatRateBasisPoints()"
-        [company]="store.company()"
-        [editable]="true"
-        (subtotalOverrideChange)="store.setSubtotalOverrideText($event)"
-        (vatOverrideChange)="store.setVatOverrideText($event)"
-        (totalOverrideChange)="store.setTotalOverrideText($event)"
-        (vatChoiceChange)="store.setVatChoice($event)"
-      />
-      <div class="w-full sm:w-64">
-        @if (previewError(); as message) {
-          <p class="mb-2 text-center text-sm font-medium text-danger">{{ message }}</p>
-        }
-        <app-big-button
-          variant="secondary"
-          tone="subtle"
-          appTourAnchor="manual-preview"
+    @if (keyboardVisibility.isOpen()) {
+      <!-- Keyboard-open compact bar — see InvoiceCreateShellPage's identical
+           footer for why: the on-screen keyboard drags this fixed-position
+           bar up over whatever cell the artisan is typing into, so it's
+           reduced to one thin line (total TTC + aperçu) while the full,
+           editable breakdown below stays hidden until the keyboard closes. -->
+      <div class="mx-auto flex max-w-5xl items-center justify-between gap-3 text-sm">
+        <span class="font-mono font-semibold text-ink">
+          Total TTC : {{ store.totalsPreview().totalInclVatCents | centsToEuros }}
+        </span>
+        <button
+          type="button"
+          class="font-medium text-primary hover:underline"
           [disabled]="previewing()"
           (click)="preview()"
         >
-          {{ previewing() ? 'Génération…' : 'Aperçu de la facture' }}
-        </app-big-button>
+          {{ previewing() ? 'Génération…' : 'Aperçu' }}
+        </button>
       </div>
-    </div>
+    } @else {
+      <div
+        class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+      >
+        <app-invoice-totals-summary
+          appTourAnchor="manual-total"
+          [totals]="store.totalsPreview()"
+          [vatApplicable]="store.vatApplicable()"
+          [vatRateBasisPoints]="store.vatRateBasisPoints()"
+          [company]="store.company()"
+          [editable]="true"
+          (subtotalOverrideChange)="store.setSubtotalOverrideText($event)"
+          (vatOverrideChange)="store.setVatOverrideText($event)"
+          (totalOverrideChange)="store.setTotalOverrideText($event)"
+          (vatChoiceChange)="store.setVatChoice($event)"
+        />
+        <div class="w-full sm:w-64">
+          @if (previewError(); as message) {
+            <p class="mb-2 text-center text-sm font-medium text-danger">{{ message }}</p>
+          }
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            appTourAnchor="manual-preview"
+            [disabled]="previewing()"
+            (click)="preview()"
+          >
+            {{ previewing() ? 'Génération…' : 'Aperçu de la facture' }}
+          </app-big-button>
+        </div>
+      </div>
+    }
   </div>
 
   <app-pdf-preview-modal
