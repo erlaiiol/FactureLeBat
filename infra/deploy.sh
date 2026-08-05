@@ -32,6 +32,15 @@ docker compose -f infra/docker-compose.prod.yml build
 echo "==> Recreating containers"
 docker compose -f infra/docker-compose.prod.yml up -d
 
+# Caddy has no `build:` (plain caddy:2-alpine, Caddyfile bind-mounted
+# read-only) — `up -d` above only recreates a container whose *compose*
+# config changed, so a Caddyfile-only edit lands on disk via git pull but
+# never reaches the running process. `caddy reload` re-reads the mounted
+# file and swaps the config with no dropped connections; harmless no-op if
+# the Caddyfile didn't actually change this deploy.
+echo "==> Reloading Caddy config"
+docker compose -f infra/docker-compose.prod.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
+
 echo "==> Removing dangling images"
 docker image prune -f
 

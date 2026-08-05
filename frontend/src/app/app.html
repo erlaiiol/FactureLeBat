@@ -77,6 +77,36 @@
                 </svg>
                 Documents
               </a>
+              <!-- Icon-only, unlike Documents above — a third labeled pill
+                   no longer fits this row at a phone width (measured against
+                   the real compiled CSS down to 320px), and a bar-chart icon
+                   reads clearly enough on its own next to the two other,
+                   already-established icons. Always enabled, even on a
+                   tier without the paid "statistiques d'activité" feature —
+                   this same route's other tab (déclaration de TVA) stays
+                   free on every tier (see app.routes.ts), and the page
+                   itself already shows its own lock/upsell for the gated
+                   tab — see StatsReportsPage.analyticsLocked. -->
+              <a
+                routerLink="/statistiques"
+                routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                class="flex shrink-0 items-center rounded-lg px-2.5 py-2 text-ink hover:bg-secondary-subtle"
+                aria-label="Statistiques"
+                title="Statistiques"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 20V10M12 20V4M20 20v-7" />
+                </svg>
+              </a>
               <a
                 routerLink="/abonnement"
                 class="ml-auto flex h-2.5 w-2.5 shrink-0 rounded-full"

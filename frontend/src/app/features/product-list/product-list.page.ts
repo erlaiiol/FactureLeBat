@@ -12,6 +12,7 @@ import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../shared/pipes/unit-label.pipe';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
+import { SourcingPanelComponent } from '../invoice-create/components/sourcing-panel.component';
 
 @Component({
   selector: 'app-product-list-page',
@@ -25,6 +26,7 @@ import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
     CentsToEurosPipe,
     UnitLabelPipe,
     TourAnchorDirective,
+    SourcingPanelComponent,
   ],
   templateUrl: './product-list.page.html',
 })

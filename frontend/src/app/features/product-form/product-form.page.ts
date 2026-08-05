@@ -16,11 +16,18 @@ import { AdvancedSettingsComponent } from '../../shared/components/advanced-sett
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
+import { SourcingPanelComponent } from '../invoice-create/components/sourcing-panel.component';
 
 @Component({
   selector: 'app-product-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, AdvancedSettingsComponent, BigButtonComponent, FieldHintComponent],
+  imports: [
+    ReactiveFormsModule,
+    AdvancedSettingsComponent,
+    BigButtonComponent,
+    FieldHintComponent,
+    SourcingPanelComponent,
+  ],
   templateUrl: './product-form.page.html',
 })
 export class ProductFormPage {
@@ -71,6 +78,12 @@ export class ProductFormPage {
 
   protected unitPriceButtonLabel(): string {
     return UNIT_PRICE_BUTTON_LABELS[this.form.controls.unit.value];
+  }
+
+  // The sourcing panel needs a name to search on — nothing to look up yet
+  // for a blank "Nouveau produit" form.
+  protected canSearchSuppliers(): boolean {
+    return this.form.controls.name.value.trim().length > 0;
   }
 
   protected onPackagingItemCountInput(rawValue: string): void {

@@ -198,6 +198,14 @@
       />
       <app-field-hint text="Facultatif — un lien vers la page du produit chez ce fournisseur." />
     </label>
+
+    @if (canSearchSuppliers()) {
+      <app-sourcing-panel
+        [productName]="form.controls.name.value"
+        [quantity]="1"
+        [unit]="form.controls.unit.value"
+      />
+    }
   </app-advanced-settings>
 
   @if (errorMessage(); as message) {
