@@ -30,9 +30,15 @@ const INITIAL_STATE: RatingPromptState = { shareCount: 0, promptCount: 0, lastPr
 // requestReview()'s Promise<void>.
 @Injectable({ providedIn: 'root' })
 export class RatingPromptService {
-  // Called from InvoiceShareService.share() after a real completed send
-  // ('shared' or 'mailto-fallback' — a 'compose-email' outcome only opens
-  // the SMTP modal and hasn't sent anything yet, so it doesn't count).
+  // Called from InvoiceShareService.share() once the artisan has completed
+  // a share interaction ('shared' or 'mailto-fallback' — a 'compose-email'
+  // outcome only opens the SMTP modal and hasn't sent anything yet, so it
+  // doesn't count). This is a proxy for "used the feature successfully",
+  // not proof of delivery: 'shared' only means the OS handed the PDF to
+  // whichever app the artisan picked, never that they actually hit send
+  // there (see InvoiceShareService.share's comment) — good enough for a
+  // review-prompt heuristic, but never treat this signal as confirmation an
+  // invoice reached its recipient.
   async notifyInvoiceShared(): Promise<void> {
     if (!Capacitor.isNativePlatform()) {
       return;

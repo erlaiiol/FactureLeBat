@@ -39,6 +39,15 @@ export class InvoiceShareService {
     if ('canShare' in navigator && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: fileName });
+        // navigator.share() only resolves once the OS has handed the PDF to
+        // whichever app the artisan picked (Gmail, WhatsApp…) — it says
+        // nothing about whether that app's own send/post action was ever
+        // completed. This toast exists so the artisan isn't left assuming
+        // FactureLeBat itself confirmed delivery, which it structurally
+        // cannot: no server round-trip happens on this path at all.
+        this.toastService.success(
+          'Partage lancé — vérifiez dans l’application choisie que l’envoi a bien abouti.',
+        );
         void this.ratingPromptService.notifyInvoiceShared();
         return 'shared';
       } catch (error) {

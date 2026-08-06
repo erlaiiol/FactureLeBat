@@ -10,6 +10,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { DeclarationFrequency, LegalStatus } from '../../../generated/prisma/enums';
 
@@ -113,4 +114,29 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsBoolean()
   versementLiberatoireOptIn?: boolean;
+
+  // BTP mandatory mention (art. L243-2 du Code des assurances): the artisan
+  // declares themself subject to garantie décennale, which makes the three
+  // fields below required — never inferred from legalStatus/siret, there's
+  // no way to derive "does construction work" from either.
+  @IsBoolean()
+  decennialInsuranceApplicable: boolean;
+
+  @ValidateIf((dto: UpdateCompanyDto) => dto.decennialInsuranceApplicable)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  decennialInsurerName?: string;
+
+  @ValidateIf((dto: UpdateCompanyDto) => dto.decennialInsuranceApplicable)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  decennialInsurancePolicyNumber?: string;
+
+  @ValidateIf((dto: UpdateCompanyDto) => dto.decennialInsuranceApplicable)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  decennialInsuranceCoverageArea?: string;
 }

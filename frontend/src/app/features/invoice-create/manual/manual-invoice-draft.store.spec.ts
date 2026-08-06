@@ -25,6 +25,10 @@ const companyFixture: CompanyProfile = {
   cotisationPrestationBicBasisPoints: 2120,
   cotisationPrestationBncBasisPoints: 2110,
   versementLiberatoireOptIn: false,
+  decennialInsuranceApplicable: false,
+  decennialInsurerName: null,
+  decennialInsurancePolicyNumber: null,
+  decennialInsuranceCoverageArea: null,
   hasLogo: false,
 };
 

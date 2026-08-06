@@ -57,6 +57,20 @@ export class CompanySettingsPage {
   private readonly essentialControlNames = Object.keys(
     CompanySettingsPage.essentialFieldLabels,
   ) as (keyof typeof CompanySettingsPage.essentialFieldLabels)[];
+
+  // BTP mandatory mention (art. L243-2 du Code des assurances): only
+  // "essential" — required, gates onboarding the same way as the fields
+  // above — while decennialInsuranceApplicable is checked. An artisan who
+  // never ticks the box (most of this app's users) never sees these treated
+  // as missing.
+  private static readonly decennialFieldLabels = {
+    decennialInsurerName: 'Assureur (garantie décennale)',
+    decennialInsurancePolicyNumber: 'N° de police (garantie décennale)',
+    decennialInsuranceCoverageArea: 'Zone couverte (garantie décennale)',
+  } as const;
+  private readonly decennialControlNames = Object.keys(
+    CompanySettingsPage.decennialFieldLabels,
+  ) as (keyof typeof CompanySettingsPage.decennialFieldLabels)[];
   protected readonly onboardingBlocked = signal(false);
   protected readonly missingEssentialFields = signal<string[]>([]);
 
@@ -132,6 +146,13 @@ export class CompanySettingsPage {
       [Validators.required, Validators.min(0), Validators.max(100)],
     ],
     versementLiberatoireOptIn: [false],
+    // BTP mandatory mention (art. L243-2 du Code des assurances) — the three
+    // detail fields below only become Validators.required while this is
+    // checked (see the valueChanges subscription in the constructor).
+    decennialInsuranceApplicable: [false],
+    decennialInsurerName: [''],
+    decennialInsurancePolicyNumber: [''],
+    decennialInsuranceCoverageArea: [''],
   });
 
   // Phase 12: the artisan's own SMTP account, used to send invoices for
@@ -176,6 +197,10 @@ export class CompanySettingsPage {
             cotisationPrestationBicPercent: profile.cotisationPrestationBicBasisPoints / 100,
             cotisationPrestationBncPercent: profile.cotisationPrestationBncBasisPoints / 100,
             versementLiberatoireOptIn: profile.versementLiberatoireOptIn,
+            decennialInsuranceApplicable: profile.decennialInsuranceApplicable,
+            decennialInsurerName: profile.decennialInsurerName ?? '',
+            decennialInsurancePolicyNumber: profile.decennialInsurancePolicyNumber ?? '',
+            decennialInsuranceCoverageArea: profile.decennialInsuranceCoverageArea ?? '',
           });
         },
         error: () => {
@@ -197,6 +222,14 @@ export class CompanySettingsPage {
         this.onboardingBlocked.set(false);
       }
     });
+
+    // Same "only required while the box is checked" pattern as
+    // microEntrepreneurCeilingEuros being optional — an artisan outside the
+    // BTP never has to see these three fields turn red.
+    this.form.controls.decennialInsuranceApplicable.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((applicable) => this.setDecennialValidators(applicable));
+    this.setDecennialValidators(this.form.controls.decennialInsuranceApplicable.value);
 
     this.mailSettingsService
       .getSettings()
@@ -255,6 +288,16 @@ export class CompanySettingsPage {
         cotisationPrestationBicBasisPoints: Math.round(value.cotisationPrestationBicPercent * 100),
         cotisationPrestationBncBasisPoints: Math.round(value.cotisationPrestationBncPercent * 100),
         versementLiberatoireOptIn: value.versementLiberatoireOptIn,
+        decennialInsuranceApplicable: value.decennialInsuranceApplicable,
+        decennialInsurerName: value.decennialInsuranceApplicable
+          ? value.decennialInsurerName
+          : undefined,
+        decennialInsurancePolicyNumber: value.decennialInsuranceApplicable
+          ? value.decennialInsurancePolicyNumber
+          : undefined,
+        decennialInsuranceCoverageArea: value.decennialInsuranceApplicable
+          ? value.decennialInsuranceCoverageArea
+          : undefined,
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -333,6 +376,9 @@ export class CompanySettingsPage {
       return true;
     }
     this.essentialControlNames.forEach((name) => this.form.controls[name].markAsTouched());
+    if (this.form.controls.decennialInsuranceApplicable.value) {
+      this.decennialControlNames.forEach((name) => this.form.controls[name].markAsTouched());
+    }
     this.missingEssentialFields.set(missing);
     this.onboardingBlocked.set(true);
     this.toastService.error(
@@ -404,9 +450,30 @@ export class CompanySettingsPage {
   }
 
   private computeMissingEssentialFields(): string[] {
-    return this.essentialControlNames
+    const missing: string[] = this.essentialControlNames
       .filter((name) => this.form.controls[name].invalid)
       .map((name) => CompanySettingsPage.essentialFieldLabels[name]);
+    if (this.form.controls.decennialInsuranceApplicable.value) {
+      missing.push(
+        ...this.decennialControlNames
+          .filter((name) => this.form.controls[name].invalid)
+          .map((name) => CompanySettingsPage.decennialFieldLabels[name]),
+      );
+    }
+    return missing;
+  }
+
+  // Toggles Validators.required on the three decennial detail fields —
+  // called both on every decennialInsuranceApplicable change and once at
+  // startup, since the form starts with the box unchecked before the real
+  // profile value is patched in above.
+  private setDecennialValidators(applicable: boolean): void {
+    const validators = applicable ? [Validators.required] : [];
+    for (const name of this.decennialControlNames) {
+      const control = this.form.controls[name];
+      control.setValidators(validators);
+      control.updateValueAndValidity({ emitEvent: false });
+    }
   }
 
   protected onTourEnabledChange(enabled: boolean): void {

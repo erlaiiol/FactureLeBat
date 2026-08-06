@@ -33,6 +33,14 @@ export interface CompanyProfile {
   // l'impôt sur le revenu at registration — see report.model.ts's
   // EstimatedCharges for how this feeds the quarterly report's estimate.
   versementLiberatoireOptIn: boolean;
+  // BTP mandatory mention (art. L243-2 du Code des assurances): the artisan
+  // declares themself subject to garantie décennale, which requires stating
+  // the insurer, policy number and geographic coverage area on every
+  // invoice/devis. The three detail fields are null unless the flag is set.
+  decennialInsuranceApplicable: boolean;
+  decennialInsurerName: string | null;
+  decennialInsurancePolicyNumber: string | null;
+  decennialInsuranceCoverageArea: string | null;
   // Whether a logo has been uploaded (CompanyService.uploadLogo) — never the
   // image bytes themselves, see CompanyService.logoUrl for how the frontend
   // actually displays it.
@@ -57,4 +65,8 @@ export interface UpdateCompanyRequest {
   cotisationPrestationBicBasisPoints?: number;
   cotisationPrestationBncBasisPoints?: number;
   versementLiberatoireOptIn?: boolean;
+  decennialInsuranceApplicable: boolean;
+  decennialInsurerName?: string;
+  decennialInsurancePolicyNumber?: string;
+  decennialInsuranceCoverageArea?: string;
 }

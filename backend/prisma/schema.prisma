@@ -356,6 +356,20 @@ model Company {
   // estimate must not silently add a tax the artisan never actually chose.
   versementLiberatoireOptIn          Boolean @default(false)
 
+  // Mandatory legal mention for BTP (construction) invoices — art. L243-2 du
+  // Code des assurances requires a company subject to garantie décennale to
+  // state its decennial-liability insurer, policy number and geographic
+  // coverage area on every invoice/devis. decennialInsuranceApplicable is
+  // the artisan's own declaration of being subject to that obligation (no
+  // way to infer it from legalStatus or SIRET); the three detail fields are
+  // then required by UpdateCompanyDto's cross-field validation, and
+  // PdfService.buildFooter only prints the mention once all three are
+  // actually filled in.
+  decennialInsuranceApplicable   Boolean @default(false)
+  decennialInsurerName           String?
+  decennialInsurancePolicyNumber String?
+  decennialInsuranceCoverageArea String?
+
   invoices         Invoice[]
   sourcingSearches SourcingSearch[]
   customers        Customer[]

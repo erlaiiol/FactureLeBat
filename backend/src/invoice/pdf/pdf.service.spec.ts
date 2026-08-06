@@ -17,6 +17,7 @@ function samplePdfData(): InvoicePdfData {
     companyVatExempt: true,
     issuerLogo: null,
     showWatermark: true,
+    decennialInsurance: null,
     customerName: 'M. Dupont',
     customerAddress: null,
     customerEmail: null,
@@ -96,6 +97,22 @@ describe('PdfService', () => {
   it('generates a non-empty PDF buffer with just Description/Total columns when simplifiedDisplay is set', async () => {
     const service = new PdfService();
     const data = { ...samplePdfData(), simplifiedDisplay: true };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with the decennial insurance mention when set', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      decennialInsurance: {
+        insurerName: 'MAAF Assurances',
+        policyNumber: '123456789',
+        coverageArea: 'France métropolitaine',
+      },
+    };
     const buffer = await service.generateInvoicePdf(data);
 
     expect(buffer.length).toBeGreaterThan(0);

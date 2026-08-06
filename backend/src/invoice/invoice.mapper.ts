@@ -850,6 +850,23 @@ export class InvoiceMapper {
       // company that simply hasn't paid for anything yet.
       showWatermark:
         !PLAN_DEFINITIONS[getEffectivePlanTier(company) ?? PlanTier.ESSENTIEL].removesWatermark,
+      // BTP mandatory mention (art. L243-2 du Code des assurances) — null
+      // unless the artisan both declared themself subject to garantie
+      // décennale AND filled in all three detail fields (UpdateCompanyDto
+      // requires all three together, but an existing row saved before this
+      // field existed could still have the flag set with blanks). PdfService
+      // only prints the mention when this is non-null.
+      decennialInsurance:
+        company.decennialInsuranceApplicable &&
+        company.decennialInsurerName &&
+        company.decennialInsurancePolicyNumber &&
+        company.decennialInsuranceCoverageArea
+          ? {
+              insurerName: company.decennialInsurerName,
+              policyNumber: company.decennialInsurancePolicyNumber,
+              coverageArea: company.decennialInsuranceCoverageArea,
+            }
+          : null,
     };
   }
 }

@@ -48,6 +48,14 @@ export class CompanyRepository {
         cotisationPrestationBicBasisPoints: data.cotisationPrestationBicBasisPoints,
         cotisationPrestationBncBasisPoints: data.cotisationPrestationBncBasisPoints,
         versementLiberatoireOptIn: data.versementLiberatoireOptIn,
+        decennialInsuranceApplicable: data.decennialInsuranceApplicable,
+        decennialInsurerName: data.decennialInsuranceApplicable ? data.decennialInsurerName : null,
+        decennialInsurancePolicyNumber: data.decennialInsuranceApplicable
+          ? data.decennialInsurancePolicyNumber
+          : null,
+        decennialInsuranceCoverageArea: data.decennialInsuranceApplicable
+          ? data.decennialInsuranceCoverageArea
+          : null,
       },
     });
   }

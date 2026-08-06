@@ -154,6 +154,65 @@
       />
     </label>
 
+    <div class="flex flex-col gap-3 rounded-lg border border-[var(--color-atelier-walnut)]/25 p-4">
+      <label class="flex items-center gap-2">
+        <input type="checkbox" class="h-5 w-5" formControlName="decennialInsuranceApplicable" />
+        <span class="text-sm font-medium text-atelier-ink">
+          Mon activité est soumise à la garantie décennale (bâtiment / BTP)
+        </span>
+      </label>
+      <app-field-hint
+        text="Obligatoire pour les professionnels du bâtiment : la loi impose de mentionner sur chaque facture l'assureur, le numéro de police et la zone géographique couverte par votre assurance décennale (art. L243-2 du Code des assurances)."
+      />
+
+      @if (form.value.decennialInsuranceApplicable) {
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-atelier-ink-soft">Assureur</span>
+          <input
+            formControlName="decennialInsurerName"
+            type="text"
+            class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+            [class.border-danger]="
+              form.controls.decennialInsurerName.invalid &&
+              form.controls.decennialInsurerName.touched
+            "
+          />
+          <app-field-hint
+            text="Le nom de la compagnie qui vous couvre pour la garantie décennale."
+          />
+        </label>
+
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-atelier-ink-soft">Numéro de police</span>
+          <input
+            formControlName="decennialInsurancePolicyNumber"
+            type="text"
+            class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+            [class.border-danger]="
+              form.controls.decennialInsurancePolicyNumber.invalid &&
+              form.controls.decennialInsurancePolicyNumber.touched
+            "
+          />
+          <app-field-hint text="Le numéro de votre contrat d'assurance décennale." />
+        </label>
+
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-atelier-ink-soft">Zone géographique couverte</span>
+          <input
+            formControlName="decennialInsuranceCoverageArea"
+            type="text"
+            placeholder="Ex : France métropolitaine"
+            class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+            [class.border-danger]="
+              form.controls.decennialInsuranceCoverageArea.invalid &&
+              form.controls.decennialInsuranceCoverageArea.touched
+            "
+          />
+          <app-field-hint text="La zone couverte par votre contrat pour les chantiers concernés." />
+        </label>
+      }
+    </div>
+
     <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-atelier-ink-soft">Taux de TVA (%)</span>
       <input

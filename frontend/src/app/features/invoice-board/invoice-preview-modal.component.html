@@ -71,7 +71,7 @@
           type="button"
           [disabled]="sharing()"
           (click)="share.emit()"
-          title="Envoyer par email depuis votre téléphone"
+          title="Partager le PDF via une app de votre téléphone"
           class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:brightness-90 disabled:opacity-60"
         >
           {{ sharing() ? 'Partage…' : 'Partager' }}

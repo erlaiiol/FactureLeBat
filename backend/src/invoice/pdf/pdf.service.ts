@@ -501,6 +501,11 @@ export class PdfService {
           ? 'TVA non applicable, art. 293 B du CGI.'
           : 'TVA non applicable.',
       "En cas de retard de paiement, une indemnité forfaitaire de 40€ pour frais de recouvrement est due, ainsi qu'une pénalité de retard calculée au taux d'intérêt légal en vigueur.",
+      // BTP mandatory mention (art. L243-2 du Code des assurances) — see
+      // InvoiceMapper.issuerFields for when decennialInsurance is non-null.
+      data.decennialInsurance
+        ? `Assurance de responsabilité civile décennale souscrite auprès de ${data.decennialInsurance.insurerName}, police n°${data.decennialInsurance.policyNumber}, couvrant les chantiers situés en ${data.decennialInsurance.coverageArea}.`
+        : undefined,
     ].filter((mention): mention is string => Boolean(mention));
 
     return {

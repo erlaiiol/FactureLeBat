@@ -82,6 +82,11 @@ export interface InvoicePdfData {
   // — false only for a company whose effective plan tier's removesWatermark
   // is true (see PLAN_DEFINITIONS, InvoiceMapper.issuerFields).
   showWatermark: boolean;
+  // BTP mandatory mention (art. L243-2 du Code des assurances) — see
+  // InvoiceMapper.issuerFields. Null whenever the company isn't subject to
+  // garantie décennale, in which case PdfService.buildFooter prints nothing
+  // extra for it.
+  decennialInsurance: { insurerName: string; policyNumber: string; coverageArea: string } | null;
 
   customerName: string;
   customerAddress: string | null;
