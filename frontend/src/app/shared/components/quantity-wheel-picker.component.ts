@@ -7,21 +7,23 @@ import {
   signal,
 } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
-import { QuantityInputModeService } from '../../core/services/quantity-input-mode.service';
+import { PlatformService } from '../../core/services/platform.service';
+import { BigButtonComponent } from './big-button.component';
 import { DigitWheelColumnComponent } from './digit-wheel-column.component';
 
 // The quantity mini-input on a collapsed catalog-picked line (see
 // invoice-create-lines-step.page.html) drops in here as a straight
-// [formControl] swap. In 'wheel' mode it's a 6-digit odometer (4 whole
-// euros/units + 2 decimals, i.e. cents from 0 to 999999 — the "6 chiffres
-// max" the artisan asked for); in 'keyboard' mode it's the same plain
-// number input it replaced. QuantityInputModeService owns which one shows,
-// so the small switch here just flips that one shared preference — every
-// picker on screen (and every one after a reload) follows it.
+// [formControl] swap. On the web (mouse + real keyboard, plenty of space)
+// it's exactly the plain number input it replaced — no wheel, no picker,
+// nothing else rendered. Only inside the native mobile/tablet app
+// (PlatformService.isNativeApp — Capacitor's own platform check, no user
+// preference involved) does tapping the value open a bottom sheet with a
+// 6-digit odometer, the same "tap to open, like a keyboard" gesture as any
+// other on-screen input — never displayed inline, unprompted.
 @Component({
   selector: 'app-quantity-wheel-picker',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DigitWheelColumnComponent],
+  imports: [DigitWheelColumnComponent, BigButtonComponent],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -30,61 +32,73 @@ import { DigitWheelColumnComponent } from './digit-wheel-column.component';
     },
   ],
   template: `
-    <div class="flex items-center gap-1.5">
-      @if (inputMode.mode() === 'wheel') {
-        <div class="flex items-center rounded-lg border border-line bg-bg px-1">
-          <app-digit-wheel-column [value]="digits()[0]" (valueChange)="setDigit(0, $event)" />
-          <app-digit-wheel-column [value]="digits()[1]" (valueChange)="setDigit(1, $event)" />
-          <app-digit-wheel-column [value]="digits()[2]" (valueChange)="setDigit(2, $event)" />
-          <app-digit-wheel-column [value]="digits()[3]" (valueChange)="setDigit(3, $event)" />
-          <span class="mx-0.5 font-mono text-lg font-semibold text-ink-soft">,</span>
-          <app-digit-wheel-column [value]="digits()[4]" (valueChange)="setDigit(4, $event)" />
-          <app-digit-wheel-column [value]="digits()[5]" (valueChange)="setDigit(5, $event)" />
-        </div>
-      } @else {
-        <input
-          type="number"
-          step="0.01"
-          [value]="quantity()"
-          (input)="onKeyboardInput($any($event.target).value)"
-          (blur)="onTouched()"
-          class="w-20 rounded border border-line px-2 py-1 text-right"
-        />
-      }
-
+    @if (!platform.isNativeApp()) {
+      <input
+        type="number"
+        step="0.01"
+        [value]="quantity()"
+        (input)="onKeyboardInput($any($event.target).value)"
+        (blur)="onTouched()"
+        class="w-20 rounded border border-line px-2 py-1 text-right"
+      />
+    } @else {
       <button
         type="button"
-        role="switch"
-        [attr.aria-checked]="inputMode.mode() === 'keyboard'"
-        [title]="
-          inputMode.mode() === 'wheel'
-            ? 'Passer au clavier classique pour cette quantité'
-            : 'Revenir à la roue pour cette quantité'
-        "
-        (click)="inputMode.toggle()"
-        class="relative h-5 w-9 shrink-0 rounded-full border border-line transition-colors"
-        [class.bg-primary]="inputMode.mode() === 'keyboard'"
-        [class.bg-bg]="inputMode.mode() === 'wheel'"
+        (click)="openSheet()"
+        class="w-20 rounded border border-line px-2 py-1 text-right font-mono tabular-nums"
       >
-        <span
-          class="absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full bg-surface shadow transition-transform"
-          [style.transform]="
-            inputMode.mode() === 'keyboard' ? 'translateX(1.125rem)' : 'translateX(0)'
-          "
-        ></span>
+        {{ formattedQuantity() }}
       </button>
-    </div>
+
+      @if (sheetOpen()) {
+        <div
+          class="fixed inset-0 z-50 flex items-end justify-center bg-ink/70"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choisir la quantité"
+          (click)="closeSheet()"
+        >
+          <div
+            class="sheet-in flex w-full flex-col items-center gap-4 rounded-t-2xl bg-surface p-4 shadow-2xl"
+            style="padding-bottom: max(1rem, env(safe-area-inset-bottom))"
+            (click)="$event.stopPropagation()"
+          >
+            <span class="text-sm font-medium text-ink-soft">Quantité</span>
+            <div class="flex items-center rounded-lg border border-line bg-bg px-1">
+              <app-digit-wheel-column [value]="digits()[0]" (valueChange)="setDigit(0, $event)" />
+              <app-digit-wheel-column [value]="digits()[1]" (valueChange)="setDigit(1, $event)" />
+              <app-digit-wheel-column [value]="digits()[2]" (valueChange)="setDigit(2, $event)" />
+              <app-digit-wheel-column [value]="digits()[3]" (valueChange)="setDigit(3, $event)" />
+              <span class="mx-0.5 font-mono text-lg font-semibold text-ink-soft">,</span>
+              <app-digit-wheel-column [value]="digits()[4]" (valueChange)="setDigit(4, $event)" />
+              <app-digit-wheel-column [value]="digits()[5]" (valueChange)="setDigit(5, $event)" />
+            </div>
+            <app-big-button type="button" (click)="closeSheet()">OK</app-big-button>
+          </div>
+        </div>
+      }
+    }
   `,
 })
 export class QuantityWheelPickerComponent implements ControlValueAccessor {
-  protected readonly inputMode = inject(QuantityInputModeService);
+  protected readonly platform = inject(PlatformService);
 
   // Whole-number cents cap the odometer can express — clamped defensively
   // so a value from outside this component (e.g. hand-edited draft data)
   // can never derive an out-of-range or negative digit.
   private static readonly MAX_QUANTITY = 9999.99;
 
+  private static readonly QUANTITY_FORMATTER = new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
   protected readonly quantity = signal(0);
+  protected readonly sheetOpen = signal(false);
+
+  protected readonly formattedQuantity = computed(() =>
+    QuantityWheelPickerComponent.QUANTITY_FORMATTER.format(this.quantity()),
+  );
 
   protected readonly digits = computed(() => {
     const clamped = Math.min(
@@ -115,6 +129,15 @@ export class QuantityWheelPickerComponent implements ControlValueAccessor {
 
   registerOnTouched(fn: () => void): void {
     this.onTouched = fn;
+  }
+
+  protected openSheet(): void {
+    this.sheetOpen.set(true);
+  }
+
+  protected closeSheet(): void {
+    this.sheetOpen.set(false);
+    this.onTouched();
   }
 
   protected setDigit(index: number, newDigit: number): void {

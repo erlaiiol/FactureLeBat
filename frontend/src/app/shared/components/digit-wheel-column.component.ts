@@ -21,14 +21,14 @@ import {
     <div
       #scroller
       (scroll)="onScroll()"
-      class="quantity-wheel-scroller flex h-[108px] w-8 flex-col overflow-y-scroll py-9 snap-y snap-mandatory"
+      class="quantity-wheel-scroller flex h-[132px] w-10 flex-col overflow-y-scroll py-11 snap-y snap-mandatory"
     >
       @for (digit of digits; track digit) {
         <button
           type="button"
           tabindex="-1"
           (click)="scrollToDigit(digit)"
-          class="flex h-9 w-8 shrink-0 items-center justify-center font-mono text-lg font-semibold text-ink snap-center"
+          class="flex h-11 w-10 shrink-0 items-center justify-center font-mono text-xl font-semibold text-ink snap-center"
         >
           {{ digit }}
         </button>
@@ -48,7 +48,7 @@ import {
   ],
 })
 export class DigitWheelColumnComponent {
-  private static readonly ROW_HEIGHT_PX = 36;
+  private static readonly ROW_HEIGHT_PX = 44;
 
   readonly value = input.required<number>();
   readonly valueChange = output<number>();

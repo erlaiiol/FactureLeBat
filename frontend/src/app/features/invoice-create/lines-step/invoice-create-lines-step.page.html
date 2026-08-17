@@ -381,19 +381,17 @@
                  own click doesn't bubble up into the "expand" button
                  above it. -->
             <label
-              class="flex flex-col gap-1.5 rounded-lg border border-line bg-bg px-3 py-2 text-sm"
+              class="flex items-center gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm"
               (click)="$event.stopPropagation()"
             >
               <span class="font-medium text-ink-soft">
                 {{ line.controls.unit.value | quantityLabel }}
               </span>
-              <span class="flex items-center gap-2">
-                <app-quantity-wheel-picker
-                  appTourAnchor="invoice-line-quantity"
-                  [formControl]="line.controls.quantity"
-                />
-                <span class="text-ink-soft">{{ line.controls.unit.value | unitLabel }}</span>
-              </span>
+              <app-quantity-wheel-picker
+                appTourAnchor="invoice-line-quantity"
+                [formControl]="line.controls.quantity"
+              />
+              <span class="text-ink-soft">{{ line.controls.unit.value | unitLabel }}</span>
             </label>
           </div>
         </div>
