@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, startWith, switchMap } from 'rxjs';
 import { ProductProfile } from '../../core/models/product.model';
 import { ProductService } from '../../core/services/product.service';
@@ -34,6 +34,7 @@ export class ProductListPage {
   private readonly productService = inject(ProductService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   protected readonly products = signal<ProductProfile[]>([]);
   protected readonly loading = signal(true);
@@ -61,5 +62,14 @@ export class ProductListPage {
           this.errorMessage.set('Impossible de charger vos produits. Veuillez réessayer.');
         },
       });
+  }
+
+  // "Documents": jumps to Mes documents with this product's devis/factures
+  // highlighted (see InvoiceBoardPage.repertoryFilter) rather than
+  // hard-filtered, same entry point as CustomerListPage.viewDocuments.
+  protected viewDocuments(product: ProductProfile): void {
+    void this.router.navigate(['/factures'], {
+      queryParams: { productId: product.id, productName: product.name },
+    });
   }
 }

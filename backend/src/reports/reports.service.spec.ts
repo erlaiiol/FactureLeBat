@@ -85,6 +85,8 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
     documentType: 'FACTURE',
     convertedFromDevisId: null,
     convertedToFacture: null,
+    createdFromFactureId: null,
+    retroactiveDevis: null,
     simplifiedDisplay: false,
     lines: [
       {
@@ -99,6 +101,7 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
         packagingQuantity: null,
         roundUpToPackaging: true,
         productCode: null,
+        productId: null,
         showUnitDetail: true,
         showBillingDetail: true,
         activityCategory: 'VENTE_MARCHANDISES',

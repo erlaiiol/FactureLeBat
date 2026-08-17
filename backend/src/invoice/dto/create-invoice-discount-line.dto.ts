@@ -38,4 +38,23 @@ export class CreateInvoiceDiscountLineDto {
   @Min(0)
   @Max(MAX_AMOUNT_CENTS)
   amountCents: number;
+
+  // Phase 34: positional, aligned with the sibling CreateInvoiceDto.lines
+  // array (targetLineIndex i means "this remise is scoped to lines[i]") —
+  // same convention as CreateInvoiceServiceLineDto.weights[i]. Mutually
+  // exclusive with targetServiceLineIndex below; both absent means this
+  // remise applies to the invoice's general total, the pre-Phase-34 default.
+  // Bounds/exclusivity checked by DiscountTargetMatchesLines on the parent
+  // DTO, which alone can see the sibling `lines`/`serviceLines` arrays.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  targetLineIndex?: number;
+
+  // Same positional convention as targetLineIndex above, aligned with
+  // CreateInvoiceDto.serviceLines instead.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  targetServiceLineIndex?: number;
 }

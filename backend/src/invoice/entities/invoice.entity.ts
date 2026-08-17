@@ -38,6 +38,12 @@ export interface InvoiceLineWithTotal {
   packagingQuantity: string | null;
   roundUpToPackaging: boolean;
   productCode: string | null;
+  // Soft reference to the catalog Product this line was toggled on from —
+  // see schema.prisma's comment on InvoiceLine.productId. Null for a
+  // freehand line. Lets "Mes produits" jump to the invoices that used a
+  // given product, same entry point as "Mes clients" already has via
+  // InvoiceWithTotals.customerId.
+  productId: string | null;
   // Phase 15: per-line PDF rendering toggles, set from the mandatory
   // preview screen — purely a display concern, never affects the totals
   // below. See schema.prisma's comment on InvoiceLine.showUnitDetail.
@@ -65,6 +71,12 @@ export interface ServiceLineDistributionEntry {
 export interface InvoiceServiceLineWithAmounts {
   id: string;
   position: number;
+  // Soft reference to the catalog Service this line was toggled on from —
+  // see schema.prisma's comment on InvoiceServiceLine.serviceId. Null for a
+  // freehand service line. Lets "Mes prestations" jump to the invoices that
+  // used a given service, same entry point as "Mes clients" already has via
+  // InvoiceWithTotals.customerId.
+  serviceId: string | null;
   name: string;
   description: string | null;
   amountCents: number;
@@ -82,8 +94,22 @@ export interface InvoiceServiceLineWithAmounts {
 export interface InvoiceDiscountLineWithAmount {
   id: string;
   position: number;
+  // Soft reference to the catalog Discount this line was toggled on from —
+  // see schema.prisma's comment on InvoiceDiscountLine.discountId. Null for
+  // a freehand remise. Lets "Mes remises" jump to the invoices that used a
+  // given discount, same entry point as "Mes clients" already has via
+  // InvoiceWithTotals.customerId.
+  discountId: string | null;
   name: string;
   amountCents: number;
+  // Phase 34: soft reference to the single product/service line (already on
+  // this invoice) this remise is scoped to, if any — mutually exclusive,
+  // both null for a remise on the invoice's general total. Purely
+  // informational: never changes how amountCents folds into
+  // subtotalExclVatCents (see InvoiceMapper) or that target line's own
+  // lineTotalExclVatCents/amountCents.
+  targetLineId: string | null;
+  targetServiceLineId: string | null;
 }
 
 // Phase 9.5 manual mode — see ManualColumnRole (schema.prisma) for what each
@@ -143,6 +169,11 @@ export interface InvoiceWithTotals {
   documentType: DocumentType;
   convertedFromDevisId: string | null;
   convertedToFacture: { id: string; number: string } | null;
+  // Reverse-direction counterpart of the pair above: set on a FACTURE that
+  // a retroactive devis was created from (InvoiceService.convertToDevis),
+  // pointing at that devis. createdFromFactureId is the devis-side field.
+  createdFromFactureId: string | null;
+  retroactiveDevis: { id: string; number: string } | null;
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   // Phase 9.5: GUIDED populates lines/serviceLines below (manualTable is

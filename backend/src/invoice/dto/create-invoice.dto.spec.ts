@@ -371,3 +371,66 @@ describe('CreateInvoiceDto — VAT applicability/rate override', () => {
     expect(rateErrors).not.toHaveLength(0);
   });
 });
+
+describe('CreateInvoiceDto — Phase 34 discount line targeting', () => {
+  it('accepts a discount line targeting a valid invoice line index', async () => {
+    const errors = await validateDto(
+      basePayload({
+        discountLines: [{ name: 'Remise carrelage', amountCents: 1000, targetLineIndex: 1 }],
+      }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts a discount line targeting a valid service line index', async () => {
+    const errors = await validateDto(
+      basePayload({
+        serviceLines: [{ name: 'Main-d’œuvre', amountCents: 10000, visibility: 'VISIBLE' }],
+        discountLines: [{ name: 'Remise pose', amountCents: 1000, targetServiceLineIndex: 0 }],
+      }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts a discount line with no target at all (applies to the general total)', async () => {
+    const errors = await validateDto(
+      basePayload({ discountLines: [{ name: 'Remise fidélité', amountCents: 1000 }] }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a discount line targeting both a line and a service line at once', async () => {
+    const errors = await validateDto(
+      basePayload({
+        serviceLines: [{ name: 'Main-d’œuvre', amountCents: 10000, visibility: 'VISIBLE' }],
+        discountLines: [
+          {
+            name: 'Remise ambiguë',
+            amountCents: 1000,
+            targetLineIndex: 0,
+            targetServiceLineIndex: 0,
+          },
+        ],
+      }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects a targetLineIndex out of bounds of the invoice’s own lines', async () => {
+    const errors = await validateDto(
+      basePayload({
+        discountLines: [{ name: 'Remise invalide', amountCents: 1000, targetLineIndex: 2 }],
+      }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects a targetServiceLineIndex out of bounds when no service lines exist', async () => {
+    const errors = await validateDto(
+      basePayload({
+        discountLines: [{ name: 'Remise invalide', amountCents: 1000, targetServiceLineIndex: 0 }],
+      }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+});

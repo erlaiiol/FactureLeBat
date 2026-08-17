@@ -47,6 +47,7 @@ export class InvoicePreviewModalComponent {
   readonly share = output<void>();
   readonly convertToFacture = output<void>();
   readonly createFromDevis = output<void>();
+  readonly createDevisFromFacture = output<void>();
 
   protected readonly isDevis = computed(() => this.invoice()?.documentType === 'DEVIS');
   // See PdfPreviewModalComponent's identical field for why.

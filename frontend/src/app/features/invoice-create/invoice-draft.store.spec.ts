@@ -42,6 +42,7 @@ const customerFixture: InvoiceCustomerDraft = {
 };
 
 const lineFixture: InvoiceLineDraft = {
+  clientId: 'line-client-1',
   description: 'Parquet',
   unit: 'SQUARE_METER',
   quantity: 10,
@@ -50,6 +51,7 @@ const lineFixture: InvoiceLineDraft = {
   packagingQuantity: null,
   roundUpToPackaging: true,
   productCode: null,
+  productId: null,
   catalogProductId: null,
   saveAsNewProduct: false,
   showUnitDetail: true,
@@ -93,6 +95,7 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]);
       store.setServiceLines([
         {
+          clientId: 'service-client-1',
           serviceId: null,
           name: "Main-d'œuvre",
           description: '',
@@ -127,6 +130,7 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture, { ...lineFixture, description: 'Plinthes' }]);
       store.setServiceLines([
         {
+          clientId: 'service-client-2',
           serviceId: null,
           name: 'Savoir-faire',
           description: '',
@@ -157,6 +161,7 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture, { ...lineFixture, description: 'Plinthes' }]);
       store.setServiceLines([
         {
+          clientId: 'service-client-3',
           serviceId: null,
           name: 'Savoir-faire',
           description: '',
@@ -242,6 +247,7 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]); // 10 x 45€ = 450€ = 45000 cents
       store.setServiceLines([
         {
+          clientId: 'service-client-1',
           serviceId: 'service-1',
           catalogServiceId: 'service-1',
           saveAsNewService: false,
@@ -268,6 +274,7 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]); // 45000 cents
       store.setServiceLines([
         {
+          clientId: 'service-client-1',
           serviceId: 'service-1',
           catalogServiceId: 'service-1',
           saveAsNewService: false,
@@ -282,6 +289,7 @@ describe('InvoiceDraftStore', () => {
           percentageBasisPoints: 3000,
         },
         {
+          clientId: 'service-client-2',
           serviceId: 'service-2',
           catalogServiceId: 'service-2',
           saveAsNewService: false,
@@ -318,6 +326,8 @@ describe('InvoiceDraftStore', () => {
           discountType: 'FIXED',
           fixedAmountEuros: 50,
           percentageBasisPoints: null,
+          targetLineClientId: null,
+          targetServiceLineClientId: null,
         },
       ]);
 
@@ -341,6 +351,8 @@ describe('InvoiceDraftStore', () => {
           discountType: 'PERCENTAGE',
           fixedAmountEuros: 0,
           percentageBasisPoints: 1000, // 10%
+          targetLineClientId: null,
+          targetServiceLineClientId: null,
         },
       ]);
 
@@ -363,6 +375,8 @@ describe('InvoiceDraftStore', () => {
           discountType: 'FIXED',
           fixedAmountEuros: 9999,
           percentageBasisPoints: null,
+          targetLineClientId: null,
+          targetServiceLineClientId: null,
         },
       ]);
 
@@ -378,6 +392,108 @@ describe('InvoiceDraftStore', () => {
       const request = store.buildInvoiceRequest();
 
       expect(request.discountLines).toBeUndefined();
+    });
+  });
+
+  describe('Phase 34 — discount line targeting', () => {
+    it('computes a PERCENTAGE discount targeting a specific line off that line’s own total, not the whole invoice', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([
+        lineFixture, // clientId 'line-client-1', 10 x 45€ = 45000 cents
+        {
+          ...lineFixture,
+          clientId: 'line-client-2',
+          description: 'Plinthes',
+          quantity: 5,
+          unitPriceEuros: 8, // 5 x 8€ = 4000 cents
+        },
+      ]);
+      store.setDiscountLines([
+        {
+          discountId: null,
+          catalogDiscountId: null,
+          saveAsNewDiscount: false,
+          name: 'Remise plinthes',
+          discountType: 'PERCENTAGE',
+          fixedAmountEuros: 0,
+          percentageBasisPoints: 1000, // 10%
+          targetLineClientId: 'line-client-2',
+          targetServiceLineClientId: null,
+        },
+      ]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.discountLines?.[0].amountCents).toBe(400); // 10% of 4000, not of 49000
+      expect(request.discountLines?.[0].targetLineIndex).toBe(1);
+      expect(request.discountLines?.[0].targetServiceLineIndex).toBeUndefined();
+    });
+
+    it('resolves a targetServiceLineClientId to the matching positional targetServiceLineIndex', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]);
+      store.setServiceLines([
+        {
+          clientId: 'service-client-1',
+          serviceId: null,
+          name: "Main-d'œuvre",
+          description: '',
+          amountEuros: 100,
+          visibility: 'VISIBLE',
+          redistributionStrategy: 'EQUAL',
+          weights: [],
+          pricingMode: 'FIXED',
+          percentageBasisPoints: null,
+          catalogServiceId: null,
+          saveAsNewService: false,
+          activityCategory: null,
+        },
+      ]);
+      store.setDiscountLines([
+        {
+          discountId: null,
+          catalogDiscountId: null,
+          saveAsNewDiscount: false,
+          name: 'Remise pose',
+          discountType: 'PERCENTAGE',
+          fixedAmountEuros: 0,
+          percentageBasisPoints: 5000, // 50% of the targeted service line's own 10000 cents
+          targetLineClientId: null,
+          targetServiceLineClientId: 'service-client-1',
+        },
+      ]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.discountLines?.[0].amountCents).toBe(5000);
+      expect(request.discountLines?.[0].targetLineIndex).toBeUndefined();
+      expect(request.discountLines?.[0].targetServiceLineIndex).toBe(0);
+    });
+
+    it('falls back to the whole-invoice base when the targeted clientId no longer matches any line', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]); // 45000 cents
+      store.setDiscountLines([
+        {
+          discountId: null,
+          catalogDiscountId: null,
+          saveAsNewDiscount: false,
+          name: 'Remise fantôme',
+          discountType: 'PERCENTAGE',
+          fixedAmountEuros: 0,
+          percentageBasisPoints: 1000, // 10%
+          targetLineClientId: 'line-client-does-not-exist',
+          targetServiceLineClientId: null,
+        },
+      ]);
+
+      const request = store.buildInvoiceRequest();
+
+      expect(request.discountLines?.[0].amountCents).toBe(4_500); // 10% of 45000, the whole-invoice base
+      expect(request.discountLines?.[0].targetLineIndex).toBeUndefined();
     });
   });
 

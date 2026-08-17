@@ -10,6 +10,8 @@ import { LineBadgeComponent } from '../../../shared/components/line-badge.compon
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 export type InvoiceServiceLineFormGroup = FormGroup<{
+  // Phase 34, UI-only: see InvoiceServiceLineDraft.clientId.
+  clientId: FormControl<string>;
   serviceId: FormControl<string | null>;
   name: FormControl<string>;
   description: FormControl<string>;

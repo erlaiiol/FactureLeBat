@@ -60,6 +60,16 @@
             Facture à partir du devis
           </button>
         }
+        @if (!isDevis() && !invoice.retroactiveDevis) {
+          <button
+            type="button"
+            [disabled]="converting()"
+            (click)="createDevisFromFacture.emit()"
+            class="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle disabled:opacity-60"
+          >
+            Créer un devis
+          </button>
+        }
         <a
           [href]="pdfUrl()"
           target="_blank"

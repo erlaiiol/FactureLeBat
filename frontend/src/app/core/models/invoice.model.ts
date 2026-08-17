@@ -61,6 +61,9 @@ export interface CreateInvoiceLineRequest {
   // Freehand product reference (e.g. "UC204850") — never a live reference to
   // a saved Product.
   productCode?: string;
+  // Soft reference to a saved Product, if the artisan picked one — see
+  // docs/conventions.md's "autofill, not a lock" rule.
+  productId?: string;
   // Phase 15: per-line PDF rendering toggles, set from the mandatory
   // preview screen — purely a display concern, backend defaults both to
   // true when omitted.
@@ -98,6 +101,13 @@ export interface CreateInvoiceDiscountLineRequest {
   discountId?: string;
   name: string;
   amountCents: number;
+  // Phase 34: positional, aligned with CreateInvoiceRequest.lines/serviceLines
+  // — mutually exclusive, both absent means this remise applies to the
+  // invoice's general total (the pre-Phase-34 default). See
+  // InvoiceDraftStore.buildInvoiceRequest for how these are resolved from a
+  // draft line's stable clientId.
+  targetLineIndex?: number;
+  targetServiceLineIndex?: number;
 }
 
 // A freehand extra client field (e.g. label "SIRET", value "123 456 789
@@ -181,6 +191,10 @@ export interface InvoiceLineWithTotal {
   packagingQuantity: string | null;
   roundUpToPackaging: boolean;
   productCode: string | null;
+  // Soft reference to the catalog Product this line was toggled on from,
+  // null for a freehand line — lets "Mes produits" jump to the invoices
+  // that used a given product, same entry point as "Mes clients".
+  productId: string | null;
   // Phase 15: per-line PDF rendering toggles — purely a display concern,
   // never affects lineTotalExclVatCents below.
   showUnitDetail: boolean;
@@ -192,6 +206,10 @@ export interface InvoiceLineWithTotal {
 export interface InvoiceServiceLineWithAmounts {
   id: string;
   position: number;
+  // Soft reference to the catalog Service this line was toggled on from,
+  // null for a freehand service line — lets "Mes prestations" jump to the
+  // invoices that used a given service, same entry point as "Mes clients".
+  serviceId: string | null;
   name: string;
   description: string | null;
   amountCents: number;
@@ -206,8 +224,19 @@ export interface InvoiceServiceLineWithAmounts {
 export interface InvoiceDiscountLineWithAmount {
   id: string;
   position: number;
+  // Soft reference to the catalog Discount this line was toggled on from,
+  // null for a freehand remise — lets "Mes remises" jump to the invoices
+  // that used a given discount, same entry point as "Mes clients".
+  discountId: string | null;
   name: string;
   amountCents: number;
+  // Phase 34: soft reference to the single product/service line (already on
+  // this invoice) this remise is scoped to, if any — mutually exclusive,
+  // both null for a remise on the invoice's general total. Purely
+  // informational/percentage-base metadata: never changes how amountCents
+  // folds into subtotalExclVatCents, nor the target's own displayed total.
+  targetLineId: string | null;
+  targetServiceLineId: string | null;
 }
 
 export interface ManualInvoiceColumnWithId {
@@ -258,6 +287,11 @@ export interface InvoiceWithTotals {
   documentType: DocumentType;
   convertedFromDevisId: string | null;
   convertedToFacture: { id: string; number: string } | null;
+  // Reverse-direction counterpart: set on a FACTURE a retroactive devis was
+  // created from, pointing at that devis; createdFromFactureId is set on
+  // the devis side, pointing back — both null otherwise.
+  createdFromFactureId: string | null;
+  retroactiveDevis: { id: string; number: string } | null;
   vatApplicable: boolean;
   vatRateBasisPoints: number;
   // Phase 9.5: GUIDED populates lines/serviceLines (manualTable absent).

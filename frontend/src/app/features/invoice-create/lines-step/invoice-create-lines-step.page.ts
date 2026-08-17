@@ -29,6 +29,7 @@ import { IconCloseComponent } from '../../../shared/components/icon-close.compon
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
 import { LineBadgeComponent } from '../../../shared/components/line-badge.component';
+import { QuantityWheelPickerComponent } from '../../../shared/components/quantity-wheel-picker.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { QuantityLabelPipe } from '../../../shared/pipes/quantity-label.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
@@ -36,6 +37,7 @@ import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive'
 import { TourService } from '../../../shared/tour/tour.service';
 import { computeLineTotalPreviewCents } from '../calculation-preview';
 import {
+  DiscountTargetOption,
   InvoiceDiscountLineFormComponent,
   InvoiceDiscountLineFormGroup,
 } from '../components/invoice-discount-line-form.component';
@@ -73,6 +75,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
     IconEyeComponent,
     IconEyeOffComponent,
     LineBadgeComponent,
+    QuantityWheelPickerComponent,
     CentsToEurosPipe,
     QuantityLabelPipe,
     UnitLabelPipe,
@@ -181,6 +184,23 @@ export class InvoiceCreateLinesStepPage {
     this.linesValue().map((line, index) => line.description || `Ligne ${index + 1}`),
   );
 
+  // Phase 34: the discount form's "Appliquer sur" picker options — one per
+  // current product line/service line, keyed by clientId (stable across
+  // FormArray insertions/removals) rather than array index.
+  protected readonly lineTargetOptions = computed<DiscountTargetOption[]>(() =>
+    this.linesValue().map((line, index) => ({
+      clientId: line.clientId ?? '',
+      label: line.description || `Ligne ${index + 1}`,
+    })),
+  );
+
+  protected readonly serviceLineTargetOptions = computed<DiscountTargetOption[]>(() =>
+    this.serviceLinesValue().map((serviceLine, index) => ({
+      clientId: serviceLine.clientId ?? '',
+      label: serviceLine.name || `Prestation ${index + 1}`,
+    })),
+  );
+
   // Phase 13.5: which catalog Products/Services have at least one active
   // line — purely a badge/checkmark signal for the flyout's catalog list
   // (see pickProduct/pickService below for why this can no longer double as
@@ -235,6 +255,29 @@ export class InvoiceCreateLinesStepPage {
       .map((discountLine) => this.draftStore.resolvedDiscountAmountCents(discountLine)),
   );
 
+  // Phase 34: the collapsed gallery card's "Sur : X" badge — null for a
+  // discount line with no target (applies to the general total), same
+  // stale-target fallback as InvoiceDiscountLineFormComponent.targetLabel.
+  protected readonly discountTargetLabels = computed<(string | null)[]>(() =>
+    this.discountLinesValue().map((discountLine) => {
+      if (discountLine.targetLineClientId) {
+        return (
+          this.lineTargetOptions().find(
+            (option) => option.clientId === discountLine.targetLineClientId,
+          )?.label ?? null
+        );
+      }
+      if (discountLine.targetServiceLineClientId) {
+        return (
+          this.serviceLineTargetOptions().find(
+            (option) => option.clientId === discountLine.targetServiceLineClientId,
+          )?.label ?? null
+        );
+      }
+      return null;
+    }),
+  );
+
   // Live per-line total for the gallery's compact card and expanded-form
   // recap — same preview-only mirror as InvoiceDraftStore.totalsPreview,
   // just broken out per line instead of summed.
@@ -273,6 +316,7 @@ export class InvoiceCreateLinesStepPage {
   }
 
   private createLineGroup(initial?: {
+    clientId?: string;
     description: string;
     unit: Unit;
     quantity: number;
@@ -281,12 +325,16 @@ export class InvoiceCreateLinesStepPage {
     packagingQuantity: number | null;
     roundUpToPackaging: boolean;
     productCode: string | null;
+    productId?: string | null;
     catalogProductId?: string | null;
     showUnitDetail?: boolean;
     showBillingDetail?: boolean;
     activityCategory?: ActivityCategory | null;
   }): InvoiceLineFormGroup {
     return this.fb.nonNullable.group({
+      // Phase 34: a stable identity for this line, independent of its
+      // FormArray position — see InvoiceLineDraft.clientId.
+      clientId: this.fb.nonNullable.control(initial?.clientId ?? crypto.randomUUID()),
       description: this.fb.nonNullable.control(initial?.description ?? '', Validators.required),
       unit: this.fb.nonNullable.control<Unit>(initial?.unit ?? 'SQUARE_METER', Validators.required),
       quantity: this.fb.nonNullable.control(initial?.quantity ?? 0, [
@@ -309,6 +357,9 @@ export class InvoiceCreateLinesStepPage {
       // Freehand product reference (e.g. "UC204850"), same soft-snapshot
       // spirit as packagingQuantity above.
       productCode: this.fb.control<string | null>(initial?.productCode ?? null),
+      // Soft reference to the catalog Product this line was toggled on
+      // from — see InvoiceLineDraft.productId.
+      productId: this.fb.control<string | null>(initial?.productId ?? null),
       // UI-only: whether to save this line as a new catalog Product on
       // submit — never sent as-is to the invoice-creation request (see
       // submit() below), mirrors the customer step's saveAsNewCustomer.
@@ -371,6 +422,7 @@ export class InvoiceCreateLinesStepPage {
       packagingQuantity: product.packagingQuantity ? Number(product.packagingQuantity) : null,
       roundUpToPackaging: true,
       productCode: product.code,
+      productId: product.id,
       catalogProductId: alreadyLinked ? null : product.id,
       activityCategory: product.activityCategory,
     });
@@ -382,9 +434,16 @@ export class InvoiceCreateLinesStepPage {
 
   protected removeLine(index: number): void {
     const group = this.lines.at(index);
+    const removedClientId = group.controls.clientId.value;
     this.lines.removeAt(index);
     this.syncAllServiceLineWeights();
     this.uncollapseLine(group);
+    // Phase 34: a discount targeting this line would otherwise keep a
+    // clientId matching nothing — resolvedDiscountAmountCents/
+    // buildInvoiceRequest already fall back gracefully to the general total
+    // in that case, but clearing it here keeps the form's own "Appliquer
+    // sur" selection from silently pointing at a line that no longer exists.
+    this.clearDiscountTargetsReferencing(removedClientId, 'targetLineClientId');
   }
 
   // Phase 13.5: the catalog flyout's entry point for a Product row — always
@@ -402,6 +461,7 @@ export class InvoiceCreateLinesStepPage {
   }
 
   private createServiceLineGroup(initial?: {
+    clientId?: string;
     serviceId: string | null;
     name: string;
     description: string;
@@ -415,6 +475,8 @@ export class InvoiceCreateLinesStepPage {
     activityCategory?: ActivityCategory | null;
   }): InvoiceServiceLineFormGroup {
     const group = this.fb.nonNullable.group({
+      // Phase 34: same stable-identity role as createLineGroup's clientId.
+      clientId: this.fb.nonNullable.control(initial?.clientId ?? crypto.randomUUID()),
       serviceId: this.fb.control<string | null>(initial?.serviceId ?? null),
       name: this.fb.nonNullable.control(initial?.name ?? '', Validators.required),
       description: this.fb.nonNullable.control(initial?.description ?? ''),
@@ -545,8 +607,22 @@ export class InvoiceCreateLinesStepPage {
 
   protected removeServiceLine(index: number): void {
     const group = this.serviceLines.at(index);
+    const removedClientId = group.controls.clientId.value;
     this.serviceLines.removeAt(index);
     this.uncollapseServiceLine(group);
+    // Phase 34: same stale-target cleanup as removeLine above.
+    this.clearDiscountTargetsReferencing(removedClientId, 'targetServiceLineClientId');
+  }
+
+  private clearDiscountTargetsReferencing(
+    clientId: string,
+    field: 'targetLineClientId' | 'targetServiceLineClientId',
+  ): void {
+    for (const group of this.discountLines.controls) {
+      if (group.controls[field].value === clientId) {
+        group.controls[field].setValue(null);
+      }
+    }
   }
 
   // Phase 13.5: same flyout entry point as pickProduct, for a Service —
@@ -563,6 +639,8 @@ export class InvoiceCreateLinesStepPage {
     fixedAmountEuros: number;
     percentageBasisPoints?: number | null;
     catalogDiscountId?: string | null;
+    targetLineClientId?: string | null;
+    targetServiceLineClientId?: string | null;
   }): InvoiceDiscountLineFormGroup {
     const group = this.fb.nonNullable.group({
       discountId: this.fb.control<string | null>(initial?.discountId ?? null),
@@ -579,6 +657,12 @@ export class InvoiceCreateLinesStepPage {
       // submit — never sent as-is to the invoice-creation request, mirrors
       // the service line's saveAsNewService.
       saveAsNewDiscount: this.fb.nonNullable.control(false),
+      // Phase 34, UI-only: see InvoiceDiscountLineDraft.targetLineClientId/
+      // targetServiceLineClientId.
+      targetLineClientId: this.fb.control<string | null>(initial?.targetLineClientId ?? null),
+      targetServiceLineClientId: this.fb.control<string | null>(
+        initial?.targetServiceLineClientId ?? null,
+      ),
     });
     this.syncDiscountLinePricingValidators(group);
     group.controls.discountType.valueChanges

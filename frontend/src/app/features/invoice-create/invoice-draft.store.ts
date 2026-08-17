@@ -40,6 +40,13 @@ export interface InvoiceCustomerDraft {
 }
 
 export interface InvoiceLineDraft {
+  // Phase 34: a stable, UI-only identity for this line within the draft —
+  // never sent to the backend (see buildInvoiceRequest, which resolves it to
+  // a positional index instead). Lets a targeted InvoiceDiscountLineDraft
+  // keep pointing at the same line across FormArray insertions/removals,
+  // which shift raw array indices around; a plain array index would silently
+  // drift to the wrong line the moment an earlier line is removed.
+  clientId: string;
   description: string;
   unit: Unit;
   quantity: number;
@@ -54,6 +61,13 @@ export interface InvoiceLineDraft {
   // Freehand product reference (e.g. "UC204850"), never tied to a saved
   // Product — same soft-snapshot spirit as packagingQuantity above.
   productCode: string | null;
+  // Soft reference to the catalog Product this line was toggled on from, if
+  // any — sent to the backend (unlike catalogProductId below), same
+  // "autofill, not a lock" pattern as InvoiceServiceLineDraft.serviceId.
+  // Always set alongside catalogProductId when picking from the catalog,
+  // but (unlike it) never reset to null on a second pick of the same
+  // product — see InvoiceCreateLinesStepPage.addProductFromCatalog.
+  productId: string | null;
   // Phase 13.5: which catalog Product this line was toggled on from, if any
   // — UI-only (never sent to the backend, see buildInvoiceRequest), lets
   // the merged catalog/lines screen know which toggle to show as "on" and
@@ -77,6 +91,8 @@ export interface InvoiceLineDraft {
 }
 
 export interface InvoiceServiceLineDraft {
+  // Phase 34: same stable, UI-only identity role as InvoiceLineDraft.clientId.
+  clientId: string;
   serviceId: string | null;
   name: string;
   description: string;
@@ -101,8 +117,9 @@ export interface InvoiceServiceLineDraft {
 
 // Phase 32: a remise on the draft — mirrors InvoiceServiceLineDraft's shape,
 // minus visibility/redistribution (a discount always folds straight into
-// the subtotal, never targets specific lines) and minus activityCategory (a
-// discount isn't a URSSAF-categorized sale).
+// the subtotal as a single amount, never splits across several lines like a
+// REDISTRIBUTED service line does) and minus activityCategory (a discount
+// isn't a URSSAF-categorized sale).
 export interface InvoiceDiscountLineDraft {
   discountId: string | null;
   name: string;
@@ -116,6 +133,15 @@ export interface InvoiceDiscountLineDraft {
   catalogDiscountId: string | null;
   // Same UI-only toggle-tracking role as InvoiceServiceLineDraft.saveAsNewService.
   saveAsNewDiscount: boolean;
+  // Phase 34: which single already-added product/service line (by its
+  // stable clientId, see InvoiceLineDraft.clientId) this remise is scoped
+  // to, if any — mutually exclusive, both null means this remise applies to
+  // the invoice's general total (the pre-Phase-34 default). Drives
+  // resolvedDiscountAmountCents' percentage base for a PERCENTAGE remise,
+  // and is resolved to a positional targetLineIndex/targetServiceLineIndex
+  // at buildInvoiceRequest time — never sent as a clientId itself.
+  targetLineClientId: string | null;
+  targetServiceLineClientId: string | null;
 }
 
 const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
@@ -128,6 +154,10 @@ const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
 };
 
 const EMPTY_LINE: InvoiceLineDraft = {
+  // Placeholder only — always overwritten with a freshly generated id
+  // wherever this template is actually merged into a real line (see
+  // hydrateFromStorage), never left as-is.
+  clientId: '',
   description: '',
   unit: 'SQUARE_METER',
   quantity: 0,
@@ -136,6 +166,7 @@ const EMPTY_LINE: InvoiceLineDraft = {
   packagingQuantity: null,
   roundUpToPackaging: true,
   productCode: null,
+  productId: null,
   catalogProductId: null,
   saveAsNewProduct: false,
   showUnitDetail: true,
@@ -148,6 +179,9 @@ const EMPTY_LINE: InvoiceLineDraft = {
 // draft persisted before this phase still hydrates to a valid,
 // unambiguously-FIXED, non-catalog-linked service line.
 const EMPTY_SERVICE_LINE_DEFAULTS = {
+  // Same "always overwritten, never left as-is" placeholder role as
+  // EMPTY_LINE.clientId.
+  clientId: '',
   pricingMode: 'FIXED' as ServicePricingMode,
   percentageBasisPoints: null as number | null,
   catalogServiceId: null as string | null,
@@ -166,6 +200,8 @@ const EMPTY_DISCOUNT_LINE_DEFAULTS: InvoiceDiscountLineDraft = {
   percentageBasisPoints: null,
   catalogDiscountId: null,
   saveAsNewDiscount: false,
+  targetLineClientId: null,
+  targetServiceLineClientId: null,
 };
 
 const DRAFT_STORAGE_KEY = 'facturele.invoiceDraft.v1';
@@ -304,12 +340,46 @@ export class InvoiceDraftStore {
     ),
   );
 
+  // Phase 34: a PERCENTAGE remise's base — the targeted line/service line's
+  // own resolved amount when one is set (see InvoiceDiscountLineDraft.
+  // targetLineClientId/targetServiceLineClientId), otherwise the same
+  // whole-invoice percentageBaseCents an untargeted remise always used.
+  // Falls back to the whole-invoice base if the target was removed from the
+  // draft since being picked (a stale clientId matching nothing) rather than
+  // computing off a vanished line.
+  private discountPercentageBaseCents(discountLine: InvoiceDiscountLineDraft): number {
+    if (discountLine.targetLineClientId) {
+      const line = this.lines().find((l) => l.clientId === discountLine.targetLineClientId);
+      if (line) {
+        return computeLineTotalPreviewCents({
+          unit: line.unit,
+          quantity: line.quantity,
+          unitPriceCents: Math.round(line.unitPriceEuros * 100),
+          wasteSurcharge: line.wasteSurcharge,
+          packagingQuantity: line.packagingQuantity,
+          roundUpToPackaging: line.roundUpToPackaging,
+        });
+      }
+    }
+    if (discountLine.targetServiceLineClientId) {
+      const serviceLine = this.serviceLines().find(
+        (s) => s.clientId === discountLine.targetServiceLineClientId,
+      );
+      if (serviceLine) {
+        return this.resolvedServiceAmountCents(serviceLine);
+      }
+    }
+    return this.percentageBaseCents();
+  }
+
   // Phase 32: same "computed at build time, not typed per invoice" precedent
   // as resolvedServiceAmountCents above — FIXED just returns the typed
-  // amount; PERCENTAGE recomputes it live as a share of percentageBaseCents
-  // (product lines + FIXED visible service lines, before this discount and
-  // before VAT — see the Q&A that settled this base). Used for both the
-  // running total below and the actual create/preview request
+  // amount; PERCENTAGE recomputes it live as a share of
+  // discountPercentageBaseCents (Phase 34: the targeted line/service line's
+  // amount when this remise is scoped to one, otherwise the same
+  // whole-invoice base as before — product lines + FIXED visible service
+  // lines, before this discount and before VAT). Used for both the running
+  // total below and the actual create/preview request
   // (buildInvoiceRequest), so they can never disagree.
   resolvedDiscountAmountCents(discountLine: InvoiceDiscountLineDraft): number {
     if (discountLine.discountType === 'FIXED') {
@@ -317,7 +387,7 @@ export class InvoiceDraftStore {
       return Number.isFinite(cents) && cents > 0 ? cents : 0;
     }
     return computePercentageServiceAmountCents(
-      this.percentageBaseCents(),
+      this.discountPercentageBaseCents(discountLine),
       discountLine.percentageBasisPoints ?? 0,
     );
   }
@@ -486,8 +556,16 @@ export class InvoiceDraftStore {
       saveAsNewCustomer: false,
     });
 
+    // Phase 34: fresh clientIds, generated up front so the discountLines
+    // rebuild below (a separate .map()) can resolve each remise's persisted
+    // targetLineId/targetServiceLineId against the exact same ids just
+    // assigned here, positionally matched to source.lines/source.serviceLines.
+    const lineClientIds = source.lines.map(() => crypto.randomUUID());
+    const serviceLineClientIds = source.serviceLines.map(() => crypto.randomUUID());
+
     this.lines.set(
-      source.lines.map((line) => ({
+      source.lines.map((line, index) => ({
+        clientId: lineClientIds[index],
         description: line.description,
         unit: line.unit,
         quantity: Number(line.quantity),
@@ -496,6 +574,7 @@ export class InvoiceDraftStore {
         packagingQuantity: line.packagingQuantity !== null ? Number(line.packagingQuantity) : null,
         roundUpToPackaging: line.roundUpToPackaging,
         productCode: line.productCode,
+        productId: null,
         catalogProductId: null,
         saveAsNewProduct: false,
         activityCategory: line.activityCategory,
@@ -505,7 +584,8 @@ export class InvoiceDraftStore {
     );
 
     this.serviceLines.set(
-      source.serviceLines.map((serviceLine) => ({
+      source.serviceLines.map((serviceLine, index) => ({
+        clientId: serviceLineClientIds[index],
         serviceId: null,
         name: serviceLine.name,
         description: serviceLine.description ?? '',
@@ -534,15 +614,33 @@ export class InvoiceDraftStore {
     // InvoiceDiscountLine, schema.prisma), so it's rebuilt as a plain FIXED
     // line at the amount it actually resolved to.
     this.discountLines.set(
-      source.discountLines.map((discountLine) => ({
-        discountId: null,
-        name: discountLine.name,
-        discountType: 'FIXED',
-        fixedAmountEuros: discountLine.amountCents / 100,
-        percentageBasisPoints: null,
-        catalogDiscountId: null,
-        saveAsNewDiscount: false,
-      })),
+      source.discountLines.map((discountLine) => {
+        // Phase 34: the persisted target is a real InvoiceLine/
+        // InvoiceServiceLine id — re-expressed as this draft's own
+        // clientId, positionally matched against source.lines/
+        // source.serviceLines (same lineClientIds/serviceLineClientIds
+        // just assigned above).
+        const targetLineIndex = discountLine.targetLineId
+          ? source.lines.findIndex((line) => line.id === discountLine.targetLineId)
+          : -1;
+        const targetServiceLineIndex = discountLine.targetServiceLineId
+          ? source.serviceLines.findIndex(
+              (serviceLine) => serviceLine.id === discountLine.targetServiceLineId,
+            )
+          : -1;
+        return {
+          discountId: null,
+          name: discountLine.name,
+          discountType: 'FIXED' as DiscountType,
+          fixedAmountEuros: discountLine.amountCents / 100,
+          percentageBasisPoints: null,
+          catalogDiscountId: null,
+          targetLineClientId: targetLineIndex >= 0 ? lineClientIds[targetLineIndex] : null,
+          targetServiceLineClientId:
+            targetServiceLineIndex >= 0 ? serviceLineClientIds[targetServiceLineIndex] : null,
+          saveAsNewDiscount: false,
+        };
+      }),
     );
 
     this.documentType.set('FACTURE');
@@ -570,6 +668,7 @@ export class InvoiceDraftStore {
       packagingQuantity: line.packagingQuantity ?? undefined,
       roundUpToPackaging: line.roundUpToPackaging,
       productCode: line.productCode ?? undefined,
+      productId: line.productId ?? undefined,
       showUnitDetail: line.showUnitDetail,
       showBillingDetail: line.showBillingDetail,
       activityCategory: line.activityCategory ?? undefined,
@@ -603,11 +702,30 @@ export class InvoiceDraftStore {
     );
 
     const discountLines: CreateInvoiceDiscountLineRequest[] = this.discountLines().map(
-      (discountLine) => ({
-        discountId: discountLine.discountId ?? undefined,
-        name: discountLine.name,
-        amountCents: this.resolvedDiscountAmountCents(discountLine),
-      }),
+      (discountLine) => {
+        // Phase 34: resolve this draft's own clientId-based target back to a
+        // positional index into the `lines`/`serviceLines` arrays just built
+        // above — the shape the backend actually understands (see
+        // CreateInvoiceDiscountLineRequest). A clientId matching nothing
+        // (its target line/service line was removed from the draft since
+        // being picked) silently falls back to no target, same as
+        // discountPercentageBaseCents above.
+        const targetLineIndex = discountLine.targetLineClientId
+          ? this.lines().findIndex((line) => line.clientId === discountLine.targetLineClientId)
+          : -1;
+        const targetServiceLineIndex = discountLine.targetServiceLineClientId
+          ? this.serviceLines().findIndex(
+              (serviceLine) => serviceLine.clientId === discountLine.targetServiceLineClientId,
+            )
+          : -1;
+        return {
+          discountId: discountLine.discountId ?? undefined,
+          name: discountLine.name,
+          amountCents: this.resolvedDiscountAmountCents(discountLine),
+          targetLineIndex: targetLineIndex >= 0 ? targetLineIndex : undefined,
+          targetServiceLineIndex: targetServiceLineIndex >= 0 ? targetServiceLineIndex : undefined,
+        };
+      },
     );
 
     return {
@@ -789,14 +907,25 @@ export class InvoiceDraftStore {
       }
       if (Array.isArray(parsed.lines) && parsed.lines.length > 0) {
         // Merge over EMPTY_LINE so a draft persisted before Phase 8.5 (missing
-        // packagingQuantity/roundUpToPackaging) still hydrates to valid values.
-        this.lines.set(parsed.lines.map((line) => ({ ...EMPTY_LINE, ...line })));
+        // packagingQuantity/roundUpToPackaging) still hydrates to valid
+        // values — Phase 34: also backfills clientId for a draft persisted
+        // before that field existed (EMPTY_LINE's own '' placeholder), while
+        // preserving an already-assigned one so a restored draft's discount
+        // targets (matched by clientId) don't silently detach.
+        this.lines.set(
+          parsed.lines.map((line) => ({
+            ...EMPTY_LINE,
+            ...line,
+            clientId: line.clientId || crypto.randomUUID(),
+          })),
+        );
       }
       if (Array.isArray(parsed.serviceLines)) {
         this.serviceLines.set(
           parsed.serviceLines.map((serviceLine) => ({
             ...EMPTY_SERVICE_LINE_DEFAULTS,
             ...serviceLine,
+            clientId: serviceLine.clientId || crypto.randomUUID(),
           })),
         );
       }

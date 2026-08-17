@@ -614,6 +614,16 @@ model Invoice {
   convertedFromDevis   Invoice? @relation("DevisConversion", fields: [convertedFromDevisId], references: [id], onDelete: SetNull)
   convertedToFacture   Invoice? @relation("DevisConversion")
 
+  // Set on a DEVIS created retroactively from an existing FACTURE (the
+  // artisan forgot to make the devis first) — points at the source
+  // facture, which this leaves untouched (a new Invoice row is created,
+  // never a mutation in place). @unique since a facture can spawn at most
+  // one retroactive devis; onDelete: SetNull, same soft-reference spirit
+  // as convertedFromDevisId above.
+  createdFromFactureId String?  @unique
+  createdFromFacture   Invoice? @relation("FactureRetroConversion", fields: [createdFromFactureId], references: [id], onDelete: SetNull)
+  retroactiveDevis     Invoice? @relation("FactureRetroConversion")
+
   lines         InvoiceLine[]
   serviceLines  InvoiceServiceLine[]
   discountLines InvoiceDiscountLine[]
@@ -746,6 +756,8 @@ model Product {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  invoiceLines InvoiceLine[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -864,6 +876,15 @@ model InvoiceLine {
   // for an ad-hoc line that isn't saved to the catalog.
   productCode String?
 
+  // Soft reference to the saved Product this line was toggled on from, if
+  // any — same "autofill, not a lock" rule as InvoiceServiceLine.serviceId
+  // (onDelete: SetNull so deleting a Product can never corrupt an
+  // already-issued invoice). Only set for a catalog-picked line, never a
+  // freehand one; lets "Mes produits" jump to the invoices that used a given
+  // product the same way "Mes clients" already does for a customer.
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
   // Phase 15 — artisan-chosen, persisted like the vatApplicable snapshot
   // (not derived): whether this line's technical detail renders on the
   // generated PDF. showUnitDetail governs the "Unité" cell; showBillingDetail
@@ -884,6 +905,12 @@ model InvoiceLine {
   activityCategory ActivityCategory?
 
   serviceWeights InvoiceServiceLineWeight[]
+
+  // Phase 34: reverse side of InvoiceDiscountLine.targetInvoiceLine — the
+  // remise(s) scoped to this line, if any. Never read to compute this line's
+  // own total (see InvoiceDiscountLine's comment); only exists so Prisma's
+  // relation is bidirectional.
+  targetedByDiscountLines InvoiceDiscountLine[] @relation("DiscountTargetLine")
 
   createdAt DateTime @default(now())
 
@@ -927,6 +954,11 @@ model InvoiceServiceLine {
   // math the read path needs (see InvoiceCalculationService.computeWeightedSplit).
   weights InvoiceServiceLineWeight[]
 
+  // Phase 34: reverse side of InvoiceDiscountLine.targetInvoiceServiceLine —
+  // same "exists only for Prisma's bidirectional relation" role as
+  // InvoiceLine.targetedByDiscountLines above.
+  targetedByDiscountLines InvoiceDiscountLine[] @relation("DiscountTargetServiceLine")
+
   createdAt DateTime @default(now())
 
   @@index([invoiceId])
@@ -935,12 +967,14 @@ model InvoiceServiceLine {
 // Phase 32: a remise applied to an invoice/devis (GUIDED mode only — see
 // ManualModeFieldsConsistency, which forbids this for MANUAL) — always folds
 // its resolved amountCents straight into the subtotal as a reduction, no
-// visibility/redistribution concept (a discount never targets specific
-// lines, unlike InvoiceServiceLine). Soft reference to a saved Discount, same
-// "autofill, not a lock" rule as InvoiceServiceLine.serviceId — amountCents
-// is always the source of truth for this invoice, never re-read from
-// `discount` after creation, and (same as a PERCENTAGE service line) the
-// original discountType/rate is not retained once persisted.
+// visibility/redistribution concept (unlike InvoiceServiceLine, it never
+// splits its amount across several lines — see the two soft target
+// references below for the one-line-or-none it can still be scoped to).
+// Soft reference to a saved Discount, same "autofill, not a lock" rule as
+// InvoiceServiceLine.serviceId — amountCents is always the source of truth
+// for this invoice, never re-read from `discount` after creation, and (same
+// as a PERCENTAGE service line) the original discountType/rate is not
+// retained once persisted.
 model InvoiceDiscountLine {
   id String @id @default(uuid())
 
@@ -954,9 +988,29 @@ model InvoiceDiscountLine {
   name        String
   amountCents Int
 
+  // Phase 34: which single product/service line (already added to the same
+  // invoice) this remise is scoped to, if any — mutually exclusive (enforced
+  // by DiscountTargetMatchesLines at the DTO boundary, not the DB), both null
+  // for a remise on the invoice's general total (the pre-Phase-34 default
+  // behavior). Purely informational/percentage-base metadata: a targeted
+  // remise still folds its amountCents into the invoice subtotal exactly
+  // like an untargeted one (see InvoiceMapper) — it never changes
+  // targetInvoiceLine/targetInvoiceServiceLine's own displayed total. Soft
+  // references, same "autofill, not a lock" rule as discountId above —
+  // onDelete: SetNull so removing the targeted line (impossible today, no
+  // per-line delete endpoint, but the invoice itself cascades) can never
+  // corrupt this row.
+  targetInvoiceLineId String?
+  targetInvoiceLine   InvoiceLine? @relation("DiscountTargetLine", fields: [targetInvoiceLineId], references: [id], onDelete: SetNull)
+
+  targetInvoiceServiceLineId String?
+  targetInvoiceServiceLine   InvoiceServiceLine? @relation("DiscountTargetServiceLine", fields: [targetInvoiceServiceLineId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
 
   @@index([invoiceId])
+  @@index([targetInvoiceLineId])
+  @@index([targetInvoiceServiceLineId])
 }
 
 // Phase 9.5 manual mode: one column of the free-form invoice canvas — see

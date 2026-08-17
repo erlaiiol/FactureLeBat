@@ -36,6 +36,10 @@ export type InvoiceWithLines = Invoice & {
   // Phase 14.3: set on a devis once it's been converted — the facture that
   // was created from it. Null for a facture, and for a devis never converted.
   convertedToFacture: { id: string; number: string } | null;
+  // Set on a facture once a devis has been retroactively created from it —
+  // see InvoiceService.convertToDevis. Null for a devis, and for a facture
+  // with no retroactive devis.
+  retroactiveDevis: { id: string; number: string } | null;
 };
 
 export interface CreateInvoiceLineData {
@@ -47,6 +51,9 @@ export interface CreateInvoiceLineData {
   packagingQuantity?: number;
   roundUpToPackaging: boolean;
   productCode?: string;
+  // Soft reference to the catalog Product this line was toggled on from —
+  // see schema.prisma's comment on InvoiceLine.productId.
+  productId?: string;
   // Phase 15: per-line PDF rendering toggles — see schema.prisma's comment
   // on InvoiceLine.showUnitDetail/showBillingDetail.
   showUnitDetail: boolean;
@@ -79,6 +86,14 @@ export interface CreateInvoiceDiscountLineData {
   discountId?: string;
   name: string;
   amountCents: number;
+  // Phase 34: positional, aligned with CreateInvoiceData.lines/serviceLines
+  // (targetLineIndex i means "scoped to the line created from lines[i]") —
+  // resolved to the generated InvoiceLine/InvoiceServiceLine id once those
+  // rows exist (see createWithSequentialNumber, which creates discountLines
+  // last for exactly this reason). Mutually exclusive, both undefined means
+  // this remise applies to the invoice's general total.
+  targetLineIndex?: number;
+  targetServiceLineIndex?: number;
 }
 
 // Phase 9.5: one column of a MANUAL invoice's free-form table. Positional
@@ -136,6 +151,10 @@ export interface CreateInvoiceData {
   // facture created from scratch.
   documentType: DocumentType;
   convertedFromDevisId?: string;
+  // Set when this devis was created retroactively from an existing facture
+  // (see InvoiceService.convertToDevis) — never set for a facture itself or
+  // a devis created from scratch.
+  createdFromFactureId?: string;
   // Phase 27: the artisan's own explicit number (validated + uniqueness-
   // checked by InvoiceService.create) — when absent, the repository derives
   // one itself (see createWithSequentialNumber / computeNextDocumentNumber).
@@ -154,6 +173,7 @@ const INVOICE_INCLUDE = {
   customerFields: { orderBy: { position: 'asc' } },
   company: true,
   convertedToFacture: { select: { id: true, number: true } },
+  retroactiveDevis: { select: { id: true, number: true } },
 } as const;
 
 @Injectable()
@@ -174,9 +194,13 @@ export class InvoiceRepository {
   // references the *generated* id of a column created alongside the invoice,
   // so columns are created first (nested in the invoice.create() call
   // itself, like lines above), then rows-with-cells are created afterward,
-  // positionally matched to those columns. A final re-read (still inside the
-  // transaction, so it sees an atomic, fully-formed invoice or none at all)
-  // returns the shape InvoiceMapper needs.
+  // positionally matched to those columns. Phase 34's discount lines are
+  // created last, after both lines and service lines exist, for the same
+  // reason: a targeted discount line's targetInvoiceLineId/
+  // targetInvoiceServiceLineId reference whichever of those two was just
+  // generated above. A final re-read (still inside the transaction, so it
+  // sees an atomic, fully-formed invoice or none at all) returns the shape
+  // InvoiceMapper needs.
   async createWithSequentialNumber(data: CreateInvoiceData): Promise<InvoiceWithLines> {
     return this.prisma.$transaction(async (tx) => {
       // Phase 27: `FOR UPDATE` takes the same row lock the old counter
@@ -211,6 +235,7 @@ export class InvoiceRepository {
           number,
           documentType: data.documentType,
           convertedFromDevisId: data.convertedFromDevisId,
+          createdFromFactureId: data.createdFromFactureId,
           companyId: data.companyId,
           customerName: data.customerName,
           customerAddress: data.customerAddress,
@@ -235,17 +260,10 @@ export class InvoiceRepository {
               packagingQuantity: line.packagingQuantity,
               roundUpToPackaging: line.roundUpToPackaging,
               productCode: line.productCode,
+              productId: line.productId,
               showUnitDetail: line.showUnitDetail,
               showBillingDetail: line.showBillingDetail,
               activityCategory: line.activityCategory,
-            })),
-          },
-          discountLines: {
-            create: data.discountLines.map((discountLine, index) => ({
-              position: index,
-              discountId: discountLine.discountId,
-              name: discountLine.name,
-              amountCents: discountLine.amountCents,
             })),
           },
           manualColumns: {
@@ -270,6 +288,11 @@ export class InvoiceRepository {
         },
       });
 
+      // Phase 34: tracked positionally (createdServiceLineIds[i] is the id
+      // generated for data.serviceLines[i]) so a discount line's
+      // targetServiceLineIndex can be resolved to a real id below, the same
+      // way invoice.lines[targetLineIndex].id resolves a line target.
+      const createdServiceLineIds: string[] = [];
       for (const [index, serviceLine] of data.serviceLines.entries()) {
         const createdServiceLine = await tx.invoiceServiceLine.create({
           data: {
@@ -283,6 +306,7 @@ export class InvoiceRepository {
             activityCategory: serviceLine.activityCategory,
           },
         });
+        createdServiceLineIds.push(createdServiceLine.id);
 
         if (serviceLine.visibility === 'REDISTRIBUTED') {
           await tx.invoiceServiceLineWeight.createMany({
@@ -293,6 +317,29 @@ export class InvoiceRepository {
             })),
           });
         }
+      }
+
+      // Phase 34: created last, after both lines and service lines above —
+      // see this method's own doc comment for why a targeted discount line
+      // needs those generated ids to already exist.
+      for (const [index, discountLine] of data.discountLines.entries()) {
+        await tx.invoiceDiscountLine.create({
+          data: {
+            invoiceId: invoice.id,
+            position: index,
+            discountId: discountLine.discountId,
+            name: discountLine.name,
+            amountCents: discountLine.amountCents,
+            targetInvoiceLineId:
+              discountLine.targetLineIndex !== undefined
+                ? invoice.lines[discountLine.targetLineIndex].id
+                : undefined,
+            targetInvoiceServiceLineId:
+              discountLine.targetServiceLineIndex !== undefined
+                ? createdServiceLineIds[discountLine.targetServiceLineIndex]
+                : undefined,
+          },
+        });
       }
 
       for (const [index, row] of (data.manualRows ?? []).entries()) {

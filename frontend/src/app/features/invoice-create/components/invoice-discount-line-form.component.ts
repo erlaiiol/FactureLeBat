@@ -20,7 +20,20 @@ export type InvoiceDiscountLineFormGroup = FormGroup<{
   catalogDiscountId: FormControl<string | null>;
   // UI-only, see InvoiceDiscountLineDraft.saveAsNewDiscount.
   saveAsNewDiscount: FormControl<boolean>;
+  // Phase 34, UI-only: see InvoiceDiscountLineDraft.targetLineClientId/
+  // targetServiceLineClientId.
+  targetLineClientId: FormControl<string | null>;
+  targetServiceLineClientId: FormControl<string | null>;
 }>;
+
+// Phase 34: one selectable target for the "Appliquer sur" picker — a plain
+// invoice line or service line already added to the draft, keyed by its
+// stable clientId (see InvoiceLineDraft.clientId) rather than its
+// (mutation-prone) array index.
+export interface DiscountTargetOption {
+  clientId: string;
+  label: string;
+}
 
 @Component({
   selector: 'app-invoice-discount-line-form',
@@ -34,7 +47,64 @@ export class InvoiceDiscountLineFormComponent {
   readonly group = input.required<InvoiceDiscountLineFormGroup>();
   readonly index = input.required<number>();
   readonly discounts = input.required<DiscountProfile[]>();
+  // Phase 34: the invoice's current product/material lines and service
+  // lines, offered as "Appliquer sur" targets — kept in sync with the
+  // parent page's own FormArrays (see InvoiceCreateLinesStepPage).
+  readonly lineOptions = input.required<DiscountTargetOption[]>();
+  readonly serviceLineOptions = input.required<DiscountTargetOption[]>();
   readonly remove = output<void>();
+
+  // Encodes the mutually-exclusive targetLineClientId/targetServiceLineClientId
+  // pair as a single <select> value: '' (general total), `line:<clientId>`,
+  // or `service:<clientId>`.
+  protected currentTargetValue(): string {
+    const controls = this.group().controls;
+    if (controls.targetLineClientId.value) {
+      return `line:${controls.targetLineClientId.value}`;
+    }
+    if (controls.targetServiceLineClientId.value) {
+      return `service:${controls.targetServiceLineClientId.value}`;
+    }
+    return '';
+  }
+
+  protected onTargetSelected(rawValue: string): void {
+    if (!rawValue) {
+      this.group().patchValue({ targetLineClientId: null, targetServiceLineClientId: null });
+      return;
+    }
+    const [kind, clientId] = rawValue.split(':');
+    if (kind === 'line') {
+      this.group().patchValue({ targetLineClientId: clientId, targetServiceLineClientId: null });
+    } else if (kind === 'service') {
+      this.group().patchValue({ targetLineClientId: null, targetServiceLineClientId: clientId });
+    }
+  }
+
+  protected hasTarget(): boolean {
+    return this.currentTargetValue() !== '';
+  }
+
+  // The targeted line/service line's own name — read for the percentage
+  // hint text below; null once its target has been removed from the draft
+  // (see InvoiceDraftStore.discountPercentageBaseCents' same fallback).
+  protected targetLabel(): string | null {
+    const controls = this.group().controls;
+    if (controls.targetLineClientId.value) {
+      return (
+        this.lineOptions().find((option) => option.clientId === controls.targetLineClientId.value)
+          ?.label ?? null
+      );
+    }
+    if (controls.targetServiceLineClientId.value) {
+      return (
+        this.serviceLineOptions().find(
+          (option) => option.clientId === controls.targetServiceLineClientId.value,
+        )?.label ?? null
+      );
+    }
+    return null;
+  }
 
   protected isPercentageMode(): boolean {
     return this.group().controls.discountType.value === 'PERCENTAGE';

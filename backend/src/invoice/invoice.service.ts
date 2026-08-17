@@ -11,6 +11,7 @@ import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
 import { DiscountService } from '../discount/discount.service';
+import { ProductService } from '../product/product.service';
 import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
@@ -38,6 +39,7 @@ export class InvoiceService {
     private readonly customerService: CustomerService,
     private readonly serviceCatalogService: ServiceCatalogService,
     private readonly discountService: DiscountService,
+    private readonly productService: ProductService,
     private readonly mapper: InvoiceMapper,
     private readonly premiumGate: PlanGateService,
   ) {}
@@ -84,6 +86,15 @@ export class InvoiceService {
     // ManualModeFieldsConsistency already rejects a request that tries to
     // combine the two, so this can only run for entryMode GUIDED.
     const entryMode = dto.entryMode ?? InvoiceEntryMode.GUIDED;
+    const lineDtos = entryMode === InvoiceEntryMode.GUIDED ? (dto.lines ?? []) : [];
+    // Same soft-reference existence check as serviceId/discountId below, for
+    // a line's productId — there is no DELETE /products endpoint either.
+    for (const line of lineDtos) {
+      if (line.productId) {
+        await this.productService.findById(companyId, line.productId);
+      }
+    }
+
     const serviceLineDtos = entryMode === InvoiceEntryMode.GUIDED ? (dto.serviceLines ?? []) : [];
     // Same reasoning applies to Service — there is no DELETE /services
     // endpoint either.
@@ -141,6 +152,7 @@ export class InvoiceService {
               packagingQuantity: line.packagingQuantity,
               roundUpToPackaging: line.roundUpToPackaging ?? true,
               productCode: line.productCode,
+              productId: line.productId,
               showUnitDetail: line.showUnitDetail ?? true,
               showBillingDetail: line.showBillingDetail ?? true,
               activityCategory: line.activityCategory,
@@ -162,6 +174,8 @@ export class InvoiceService {
         discountId: discountLine.discountId,
         name: discountLine.name,
         amountCents: discountLine.amountCents,
+        targetLineIndex: discountLine.targetLineIndex,
+        targetServiceLineIndex: discountLine.targetServiceLineIndex,
       })),
       // ManualModeFieldsConsistency guarantees `manualTable` is present
       // whenever entryMode is MANUAL (the only branch that reads it below).
@@ -232,6 +246,7 @@ export class InvoiceService {
         packagingQuantity: line.packagingQuantity?.toNumber(),
         roundUpToPackaging: line.roundUpToPackaging,
         productCode: line.productCode ?? undefined,
+        productId: line.productId ?? undefined,
         showUnitDetail: line.showUnitDetail,
         showBillingDetail: line.showBillingDetail,
         activityCategory: line.activityCategory ?? undefined,
@@ -252,11 +267,23 @@ export class InvoiceService {
               )
             : undefined,
       })),
-      discountLines: devis.discountLines.map((discountLine): CreateInvoiceDiscountLineData => ({
-        discountId: discountLine.discountId ?? undefined,
-        name: discountLine.name,
-        amountCents: discountLine.amountCents,
-      })),
+      discountLines: devis.discountLines.map((discountLine): CreateInvoiceDiscountLineData => {
+        const targetLineIndex = discountLine.targetInvoiceLineId
+          ? devis.lines.findIndex((line) => line.id === discountLine.targetInvoiceLineId)
+          : -1;
+        const targetServiceLineIndex = discountLine.targetInvoiceServiceLineId
+          ? devis.serviceLines.findIndex(
+              (serviceLine) => serviceLine.id === discountLine.targetInvoiceServiceLineId,
+            )
+          : -1;
+        return {
+          discountId: discountLine.discountId ?? undefined,
+          name: discountLine.name,
+          amountCents: discountLine.amountCents,
+          targetLineIndex: targetLineIndex >= 0 ? targetLineIndex : undefined,
+          targetServiceLineIndex: targetServiceLineIndex >= 0 ? targetServiceLineIndex : undefined,
+        };
+      }),
       manualColumns:
         devis.entryMode === InvoiceEntryMode.MANUAL
           ? devis.manualColumns.map((column) => ({
@@ -284,6 +311,124 @@ export class InvoiceService {
     // company able to reach this point (an existing devis to convert)
     // already has invoiceCount >= 1 from that devis alone, so this can never
     // be the invoiceCount 0 -> 1 transition the trial offer is keyed on.
+    await this.premiumGate.recordInvoiceCreated(companyId);
+
+    return this.mapper.toInvoiceWithTotals(invoice);
+  }
+
+  // Retroactive devis creation: an artisan who forgot to make the devis
+  // before issuing a facture can create one after the fact — an untouched
+  // clone of the facture, like convertToFacture above but in the opposite
+  // direction, with an artisan-chosen number (see ConvertToDevisDto) since
+  // there's no natural "next devis in sequence" to default to here. Kept as
+  // its own method rather than a documentType param on convertToFacture:
+  // the guard clauses, lineage field, and "already has one" check are all
+  // mirrored-but-reversed, not shared logic.
+  async convertToDevis(
+    companyId: string,
+    factureId: string,
+    number: string,
+  ): Promise<InvoiceWithTotals> {
+    await this.premiumGate.assertCanCreateInvoice(companyId);
+
+    const facture = await this.findRawById(companyId, factureId);
+    if (facture.documentType !== DocumentType.FACTURE) {
+      throw new BadRequestException(`Invoice ${factureId} is not a facture`);
+    }
+    if (facture.retroactiveDevis) {
+      throw new BadRequestException(`Facture ${factureId} already has a devis created from it`);
+    }
+
+    const invoice = await this.createInvoiceRow({
+      companyId,
+      customerName: facture.customerName,
+      customerAddress: facture.customerAddress ?? undefined,
+      customerEmail: facture.customerEmail ?? undefined,
+      customerPhone: facture.customerPhone ?? undefined,
+      customerId: facture.customerId ?? undefined,
+      customerFields: facture.customerFields.map((field) => ({
+        label: field.label,
+        value: field.value,
+      })),
+      vatApplicable: facture.vatApplicable,
+      vatRateBasisPoints: facture.vatRateBasisPoints,
+      subtotalOverrideCents: facture.subtotalOverrideCents ?? undefined,
+      vatOverrideCents: facture.vatOverrideCents ?? undefined,
+      totalOverrideCents: facture.totalOverrideCents ?? undefined,
+      entryMode: facture.entryMode,
+      documentType: DocumentType.DEVIS,
+      createdFromFactureId: facture.id,
+      number,
+      simplifiedDisplay: facture.simplifiedDisplay,
+      lines: facture.lines.map((line) => ({
+        description: line.description,
+        unit: line.unit,
+        quantity: line.quantity.toNumber(),
+        unitPriceCents: line.unitPriceCents,
+        wasteSurcharge: line.wasteSurcharge,
+        packagingQuantity: line.packagingQuantity?.toNumber(),
+        roundUpToPackaging: line.roundUpToPackaging,
+        productCode: line.productCode ?? undefined,
+        productId: line.productId ?? undefined,
+        showUnitDetail: line.showUnitDetail,
+        showBillingDetail: line.showBillingDetail,
+        activityCategory: line.activityCategory ?? undefined,
+      })),
+      serviceLines: facture.serviceLines.map((serviceLine): CreateInvoiceServiceLineData => ({
+        serviceId: serviceLine.serviceId ?? undefined,
+        name: serviceLine.name,
+        description: serviceLine.description ?? undefined,
+        amountCents: serviceLine.amountCents,
+        visibility: serviceLine.visibility,
+        activityCategory: serviceLine.activityCategory ?? undefined,
+        weights:
+          serviceLine.visibility === 'REDISTRIBUTED'
+            ? facture.lines.map(
+                (line) =>
+                  serviceLine.weights.find((weight) => weight.invoiceLineId === line.id)?.weight ??
+                  0,
+              )
+            : undefined,
+      })),
+      discountLines: facture.discountLines.map((discountLine): CreateInvoiceDiscountLineData => {
+        const targetLineIndex = discountLine.targetInvoiceLineId
+          ? facture.lines.findIndex((line) => line.id === discountLine.targetInvoiceLineId)
+          : -1;
+        const targetServiceLineIndex = discountLine.targetInvoiceServiceLineId
+          ? facture.serviceLines.findIndex(
+              (serviceLine) => serviceLine.id === discountLine.targetInvoiceServiceLineId,
+            )
+          : -1;
+        return {
+          discountId: discountLine.discountId ?? undefined,
+          name: discountLine.name,
+          amountCents: discountLine.amountCents,
+          targetLineIndex: targetLineIndex >= 0 ? targetLineIndex : undefined,
+          targetServiceLineIndex: targetServiceLineIndex >= 0 ? targetServiceLineIndex : undefined,
+        };
+      }),
+      manualColumns:
+        facture.entryMode === InvoiceEntryMode.MANUAL
+          ? facture.manualColumns.map((column) => ({
+              role: column.role,
+              label: column.label,
+              widthPx: column.widthPx ?? undefined,
+            }))
+          : undefined,
+      manualRows:
+        facture.entryMode === InvoiceEntryMode.MANUAL
+          ? facture.manualRows.map((row) => ({
+              heightPx: row.heightPx ?? undefined,
+              cells: facture.manualColumns.map(
+                (column) => row.cells.find((cell) => cell.columnId === column.id)?.value ?? '',
+              ),
+            }))
+          : undefined,
+    });
+
+    // Phase 33: same reasoning as convertToFacture's identical call above —
+    // a company able to reach this point already has invoiceCount >= 1 from
+    // the source facture alone.
     await this.premiumGate.recordInvoiceCreated(companyId);
 
     return this.mapper.toInvoiceWithTotals(invoice);

@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -74,6 +75,15 @@ export class CreateInvoiceLineDto {
   @IsString()
   @MaxLength(50)
   productCode?: string;
+
+  // Soft reference to a saved Product, if the artisan picked one — same
+  // "autofill, not a lock" rule as CreateInvoiceServiceLineDto.serviceId:
+  // every field above is always what actually gets persisted, confirmed to
+  // exist by InvoiceService.create but never re-read from the Product
+  // record itself.
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
 
   // Phase 15: per-line PDF rendering toggles, set from the mandatory
   // preview screen — purely a display concern, never read by

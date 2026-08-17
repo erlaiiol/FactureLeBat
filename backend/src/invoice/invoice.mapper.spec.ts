@@ -100,6 +100,8 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     documentType: 'FACTURE',
     convertedFromDevisId: null,
     convertedToFacture: null,
+    createdFromFactureId: null,
+    retroactiveDevis: null,
     simplifiedDisplay: false,
     lines: [
       {
@@ -114,6 +116,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
         packagingQuantity: null,
         roundUpToPackaging: true,
         productCode: null,
+        productId: null,
         showUnitDetail: true,
         showBillingDetail: true,
         activityCategory: null,
@@ -155,6 +158,7 @@ describe('InvoiceMapper', () => {
             packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             roundUpToPackaging: true,
             productCode: null,
+            productId: null,
             showUnitDetail: true,
             showBillingDetail: true,
             activityCategory: null,
@@ -217,6 +221,8 @@ describe('InvoiceMapper', () => {
             discountId: null,
             name: 'Remise fidélité',
             amountCents: 5000,
+            targetInvoiceLineId: null,
+            targetInvoiceServiceLineId: null,
             createdAt: new Date('2026-01-15'),
           },
         ],
@@ -241,6 +247,8 @@ describe('InvoiceMapper', () => {
             discountId: null,
             name: 'Remise énorme',
             amountCents: 999_999,
+            targetInvoiceLineId: null,
+            targetInvoiceServiceLineId: null,
             createdAt: new Date('2026-01-15'),
           },
         ],
@@ -250,6 +258,33 @@ describe('InvoiceMapper', () => {
       expect(result.subtotalExclVatCents).toBe(0);
       expect(result.vatAmountCents).toBe(0);
       expect(result.totalInclVatCents).toBe(0);
+    });
+
+    it('exposes a discount line’s target line/service line, without changing that target’s own total (Phase 34)', () => {
+      const invoice = invoiceWithLines({
+        discountLines: [
+          {
+            id: 'disc-1',
+            invoiceId: 'inv-1',
+            position: 0,
+            discountId: null,
+            name: 'Remise parquet',
+            amountCents: 5000,
+            targetInvoiceLineId: 'line-1',
+            targetInvoiceServiceLineId: null,
+            createdAt: new Date('2026-01-15'),
+          },
+        ],
+      });
+      const result = mapper.toInvoiceWithTotals(invoice);
+
+      expect(result.discountLines[0]).toEqual(
+        expect.objectContaining({ targetLineId: 'line-1', targetServiceLineId: null }),
+      );
+      // The targeted line's own total is untouched — a discount line always
+      // folds into the invoice subtotal, never a specific line's total.
+      expect(result.lines[0].lineTotalExclVatCents).toBe(45000);
+      expect(result.subtotalExclVatCents).toBe(45000 - 5000);
     });
 
     it('folds a REDISTRIBUTED service line into the referenced lines, matching the total increase invariant', () => {
@@ -267,6 +302,7 @@ describe('InvoiceMapper', () => {
             packagingQuantity: null,
             roundUpToPackaging: true,
             productCode: null,
+            productId: null,
             showUnitDetail: true,
             showBillingDetail: true,
             activityCategory: null,
@@ -284,6 +320,7 @@ describe('InvoiceMapper', () => {
             packagingQuantity: null,
             roundUpToPackaging: true,
             productCode: null,
+            productId: null,
             showUnitDetail: true,
             showBillingDetail: true,
             activityCategory: null,
@@ -348,6 +385,7 @@ describe('InvoiceMapper', () => {
             packagingQuantity: null,
             roundUpToPackaging: true,
             productCode: null,
+            productId: null,
             showUnitDetail: true,
             showBillingDetail: true,
             activityCategory: null,
@@ -417,6 +455,7 @@ describe('InvoiceMapper', () => {
             packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             roundUpToPackaging: true,
             productCode: null,
+            productId: null,
             showUnitDetail: true,
             showBillingDetail: true,
             activityCategory: null,
@@ -447,6 +486,7 @@ describe('InvoiceMapper', () => {
             packagingQuantity: '9' as unknown as InvoiceWithLines['lines'][number]['quantity'],
             roundUpToPackaging: true,
             productCode: null,
+            productId: null,
             showUnitDetail: false,
             showBillingDetail: false,
             activityCategory: null,
@@ -753,6 +793,24 @@ describe('InvoiceMapper', () => {
 
       const pdf = mapper.toPreviewPdfData(dto, companyFixture());
       expect(pdf.lines[0].unitPriceCents).toBe(520);
+    });
+
+    it('resolves a discount line’s targetLineIndex/targetServiceLineIndex to the draft’s own synthetic positional ids (Phase 34)', () => {
+      const dto = createInvoiceDtoFixture({
+        serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000, visibility: 'VISIBLE' }],
+        discountLines: [
+          { name: 'Remise parquet', amountCents: 1000, targetLineIndex: 0 },
+          { name: 'Remise pose', amountCents: 500, targetServiceLineIndex: 0 },
+        ],
+      });
+      const preview = mapper.toPreviewInvoiceWithTotals(dto, companyFixture());
+
+      expect(preview.discountLines[0]).toEqual(
+        expect.objectContaining({ targetLineId: '0', targetServiceLineId: null }),
+      );
+      expect(preview.discountLines[1]).toEqual(
+        expect.objectContaining({ targetLineId: null, targetServiceLineId: '0' }),
+      );
     });
   });
 

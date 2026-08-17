@@ -44,8 +44,16 @@
             {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
           </span>
         </a>
-        <div class="border-t border-line p-2">
+        <div class="flex items-center justify-between gap-2 border-t border-line p-2">
           <app-sourcing-panel [productName]="product.name" [quantity]="1" [unit]="product.unit" />
+          <button
+            type="button"
+            (click)="viewDocuments(product)"
+            title="Voir les devis/factures utilisant ce produit"
+            class="shrink-0 rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink hover:bg-primary-subtle hover:text-primary-subtle-fg"
+          >
+            Documents
+          </button>
         </div>
       </li>
     }

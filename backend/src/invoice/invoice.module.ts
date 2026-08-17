@@ -5,6 +5,7 @@ import { CustomerModule } from '../customer/customer.module';
 import { DiscountModule } from '../discount/discount.module';
 import { MailSettingsModule } from '../mail-settings/mail-settings.module';
 import { MailerModule } from '../mailer/mailer.module';
+import { ProductModule } from '../product/product.module';
 import { ServiceCatalogModule } from '../service-catalog/service-catalog.module';
 import { InvoiceCalculationService } from './calculation/invoice-calculation.service';
 import { InvoiceController } from './invoice.controller';
@@ -19,6 +20,7 @@ import { PdfModule } from './pdf/pdf.module';
     CompanyModule,
     CustomerModule,
     DiscountModule,
+    ProductModule,
     ServiceCatalogModule,
     PdfModule,
     MailSettingsModule,

@@ -27,6 +27,8 @@ import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive'
 import { SourcingPanelComponent } from './sourcing-panel.component';
 
 export type InvoiceLineFormGroup = FormGroup<{
+  // Phase 34, UI-only: see InvoiceLineDraft.clientId.
+  clientId: FormControl<string>;
   description: FormControl<string>;
   unit: FormControl<Unit>;
   quantity: FormControl<number>;
@@ -35,6 +37,9 @@ export type InvoiceLineFormGroup = FormGroup<{
   packagingQuantity: FormControl<number | null>;
   roundUpToPackaging: FormControl<boolean>;
   productCode: FormControl<string | null>;
+  // Soft reference to the catalog Product this line was toggled on from —
+  // see InvoiceLineDraft.productId.
+  productId: FormControl<string | null>;
   // UI-only — never sent as part of the invoice-creation request, see
   // InvoiceCreateLinesStepPage.submit().
   saveAsNewProduct: FormControl<boolean>;

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, startWith, switchMap } from 'rxjs';
 import { ServiceProfile } from '../../core/models/service.model';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
@@ -30,6 +30,7 @@ export class ServiceListPage {
   private readonly serviceCatalogService = inject(ServiceCatalogService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   protected readonly services = signal<ServiceProfile[]>([]);
   protected readonly loading = signal(true);
@@ -57,5 +58,14 @@ export class ServiceListPage {
           this.errorMessage.set('Impossible de charger vos prestations. Veuillez réessayer.');
         },
       });
+  }
+
+  // "Documents": jumps to Mes documents with this service's devis/factures
+  // highlighted (see InvoiceBoardPage.repertoryFilter) rather than
+  // hard-filtered, same entry point as CustomerListPage.viewDocuments.
+  protected viewDocuments(service: ServiceProfile): void {
+    void this.router.navigate(['/factures'], {
+      queryParams: { serviceId: service.id, serviceName: service.name },
+    });
   }
 }

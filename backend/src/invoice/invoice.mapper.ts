@@ -126,6 +126,7 @@ export class InvoiceMapper {
           return {
             id: serviceLine.id,
             position: serviceLine.position,
+            serviceId: serviceLine.serviceId,
             name: serviceLine.name,
             description: serviceLine.description,
             amountCents: serviceLine.amountCents,
@@ -157,6 +158,7 @@ export class InvoiceMapper {
         return {
           id: serviceLine.id,
           position: serviceLine.position,
+          serviceId: serviceLine.serviceId,
           name: serviceLine.name,
           description: serviceLine.description,
           amountCents: serviceLine.amountCents,
@@ -189,6 +191,7 @@ export class InvoiceMapper {
         packagingQuantity: line.packagingQuantity?.toString() ?? null,
         roundUpToPackaging: line.roundUpToPackaging,
         productCode: line.productCode,
+        productId: line.productId,
         showUnitDetail: line.showUnitDetail,
         showBillingDetail: line.showBillingDetail,
         activityCategory: line.activityCategory,
@@ -205,8 +208,11 @@ export class InvoiceMapper {
       (discountLine) => ({
         id: discountLine.id,
         position: discountLine.position,
+        discountId: discountLine.discountId,
         name: discountLine.name,
         amountCents: discountLine.amountCents,
+        targetLineId: discountLine.targetInvoiceLineId,
+        targetServiceLineId: discountLine.targetInvoiceServiceLineId,
       }),
     );
     const discountTotalCents = discountLines.reduce((sum, d) => sum + d.amountCents, 0);
@@ -244,6 +250,8 @@ export class InvoiceMapper {
       documentType: invoice.documentType,
       convertedFromDevisId: invoice.convertedFromDevisId,
       convertedToFacture: invoice.convertedToFacture,
+      createdFromFactureId: invoice.createdFromFactureId,
+      retroactiveDevis: invoice.retroactiveDevis,
       vatApplicable: invoice.vatApplicable,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
       entryMode: InvoiceEntryMode.GUIDED,
@@ -327,6 +335,8 @@ export class InvoiceMapper {
       documentType: invoice.documentType,
       convertedFromDevisId: invoice.convertedFromDevisId,
       convertedToFacture: invoice.convertedToFacture,
+      createdFromFactureId: invoice.createdFromFactureId,
+      retroactiveDevis: invoice.retroactiveDevis,
       vatApplicable: invoice.vatApplicable,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
       entryMode: InvoiceEntryMode.MANUAL,
@@ -507,6 +517,7 @@ export class InvoiceMapper {
         serviceLines.push({
           id: String(serviceLines.length),
           position: serviceLines.length,
+          serviceId: serviceLine.serviceId ?? null,
           name: serviceLine.name,
           description: serviceLine.description ?? null,
           amountCents: serviceLine.amountCents,
@@ -528,6 +539,7 @@ export class InvoiceMapper {
       serviceLines.push({
         id: String(serviceLines.length),
         position: serviceLines.length,
+        serviceId: serviceLine.serviceId ?? null,
         name: serviceLine.name,
         description: serviceLine.description ?? null,
         amountCents: serviceLine.amountCents,
@@ -560,6 +572,7 @@ export class InvoiceMapper {
         packagingQuantity: line.packagingQuantity?.toString() ?? null,
         roundUpToPackaging: line.roundUpToPackaging ?? true,
         productCode: line.productCode ?? null,
+        productId: line.productId ?? null,
         showUnitDetail: line.showUnitDetail ?? true,
         showBillingDetail: line.showBillingDetail ?? true,
         activityCategory: line.activityCategory ?? null,
@@ -573,8 +586,19 @@ export class InvoiceMapper {
       (discountLine, index) => ({
         id: String(index),
         position: index,
+        discountId: discountLine.discountId ?? null,
         name: discountLine.name,
         amountCents: discountLine.amountCents,
+        // Phase 34: same positional-synthetic-id treatment as lines/
+        // serviceLines above — targetLineIndex/targetServiceLineIndex are
+        // already the exact index a line/serviceLine's own synthetic id was
+        // built from (String(index)), so no lookup is needed here.
+        targetLineId:
+          discountLine.targetLineIndex !== undefined ? String(discountLine.targetLineIndex) : null,
+        targetServiceLineId:
+          discountLine.targetServiceLineIndex !== undefined
+            ? String(discountLine.targetServiceLineIndex)
+            : null,
       }),
     );
     const discountTotalCents = discountLines.reduce((sum, d) => sum + d.amountCents, 0);
@@ -617,6 +641,8 @@ export class InvoiceMapper {
       documentType: dto.documentType ?? DocumentType.FACTURE,
       convertedFromDevisId: null,
       convertedToFacture: null,
+      createdFromFactureId: null,
+      retroactiveDevis: null,
       vatApplicable,
       vatRateBasisPoints,
       entryMode: InvoiceEntryMode.GUIDED,
@@ -695,6 +721,8 @@ export class InvoiceMapper {
       documentType: dto.documentType ?? DocumentType.FACTURE,
       convertedFromDevisId: null,
       convertedToFacture: null,
+      createdFromFactureId: null,
+      retroactiveDevis: null,
       vatApplicable,
       vatRateBasisPoints,
       entryMode: InvoiceEntryMode.MANUAL,

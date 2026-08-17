@@ -45,6 +45,36 @@
     }
   </label>
 
+  @if (lineOptions().length > 0 || serviceLineOptions().length > 0) {
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Appliquer sur</span>
+      <select
+        [value]="currentTargetValue()"
+        (change)="onTargetSelected($any($event.target).value)"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      >
+        <option value="">Le total général de la facture</option>
+        @if (lineOptions().length > 0) {
+          <optgroup label="Produits">
+            @for (option of lineOptions(); track option.clientId) {
+              <option [value]="'line:' + option.clientId">{{ option.label }}</option>
+            }
+          </optgroup>
+        }
+        @if (serviceLineOptions().length > 0) {
+          <optgroup label="Prestations">
+            @for (option of serviceLineOptions(); track option.clientId) {
+              <option [value]="'service:' + option.clientId">{{ option.label }}</option>
+            }
+          </optgroup>
+        }
+      </select>
+      <app-field-hint
+        text="Une remise ciblée reste listée dans le total de la facture, mais son pourcentage (le cas échéant) se calcule sur le produit/la prestation choisi plutôt que sur le total général."
+      />
+    </label>
+  }
+
   <div class="flex flex-col gap-1">
     <span class="text-sm font-medium text-ink">Type</span>
     <div class="flex overflow-hidden rounded-lg border border-line">
@@ -64,12 +94,16 @@
         [class.text-warning-fg]="isPercentageMode()"
         class="flex-1 px-4 py-3 text-sm font-semibold"
       >
-        Pourcentage du total
+        {{ hasTarget() ? 'Pourcentage de la cible' : 'Pourcentage du total' }}
       </button>
     </div>
-    <app-field-hint
-      text="Pourcentage : calculé automatiquement sur le total des produits et prestations visibles de la facture, hors TVA."
-    />
+    @if (hasTarget() && targetLabel(); as label) {
+      <app-field-hint text="Pourcentage : calculé automatiquement sur « {{ label }} », hors TVA." />
+    } @else {
+      <app-field-hint
+        text="Pourcentage : calculé automatiquement sur le total des produits et prestations visibles de la facture, hors TVA."
+      />
+    }
   </div>
 
   @if (isPercentageMode()) {

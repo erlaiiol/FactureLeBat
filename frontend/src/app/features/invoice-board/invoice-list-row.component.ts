@@ -52,6 +52,12 @@ export class InvoiceListRowComponent {
   // null for a facture-less devis and for every facture row (a facture
   // never shows its own origin here, only the devis side links forward).
   readonly attachedFactureNumber = input<string | null>(null);
+  // Facture-only counterpart: the number of the devis retroactively created
+  // from it, if any — null otherwise and for every devis row (see
+  // InvoiceService.convertToDevis). Same "origin row shows a link to what
+  // it spawned" convention as attachedFactureNumber above, just the other
+  // direction.
+  readonly attachedDevisNumber = input<string | null>(null);
   // True while this row is part of the currently-toggled devis/facture
   // pair (see InvoiceBoardPage.highlightedPair) — applies the same tint to
   // both rows regardless of how far apart they land in the sorted list.
@@ -65,6 +71,7 @@ export class InvoiceListRowComponent {
 
   readonly convertToFacture = output<void>();
   readonly createFromDevis = output<void>();
+  readonly createDevisFromFacture = output<void>();
   readonly toggleHighlight = output<void>();
   readonly toggleStatusMenu = output<void>();
   readonly toggleActionsMenu = output<void>();

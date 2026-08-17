@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import { ConvertToDevisDto } from './dto/convert-to-devis.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { GetNextNumberQueryDto } from './dto/get-next-number-query.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
@@ -62,6 +63,17 @@ export class InvoiceController {
     @Param('id') id: string,
   ): Promise<InvoiceWithTotals> {
     return this.invoiceService.convertToFacture(user.companyId, id);
+  }
+
+  // Retroactive devis creation: an untouched clone of the facture, numbered
+  // by the artisan — see InvoiceService.convertToDevis.
+  @Post(':id/convert-to-devis')
+  convertToDevis(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ConvertToDevisDto,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.convertToDevis(user.companyId, id, dto.number);
   }
 
   // Phase 16: the board's drag/button status changes (Non payées <-> Payées

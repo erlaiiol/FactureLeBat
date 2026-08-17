@@ -19,6 +19,7 @@ import { BadgeComponent } from '../../shared/components/badge.component';
 import { IconCalendarComponent } from '../../shared/components/icon-calendar.component';
 import { IconChevronDownComponent } from '../../shared/components/icon-chevron-down.component';
 import { IconCloseComponent } from '../../shared/components/icon-close.component';
+import { CreateDevisModalComponent } from './create-devis-modal.component';
 import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
 import { InvoiceListRowComponent } from './invoice-list-row.component';
 import { InvoicePreviewModalComponent } from './invoice-preview-modal.component';
@@ -109,6 +110,7 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
   imports: [
     InvoiceListRowComponent,
     InvoiceDueDateModalComponent,
+    CreateDevisModalComponent,
     InvoicePreviewModalComponent,
     SendInvoiceEmailModalComponent,
     IconChevronDownComponent,
@@ -162,20 +164,29 @@ export class InvoiceBoardPage {
   // from restoring an ANNULEE one, both funnel through moveToNonPayee below.
   protected readonly dueDateModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly convertingDevisId = signal<string | null>(null);
+  // Which facture is waiting on the "Créer un devis" (retroactive) modal —
+  // see openCreateDevisModal/onDevisCreated below.
+  protected readonly createDevisModalInvoice = signal<InvoiceWithTotals | null>(null);
 
   // Phase 26: the devis/facture pair currently highlighted (see
   // attachedFactureOf/toggleHighlight/isHighlighted below) — at most one
   // pair at a time, cleared by clicking the same devis's link again.
   protected readonly highlightedPair = signal<{ devisId: string; factureId: string } | null>(null);
-  // Client-repertory entry point: CustomerListPage's "Documents" button
-  // navigates here with ?clientId=&clientName= — scopes the list to that
-  // client's own devis/factures, same as search/dateFrom/dateTo below (see
-  // `filtered`), so it stays useful once an artisan has enough documents
-  // that a plain highlight would get lost in the list. Combines with
-  // search/date/sort like any other filter and only clears via
-  // clearClientFilter (the chip's close button next to the date filters).
-  protected readonly clientFilterId = signal<string | null>(null);
-  protected readonly clientFilterName = signal<string | null>(null);
+  // Répertoire entry point: CustomerListPage/ProductListPage/ServiceListPage/
+  // DiscountListPage's "Documents" button navigates here with a
+  // ?clientId=&clientName= (or productId/serviceId/discountId) query param —
+  // scopes the list to that entry's own devis/factures, same as search/
+  // dateFrom/dateTo below (see `filtered`), so it stays useful once an
+  // artisan has enough documents that a plain highlight would get lost in
+  // the list. Combines with search/date/sort like any other filter and only
+  // clears via clearRepertoryFilter (the chip's close button next to the
+  // date filters). At most one répertoire filter at a time — there is only
+  // ever one entry point navigated from.
+  protected readonly repertoryFilter = signal<{
+    kind: 'client' | 'product' | 'service' | 'discount';
+    id: string;
+    name: string | null;
+  } | null>(null);
   // Phase 23: which single facture row's status menu is open — at most one
   // at a time.
   protected readonly statusMenuInvoiceId = signal<string | null>(null);
@@ -194,9 +205,9 @@ export class InvoiceBoardPage {
     const search = this.search().trim().toLowerCase();
     const from = this.dateFrom();
     const to = this.dateTo();
-    const clientId = this.clientFilterId();
+    const repertoryFilter = this.repertoryFilter();
     return this.invoices().filter((invoice) => {
-      if (clientId && invoice.customerId !== clientId) {
+      if (repertoryFilter && !this.matchesRepertoryFilter(invoice, repertoryFilter)) {
         return false;
       }
       if (search && !invoice.customerName.toLowerCase().includes(search)) {
@@ -238,16 +249,59 @@ export class InvoiceBoardPage {
     return link ? (this.invoicesById().get(link.id) ?? null) : null;
   }
 
+  // Facture-only counterpart of attachedFactureOf above — the devis
+  // retroactively created from it, if any (see InvoiceService.convertToDevis).
+  protected attachedDevisOf(facture: InvoiceWithTotals): InvoiceWithTotals | null {
+    const link = facture.retroactiveDevis;
+    return link ? (this.invoicesById().get(link.id) ?? null) : null;
+  }
+
   protected isHighlighted(invoice: InvoiceWithTotals): boolean {
     const pair = this.highlightedPair();
     return pair !== null && (pair.devisId === invoice.id || pair.factureId === invoice.id);
   }
 
-  // The chip next to the date filters — the only way to remove the client
-  // filter once it's set, same as clearing search/dateFrom/dateTo would.
-  protected clearClientFilter(): void {
-    this.clientFilterId.set(null);
-    this.clientFilterName.set(null);
+  // No live FK ties a devis/facture back to its lines' catalog Products —
+  // see schema.prisma's comment on InvoiceLine.productId, which does exist,
+  // so this only reads lines/serviceLines/discountLines rather than a
+  // top-level id the way the 'client' branch reads customerId directly.
+  private matchesRepertoryFilter(
+    invoice: InvoiceWithTotals,
+    filter: { kind: 'client' | 'product' | 'service' | 'discount'; id: string },
+  ): boolean {
+    switch (filter.kind) {
+      case 'client':
+        return invoice.customerId === filter.id;
+      case 'product':
+        return invoice.lines.some((line) => line.productId === filter.id);
+      case 'service':
+        return invoice.serviceLines.some((serviceLine) => serviceLine.serviceId === filter.id);
+      case 'discount':
+        return invoice.discountLines.some((discountLine) => discountLine.discountId === filter.id);
+    }
+  }
+
+  // The chip next to the date filters — the only way to remove the
+  // répertoire filter once it's set, same as clearing search/dateFrom/
+  // dateTo would.
+  protected clearRepertoryFilter(): void {
+    this.repertoryFilter.set(null);
+  }
+
+  protected repertoryFilterLabel(): string {
+    const filter = this.repertoryFilter();
+    if (!filter) {
+      return '';
+    }
+    const kindLabels: Record<typeof filter.kind, string> = {
+      client: 'Client',
+      product: 'Produit',
+      service: 'Prestation',
+      discount: 'Remise',
+    };
+    return filter.name
+      ? `${kindLabels[filter.kind]} : ${filter.name}`
+      : `Filtré par ${kindLabels[filter.kind].toLowerCase()}`;
   }
 
   // Phase 26: toggles the shared highlight for a devis and the facture it
@@ -255,18 +309,23 @@ export class InvoiceBoardPage {
   // can land far apart in the sorted list (different dates), so a plain
   // color cue alone might not be visible without also bringing it on
   // screen. Clicking the same devis's link again clears the highlight.
-  protected toggleHighlight(devis: InvoiceWithTotals): void {
-    const facture = this.attachedFactureOf(devis);
-    if (!facture) {
+  protected toggleHighlight(item: InvoiceWithTotals): void {
+    const isDevisItem = item.documentType === 'DEVIS';
+    const linked = isDevisItem ? this.attachedFactureOf(item) : this.attachedDevisOf(item);
+    if (!linked) {
       return;
     }
     const current = this.highlightedPair();
-    if (current?.devisId === devis.id) {
+    if (current?.devisId === item.id || current?.factureId === item.id) {
       this.highlightedPair.set(null);
       return;
     }
-    this.highlightedPair.set({ devisId: devis.id, factureId: facture.id });
-    this.scrollRowIntoView(facture.id);
+    this.highlightedPair.set(
+      isDevisItem
+        ? { devisId: item.id, factureId: linked.id }
+        : { devisId: linked.id, factureId: item.id },
+    );
+    this.scrollRowIntoView(linked.id);
   }
 
   private scrollRowIntoView(invoiceId: string): void {
@@ -302,10 +361,18 @@ export class InvoiceBoardPage {
 
   constructor() {
     const queryParams = this.route.snapshot.queryParamMap;
-    const clientId = queryParams.get('clientId');
-    if (clientId) {
-      this.clientFilterId.set(clientId);
-      this.clientFilterName.set(queryParams.get('clientName'));
+    const repertoryParams: { kind: 'client' | 'product' | 'service' | 'discount' }[] = [
+      { kind: 'client' },
+      { kind: 'product' },
+      { kind: 'service' },
+      { kind: 'discount' },
+    ];
+    for (const { kind } of repertoryParams) {
+      const id = queryParams.get(`${kind}Id`);
+      if (id) {
+        this.repertoryFilter.set({ kind, id, name: queryParams.get(`${kind}Name`) });
+        break;
+      }
     }
 
     this.invoiceService
@@ -513,6 +580,36 @@ export class InvoiceBoardPage {
     });
   }
 
+  // Retroactive devis creation: opens the number-picker modal (see
+  // CreateDevisModalComponent) instead of creating anything immediately —
+  // unlike convertDevis, the artisan must choose the devis's number first
+  // (no natural "next in sequence" default exists for a document created
+  // after the fact).
+  protected openCreateDevisModal(facture: InvoiceWithTotals): void {
+    this.createDevisModalInvoice.set(facture);
+  }
+
+  protected onCreateDevisModalClosed(): void {
+    this.createDevisModalInvoice.set(null);
+  }
+
+  protected onDevisCreated(devis: InvoiceWithTotals): void {
+    const factureId = this.createDevisModalInvoice()?.id;
+    this.createDevisModalInvoice.set(null);
+    this.invoices.update((invoices) => [
+      devis,
+      ...invoices.map((invoice) =>
+        invoice.id === factureId
+          ? { ...invoice, retroactiveDevis: { id: devis.id, number: devis.number } }
+          : invoice,
+      ),
+    ]);
+    if (factureId) {
+      this.highlightedPair.set({ devisId: devis.id, factureId });
+    }
+    this.toastService.success(`Devis ${devis.number} créé.`);
+  }
+
   protected openPreview(invoice: InvoiceWithTotals): void {
     this.previewInvoice.set(invoice);
     this.revokePreviewPdfUrl();
@@ -576,6 +673,15 @@ export class InvoiceBoardPage {
     }
     this.closePreview();
     this.createFromDevis(invoice);
+  }
+
+  protected onPreviewCreateDevisFromFacture(): void {
+    const invoice = this.previewInvoice();
+    if (!invoice) {
+      return;
+    }
+    this.closePreview();
+    this.openCreateDevisModal(invoice);
   }
 
   protected openEmailModal(invoice: InvoiceWithTotals): void {

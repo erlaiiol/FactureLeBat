@@ -83,6 +83,16 @@
           → Facture {{ factureNumber }}
         </button>
       }
+      @if (!isDevis() && attachedDevisNumber(); as devisNumber) {
+        <button
+          type="button"
+          (click)="$event.stopPropagation(); toggleHighlight.emit()"
+          class="-mt-0.5 flex items-center gap-1 text-left text-xs text-info hover:underline"
+          [class.font-semibold]="highlighted()"
+        >
+          → Devis {{ devisNumber }}
+        </button>
+      }
     </div>
   </td>
 
@@ -126,6 +136,16 @@
               class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
             >
               Facture à partir du devis
+            </button>
+          }
+          @if (!isDevis() && !invoice().retroactiveDevis) {
+            <button
+              type="button"
+              [disabled]="converting()"
+              (click)="createDevisFromFacture.emit(); toggleActionsMenu.emit()"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+            >
+              Créer un devis
             </button>
           }
           <a

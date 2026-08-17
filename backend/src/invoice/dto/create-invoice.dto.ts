@@ -21,6 +21,7 @@ import { CreateInvoiceCustomerFieldDto } from './create-invoice-customer-field.d
 import { CreateInvoiceDiscountLineDto } from './create-invoice-discount-line.dto';
 import { CreateInvoiceLineDto } from './create-invoice-line.dto';
 import { CreateInvoiceServiceLineDto } from './create-invoice-service-line.dto';
+import { DiscountTargetMatchesLines } from './discount-target-matches-lines.validator';
 import { CreateManualTableDto } from './manual/create-manual-table.dto';
 import { ManualModeFieldsConsistency } from './manual-mode-fields-consistency.validator';
 import { ServiceLineWeightsMatchLines } from './service-line-weights-match-lines.validator';
@@ -126,6 +127,7 @@ export class CreateInvoiceDto {
   @ArrayMaxSize(MAX_DISCOUNT_LINES)
   @ValidateNested({ each: true })
   @Type(() => CreateInvoiceDiscountLineDto)
+  @DiscountTargetMatchesLines()
   discountLines?: CreateInvoiceDiscountLineDto[];
 
   // Phase 9.5 manual mode's whole body — required exactly when entryMode is

@@ -58,16 +58,14 @@
         </div>
       </div>
     </div>
-    @if (clientFilterId()) {
+    @if (repertoryFilter()) {
       <button
         type="button"
-        (click)="clearClientFilter()"
+        (click)="clearRepertoryFilter()"
         title="Afficher tous les documents"
         class="flex items-center gap-1.5 rounded-lg border border-primary-subtle-border bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-fg hover:brightness-95"
       >
-        <span>{{
-          clientFilterName() ? 'Client : ' + clientFilterName() : 'Filtré par client'
-        }}</span>
+        <span>{{ repertoryFilterLabel() }}</span>
         <app-icon-close [size]="14" />
       </button>
     }
@@ -154,6 +152,7 @@
             <app-invoice-list-row
               [invoice]="item"
               [attachedFactureNumber]="attachedFactureOf(item)?.number ?? null"
+              [attachedDevisNumber]="attachedDevisOf(item)?.number ?? null"
               [highlighted]="isHighlighted(item)"
               [converting]="convertingDevisId() === item.id"
               [sharing]="sharingInvoiceId() === item.id"
@@ -161,6 +160,7 @@
               [actionsMenuOpen]="isActionsMenuOpen(item.id)"
               (convertToFacture)="convertDevis(item)"
               (createFromDevis)="createFromDevis(item)"
+              (createDevisFromFacture)="openCreateDevisModal(item)"
               (toggleHighlight)="toggleHighlight(item)"
               (toggleStatusMenu)="toggleStatusMenu(item.id)"
               (toggleActionsMenu)="toggleActionsMenu(item.id)"
@@ -188,6 +188,12 @@
     (skipped)="onDueDateSkipped()"
   />
 
+  <app-create-devis-modal
+    [invoice]="createDevisModalInvoice()"
+    (closed)="onCreateDevisModalClosed()"
+    (created)="onDevisCreated($event)"
+  />
+
   <app-send-invoice-email-modal
     [invoice]="emailModalInvoice()"
     (closed)="closeEmailModal()"
@@ -203,5 +209,6 @@
     (share)="onPreviewShare()"
     (convertToFacture)="onPreviewConvertToFacture()"
     (createFromDevis)="onPreviewCreateFromDevis()"
+    (createDevisFromFacture)="onPreviewCreateDevisFromFacture()"
   />
 </div>

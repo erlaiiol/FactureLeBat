@@ -85,6 +85,14 @@ export class InvoiceService {
     return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${devisId}/convert-to-facture`, {});
   }
 
+  // Retroactive devis creation: an untouched clone of the facture, numbered
+  // by the artisan — see InvoiceService.convertToDevis on the backend.
+  convertToDevis(factureId: string, number: string): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${factureId}/convert-to-devis`, {
+      number,
+    });
+  }
+
   // Phase 16: the board's drag/button status changes, and a due-date-only
   // edit from an existing card (same status, new dueDate).
   updateStatus(id: string, request: UpdateInvoiceStatusRequest): Observable<InvoiceWithTotals> {
