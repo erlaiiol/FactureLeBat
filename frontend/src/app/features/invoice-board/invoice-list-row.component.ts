@@ -11,6 +11,7 @@ import {
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
+import { IconCheckComponent } from '../../shared/components/icon-check.component';
 import { IconDotsVerticalComponent } from '../../shared/components/icon-dots-vertical.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { isOverdue } from './invoice-status.util';
@@ -41,7 +42,13 @@ import { isOverdue } from './invoice-status.util';
   selector: 'app-invoice-list-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { style: 'display: contents' },
-  imports: [DatePipe, CentsToEurosPipe, BadgeComponent, IconDotsVerticalComponent],
+  imports: [
+    DatePipe,
+    CentsToEurosPipe,
+    BadgeComponent,
+    IconCheckComponent,
+    IconDotsVerticalComponent,
+  ],
   templateUrl: './invoice-list-row.component.html',
 })
 export class InvoiceListRowComponent {
@@ -78,14 +85,28 @@ export class InvoiceListRowComponent {
   readonly setPaid = output<void>();
   readonly setCancelled = output<void>();
   readonly setNonPayee = output<void>();
+  // Phase 1.1-3: only ever emitted from a menu entry gated on
+  // invoice().depositAmountCents !== null — see the template.
+  readonly setDepositPaid = output<void>();
   readonly share = output<void>();
   // Opens the preview modal (see InvoicePreviewModalComponent) — emitted
   // from the <tr> itself; the status and actions columns stop propagation
   // so their own dropdown triggers still take priority over opening it.
   readonly rowClick = output<void>();
 
+  // Phase 1.1-1: the "Signé" column's checkbox — a no-op while
+  // hasSignatureProof is true (the checkbox is locked, see
+  // invoice-list-row.component.html), otherwise toggles manuallySigned.
+  readonly toggleManuallySigned = output<void>();
+  readonly openSignatureModal = output<void>();
+  readonly openSignatureView = output<void>();
+  readonly deleteSignature = output<void>();
+
   protected readonly isDevis = computed(() => this.invoice().documentType === 'DEVIS');
   protected readonly overdue = computed(() => !this.isDevis() && isOverdue(this.invoice()));
+  protected readonly signed = computed(
+    () => this.invoice().hasSignatureProof || this.invoice().manuallySigned,
+  );
 
   protected readonly statusLabel = computed(() => {
     if (this.overdue()) {
@@ -96,26 +117,30 @@ export class InvoiceListRowComponent {
         return 'Payée';
       case 'ANNULEE':
         return 'Annulée';
+      case 'ACOMPTE_VERSE':
+        return 'Acompte versé';
       default:
         return 'Non payée';
     }
   });
 
-  protected readonly statusVariant = computed<'warning' | 'danger' | 'success' | 'secondary'>(
-    () => {
-      if (this.overdue()) {
-        return 'danger';
-      }
-      switch (this.invoice().status) {
-        case 'PAYEE':
-          return 'success';
-        case 'ANNULEE':
-          return 'secondary';
-        default:
-          return 'warning';
-      }
-    },
-  );
+  protected readonly statusVariant = computed<
+    'warning' | 'danger' | 'success' | 'secondary' | 'info'
+  >(() => {
+    if (this.overdue()) {
+      return 'danger';
+    }
+    switch (this.invoice().status) {
+      case 'PAYEE':
+        return 'success';
+      case 'ANNULEE':
+        return 'secondary';
+      case 'ACOMPTE_VERSE':
+        return 'info';
+      default:
+        return 'warning';
+    }
+  });
 
   protected pdfUrl(): string {
     return this.invoiceService.pdfUrl(this.invoice().id);

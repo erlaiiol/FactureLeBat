@@ -19,8 +19,14 @@ const PULSE_DURATION_MS = 400;
 // on hover/focus so the field never looks inert. `secondary-subtle` is a
 // semantic token (styles.css's @theme + :root.dark override), so this reads
 // correctly in both themes without any dark: variant of its own.
+// w-40 (was w-28): a real invoice's total routinely reaches 5-6 figures
+// (e.g. "24 567,89 €", "148 148,14 €") — at w-28 the value text silently
+// clipped past the input's own edge (scrollWidth > clientWidth, invisible
+// on an unfocused field since there's no ellipsis/overflow indicator),
+// which reads as the number "escaping" its card. Widened along with the
+// row's own w-56 -> w-64 below so the label still has room next to it.
 const EDITABLE_FIELD_CLASSES =
-  'w-28 rounded bg-secondary-subtle/40 px-1 text-right font-mono outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle focus:border-primary';
+  'w-40 rounded bg-secondary-subtle/40 px-1 text-right font-mono outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle focus:border-primary';
 
 const VAT_NON_APPLICABLE_VALUE = 'NON_APPLICABLE';
 
@@ -53,18 +59,18 @@ function formatRateLabel(basisPoints: number): string {
            .subtotalExclVatCents, so "before remise" is reconstructed by
            adding it back for display, never a second source of truth. -->
       @if (!editable() && discountAmountCents() > 0) {
-        <div class="flex w-56 justify-between text-ink-soft">
+        <div class="flex w-64 justify-between text-ink-soft">
           <span>Sous-total avant remise</span>
           <span class="font-mono">
             {{ totals().subtotalExclVatCents + discountAmountCents() | centsToEuros }}
           </span>
         </div>
-        <div class="flex w-56 justify-between text-danger">
+        <div class="flex w-64 justify-between text-danger">
           <span>Remises</span>
           <span class="font-mono">− {{ discountAmountCents() | centsToEuros }}</span>
         </div>
       }
-      <div class="flex w-56 justify-between text-ink">
+      <div class="flex w-64 justify-between text-ink">
         <span>Sous-total HT</span>
         @if (editable()) {
           <input
@@ -79,7 +85,7 @@ function formatRateLabel(basisPoints: number): string {
         }
       </div>
       @if (editable()) {
-        <div class="flex w-56 items-center justify-between text-ink">
+        <div class="flex w-64 items-center justify-between text-ink">
           <span class="flex items-center gap-1">
             <select
               class="rounded border-none bg-secondary-subtle/40 px-1 py-0.5 text-xs text-ink outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle"
@@ -120,14 +126,14 @@ function formatRateLabel(basisPoints: number): string {
           }
         </div>
       } @else if (vatApplicable()) {
-        <div class="flex w-56 justify-between text-ink">
+        <div class="flex w-64 justify-between text-ink">
           <span>TVA</span>
           <span class="font-mono">{{ totals().vatAmountCents | centsToEuros }}</span>
         </div>
       } @else {
-        <div class="w-56 text-right text-xs text-ink-soft">TVA non applicable</div>
+        <div class="w-64 text-right text-xs text-ink-soft">TVA non applicable</div>
       }
-      <div class="flex w-56 items-center justify-between text-lg font-bold text-ink">
+      <div class="flex w-64 items-center justify-between text-lg font-bold text-ink">
         <span>Total TTC</span>
         @if (editable()) {
           <input

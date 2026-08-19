@@ -28,6 +28,7 @@ function companyFixture(overrides: Partial<CompanyProfile> = {}): CompanyProfile
     smtpSecure: true,
     smtpUser: null,
     smtpPasswordEncrypted: null,
+    invoiceMailCustomMessage: null,
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     subscriptionStatus: 'NONE',
@@ -41,6 +42,7 @@ function companyFixture(overrides: Partial<CompanyProfile> = {}): CompanyProfile
     trialOfferExpiresAt: null,
     declarationFrequency: 'TRIMESTRIELLE',
     microEntrepreneurCeiling: null,
+    defaultDepositPercentageBasisPoints: null,
     cotisationVenteBasisPoints: 1230,
     cotisationPrestationBicBasisPoints: 2120,
     cotisationPrestationBncBasisPoints: 2110,
@@ -87,6 +89,11 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
     convertedToFacture: null,
     createdFromFactureId: null,
     retroactiveDevis: null,
+    signature: null,
+    manuallySigned: false,
+    depositPercentageBasisPoints: null,
+    depositAmountCents: null,
+    depositPaidAt: null,
     simplifiedDisplay: false,
     lines: [
       {
@@ -120,9 +127,11 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
 
 describe('ReportsService', () => {
   function setup() {
+    const countUnsigned = jest.fn().mockResolvedValue(0);
     const invoiceRepository = {
       findPaidInRange: jest.fn(),
       findOutstanding: jest.fn(),
+      countUnsigned,
     } as unknown as jest.Mocked<InvoiceRepository>;
     const companyService = {
       getProfile: jest.fn(),
@@ -132,7 +141,7 @@ describe('ReportsService', () => {
     } as unknown as jest.Mocked<PlanGateService>;
     const mapper = new InvoiceMapper(new InvoiceCalculationService());
     const service = new ReportsService(invoiceRepository, mapper, companyService, planGateService);
-    return { service, invoiceRepository, companyService, planGateService };
+    return { service, invoiceRepository, companyService, planGateService, countUnsigned };
   }
 
   describe('getQuarterlyReport', () => {
@@ -319,6 +328,18 @@ describe('ReportsService', () => {
 
       expect(analytics.outstandingTotalCents).toBe(45000);
       expect(analytics.invoiceCount).toBe(0);
+    });
+
+    it('passes through the unsigned-facture risk count untouched by the paid window', async () => {
+      const { service, invoiceRepository, countUnsigned } = setup();
+      invoiceRepository.findPaidInRange.mockResolvedValue([]);
+      invoiceRepository.findOutstanding.mockResolvedValue([]);
+      countUnsigned.mockResolvedValue(3);
+
+      const analytics = await service.getActivityAnalytics('company-1');
+
+      expect(analytics.unsignedFactureCount).toBe(3);
+      expect(countUnsigned).toHaveBeenCalledWith('company-1');
     });
 
     it('always returns 12 months of revenue points, zero-filled where there is no activity', async () => {

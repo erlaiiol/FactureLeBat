@@ -69,12 +69,12 @@ export class PdfService {
       // never break every future invoice/devis this company generates.
       // Retry once without it rather than surfacing a 500 for a problem the
       // artisan has no way to self-diagnose from here.
-      if (data.issuerLogo) {
+      if (data.issuerLogo || data.signature) {
         PdfService.logger.warn(
-          `PDF generation failed with issuer logo attached, retrying without it: ${String(error)}`,
+          `PDF generation failed with issuer logo/signature attached, retrying without them: ${String(error)}`,
         );
         return pdfMake
-          .createPdf(this.buildDocDefinition({ ...data, issuerLogo: null }))
+          .createPdf(this.buildDocDefinition({ ...data, issuerLogo: null, signature: null }))
           .getBuffer();
       }
       throw error;
@@ -263,6 +263,7 @@ export class PdfService {
           : []),
         { text: '\n' },
         this.buildTotals(data),
+        ...(data.signature ? [{ text: '\n' }, this.buildSignatureBlock(data)] : []),
         { text: '\n\n' },
         this.buildFooter(data),
       ],
@@ -474,6 +475,20 @@ export class PdfService {
 
     rows.push(['Total TTC', centsToEuros(data.totalInclVatCents)]);
 
+    // Phase 1.1-3: only rendered when a deposit was actually requested —
+    // pixel-identical to today when none was, same "only render when
+    // present" precedent as the discount rows above.
+    if (data.depositPercentageBasisPoints !== null && data.depositAmountCents !== null) {
+      const depositRate = (data.depositPercentageBasisPoints / 100).toFixed(2);
+      rows.push([
+        'Acompte demandé',
+        `${depositRate} % soit ${centsToEuros(data.depositAmountCents)}`,
+      ]);
+      if (data.depositPaidAt) {
+        rows.push(['Acompte réglé le', data.depositPaidAt.toLocaleDateString('fr-FR')]);
+      }
+    }
+
     return {
       columns: [
         { text: '', width: '*' },
@@ -483,6 +498,26 @@ export class PdfService {
             body: rows,
           },
           layout: 'noBorders',
+        },
+      ],
+    };
+  }
+
+  // Phase 1.1-1: the attached signature proof (drawn or photographed),
+  // right-aligned under the totals like a real signed document — composited
+  // fresh from InvoiceSignature.image on every render, same "derived at
+  // render time, not cached" rule as the rest of this pipeline. Only called
+  // when data.signature is present (see buildDocDefinition).
+  private buildSignatureBlock(data: InvoicePdfData): Content {
+    return {
+      columns: [
+        { text: '', width: '*' },
+        {
+          stack: [
+            { text: 'Signature', fontSize: 8, color: '#555555', alignment: 'center' },
+            { image: data.signature!.base64, fit: [140, 70] as [number, number] },
+          ],
+          alignment: 'center',
         },
       ],
     };

@@ -58,6 +58,14 @@ export class UpdateCompanyDto {
   @MaxLength(30)
   phone?: string;
 
+  // Appended to the default invoice/devis message on every send (native
+  // share, SMTP compose modal, mailto fallback) — see
+  // buildDefaultInvoiceMailTemplate.
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  invoiceMailCustomMessage?: string;
+
   @IsEnum(LegalStatus)
   legalStatus: LegalStatus;
 
@@ -88,6 +96,16 @@ export class UpdateCompanyDto {
   @Min(0)
   @Max(MAX_CEILING_CENTS)
   microEntrepreneurCeiling?: number;
+
+  // Phase 1.1-3: the artisan's habitual acompte rate, basis points (3000 =
+  // 30.00%) — same convention/bound as vatRateBasisPoints. Null (omitted)
+  // means no default — see schema.prisma's comment on
+  // Company.defaultDepositPercentageBasisPoints.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  defaultDepositPercentageBasisPoints?: number;
 
   // Phase 17 (charges estimate): micro-entrepreneur "cotisations sociales"
   // rates, basis points (1230 = 12.30%) — see schema.prisma's comment on

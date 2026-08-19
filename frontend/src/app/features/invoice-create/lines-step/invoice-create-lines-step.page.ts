@@ -1,4 +1,4 @@
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -17,14 +17,17 @@ import {
   ServiceLineVisibility,
   WasteSurcharge,
 } from '../../../core/models/invoice.model';
+import { CatalogFolderRef } from '../../../core/models/catalog-folder.model';
 import { DiscountProfile, DiscountType } from '../../../core/models/discount.model';
 import { ProductProfile } from '../../../core/models/product.model';
 import { ActivityCategory } from '../../../core/models/report.model';
 import { ServicePricingMode, ServiceProfile } from '../../../core/models/service.model';
 import { Unit } from '../../../core/models/unit.model';
+import { CatalogFolderService } from '../../../core/services/catalog-folder.service';
 import { BadgeComponent } from '../../../shared/components/badge.component';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconCheckComponent } from '../../../shared/components/icon-check.component';
+import { IconChevronDownComponent } from '../../../shared/components/icon-chevron-down.component';
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
@@ -34,6 +37,7 @@ import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { QuantityLabelPipe } from '../../../shared/pipes/quantity-label.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { planFeatureLockedMessage } from '../../../shared/utils/plan-error.util';
 import { TourService } from '../../../shared/tour/tour.service';
 import { computeLineTotalPreviewCents } from '../calculation-preview';
 import {
@@ -50,6 +54,39 @@ import {
   InvoiceServiceLineFormGroup,
 } from '../components/invoice-service-line-form.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
+
+// Phase 1.1-2: buckets a catalog list into its per-dossier groups (an item
+// in several folders appears once under each one, matching the picker's own
+// "belongs to several at once" semantics) plus whatever has zero folders —
+// the flyout renders folders first, then that unassigned tail exactly as
+// the flat list worked before this phase. Folders sorted alphabetically,
+// same convention as the catalog list pages themselves.
+interface FolderGroup<T> {
+  folder: CatalogFolderRef;
+  items: T[];
+}
+
+function groupByFolder<T extends { folders: CatalogFolderRef[] }>(
+  items: T[],
+): { groups: FolderGroup<T>[]; unassigned: T[] } {
+  const groupsByFolderId = new Map<string, FolderGroup<T>>();
+  const unassigned: T[] = [];
+  for (const item of items) {
+    if (item.folders.length === 0) {
+      unassigned.push(item);
+      continue;
+    }
+    for (const folder of item.folders) {
+      const group = groupsByFolderId.get(folder.id) ?? { folder, items: [] };
+      group.items.push(item);
+      groupsByFolderId.set(folder.id, group);
+    }
+  }
+  const groups = [...groupsByFolderId.values()].sort((a, b) =>
+    a.folder.name.localeCompare(b.folder.name),
+  );
+  return { groups, unassigned };
+}
 
 // Phase 6/13.5 gallery redesign, step 2: two fixed "+" buttons (product,
 // service) replace the old always-visible catalog toggle grid and the
@@ -68,9 +105,11 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
   imports: [
     ReactiveFormsModule,
     DecimalPipe,
+    NgTemplateOutlet,
     BadgeComponent,
     BigButtonComponent,
     IconCheckComponent,
+    IconChevronDownComponent,
     IconCloseComponent,
     IconEyeComponent,
     IconEyeOffComponent,
@@ -93,6 +132,7 @@ export class InvoiceCreateLinesStepPage {
   private readonly injector = inject(Injector);
   protected readonly draftStore = inject(InvoiceDraftStore);
   private readonly tourService = inject(TourService);
+  private readonly catalogFolderService = inject(CatalogFolderService);
 
   protected readonly errorMessage = signal<string | null>(null);
   // Phase 13.5 gallery redesign: which of the three fixed "+" flyouts is
@@ -236,6 +276,46 @@ export class InvoiceCreateLinesStepPage {
     return ids;
   });
 
+  // Phase 1.1-2 amendment: Dossiers is Pro+/Premium-only — a downgraded
+  // company's items keep their `folders` assignments in the data (nothing
+  // here ever clears them), but the flyout falls back to the flat list
+  // exactly as it rendered before Phase 1.1-2 until back at Pro+.
+  protected readonly dossiersLocked = signal(false);
+
+  // Phase 1.1-2: each flyout browses its catalog by dossier first, orphans
+  // (zero folders) below — see groupByFolder above.
+  protected readonly groupedProducts = computed(() =>
+    this.dossiersLocked()
+      ? { groups: [], unassigned: this.draftStore.products() }
+      : groupByFolder(this.draftStore.products()),
+  );
+  protected readonly groupedServices = computed(() =>
+    this.dossiersLocked()
+      ? { groups: [], unassigned: this.draftStore.services() }
+      : groupByFolder(this.draftStore.services()),
+  );
+  protected readonly groupedDiscounts = computed(() =>
+    this.dossiersLocked()
+      ? { groups: [], unassigned: this.draftStore.discounts() }
+      : groupByFolder(this.draftStore.discounts()),
+  );
+
+  // Which folder groups are expanded — shared across all three flyouts
+  // (folder ids are global and the three panels are mutually exclusive
+  // anyway), collapsed by default so a full catalog doesn't dump every item
+  // open at once.
+  protected readonly expandedFolderIds = signal<ReadonlySet<string>>(new Set());
+
+  protected toggleFolderExpanded(folderId: string): void {
+    const next = new Set(this.expandedFolderIds());
+    if (next.has(folderId)) {
+      next.delete(folderId);
+    } else {
+      next.add(folderId);
+    }
+    this.expandedFolderIds.set(next);
+  }
+
   // Live amount for every current service line, in the same order as
   // serviceLines.controls — reads through InvoiceDraftStore so a
   // PERCENTAGE line's amount always reflects the current base (see
@@ -313,6 +393,26 @@ export class InvoiceCreateLinesStepPage {
       const introTimer = setTimeout(() => this.introExpanded.set(false), 3000);
       this.destroyRef.onDestroy(() => clearTimeout(introTimer));
     }
+
+    // Phase 1.1-2 amendment: no folder-specific data is actually needed
+    // here (each item's own `folders` array, already embedded on
+    // draftStore.products()/services()/discounts(), is what groupByFolder
+    // reads) — this call exists purely to detect, via the same 402 the
+    // other Dossiers surfaces react to, whether folder grouping should
+    // render at all for this company right now. A downgraded company keeps
+    // every folder assignment in the data untouched; this just falls back
+    // to the flat list the flyouts always had before Phase 1.1-2.
+    this.catalogFolderService
+      .getAllCached()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {},
+        error: (error: unknown) => {
+          if (planFeatureLockedMessage(error)) {
+            this.dossiersLocked.set(true);
+          }
+        },
+      });
   }
 
   private createLineGroup(initial?: {

@@ -9,6 +9,7 @@ import {
   InvoiceWithTotals,
   NextNumberResponse,
   SendInvoiceEmailRequest,
+  SignatureMethod,
   UpdateInvoiceStatusRequest,
 } from '../models/invoice.model';
 
@@ -105,6 +106,37 @@ export class InvoiceService {
   getNextNumber(documentType: DocumentType): Observable<NextNumberResponse> {
     return this.http.get<NextNumberResponse>(`${this.baseUrl}/next-number`, {
       params: { documentType },
+    });
+  }
+
+  // Phase 1.1-1: "Signer" — attaches a drawn or photographed signature,
+  // replacing any existing one. `file` is already a canvas-produced
+  // PNG/JPEG blob by the time it reaches here — see SignatureModalComponent.
+  uploadSignature(id: string, file: Blob, method: SignatureMethod): Observable<InvoiceWithTotals> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('method', method);
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${id}/signature`, formData);
+  }
+
+  deleteSignature(id: string): Observable<InvoiceWithTotals> {
+    return this.http.delete<InvoiceWithTotals>(`${this.baseUrl}/${id}/signature`);
+  }
+
+  // Plain <img src> URL, same cache-bust-query-param convention as
+  // CompanyService.logoUrl — bump cacheBust after a successful
+  // upload/delete since GET .../signature is otherwise briefly cacheable.
+  signatureUrl(id: string, cacheBust?: number): string {
+    const base = `${this.baseUrl}/${id}/signature`;
+    return cacheBust ? `${base}?v=${cacheBust}` : base;
+  }
+
+  // The freehand fallback checkbox — only meaningful while
+  // !hasSignatureProof (see schema.prisma's comment on
+  // Invoice.manuallySigned); the backend rejects it otherwise.
+  setManuallySigned(id: string, manuallySigned: boolean): Observable<InvoiceWithTotals> {
+    return this.http.patch<InvoiceWithTotals>(`${this.baseUrl}/${id}/manually-signed`, {
+      manuallySigned,
     });
   }
 }

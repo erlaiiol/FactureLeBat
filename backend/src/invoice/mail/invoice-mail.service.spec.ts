@@ -29,7 +29,12 @@ function buildService(options: {
 }) {
   const findById = jest.fn().mockResolvedValue(options.found === false ? null : RAW_INVOICE);
   const markSent = jest.fn().mockResolvedValue(RAW_INVOICE);
-  const invoiceRepository = { findById, markSent } as unknown as InvoiceRepository;
+  const findSignatureImage = jest.fn().mockResolvedValue(null);
+  const invoiceRepository = {
+    findById,
+    markSent,
+    findSignatureImage,
+  } as unknown as InvoiceRepository;
 
   const toInvoiceWithTotals = jest.fn().mockReturnValue({
     number: 'F-000001',
@@ -65,7 +70,15 @@ function buildService(options: {
     mailSettingsService,
     mailerService,
   );
-  return { service, findById, markSent, send, getDecryptedCredentials };
+  return {
+    service,
+    findById,
+    markSent,
+    send,
+    getDecryptedCredentials,
+    toPdfData,
+    findSignatureImage,
+  };
 }
 
 describe('InvoiceMailService.send', () => {
@@ -79,6 +92,23 @@ describe('InvoiceMailService.send', () => {
     expect(sentParams.from.address).toBe('moi@exemple.fr');
     expect(markSent).toHaveBeenCalledWith(COMPANY_ID, 'inv-1', 'client@exemple.fr', {
       bumpReminder: true,
+    });
+  });
+
+  // Phase 1.1-1: the emailed PDF must go through the exact same signature
+  // compositing as download/"Partager" — see InvoiceMapper.toPdfData's third
+  // param. A regression here would silently email an unsigned copy of a
+  // document the artisan believes is signed.
+  it('fetches and forwards the attached signature to the PDF render, keyed by this invoice', async () => {
+    const { service, findSignatureImage, toPdfData } = buildService({});
+    findSignatureImage.mockResolvedValue({ image: Buffer.from('sig'), mimeType: 'image/png' });
+
+    await service.send(COMPANY_ID, 'inv-1', {});
+
+    expect(findSignatureImage).toHaveBeenCalledWith(COMPANY_ID, 'inv-1');
+    expect(toPdfData).toHaveBeenCalledWith(RAW_INVOICE, null, {
+      image: Buffer.from('sig'),
+      mimeType: 'image/png',
     });
   });
 

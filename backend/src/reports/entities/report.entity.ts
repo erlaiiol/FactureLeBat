@@ -115,4 +115,11 @@ export interface ActivityAnalytics {
   averageInvoiceValueCents: number;
   activeClientCount: number;
   activeProductCount: number;
+  // Phase 1.1-1: every FACTURE (any status but ANNULEE, unpaid or already
+  // paid alike) with no signature proof and no manual fallback checked —
+  // see InvoiceRepository.countUnsigned. Unlike every other field above,
+  // deliberately NOT scoped to the 12-month analytics window: a legal-risk
+  // count should surface the whole book, not just recent activity, same
+  // "one more exception" reasoning as outstandingTotalCents.
+  unsignedFactureCount: number;
 }

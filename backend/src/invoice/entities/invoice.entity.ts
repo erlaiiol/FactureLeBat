@@ -5,6 +5,7 @@ import {
   InvoiceStatus,
   ManualColumnRole,
   ServiceVisibility,
+  SignatureMethod,
   Unit,
   WasteSurcharge,
 } from '../../../generated/prisma/enums';
@@ -207,6 +208,24 @@ export interface InvoiceWithTotals {
   dueDate: Date | null;
   paidAt: Date | null;
   lastReminderAt: Date | null;
+  // Phase 1.1-3: the requested deposit — both null if none was requested,
+  // both set together (see schema.prisma's comment on
+  // Invoice.depositPercentageBasisPoints). depositPaidAt mirrors paidAt's
+  // "records the fact, not a log" convention, set when status enters
+  // ACOMPTE_VERSE and cleared if moved back out.
+  depositPercentageBasisPoints: number | null;
+  depositAmountCents: number | null;
+  depositPaidAt: Date | null;
   // Phase 23: see schema.prisma's comment on Invoice.simplifiedDisplay.
   simplifiedDisplay: boolean;
+  // Phase 1.1-1: whether a real InvoiceSignature is attached — never the
+  // image bytes themselves (see InvoiceService.getSignatureImage/
+  // InvoiceController.serveSignature for the one place those are read).
+  hasSignatureProof: boolean;
+  signatureMethod: SignatureMethod | null;
+  // The freehand fallback — only interactive (from the frontend) while
+  // hasSignatureProof is false; the "signed" checkbox itself is the
+  // frontend-computed hasSignatureProof || manuallySigned, never persisted
+  // as its own field. See schema.prisma's comment on Invoice.manuallySigned.
+  manuallySigned: boolean;
 }

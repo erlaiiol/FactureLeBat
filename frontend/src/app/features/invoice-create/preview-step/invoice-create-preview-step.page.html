@@ -23,6 +23,11 @@
             Partage le PDF via une app de votre téléphone (email, messagerie…)
           </p>
         </div>
+        <div class="w-full max-w-sm">
+          <app-big-button variant="secondary" tone="subtle" (click)="openSignatureModal(facture)">
+            Signer
+          </app-big-button>
+        </div>
       </div>
     }
 
@@ -85,6 +90,11 @@
         </p>
       </div>
       <div class="w-full max-w-sm">
+        <app-big-button variant="secondary" tone="subtle" (click)="openSignatureModal(invoice)">
+          Signer
+        </app-big-button>
+      </div>
+      <div class="w-full max-w-sm">
         <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
           Nouveau document
         </app-big-button>
@@ -95,6 +105,11 @@
     [invoice]="emailModalInvoice()"
     (closed)="closeEmailModal()"
     (sent)="onEmailSent($event)"
+  />
+  <app-signature-modal
+    [invoice]="signatureModalInvoice()"
+    (closed)="closeSignatureModal()"
+    (signed)="onSignatureSaved($event)"
   />
 } @else {
   <h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
@@ -126,6 +141,21 @@
     <span class="font-medium text-ink">Mode simplifié</span>
     <span class="text-ink-soft">— n'afficher que le nom du produit et le prix total</span>
   </label>
+
+  @if (draftStore.documentType() === 'FACTURE') {
+    <div class="mb-4">
+      <app-invoice-deposit-field
+        [requested]="draftStore.deposit().requested"
+        [percentageBasisPoints]="draftStore.deposit().percentageBasisPoints"
+        [amountCents]="draftStore.depositAmountCents()"
+        [autoCalc]="draftStore.deposit().amountOverrideEuros === null"
+        (requestedChange)="draftStore.setDepositRequested($event)"
+        (percentageBasisPointsChange)="draftStore.setDepositPercentage($event)"
+        (amountEurosChange)="onDepositAmountChange($event)"
+        (resetAutoCalc)="draftStore.resetDepositAutoCalc()"
+      />
+    </div>
+  }
 
   @if (missingSiret()) {
     <p
@@ -364,6 +394,15 @@
                 {{ previewData()?.totalInclVatCents ?? 0 | centsToEuros }}
               </td>
             </tr>
+            @if (draftStore.documentType() === 'FACTURE' && draftStore.deposit().requested) {
+              <tr>
+                <td class="py-1 pr-4 text-ink-soft">Acompte demandé</td>
+                <td class="py-1 text-right font-mono text-ink">
+                  {{ draftStore.deposit().percentageBasisPoints / 100 }} % soit
+                  {{ draftStore.depositAmountCents() | centsToEuros }}
+                </td>
+              </tr>
+            }
           </tbody>
         </table>
       </div>

@@ -12,6 +12,8 @@
 // against an already-seeded database (e.g. a container restart) without
 // unique-constraint errors.
 import * as bcrypt from 'bcrypt';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaPg } from '@prisma/adapter-pg';
 // Plain data, zero Nest imports (see that file's own header) — safe to pull
 // into this standalone script, unlike anything else under src/. This is what
@@ -23,12 +25,14 @@ import { PrismaClient } from '../generated/prisma/client';
 import {
   ActivityCategory,
   DeclarationFrequency,
+  DiscountType,
   DocumentType,
   InvoiceStatus,
   LegalStatus,
   PlanTier,
   ServicePricingMode,
   ServiceVisibility,
+  SignatureMethod,
   Unit,
   UserRole,
   WasteSurcharge,
@@ -64,6 +68,22 @@ const DEMO_PREMIUM_GRANTED_UNTIL = new Date(Date.now() + 365 * 24 * 60 * 60 * 10
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: mustGetEnv('DATABASE_URL') }),
 });
+
+// Phase 1.1-5: the one binary asset this seed needs — a small drawn-looking
+// signature PNG reused across whichever invoice(s) get the photo-method
+// InvoiceSignature below. Read once at module load (same fail-fast spirit as
+// mustGetEnv); path is process.cwd()-relative rather than __dirname-relative
+// since this script always runs compiled as dist/prisma/seed-demo.js while
+// seed-assets/ (a binary, never compiled by tsc) only ever exists alongside
+// the *source* prisma/ folder — both the dev container (whole backend/
+// bind-mounted at /app) and the prod image (Dockerfile's explicit
+// `COPY --from=build /app/prisma ./prisma`) put that source prisma/ folder
+// at the container's WORKDIR, which is also where `node dist/prisma/...`
+// is always invoked from.
+const DEMO_SIGNATURE_IMAGE: { image: Buffer; mimeType: string } = {
+  image: fs.readFileSync(path.join(process.cwd(), 'prisma', 'seed-assets', 'demo-signature.png')),
+  mimeType: 'image/png',
+};
 
 function mustGetEnv(name: string): string {
   const value = process.env[name];
@@ -111,6 +131,12 @@ interface SeedServiceLine {
   redistributeWeights?: number[];
 }
 
+interface SeedDiscountLine {
+  discountKey?: string;
+  name: string;
+  amountCents: number;
+}
+
 interface SeedDocument {
   number: string;
   documentType?: DocumentType;
@@ -120,10 +146,21 @@ interface SeedDocument {
   vatRateBasisPoints: number;
   lines?: SeedLine[];
   serviceLines?: SeedServiceLine[];
+  discountLines?: SeedDiscountLine[];
   status?: InvoiceStatus;
   dueDate?: string;
   paidAt?: string;
   convertedFromDevisNumber?: string;
+  // Phase 1.1-3: FACTURE-only, both null on every document above unless set.
+  depositPercentageBasisPoints?: number;
+  depositAmountCents?: number;
+  depositPaidAt?: string;
+  // Phase 1.1-1: the freehand fallback, no attached InvoiceSignature.
+  manuallySigned?: boolean;
+  // Phase 1.1-1: attaches DEMO_SIGNATURE_IMAGE as a PHOTO-method
+  // InvoiceSignature — mutually exclusive with manuallySigned in practice
+  // (a real signature locks the checkbox, same as the app itself).
+  attachSignaturePhoto?: boolean;
 }
 
 interface ProductDef {
@@ -138,6 +175,8 @@ interface ProductDef {
   // URSSAF purposes, even though it's modeled as a Product so it can carry a
   // unit + quantity like any other quantity-billed line).
   activityCategory?: ActivityCategory;
+  // Phase 1.1-2: zero, one, or several dossiers this item belongs to.
+  folderKeys?: string[];
 }
 
 interface ServiceDef {
@@ -145,6 +184,28 @@ interface ServiceDef {
   name: string;
   priceCents: number;
   description?: string;
+  // Phase 1.1-2: zero, one, or several dossiers this item belongs to.
+  folderKeys?: string[];
+}
+
+// Phase 1.1-2: a single, type-agnostic "dossier" an item can optionally
+// belong to — key is this seed's own lookup handle, name is what's stored.
+interface FolderDef {
+  key: string;
+  name: string;
+}
+
+// Phase 32/1.1-2: a reusable named remise, same shorter shape as the DTO
+// (exactly one of fixedAmountCents/percentageBasisPoints, enforced by
+// DiscountConsistency on the real create endpoint — this seed just mirrors
+// that by construction).
+interface DiscountDef {
+  key: string;
+  name: string;
+  discountType: DiscountType;
+  fixedAmountCents?: number;
+  percentageBasisPoints?: number;
+  folderKeys?: string[];
 }
 
 async function wipeExistingDemoData(): Promise<void> {
@@ -154,8 +215,11 @@ async function wipeExistingDemoData(): Promise<void> {
   });
   if (existing.length > 0) {
     // Company.onDelete: Cascade fans out to every invoice/customer/product/
-    // service row for that tenant, and User.onDelete: Cascade (keyed off
-    // Company) removes the login itself — one delete is enough.
+    // service row for that tenant (Phase 1.1-5: CatalogFolder/Discount are
+    // companyId-cascaded the same way, InvoiceSignature cascades off the
+    // Invoice it belongs to — no extra deletes needed here), and
+    // User.onDelete: Cascade (keyed off Company) removes the login itself —
+    // one delete is enough.
     await prisma.company.deleteMany({ where: { id: { in: existing.map((u) => u.companyId) } } });
   }
 }
@@ -204,10 +268,47 @@ async function createCustomers(companyId: string, customers: SeedCustomer[]) {
   return byKey;
 }
 
+async function createFolders(
+  companyId: string,
+  folders: FolderDef[],
+): Promise<Map<string, string>> {
+  const byKey = new Map<string, string>();
+  for (const f of folders) {
+    const row = await prisma.catalogFolder.create({ data: { companyId, name: f.name } });
+    byKey.set(f.key, row.id);
+  }
+  return byKey;
+}
+
+async function createDiscounts(
+  companyId: string,
+  folders: Map<string, string>,
+  discountDefs: DiscountDef[],
+): Promise<Map<string, string>> {
+  const byKey = new Map<string, string>();
+  for (const d of discountDefs) {
+    const row = await prisma.discount.create({
+      data: {
+        companyId,
+        name: d.name,
+        discountType: d.discountType,
+        fixedAmountCents: d.fixedAmountCents,
+        percentageBasisPoints: d.percentageBasisPoints,
+        folders: d.folderKeys
+          ? { connect: d.folderKeys.map((key) => ({ id: folders.get(key)! })) }
+          : undefined,
+      },
+    });
+    byKey.set(d.key, row.id);
+  }
+  return byKey;
+}
+
 async function createDocuments(
   companyId: string,
   customers: Map<string, { id: string; name: string; companyName: string | null }>,
   services: Map<string, string>,
+  discounts: Map<string, string>,
   documents: SeedDocument[],
 ) {
   const invoiceIdsByNumber = new Map<string, string>();
@@ -235,6 +336,10 @@ async function createDocuments(
         dueDate: doc.dueDate ? new Date(doc.dueDate) : null,
         paidAt: doc.paidAt ? new Date(doc.paidAt) : null,
         convertedFromDevisId: convertedFromDevisId ?? null,
+        depositPercentageBasisPoints: doc.depositPercentageBasisPoints ?? null,
+        depositAmountCents: doc.depositAmountCents ?? null,
+        depositPaidAt: doc.depositPaidAt ? new Date(doc.depositPaidAt) : null,
+        manuallySigned: doc.manuallySigned ?? false,
         lines: doc.lines
           ? {
               create: doc.lines.map((line, position) => ({
@@ -285,6 +390,34 @@ async function createDocuments(
         });
       }
     }
+
+    if (doc.discountLines) {
+      for (const [position, dl] of doc.discountLines.entries()) {
+        await prisma.invoiceDiscountLine.create({
+          data: {
+            invoiceId: invoice.id,
+            position,
+            discountId: dl.discountKey ? (discounts.get(dl.discountKey) ?? null) : null,
+            name: dl.name,
+            amountCents: dl.amountCents,
+          },
+        });
+      }
+    }
+
+    if (doc.attachSignaturePhoto) {
+      // Same Buffer-is-a-Uint8Array-at-runtime cast as
+      // InvoiceRepository.upsertSignature — works around Prisma 7's
+      // generated Bytes type being pinned to Uint8Array<ArrayBuffer>.
+      await prisma.invoiceSignature.create({
+        data: {
+          invoiceId: invoice.id,
+          image: DEMO_SIGNATURE_IMAGE.image as unknown as Uint8Array<ArrayBuffer>,
+          mimeType: DEMO_SIGNATURE_IMAGE.mimeType,
+          method: SignatureMethod.PHOTO,
+        },
+      });
+    }
   }
 }
 
@@ -306,6 +439,11 @@ async function seedArtisanBatiment(): Promise<void> {
       vatRateBasisPoints: 2000,
       premiumGrantedUntil: DEMO_PREMIUM_GRANTED_UNTIL,
       grantedPlanTier: PlanTier.PREMIUM,
+      // Phase 1.1-3: habitual acompte rate — pre-fills the toggle on every
+      // new FACTURE from now on (see F-000007 below for the opted-in state
+      // this produces, unchanged from what an artisan setting this in "Mon
+      // entreprise" would see).
+      defaultDepositPercentageBasisPoints: 3000,
     },
     email: DEMO_ARTISAN_EMAIL,
     password: DEMO_ARTISAN_PASSWORD,
@@ -375,6 +513,15 @@ async function seedArtisanBatiment(): Promise<void> {
     },
   ]);
 
+  // Phase 1.1-2: dossiers matching Bâti Rénov's real corps de métier —
+  // created before the catalog below so products/services can connect into
+  // them at creation time.
+  const folders = await createFolders(company.id, [
+    { key: 'sol', name: 'Sol' },
+    { key: 'peinture', name: 'Peinture' },
+    { key: 'platrerie', name: 'Plâtrerie' },
+  ]);
+
   const productDefs: ProductDef[] = [
     {
       key: 'CAR-GC60',
@@ -383,6 +530,7 @@ async function seedArtisanBatiment(): Promise<void> {
       priceCents: 3490,
       packagingQuantity: '1.44',
       supplierName: 'Point P',
+      folderKeys: ['sol'],
     },
     {
       key: 'PARQ-CH14',
@@ -391,6 +539,7 @@ async function seedArtisanBatiment(): Promise<void> {
       priceCents: 5290,
       packagingQuantity: '2.22',
       supplierName: 'Leroy Merlin Pro',
+      folderKeys: ['sol'],
     },
     {
       key: 'PEINT-BLC10',
@@ -399,6 +548,7 @@ async function seedArtisanBatiment(): Promise<void> {
       priceCents: 690,
       packagingQuantity: '10',
       supplierName: 'Tollens',
+      folderKeys: ['peinture'],
     },
     {
       key: 'PLACO-BA13',
@@ -406,6 +556,7 @@ async function seedArtisanBatiment(): Promise<void> {
       unit: Unit.UNIT,
       priceCents: 990,
       supplierName: 'Leroy Merlin Pro',
+      folderKeys: ['platrerie'],
     },
     {
       key: 'CIM-25KG',
@@ -414,6 +565,10 @@ async function seedArtisanBatiment(): Promise<void> {
       priceCents: 24,
       packagingQuantity: '25',
       supplierName: 'Point P',
+      // Used for both a sol's chape and plâtrerie scellement — the one item
+      // in this tenant's catalog that actually exercises the many-to-many
+      // folder picker (belongs to two dossiers at once).
+      folderKeys: ['sol', 'platrerie'],
     },
     {
       key: 'PER-16',
@@ -430,6 +585,7 @@ async function seedArtisanBatiment(): Promise<void> {
       priceCents: 890,
       packagingQuantity: '8.5',
       supplierName: 'Point P',
+      folderKeys: ['platrerie'],
     },
     // Below: less conventional catalog entries — rounding out the Unit
     // enum (CUBIC_METER, HOUR, DAY, LUMP_SUM haven't been used yet above)
@@ -442,6 +598,7 @@ async function seedArtisanBatiment(): Promise<void> {
       priceCents: 6890,
       packagingQuantity: '0.72',
       supplierName: 'Point P',
+      folderKeys: ['sol'],
     },
     {
       key: 'BETON-C2530',
@@ -494,6 +651,9 @@ async function seedArtisanBatiment(): Promise<void> {
         packagingQuantity: p.packagingQuantity,
         supplierName: p.supplierName,
         activityCategory: p.activityCategory ?? ActivityCategory.VENTE_MARCHANDISES,
+        folders: p.folderKeys
+          ? { connect: p.folderKeys.map((key) => ({ id: folders.get(key)! })) }
+          : undefined,
       },
     });
   }
@@ -504,18 +664,21 @@ async function seedArtisanBatiment(): Promise<void> {
       name: 'Main d’œuvre pose de sol',
       description: 'Forfait journée — pose carrelage, parquet ou sol souple, jointoiement inclus',
       priceCents: 35000,
+      folderKeys: ['sol'],
     },
     {
       key: 'pose-peinture',
       name: 'Main d’œuvre peinture',
       description: 'Forfait journée, 2 couches, protection du mobilier incluse',
       priceCents: 32000,
+      folderKeys: ['peinture'],
     },
     {
       key: 'depose',
       name: 'Dépose ancien revêtement',
       description: 'Dépose et évacuation de l’ancien carrelage/sol',
       priceCents: 18000,
+      folderKeys: ['sol'],
     },
     {
       key: 'deplacement',
@@ -547,6 +710,9 @@ async function seedArtisanBatiment(): Promise<void> {
         pricingMode: ServicePricingMode.FIXED,
         priceCents: s.priceCents,
         activityCategory: ActivityCategory.PRESTATION_BIC,
+        folders: s.folderKeys
+          ? { connect: s.folderKeys.map((key) => ({ id: folders.get(key)! })) }
+          : undefined,
       },
     });
     services.set(s.key, row.id);
@@ -624,7 +790,23 @@ async function seedArtisanBatiment(): Promise<void> {
     services.set(s.key, row.id);
   }
 
-  await createDocuments(company.id, customers, services, [
+  const discounts = await createDiscounts(company.id, folders, [
+    {
+      key: 'fidelite',
+      name: 'Remise fidélité chantier suivi',
+      discountType: DiscountType.FIXED,
+      fixedAmountCents: 5000,
+    },
+    {
+      key: 'gros-chantier',
+      name: 'Remise gros chantier',
+      discountType: DiscountType.PERCENTAGE,
+      percentageBasisPoints: 500,
+      folderKeys: ['sol'],
+    },
+  ]);
+
+  await createDocuments(company.id, customers, services, discounts, [
     {
       number: 'F-000001',
       date: '2026-02-12',
@@ -633,6 +815,9 @@ async function seedArtisanBatiment(): Promise<void> {
       vatRateBasisPoints: 2000,
       status: InvoiceStatus.PAYEE,
       paidAt: '2026-02-20',
+      // Phase 1.1-1: the "real photo signature" example — a signed chantier
+      // handoff, photographed and attached.
+      attachSignaturePhoto: true,
       lines: [
         {
           description: 'Carrelage sol grès cérame 60x60 gris anthracite',
@@ -733,6 +918,9 @@ async function seedArtisanBatiment(): Promise<void> {
       status: InvoiceStatus.PAYEE,
       paidAt: '2026-04-10',
       convertedFromDevisNumber: 'DEV-000001',
+      // Phase 1.1-1: the freehand fallback — checked by hand, no photo/drawn
+      // proof attached.
+      manuallySigned: true,
       lines: [
         {
           description: 'Tube PER Ø16mm',
@@ -993,6 +1181,89 @@ async function seedArtisanBatiment(): Promise<void> {
         },
       ],
     },
+    {
+      // Phase 1.1-2/32: a remise on a real invoice (the "Sol" folder's
+      // gros-chantier percentage discount), and Phase 1.1-3's deposit path
+      // pre-filled from the company default (30%, set above) — still
+      // NON_PAYEE, the deposit only requested so far, not yet received.
+      number: 'F-000007',
+      date: '2026-08-02',
+      customerKey: 'copro-closfleuri',
+      vatApplicable: true,
+      vatRateBasisPoints: 2000,
+      status: InvoiceStatus.NON_PAYEE,
+      dueDate: '2026-09-15',
+      lines: [
+        {
+          description: 'Carrelage sol grès cérame 60x60 gris anthracite — parties communes',
+          unit: Unit.SQUARE_METER,
+          quantity: '85',
+          unitPriceCents: 3490,
+          wasteSurcharge: WasteSurcharge.TEN,
+          packagingQuantity: '1.44',
+          productCode: 'CAR-GC60',
+          activityCategory: ActivityCategory.VENTE_MARCHANDISES,
+        },
+      ],
+      serviceLines: [
+        {
+          serviceKey: 'pose-sol',
+          name: 'Main d’œuvre pose de sol',
+          description: 'Forfait 4 journées, parties communes',
+          amountCents: 140000,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+      ],
+      discountLines: [
+        {
+          discountKey: 'gros-chantier',
+          name: 'Remise gros chantier',
+          amountCents: 15000,
+        },
+      ],
+      depositPercentageBasisPoints: 3000,
+      depositAmountCents: 130000,
+    },
+    {
+      // Phase 1.1-3's other deposit state: requested and actually received
+      // — the board's ACOMPTE_VERSE status, between "Non payée" and "Payée".
+      number: 'F-000008',
+      date: '2026-08-10',
+      customerKey: 'sci-tilleuls',
+      vatApplicable: true,
+      vatRateBasisPoints: 2000,
+      status: InvoiceStatus.ACOMPTE_VERSE,
+      dueDate: '2026-09-20',
+      lines: [
+        {
+          description: 'Parquet contrecollé chêne 14mm — rénovation complète',
+          unit: Unit.SQUARE_METER,
+          quantity: '60',
+          unitPriceCents: 5290,
+          packagingQuantity: '2.22',
+          productCode: 'PARQ-CH14',
+          activityCategory: ActivityCategory.VENTE_MARCHANDISES,
+        },
+      ],
+      serviceLines: [
+        {
+          serviceKey: 'depose',
+          name: 'Dépose ancien revêtement',
+          amountCents: 18000,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+        {
+          serviceKey: 'pose-sol',
+          name: 'Main d’œuvre pose de sol',
+          description: 'Forfait 3 journées',
+          amountCents: 105000,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+      ],
+      depositPercentageBasisPoints: 3000,
+      depositAmountCents: 150000,
+      depositPaidAt: '2026-08-12',
+    },
   ]);
 }
 
@@ -1095,6 +1366,15 @@ async function seedInstitutBeaute(): Promise<void> {
     },
   ]);
 
+  // Phase 1.1-2: dossiers matching L'Atelier Beauté's real prestations —
+  // created before the catalog below so products/services can connect into
+  // them at creation time.
+  const folders = await createFolders(company.id, [
+    { key: 'visage', name: 'Soins visage' },
+    { key: 'corps', name: 'Soins corps' },
+    { key: 'groupe', name: 'Prestations groupe' },
+  ]);
+
   const productDefs: ProductDef[] = [
     {
       key: 'SHP-PRO250',
@@ -1108,8 +1388,20 @@ async function seedInstitutBeaute(): Promise<void> {
       unit: Unit.UNIT,
       priceCents: 2490,
     },
-    { key: 'FDT-30ML', name: 'Fond de teint longue tenue 30ml', unit: Unit.UNIT, priceCents: 3200 },
-    { key: 'PAL-MAQ12', name: 'Palette maquillage 12 teintes', unit: Unit.UNIT, priceCents: 4500 },
+    {
+      key: 'FDT-30ML',
+      name: 'Fond de teint longue tenue 30ml',
+      unit: Unit.UNIT,
+      priceCents: 3200,
+      folderKeys: ['visage'],
+    },
+    {
+      key: 'PAL-MAQ12',
+      name: 'Palette maquillage 12 teintes',
+      unit: Unit.UNIT,
+      priceCents: 4500,
+      folderKeys: ['visage'],
+    },
     { key: 'VERNIS-SET', name: 'Set vernis à ongles (x3)', unit: Unit.UNIT, priceCents: 1500 },
     // Less conventional catalog entries — retail items sold by volume
     // (packagingQuantity below 1 is a deliberate edge case: a 500ml bottle),
@@ -1121,6 +1413,7 @@ async function seedInstitutBeaute(): Promise<void> {
       unit: Unit.LITER,
       priceCents: 1400,
       packagingQuantity: '0.5',
+      folderKeys: ['corps'],
     },
     {
       key: 'GEL-DOUCHE5L',
@@ -1128,12 +1421,14 @@ async function seedInstitutBeaute(): Promise<void> {
       unit: Unit.LITER,
       priceCents: 800,
       packagingQuantity: '5',
+      folderKeys: ['corps'],
     },
     {
       key: 'KIT-EVENEMENTIEL',
       name: 'Kit consommables usage unique (événementiel)',
       unit: Unit.LUMP_SUM,
       priceCents: 3500,
+      folderKeys: ['groupe'],
     },
     // Sub-letting a chair/room to an independent professional is a real,
     // fairly common revenue stream for a salon — a completely different
@@ -1168,6 +1463,9 @@ async function seedInstitutBeaute(): Promise<void> {
         packagingQuantity: p.packagingQuantity,
         supplierName: p.supplierName,
         activityCategory: p.activityCategory ?? ActivityCategory.VENTE_MARCHANDISES,
+        folders: p.folderKeys
+          ? { connect: p.folderKeys.map((key) => ({ id: folders.get(key)! })) }
+          : undefined,
       },
     });
   }
@@ -1176,19 +1474,39 @@ async function seedInstitutBeaute(): Promise<void> {
     { key: 'coupe-brushing', name: 'Coupe + Brushing', priceCents: 4500 },
     { key: 'coloration', name: 'Coloration complète', priceCents: 7500 },
     { key: 'balayage', name: 'Balayage', priceCents: 9500 },
-    { key: 'maquillage-jour', name: 'Maquillage jour', priceCents: 3500 },
-    { key: 'maquillage-soiree', name: 'Maquillage soirée', priceCents: 5500 },
-    { key: 'forfait-mariage', name: 'Forfait maquillage + coiffure mariée', priceCents: 25000 },
+    {
+      key: 'maquillage-jour',
+      name: 'Maquillage jour',
+      priceCents: 3500,
+      folderKeys: ['visage'],
+    },
+    {
+      key: 'maquillage-soiree',
+      name: 'Maquillage soirée',
+      priceCents: 5500,
+      folderKeys: ['visage'],
+    },
+    {
+      key: 'forfait-mariage',
+      name: 'Forfait maquillage + coiffure mariée',
+      priceCents: 25000,
+      // The one item in this tenant's catalog exercising the many-to-many
+      // folder picker: a bridal face package that's also a group/event
+      // booking.
+      folderKeys: ['visage', 'groupe'],
+    },
     {
       key: 'retouche-mariage',
       name: 'Retouche maquillage sur place (mariage)',
       description: 'Déplacement en cours de soirée pour une retouche',
       priceCents: 4000,
+      folderKeys: ['groupe'],
     },
     {
       key: 'consultation-diagnostic',
       name: 'Consultation colorimétrie / diagnostic peau',
       priceCents: 2500,
+      folderKeys: ['visage'],
     },
   ];
 
@@ -1203,6 +1521,9 @@ async function seedInstitutBeaute(): Promise<void> {
         pricingMode: ServicePricingMode.FIXED,
         priceCents: s.priceCents,
         activityCategory: ActivityCategory.PRESTATION_BIC,
+        folders: s.folderKeys
+          ? { connect: s.folderKeys.map((key) => ({ id: folders.get(key)! })) }
+          : undefined,
       },
     });
     services.set(s.key, row.id);
@@ -1255,7 +1576,23 @@ async function seedInstitutBeaute(): Promise<void> {
   });
   services.set('stt-maquilleuses-freelance', freelanceRow.id);
 
-  await createDocuments(company.id, customers, services, [
+  const discounts = await createDiscounts(company.id, folders, [
+    {
+      key: 'fidelite',
+      name: 'Remise cliente fidèle',
+      discountType: DiscountType.FIXED,
+      fixedAmountCents: 1000,
+    },
+    {
+      key: 'groupe',
+      name: 'Remise groupe (3 personnes ou plus)',
+      discountType: DiscountType.PERCENTAGE,
+      percentageBasisPoints: 1500,
+      folderKeys: ['groupe'],
+    },
+  ]);
+
+  await createDocuments(company.id, customers, services, discounts, [
     {
       number: 'F-000001',
       date: '2026-01-15',
@@ -1407,6 +1744,9 @@ async function seedInstitutBeaute(): Promise<void> {
       status: InvoiceStatus.PAYEE,
       paidAt: '2026-07-01',
       convertedFromDevisNumber: 'DEV-000001',
+      // Phase 1.1-1: the real photo-signature example for this tenant — a
+      // signed B2B event contract, photographed and attached.
+      attachSignaturePhoto: true,
       serviceLines: [
         {
           serviceKey: 'stt-maquilleuses-freelance',
@@ -1527,6 +1867,9 @@ async function seedInstitutBeaute(): Promise<void> {
       vatRateBasisPoints: 0,
       status: InvoiceStatus.PAYEE,
       paidAt: '2026-07-15',
+      // Phase 1.1-1: the freehand fallback — checked by hand, no photo/drawn
+      // proof attached.
+      manuallySigned: true,
       lines: [
         {
           description: 'Location poste de travail indépendant — semaine du 14/07',
@@ -1537,6 +1880,96 @@ async function seedInstitutBeaute(): Promise<void> {
           activityCategory: ActivityCategory.PRESTATION_BIC,
         },
       ],
+    },
+    {
+      // Phase 1.1-2/32: a second group booking, this time actually using the
+      // "Prestations groupe" folder's remise — same client as F-000006, a
+      // real example of the -15% group discount folding into the subtotal.
+      number: 'F-000008',
+      date: '2026-08-05',
+      customerKey: 'girard',
+      vatApplicable: false,
+      vatRateBasisPoints: 0,
+      status: InvoiceStatus.PAYEE,
+      paidAt: '2026-08-05',
+      serviceLines: [
+        {
+          serviceKey: 'balayage',
+          name: 'Balayage',
+          amountCents: 9500,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+        {
+          serviceKey: 'maquillage-soiree',
+          name: 'Maquillage soirée',
+          amountCents: 5500,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+        {
+          serviceKey: 'supplement-groupe',
+          name: 'Supplément service groupe (EVJF)',
+          amountCents: 1500,
+          visibility: ServiceVisibility.VISIBLE,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+      ],
+      discountLines: [
+        {
+          discountKey: 'groupe',
+          name: 'Remise groupe (3 personnes ou plus)',
+          amountCents: 2325,
+        },
+      ],
+    },
+    {
+      // Phase 1.1-3's opt-in deposit path — unlike Bâti Rénov, this tenant
+      // has no defaultDepositPercentageBasisPoints, so the toggle starts off
+      // and this deposit was typed in by hand. Still NON_PAYEE.
+      number: 'F-000009',
+      date: '2026-08-08',
+      customerKey: 'moreau',
+      vatApplicable: false,
+      vatRateBasisPoints: 0,
+      status: InvoiceStatus.NON_PAYEE,
+      dueDate: '2026-09-12',
+      serviceLines: [
+        {
+          serviceKey: 'forfait-mariage',
+          name: 'Forfait maquillage + coiffure mariée',
+          amountCents: 25000,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+      ],
+      depositPercentageBasisPoints: 4000,
+      depositAmountCents: 10000,
+    },
+    {
+      // The other deposit state for this tenant: requested and received —
+      // ACOMPTE_VERSE, same opt-in path as F-000009 above.
+      number: 'F-000010',
+      date: '2026-08-11',
+      customerKey: 'fontaine',
+      vatApplicable: false,
+      vatRateBasisPoints: 0,
+      status: InvoiceStatus.ACOMPTE_VERSE,
+      dueDate: '2026-09-01',
+      serviceLines: [
+        {
+          serviceKey: 'coloration',
+          name: 'Coloration complète',
+          amountCents: 7500,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+        {
+          serviceKey: 'balayage',
+          name: 'Balayage',
+          amountCents: 9500,
+          activityCategory: ActivityCategory.PRESTATION_BIC,
+        },
+      ],
+      depositPercentageBasisPoints: 3000,
+      depositAmountCents: 5100,
+      depositPaidAt: '2026-08-12',
     },
   ]);
 }

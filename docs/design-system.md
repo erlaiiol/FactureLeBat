@@ -52,7 +52,7 @@ Notes on the choices:
 - `primary` reuses the "Chantier calibré" accent directly — there is only one primary action color in the app, not a second one invented for this system.
 - `danger` (`#D6432C`, brick-red) is deliberately a different hue register from `primary` (`#FF6B00`, orange) even though both are warm — a destructive action must never look like a shade of the main CTA.
 - `info` draws on the blueprint-blue explored in "Au carré" and the workwear denim from "Bleu de travail" — a callback to the directions that didn't become the primary identity, rather than an arbitrary blue.
-- **Shape rule:** semantic badges are straight rectangles, small radius, no rotation. The tilted, stamped look is reserved for the Phase 5 line-marking badge specifically — mixing the two motifs would dilute what makes the marking badge distinctive.
+- **Shape rule:** semantic badges are straight rectangles, small radius, no rotation. The tilted, stamped look was originally reserved for the Phase 5 line-marking badge alone; Phase 1.1-4 carves out one deliberate second use — the Devis/Facture toggle on "Nouveau document" — reusing the stamp geometry (sharp 2px corners, offset shadow, -1.5° rotation) but in `info` blue, never the badge's chartreuse. Color, not shape, is what an artisan actually reads as "this means a redistributed line" vs. "this is the document-type switch" — `info`'s blueprint-blue and the badge's chartreuse are different enough hue registers (same reasoning as `danger` vs. `primary` above) that the two never risk being mistaken for each other, even sharing the tilt. Still no third reuse without the same reasoning being re-applied here.
 
 ## Secondary identity: "Atelier sobre" (accent only)
 

@@ -9,6 +9,7 @@ import { CsrfGuard } from './auth/guards/csrf.guard';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { BillingModule } from './billing/billing.module';
+import { CatalogFolderModule } from './catalog-folder/catalog-folder.module';
 import { HealthController } from './common/health.controller';
 import { CompanyModule } from './company/company.module';
 import { validateEnv } from './config/env.validation';
@@ -38,6 +39,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     ScheduleModule.forRoot(),
     DatabaseModule,
     AuthModule,
+    CatalogFolderModule,
     CompanyModule,
     CustomerModule,
     DiscountModule,

@@ -144,6 +144,27 @@ export interface InvoiceDiscountLineDraft {
   targetServiceLineClientId: string | null;
 }
 
+// Phase 1.1-3: the "Demander un acompte" toggle's own state — see
+// InvoiceDraftStore.deposit/depositAmountCents. amountOverrideEuros null
+// means "auto": the amount live-follows percentageBasisPoints × the
+// invoice's own Total TTC (docs/roadmap.md Phase 1.1-3's own decision on the
+// percentage base). Non-null means the artisan typed a value directly into
+// the amount field (or, in manual mode, into the total override) — the
+// automatic link is then frozen exactly the way it was at that moment, same
+// "reset button, not silent resync" behavior decided with the user, until
+// resetDepositAutoCalc() is called.
+export interface InvoiceDepositDraft {
+  requested: boolean;
+  percentageBasisPoints: number;
+  amountOverrideEuros: number | null;
+}
+
+const EMPTY_DEPOSIT: InvoiceDepositDraft = {
+  requested: false,
+  percentageBasisPoints: 0,
+  amountOverrideEuros: null,
+};
+
 const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
   customerId: null,
   customerName: '',
@@ -215,6 +236,7 @@ interface PersistedDraft {
   simplifiedDisplay: boolean;
   sourceDevisId: string | null;
   number: string;
+  deposit: InvoiceDepositDraft;
 }
 
 // Shared, in-progress state for the whole "nouvelle facture" flow (Phase 6):
@@ -283,6 +305,12 @@ export class InvoiceDraftStore {
   // step — hides the whole Quantité/Prix unitaire columns on the rendered
   // document, leaving only description + line total.
   readonly simplifiedDisplay = signal(false);
+  // Phase 1.1-3: the "Demander un acompte" toggle — see InvoiceDepositDraft.
+  readonly deposit = signal<InvoiceDepositDraft>(EMPTY_DEPOSIT);
+  // Set once hydrateFromStorage() actually restored a persisted deposit —
+  // guards the company-default auto-fill below from clobbering an artisan's
+  // own explicit choice on a resumed draft (see the constructor).
+  private depositWasHydrated = false;
 
   readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
 
@@ -413,6 +441,24 @@ export class InvoiceDraftStore {
     );
   });
 
+  // Phase 1.1-3: resolved against the invoice's own Total TTC (see
+  // docs/roadmap.md Phase 1.1-3's implementation notes on why TTC, not the
+  // pre-tax subtotal Phase 32's remise uses) — auto-follows
+  // percentageBasisPoints × total whenever amountOverrideEuros is null, and
+  // stays pinned at that frozen value otherwise (see InvoiceDepositDraft).
+  readonly depositAmountCents = computed(() => {
+    const deposit = this.deposit();
+    if (!deposit.requested) {
+      return 0;
+    }
+    if (deposit.amountOverrideEuros !== null) {
+      return Math.max(0, Math.round(deposit.amountOverrideEuros * 100));
+    }
+    return Math.round(
+      (this.totalsPreview().totalInclVatCents * deposit.percentageBasisPoints) / 10000,
+    );
+  });
+
   // Soft UX gate for the shell's "Aperçu" button: mirrors the backend DTO's
   // real requirements (non-empty customer name, at least one usable line)
   // closely enough to avoid an obviously-doomed request, but the backend
@@ -434,7 +480,18 @@ export class InvoiceDraftStore {
     this.companyService
       .getProfile()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (profile) => this.company.set(profile) });
+      .subscribe({
+        next: (profile) => {
+          this.company.set(profile);
+          // Phase 1.1-3: pre-fill the deposit toggle from the company's
+          // habitual rate — only for a genuinely fresh draft (nothing
+          // restored from storage above), so this never overrides an
+          // artisan's own explicit choice on a resumed draft.
+          if (!this.depositWasHydrated) {
+            this.applyCompanyDefaultDeposit(profile);
+          }
+        },
+      });
     this.customerService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
     this.productService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
     this.serviceCatalogService.getAllCached().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
@@ -450,9 +507,50 @@ export class InvoiceDraftStore {
         simplifiedDisplay: this.simplifiedDisplay(),
         sourceDevisId: this.sourceDevisId(),
         number: this.number(),
+        deposit: this.deposit(),
       };
       this.writeToStorage(snapshot);
     });
+  }
+
+  // Phase 1.1-3: null (no default) leaves the toggle off — see
+  // EMPTY_DEPOSIT. Also called by reset() (company() is already cached by
+  // then), so every new draft's toggle pre-fills the same way, not just the
+  // very first one this session.
+  private applyCompanyDefaultDeposit(profile: CompanyProfile | null): void {
+    const defaultRate = profile?.defaultDepositPercentageBasisPoints;
+    this.deposit.set(
+      defaultRate != null
+        ? { requested: true, percentageBasisPoints: defaultRate, amountOverrideEuros: null }
+        : EMPTY_DEPOSIT,
+    );
+  }
+
+  setDepositRequested(requested: boolean): void {
+    this.deposit.update((deposit) => ({ ...deposit, requested }));
+  }
+
+  // Always live — the percentage is the primary lever, recomputing
+  // depositAmountCents automatically unless the artisan has separately typed
+  // a custom amount (amountOverrideEuros !== null), in which case editing
+  // the percentage no longer touches it either (see the user-decided
+  // "calculations cease until reset" behavior on InvoiceDepositDraft).
+  setDepositPercentage(basisPoints: number): void {
+    this.deposit.update((deposit) => ({ ...deposit, percentageBasisPoints: basisPoints }));
+  }
+
+  // Typing directly into the amount field freezes it — returns whether this
+  // call is what just froze it (amountOverrideEuros was null before), so the
+  // caller can show the one-time warning toast the user asked for.
+  setDepositAmountOverride(amountEuros: number): boolean {
+    const wasAuto = this.deposit().amountOverrideEuros === null;
+    this.deposit.update((deposit) => ({ ...deposit, amountOverrideEuros: amountEuros }));
+    return wasAuto;
+  }
+
+  // "Réinitialiser" — resumes the automatic percentage × total link.
+  resetDepositAutoCalc(): void {
+    this.deposit.update((deposit) => ({ ...deposit, amountOverrideEuros: null }));
   }
 
   // Phase 14.3: called once by InvoiceCreateShellPage when the `type` query
@@ -528,6 +626,10 @@ export class InvoiceDraftStore {
     this.simplifiedDisplay.set(false);
     this.sourceDevisId.set(null);
     this.number.set('');
+    // Phase 1.1-3: "auto-applied to every new mode rapide facture from then
+    // on" — re-derive from the company profile (already cached) rather than
+    // just blanking it, same as every fresh draft.
+    this.applyCompanyDefaultDeposit(this.company());
     this.clearStorage();
   }
 
@@ -645,6 +747,10 @@ export class InvoiceDraftStore {
 
     this.documentType.set('FACTURE');
     this.simplifiedDisplay.set(source.simplifiedDisplay);
+    // A devis never carries a deposit (FACTURE-only, see schema.prisma) —
+    // same "auto-applied to every new FACTURE draft" rule as reset() above,
+    // rather than leaving whatever was left over from a previous draft.
+    this.applyCompanyDefaultDeposit(this.company());
     this.sourceDevisId.set(source.id);
     // A converted facture always gets its own fresh number, never the
     // devis's — left blank so ensureNumberSuggestion() computes a real one
@@ -739,6 +845,16 @@ export class InvoiceDraftStore {
       serviceLines: serviceLines.length > 0 ? serviceLines : undefined,
       discountLines: discountLines.length > 0 ? discountLines : undefined,
       simplifiedDisplay: this.simplifiedDisplay(),
+      // Phase 1.1-3: FACTURE-only, mirrors the backend's
+      // DepositFieldsConsistency rule — a DEVIS never sends either field,
+      // regardless of what the toggle happens to hold from a document-type
+      // switch the artisan hasn't submitted yet.
+      ...(this.documentType() === 'FACTURE' && this.deposit().requested
+        ? {
+            depositPercentageBasisPoints: this.deposit().percentageBasisPoints,
+            depositAmountCents: this.depositAmountCents(),
+          }
+        : {}),
       convertedFromDevisId: this.sourceDevisId() ?? undefined,
       number: this.number().trim() || undefined,
     };
@@ -948,6 +1064,17 @@ export class InvoiceDraftStore {
       }
       if (typeof parsed.number === 'string') {
         this.number.set(parsed.number);
+      }
+      if (
+        parsed.deposit &&
+        typeof parsed.deposit.requested === 'boolean' &&
+        typeof parsed.deposit.percentageBasisPoints === 'number'
+      ) {
+        this.deposit.set({ ...EMPTY_DEPOSIT, ...parsed.deposit });
+        // The artisan's own restored choice (even "off") — never
+        // re-overridden by the company default once the profile loads (see
+        // the constructor).
+        this.depositWasHydrated = true;
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

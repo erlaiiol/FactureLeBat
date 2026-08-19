@@ -96,6 +96,11 @@
   </label>
 
   <app-advanced-settings>
+    <app-catalog-folder-multi-select
+      [selectedIds]="selectedFolderIds()"
+      (selectedIdsChange)="selectedFolderIds.set($event)"
+    />
+
     <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-ink">Code prestation</span>
       <input

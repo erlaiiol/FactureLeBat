@@ -10,6 +10,76 @@
   ← Retour au client
 </button>
 
+<!-- Phase 1.1-2: one row template per catalog type, reused by both the
+       folder-grouped list and the unassigned tail below it in each flyout —
+       see groupByFolder in the .ts file. Declared at the template's top
+       level (not nested inside an @if) so the *ngTemplateOutlet calls further
+       down, inside each flyout's own @if block, can still reference them. -->
+<ng-template #productRow let-product>
+  <button
+    type="button"
+    (click)="pickProduct(product)"
+    class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-primary-subtle/30"
+    [class.bg-primary-subtle]="activeProductIds().has(product.id)"
+  >
+    <span>
+      <span class="block text-sm font-medium text-ink">{{ product.name }}</span>
+      <span class="block text-xs text-ink-soft">
+        {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
+      </span>
+    </span>
+    @if (activeProductIds().has(product.id)) {
+      <span class="text-primary"><app-icon-check [size]="14" /></span>
+    }
+  </button>
+</ng-template>
+
+<ng-template #serviceRow let-service>
+  <button
+    type="button"
+    (click)="pickService(service)"
+    class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-info-subtle/30"
+    [class.bg-info-subtle]="activeServiceIds().has(service.id)"
+  >
+    <span>
+      <span class="block text-sm font-medium text-ink">{{ service.name }}</span>
+      <span class="block text-xs text-ink-soft">
+        @if (service.pricingMode === 'PERCENTAGE') {
+          {{ service.percentageBasisPoints! / 100 }}% de la facture
+        } @else {
+          {{ service.priceCents | centsToEuros }}
+        }
+      </span>
+    </span>
+    @if (activeServiceIds().has(service.id)) {
+      <span class="text-info"><app-icon-check [size]="14" /></span>
+    }
+  </button>
+</ng-template>
+
+<ng-template #discountRow let-discount>
+  <button
+    type="button"
+    (click)="pickDiscount(discount)"
+    class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-warning-subtle/30"
+    [class.bg-warning-subtle]="activeDiscountIds().has(discount.id)"
+  >
+    <span>
+      <span class="block text-sm font-medium text-ink">{{ discount.name }}</span>
+      <span class="block text-xs text-ink-soft">
+        @if (discount.discountType === 'PERCENTAGE') {
+          {{ discount.percentageBasisPoints! / 100 }}% du total
+        } @else {
+          {{ discount.fixedAmountCents | centsToEuros }}
+        }
+      </span>
+    </span>
+    @if (activeDiscountIds().has(discount.id)) {
+      <span class="text-warning"><app-icon-check [size]="14" /></span>
+    }
+  </button>
+</ng-template>
+
 <!-- Phase 13.5 gallery redesign: two fixed "+" buttons stay reachable at
        all times regardless of scroll — each opens a small flyout right next
        to it (catalog pick, quick create, or a one-off free line) instead of
@@ -67,29 +137,44 @@
           Mon catalogue
         </span>
         @if (draftStore.products().length > 0) {
-          <ul class="flex flex-col gap-2">
-            @for (product of draftStore.products(); track product.id) {
-              @let isActive = activeProductIds().has(product.id);
-              <li>
+          <div class="flex flex-col gap-2">
+            @for (group of groupedProducts().groups; track group.folder.id) {
+              <div class="rounded-lg border border-line">
                 <button
                   type="button"
-                  (click)="pickProduct(product)"
-                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-primary-subtle/30"
-                  [class.bg-primary-subtle]="isActive"
+                  (click)="toggleFolderExpanded(group.folder.id)"
+                  [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
+                  class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-primary-subtle/30"
                 >
-                  <span>
-                    <span class="block text-sm font-medium text-ink">{{ product.name }}</span>
-                    <span class="block text-xs text-ink-soft">
-                      {{ product.priceCents | centsToEuros }} / {{ product.unit | unitLabel }}
-                    </span>
-                  </span>
-                  @if (isActive) {
-                    <span class="text-primary"><app-icon-check [size]="14" /></span>
-                  }
+                  {{ group.folder.name }}
+                  <app-icon-chevron-down
+                    [size]="14"
+                    [rotated]="expandedFolderIds().has(group.folder.id)"
+                  />
                 </button>
-              </li>
+                @if (expandedFolderIds().has(group.folder.id)) {
+                  <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
+                    @for (product of group.items; track product.id) {
+                      <li>
+                        <ng-container
+                          *ngTemplateOutlet="productRow; context: { $implicit: product }"
+                        />
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
             }
-          </ul>
+            @if (groupedProducts().unassigned.length > 0) {
+              <ul class="flex flex-col gap-2">
+                @for (product of groupedProducts().unassigned; track product.id) {
+                  <li>
+                    <ng-container *ngTemplateOutlet="productRow; context: { $implicit: product }" />
+                  </li>
+                }
+              </ul>
+            }
+          </div>
         } @else {
           <p class="text-sm text-ink-soft">Aucun produit enregistré pour l’instant.</p>
         }
@@ -137,33 +222,44 @@
           Mes prestations
         </span>
         @if (draftStore.services().length > 0) {
-          <ul class="flex flex-col gap-2">
-            @for (service of draftStore.services(); track service.id) {
-              @let isActive = activeServiceIds().has(service.id);
-              <li>
+          <div class="flex flex-col gap-2">
+            @for (group of groupedServices().groups; track group.folder.id) {
+              <div class="rounded-lg border border-line">
                 <button
                   type="button"
-                  (click)="pickService(service)"
-                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-info-subtle/30"
-                  [class.bg-info-subtle]="isActive"
+                  (click)="toggleFolderExpanded(group.folder.id)"
+                  [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
+                  class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-info-subtle/30"
                 >
-                  <span>
-                    <span class="block text-sm font-medium text-ink">{{ service.name }}</span>
-                    <span class="block text-xs text-ink-soft">
-                      @if (service.pricingMode === 'PERCENTAGE') {
-                        {{ service.percentageBasisPoints! / 100 }}% de la facture
-                      } @else {
-                        {{ service.priceCents | centsToEuros }}
-                      }
-                    </span>
-                  </span>
-                  @if (isActive) {
-                    <span class="text-info"><app-icon-check [size]="14" /></span>
-                  }
+                  {{ group.folder.name }}
+                  <app-icon-chevron-down
+                    [size]="14"
+                    [rotated]="expandedFolderIds().has(group.folder.id)"
+                  />
                 </button>
-              </li>
+                @if (expandedFolderIds().has(group.folder.id)) {
+                  <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
+                    @for (service of group.items; track service.id) {
+                      <li>
+                        <ng-container
+                          *ngTemplateOutlet="serviceRow; context: { $implicit: service }"
+                        />
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
             }
-          </ul>
+            @if (groupedServices().unassigned.length > 0) {
+              <ul class="flex flex-col gap-2">
+                @for (service of groupedServices().unassigned; track service.id) {
+                  <li>
+                    <ng-container *ngTemplateOutlet="serviceRow; context: { $implicit: service }" />
+                  </li>
+                }
+              </ul>
+            }
+          </div>
         } @else {
           <p class="text-sm text-ink-soft">Aucune prestation enregistrée pour l’instant.</p>
         }
@@ -210,33 +306,46 @@
           Mes remises
         </span>
         @if (draftStore.discounts().length > 0) {
-          <ul class="flex flex-col gap-2">
-            @for (discount of draftStore.discounts(); track discount.id) {
-              @let isActive = activeDiscountIds().has(discount.id);
-              <li>
+          <div class="flex flex-col gap-2">
+            @for (group of groupedDiscounts().groups; track group.folder.id) {
+              <div class="rounded-lg border border-line">
                 <button
                   type="button"
-                  (click)="pickDiscount(discount)"
-                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-left hover:bg-warning-subtle/30"
-                  [class.bg-warning-subtle]="isActive"
+                  (click)="toggleFolderExpanded(group.folder.id)"
+                  [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
+                  class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-warning-subtle/30"
                 >
-                  <span>
-                    <span class="block text-sm font-medium text-ink">{{ discount.name }}</span>
-                    <span class="block text-xs text-ink-soft">
-                      @if (discount.discountType === 'PERCENTAGE') {
-                        {{ discount.percentageBasisPoints! / 100 }}% du total
-                      } @else {
-                        {{ discount.fixedAmountCents | centsToEuros }}
-                      }
-                    </span>
-                  </span>
-                  @if (isActive) {
-                    <span class="text-warning"><app-icon-check [size]="14" /></span>
-                  }
+                  {{ group.folder.name }}
+                  <app-icon-chevron-down
+                    [size]="14"
+                    [rotated]="expandedFolderIds().has(group.folder.id)"
+                  />
                 </button>
-              </li>
+                @if (expandedFolderIds().has(group.folder.id)) {
+                  <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
+                    @for (discount of group.items; track discount.id) {
+                      <li>
+                        <ng-container
+                          *ngTemplateOutlet="discountRow; context: { $implicit: discount }"
+                        />
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
             }
-          </ul>
+            @if (groupedDiscounts().unassigned.length > 0) {
+              <ul class="flex flex-col gap-2">
+                @for (discount of groupedDiscounts().unassigned; track discount.id) {
+                  <li>
+                    <ng-container
+                      *ngTemplateOutlet="discountRow; context: { $implicit: discount }"
+                    />
+                  </li>
+                }
+              </ul>
+            }
+          </div>
         } @else {
           <p class="text-sm text-ink-soft">Aucune remise enregistrée pour l’instant.</p>
         }

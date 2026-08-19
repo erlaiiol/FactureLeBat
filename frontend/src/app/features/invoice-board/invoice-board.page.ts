@@ -19,13 +19,15 @@ import { BadgeComponent } from '../../shared/components/badge.component';
 import { IconCalendarComponent } from '../../shared/components/icon-calendar.component';
 import { IconChevronDownComponent } from '../../shared/components/icon-chevron-down.component';
 import { IconCloseComponent } from '../../shared/components/icon-close.component';
+import { SignatureModalComponent } from '../../shared/components/signature-modal.component';
+import { SignatureViewModalComponent } from '../../shared/components/signature-view-modal.component';
 import { CreateDevisModalComponent } from './create-devis-modal.component';
 import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
 import { InvoiceListRowComponent } from './invoice-list-row.component';
 import { InvoicePreviewModalComponent } from './invoice-preview-modal.component';
 import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
-import { isOverdue } from './invoice-status.util';
+import { isOverdue, isUnsignedAtRisk } from './invoice-status.util';
 
 // Phase 24: which column the table is currently sorted by — a Finder/
 // Explorer-style sortable-header list. Statut isn't sortable (see
@@ -56,11 +58,12 @@ const SORT_COMPARATORS: Record<SortColumn, (a: InvoiceWithTotals, b: InvoiceWith
 // member of the 4 payment states, so it (and the whole disclosure/nesting
 // mechanism) simply disappears from view while a filter is active, rather
 // than needing its own dedicated rule to hide it.
-type StatusFilter = 'ALL' | 'PAYEE' | 'NON_PAYEE' | 'ANNULEE' | 'EN_RETARD';
+type StatusFilter = 'ALL' | 'PAYEE' | 'NON_PAYEE' | 'ACOMPTE_VERSE' | 'ANNULEE' | 'EN_RETARD';
 const STATUS_FILTER_CYCLE: readonly StatusFilter[] = [
   'ALL',
   'PAYEE',
   'NON_PAYEE',
+  'ACOMPTE_VERSE',
   'ANNULEE',
   'EN_RETARD',
 ];
@@ -77,6 +80,8 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
       return invoice.status === 'PAYEE';
     case 'ANNULEE':
       return invoice.status === 'ANNULEE';
+    case 'ACOMPTE_VERSE':
+      return invoice.status === 'ACOMPTE_VERSE';
     case 'EN_RETARD':
       return isOverdue(invoice);
     case 'NON_PAYEE':
@@ -113,6 +118,8 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
     CreateDevisModalComponent,
     InvoicePreviewModalComponent,
     SendInvoiceEmailModalComponent,
+    SignatureModalComponent,
+    SignatureViewModalComponent,
     IconChevronDownComponent,
     IconCloseComponent,
     IconCalendarComponent,
@@ -150,6 +157,10 @@ export class InvoiceBoardPage {
 
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly sharingInvoiceId = signal<string | null>(null);
+
+  // Phase 1.1-1
+  protected readonly signatureModalInvoice = signal<InvoiceWithTotals | null>(null);
+  protected readonly signatureViewInvoice = signal<InvoiceWithTotals | null>(null);
   // Which document's preview modal is open — opened by clicking anywhere on
   // its row (see InvoiceListRowComponent.rowClick); combines the PDF preview
   // and the "..." actions into one place that's always fully on-screen, no
@@ -187,6 +198,10 @@ export class InvoiceBoardPage {
     id: string;
     name: string | null;
   } | null>(null);
+  // Phase 1.1-1: Statistiques' "Voir ces factures" link (?unsigned=1) —
+  // independent of/combinable with repertoryFilter above, same "chip next
+  // to the date filters" affordance, own predicate (isUnsignedAtRisk).
+  protected readonly unsignedFilter = signal(false);
   // Phase 23: which single facture row's status menu is open — at most one
   // at a time.
   protected readonly statusMenuInvoiceId = signal<string | null>(null);
@@ -206,8 +221,12 @@ export class InvoiceBoardPage {
     const from = this.dateFrom();
     const to = this.dateTo();
     const repertoryFilter = this.repertoryFilter();
+    const unsignedFilter = this.unsignedFilter();
     return this.invoices().filter((invoice) => {
       if (repertoryFilter && !this.matchesRepertoryFilter(invoice, repertoryFilter)) {
+        return false;
+      }
+      if (unsignedFilter && !isUnsignedAtRisk(invoice)) {
         return false;
       }
       if (search && !invoice.customerName.toLowerCase().includes(search)) {
@@ -304,6 +323,13 @@ export class InvoiceBoardPage {
       : `Filtré par ${kindLabels[filter.kind].toLowerCase()}`;
   }
 
+  // Same "chip next to the date filters" affordance as
+  // clearRepertoryFilter/repertoryFilterLabel above, for the independent
+  // ?unsigned=1 entry point from Statistiques.
+  protected clearUnsignedFilter(): void {
+    this.unsignedFilter.set(false);
+  }
+
   // Phase 26: toggles the shared highlight for a devis and the facture it
   // was converted into, and scrolls that facture's row into view — the two
   // can land far apart in the sorted list (different dates), so a plain
@@ -374,6 +400,9 @@ export class InvoiceBoardPage {
         break;
       }
     }
+    if (queryParams.get('unsigned') === '1') {
+      this.unsignedFilter.set(true);
+    }
 
     this.invoiceService
       .list()
@@ -420,6 +449,8 @@ export class InvoiceBoardPage {
         return 'Non payée';
       case 'ANNULEE':
         return 'Annulée';
+      case 'ACOMPTE_VERSE':
+        return 'Acompte versé';
       case 'EN_RETARD':
         return 'En retard';
       default:
@@ -427,12 +458,14 @@ export class InvoiceBoardPage {
     }
   }
 
-  protected statusFilterVariant(): 'warning' | 'danger' | 'success' | 'secondary' {
+  protected statusFilterVariant(): 'warning' | 'danger' | 'success' | 'secondary' | 'info' {
     switch (this.statusFilter()) {
       case 'PAYEE':
         return 'success';
       case 'ANNULEE':
         return 'secondary';
+      case 'ACOMPTE_VERSE':
+        return 'info';
       case 'EN_RETARD':
         return 'danger';
       default:
@@ -477,6 +510,14 @@ export class InvoiceBoardPage {
     this.updateStatus(invoice.id, { status: 'PAYEE' }, 'Facture marquée payée.');
   }
 
+  // Phase 1.1-3: only ever reachable from a menu entry gated on
+  // depositAmountCents !== null (see InvoiceListRowComponent's template) —
+  // InvoiceService.updateStatus enforces the same guard server-side.
+  protected markDepositPaid(invoice: InvoiceWithTotals): void {
+    this.closeStatusMenu();
+    this.updateStatus(invoice.id, { status: 'ACOMPTE_VERSE' }, 'Acompte marqué comme versé.');
+  }
+
   protected cancelInvoice(invoice: InvoiceWithTotals): void {
     this.closeStatusMenu();
     this.updateStatus(invoice.id, { status: 'ANNULEE' }, 'Facture annulée.');
@@ -514,7 +555,7 @@ export class InvoiceBoardPage {
 
   private updateStatus(
     id: string,
-    request: { status: 'NON_PAYEE' | 'PAYEE' | 'ANNULEE'; dueDate?: string },
+    request: { status: 'NON_PAYEE' | 'ACOMPTE_VERSE' | 'PAYEE' | 'ANNULEE'; dueDate?: string },
     successMessage: string,
   ): void {
     this.invoiceService
@@ -715,5 +756,65 @@ export class InvoiceBoardPage {
     );
     this.emailModalInvoice.set(null);
     this.toastService.success('Email envoyé au client.');
+  }
+
+  // Phase 1.1-1 --------------------------------------------------------
+
+  private mergeInvoice(updated: InvoiceWithTotals): void {
+    this.invoices.update((invoices) =>
+      invoices.map((invoice) => (invoice.id === updated.id ? updated : invoice)),
+    );
+  }
+
+  protected openSignatureModal(invoice: InvoiceWithTotals): void {
+    this.signatureModalInvoice.set(invoice);
+  }
+
+  protected closeSignatureModal(): void {
+    this.signatureModalInvoice.set(null);
+  }
+
+  protected onSignatureSaved(updated: InvoiceWithTotals): void {
+    this.mergeInvoice(updated);
+    this.signatureModalInvoice.set(null);
+    this.toastService.success('Signature enregistrée.');
+  }
+
+  protected openSignatureView(invoice: InvoiceWithTotals): void {
+    this.signatureViewInvoice.set(invoice);
+  }
+
+  protected closeSignatureView(): void {
+    this.signatureViewInvoice.set(null);
+  }
+
+  protected toggleManuallySigned(invoice: InvoiceWithTotals): void {
+    if (invoice.hasSignatureProof) {
+      return;
+    }
+    this.invoiceService
+      .setManuallySigned(invoice.id, !invoice.manuallySigned)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updated) => this.mergeInvoice(updated),
+        error: () => {
+          this.toastService.error('Impossible de mettre à jour cette case pour le moment.');
+        },
+      });
+  }
+
+  protected onDeleteSignature(invoice: InvoiceWithTotals): void {
+    this.invoiceService
+      .deleteSignature(invoice.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updated) => {
+          this.mergeInvoice(updated);
+          this.toastService.success('Signature supprimée.');
+        },
+        error: () => {
+          this.toastService.error('Impossible de supprimer la signature pour le moment.');
+        },
+      });
   }
 }

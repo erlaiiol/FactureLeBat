@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PlanGateService } from '../billing/plan-gate.service';
+import { CatalogFolderService } from '../catalog-folder/catalog-folder.service';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { DiscountRepository } from './discount.repository';
 import { CreateDiscountDto } from './dto/create-discount.dto';
@@ -11,6 +12,7 @@ export class DiscountService {
   constructor(
     private readonly discountRepository: DiscountRepository,
     private readonly planGateService: PlanGateService,
+    private readonly catalogFolderService: CatalogFolderService,
   ) {}
 
   findAll(companyId: string, search?: string): Promise<DiscountProfile[]> {
@@ -30,14 +32,22 @@ export class DiscountService {
   // equivalent check.
   async create(companyId: string, dto: CreateDiscountDto): Promise<DiscountProfile> {
     await this.planGateService.assertCatalogCapacity(companyId, 'catalogItem');
-    return this.discountRepository.create(companyId, dto);
+    const folderIds = await this.catalogFolderService.filterOwnedFolderIds(
+      companyId,
+      dto.folderIds ?? [],
+    );
+    return this.discountRepository.create(companyId, dto, folderIds);
   }
 
   // Reports "not found" from the write itself — same TOCTOU-avoidance
   // reasoning as ProductService.update, via NoRowsAffectedError.
   async update(companyId: string, id: string, dto: UpdateDiscountDto): Promise<DiscountProfile> {
+    const folderIds = await this.catalogFolderService.filterOwnedFolderIds(
+      companyId,
+      dto.folderIds ?? [],
+    );
     try {
-      return await this.discountRepository.update(companyId, id, dto);
+      return await this.discountRepository.update(companyId, id, dto, folderIds);
     } catch (error) {
       if (error instanceof NoRowsAffectedError) {
         throw new NotFoundException(`Discount ${id} not found`);

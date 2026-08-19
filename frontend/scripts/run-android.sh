@@ -77,7 +77,11 @@ if [ "$MODE" = "dev" ]; then
         android:networkSecurityConfig="@xml/network_security_config"#' "$MANIFEST"
 	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$NETSEC"
 	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$ENVFILE"
-	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$INDEXFILE"
+	# g flag: index.capacitor-dev.html's CSP meta tag has the placeholder
+	# twice on the same line (img-src and connect-src both carve out the
+	# local API origin) — without it, sed only patches the first occurrence
+	# and ships a broken, unmatchable literal string in the CSP's img-src.
+	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#g" "$INDEXFILE"
 	if [ -f android/app/google-services.json ]; then
 		sed -i '' 's#pushNotificationsAvailable: false#pushNotificationsAvailable: true#' "$ENVFILE"
 	fi

@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PlanGateService } from '../billing/plan-gate.service';
+import { CatalogFolderService } from '../catalog-folder/catalog-folder.service';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { ServiceCatalogRepository } from './service-catalog.repository';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -12,6 +13,7 @@ export class ServiceCatalogService {
   constructor(
     private readonly serviceCatalogRepository: ServiceCatalogRepository,
     private readonly planGateService: PlanGateService,
+    private readonly catalogFolderService: CatalogFolderService,
   ) {}
 
   findAll(companyId: string, search?: string): Promise<ServiceProfile[]> {
@@ -30,8 +32,12 @@ export class ServiceCatalogService {
   // docs/roadmap.md Phase 30 and CustomerService.create's equivalent check.
   async create(companyId: string, dto: CreateServiceDto): Promise<ServiceProfile> {
     await this.planGateService.assertCatalogCapacity(companyId, 'catalogItem');
+    const folderIds = await this.catalogFolderService.filterOwnedFolderIds(
+      companyId,
+      dto.folderIds ?? [],
+    );
     try {
-      return await this.serviceCatalogRepository.create(companyId, dto);
+      return await this.serviceCatalogRepository.create(companyId, dto, folderIds);
     } catch (error) {
       throw this.mapKnownError(error);
     }
@@ -41,8 +47,12 @@ export class ServiceCatalogService {
   // TOCTOU-avoidance reasoning as ProductService.update/CustomerService.update,
   // now via NoRowsAffectedError (see ServiceCatalogRepository.update).
   async update(companyId: string, id: string, dto: UpdateServiceDto): Promise<ServiceProfile> {
+    const folderIds = await this.catalogFolderService.filterOwnedFolderIds(
+      companyId,
+      dto.folderIds ?? [],
+    );
     try {
-      return await this.serviceCatalogRepository.update(companyId, id, dto);
+      return await this.serviceCatalogRepository.update(companyId, id, dto, folderIds);
     } catch (error) {
       if (error instanceof NoRowsAffectedError) {
         throw new NotFoundException(`Service ${id} not found`);

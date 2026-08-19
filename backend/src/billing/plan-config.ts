@@ -19,6 +19,14 @@ export interface PlanDefinition {
   features: {
     analytics: boolean; // Phase 17 "Statistiques d'activité" (never the quarterly declaration — that stays free on every tier)
     aiSourcing: boolean; // Phase 10 "Assistant fournisseurs"
+    // Phase 1.1-2 amendment: "Dossiers" (CatalogFolder) — reserved Pro+/
+    // Premium, same reasoning as analytics: an Essentiel company that
+    // downgraded from a higher tier keeps every CatalogFolder row and
+    // Product/Service/Discount.folders assignment untouched (nothing here
+    // ever deletes on downgrade — see PlanGateService.assertFeatureAccess),
+    // only the feature surface (Mes dossiers, the folder picker, the mode
+    // rapide flyout's folder grouping) locks until they're back at Pro+.
+    dossiers: boolean;
   };
   prioritySupport: boolean;
   highlight: boolean; // marketing badge ("Meilleure valeur") on the pricing UI
@@ -47,7 +55,7 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     tagline: 'Pour démarrer sereinement, sans complexité inutile.',
     customerLimit: 20,
     catalogItemLimit: 30,
-    features: { analytics: false, aiSourcing: false },
+    features: { analytics: false, aiSourcing: false, dossiers: false },
     prioritySupport: false,
     highlight: false,
     removesWatermark: false,
@@ -59,7 +67,7 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     tagline: 'Pour une activité qui grandit : plus de place, vos statistiques.',
     customerLimit: 150,
     catalogItemLimit: 150,
-    features: { analytics: true, aiSourcing: false },
+    features: { analytics: true, aiSourcing: false, dossiers: true },
     prioritySupport: false,
     highlight: false,
     removesWatermark: false,
@@ -74,7 +82,7 @@ export const PLAN_DEFINITIONS: Record<PlanTier, PlanDefinition> = {
     tagline: 'Tout, sans limite, avec vos statistiques les plus complètes.',
     customerLimit: null,
     catalogItemLimit: null,
-    features: { analytics: true, aiSourcing: true },
+    features: { analytics: true, aiSourcing: true, dossiers: true },
     prioritySupport: true,
     highlight: true,
     removesWatermark: true,
@@ -94,7 +102,7 @@ export const TRIAL_OFFER_PRICE_EUROS = 2;
 export const TRIAL_OFFER_WINDOW_HOURS = 48;
 
 export type CatalogKind = 'customer' | 'catalogItem';
-export type GatedFeature = 'analytics' | 'aiSourcing';
+export type GatedFeature = 'analytics' | 'aiSourcing' | 'dossiers';
 
 // Short labels for GET /billing/plans and lock-screen copy — kept here
 // alongside PLAN_DEFINITIONS rather than duplicated in the two gate
@@ -107,6 +115,7 @@ export const CATALOG_KIND_LABELS: Record<CatalogKind, string> = {
 export const GATED_FEATURE_LABELS: Record<GatedFeature, string> = {
   analytics: "statistiques d'activité",
   aiSourcing: 'assistant IA fournisseurs',
+  dossiers: 'dossiers (organisation du catalogue par métier)',
 };
 
 export function isTierAtLeast(tier: PlanTier, required: PlanTier): boolean {

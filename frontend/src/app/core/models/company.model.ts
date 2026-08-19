@@ -12,6 +12,10 @@ export interface CompanyProfile {
   city: string;
   email: string | null;
   phone: string | null;
+  // Appended as an extra paragraph to the default invoice/devis message on
+  // every send — native "Partager" share, SMTP compose modal, mailto
+  // fallback alike (see backend's buildDefaultInvoiceMailTemplate).
+  invoiceMailCustomMessage: string | null;
   legalStatus: LegalStatus;
   vatRateBasisPoints: number;
   invoiceNumberPrefix: string;
@@ -21,6 +25,11 @@ export interface CompanyProfile {
   // warning banner — null when never set, in which case it simply doesn't show.
   declarationFrequency: DeclarationFrequency;
   microEntrepreneurCeiling: number | null;
+  // Phase 1.1-3: the artisan's habitual acompte rate, basis points (3000 =
+  // 30.00%) — null means no default, in which case mode rapide/mode
+  // manuel's "Demander un acompte" toggle stays off until turned on
+  // per-document.
+  defaultDepositPercentageBasisPoints: number | null;
   // Phase 17 (charges estimate): micro-entrepreneur "cotisations sociales"
   // rates, basis points (1230 = 12.30%) — pre-filled with the official
   // rates, but artisan-editable since they're revised periodically and vary
@@ -56,11 +65,13 @@ export interface UpdateCompanyRequest {
   city: string;
   email?: string;
   phone?: string;
+  invoiceMailCustomMessage?: string;
   legalStatus: LegalStatus;
   vatRateBasisPoints: number;
   invoiceNumberPrefix?: string;
   declarationFrequency?: DeclarationFrequency;
   microEntrepreneurCeiling?: number;
+  defaultDepositPercentageBasisPoints?: number;
   cotisationVenteBasisPoints?: number;
   cotisationPrestationBicBasisPoints?: number;
   cotisationPrestationBncBasisPoints?: number;

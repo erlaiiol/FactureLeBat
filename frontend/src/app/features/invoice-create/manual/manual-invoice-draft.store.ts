@@ -12,6 +12,7 @@ import {
 import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { computeTotalsPreview, TotalsPreview } from '../calculation-preview';
+import { InvoiceDepositDraft } from '../invoice-draft.store';
 import {
   formatManualPrice,
   formatManualQuantity,
@@ -81,6 +82,14 @@ function emptyRow(columns: readonly ManualColumnDraft[]): ManualRowDraft {
   };
 }
 
+// Phase 1.1-3: same shape/semantics as InvoiceDraftStore's own deposit
+// draft — see InvoiceDepositDraft's doc comment.
+const EMPTY_DEPOSIT: InvoiceDepositDraft = {
+  requested: false,
+  percentageBasisPoints: 0,
+  amountOverrideEuros: null,
+};
+
 const EMPTY_CUSTOMER: ManualCustomerDraft = {
   customerName: '',
   customerAddress: '',
@@ -110,6 +119,7 @@ interface PersistedManualDraft {
   documentType: DocumentType;
   sourceDevisId: string | null;
   number: string;
+  deposit: InvoiceDepositDraft;
 }
 
 // Phase 9.5 mode manuel: the free-form canvas's shared, in-progress draft
@@ -154,6 +164,12 @@ export class ManualInvoiceDraftStore {
   readonly subtotalOverrideText = signal('');
   readonly vatOverrideText = signal('');
   readonly totalOverrideText = signal('');
+
+  // Phase 1.1-3: the "Demander un acompte" toggle — see InvoiceDepositDraft.
+  readonly deposit = signal<InvoiceDepositDraft>(EMPTY_DEPOSIT);
+  // Same "don't clobber a resumed draft's own choice" guard as
+  // InvoiceDraftStore.depositWasHydrated.
+  private depositWasHydrated = false;
 
   // Manual mode's whole principle, extended to VAT itself: the company
   // profile's legal status only ever picks one fixed treatment for every
@@ -233,6 +249,21 @@ export class ManualInvoiceDraftStore {
     return { subtotalExclVatCents, vatAmountCents, totalInclVatCents };
   });
 
+  // Phase 1.1-3: same "resolved against Total TTC, auto-follows unless
+  // frozen" reasoning as InvoiceDraftStore.depositAmountCents.
+  readonly depositAmountCents = computed(() => {
+    const deposit = this.deposit();
+    if (!deposit.requested) {
+      return 0;
+    }
+    if (deposit.amountOverrideEuros !== null) {
+      return Math.max(0, Math.round(deposit.amountOverrideEuros * 100));
+    }
+    return Math.round(
+      (this.totalsPreview().totalInclVatCents * deposit.percentageBasisPoints) / 10000,
+    );
+  });
+
   // Same soft UX gate as InvoiceDraftStore.canPreview — closely mirrors the
   // backend's real requirements without being the source of truth for them.
   readonly canPreview = computed(() => {
@@ -243,13 +274,41 @@ export class ManualInvoiceDraftStore {
     return hasCustomerName && hasUsableRow;
   });
 
+  // Same two checks as canPreview above, itemized — InvoiceCreateManualPage
+  // reads this before ever calling the preview API, so an incomplete draft
+  // shows exactly what's missing instead of the PDF modal flashing open
+  // (loading spinner) then instantly shut again once the backend's 400
+  // comes back (see that page's preview()).
+  readonly previewBlockers = computed((): string[] => {
+    const blockers: string[] = [];
+    if (this.customer().customerName.trim().length === 0) {
+      blockers.push('Nom du client manquant');
+    }
+    const hasUsableRow = this.rows().some(
+      (row) => (row.cells[DESCRIPTION_COLUMN_ID] ?? '').trim().length > 0,
+    );
+    if (!hasUsableRow) {
+      blockers.push('Aucune ligne avec une désignation renseignée');
+    }
+    return blockers;
+  });
+
   constructor() {
     this.hydrateFromStorage();
 
     this.companyService
       .getProfile()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (profile) => this.company.set(profile) });
+      .subscribe({
+        next: (profile) => {
+          this.company.set(profile);
+          // Phase 1.1-3: same "only pre-fill a genuinely fresh draft" guard
+          // as InvoiceDraftStore.
+          if (!this.depositWasHydrated) {
+            this.applyCompanyDefaultDeposit(profile);
+          }
+        },
+      });
 
     effect(() => {
       const snapshot: PersistedManualDraft = {
@@ -263,9 +322,60 @@ export class ManualInvoiceDraftStore {
         documentType: this.documentType(),
         sourceDevisId: this.sourceDevisId(),
         number: this.number(),
+        deposit: this.deposit(),
       };
       this.writeToStorage(snapshot);
     });
+  }
+
+  // Phase 1.1-3: same reasoning as InvoiceDraftStore.applyCompanyDefaultDeposit.
+  private applyCompanyDefaultDeposit(profile: CompanyProfile | null): void {
+    const defaultRate = profile?.defaultDepositPercentageBasisPoints;
+    this.deposit.set(
+      defaultRate != null
+        ? { requested: true, percentageBasisPoints: defaultRate, amountOverrideEuros: null }
+        : EMPTY_DEPOSIT,
+    );
+  }
+
+  setDepositRequested(requested: boolean): void {
+    this.deposit.update((deposit) => ({ ...deposit, requested }));
+  }
+
+  setDepositPercentage(basisPoints: number): void {
+    this.deposit.update((deposit) => ({ ...deposit, percentageBasisPoints: basisPoints }));
+  }
+
+  // Same "returns whether this call is what just froze it" contract as
+  // InvoiceDraftStore.setDepositAmountOverride.
+  setDepositAmountOverride(amountEuros: number): boolean {
+    const wasAuto = this.deposit().amountOverrideEuros === null;
+    this.deposit.update((deposit) => ({ ...deposit, amountOverrideEuros: amountEuros }));
+    return wasAuto;
+  }
+
+  resetDepositAutoCalc(): void {
+    this.deposit.update((deposit) => ({ ...deposit, amountOverrideEuros: null }));
+  }
+
+  // Freezes the deposit amount at whatever it last auto-computed to,
+  // exactly as if the artisan had typed that value directly — the user's own
+  // decision: touching the manual invoice's own Total TTC field is itself a
+  // manual override of the document, so the deposit calc stops silently
+  // chasing it too. Returns whether this call is what just froze it (same
+  // contract as setDepositAmountOverride), called from setTotalOverrideText
+  // below before the new total takes effect, so it freezes at the value the
+  // artisan actually last saw on screen.
+  private freezeDepositBeforeTotalEdit(): boolean {
+    const deposit = this.deposit();
+    if (!deposit.requested || deposit.amountOverrideEuros !== null) {
+      return false;
+    }
+    this.deposit.update((current) => ({
+      ...current,
+      amountOverrideEuros: this.depositAmountCents() / 100,
+    }));
+    return true;
   }
 
   // Phase 14.3: same "only set when the mode-choice slider actually sent
@@ -341,8 +451,12 @@ export class ManualInvoiceDraftStore {
     this.vatOverrideText.set(text);
   }
 
-  setTotalOverrideText(text: string): void {
+  // Returns whether this edit just froze the deposit's auto-calc (see
+  // freezeDepositBeforeTotalEdit) — the page toasts a warning when it does.
+  setTotalOverrideText(text: string): boolean {
+    const frozeDeposit = this.freezeDepositBeforeTotalEdit();
     this.totalOverrideText.set(text);
+    return frozeDeposit;
   }
 
   // The artisan's explicit pick from the VAT selector (see
@@ -461,6 +575,9 @@ export class ManualInvoiceDraftStore {
     this.totalOverrideText.set('');
     this.vatChoice.set(null);
     this.documentType.set('FACTURE');
+    // Same "auto-applied to every new FACTURE draft" rule as
+    // InvoiceDraftStore.reset().
+    this.applyCompanyDefaultDeposit(this.company());
     this.sourceDevisId.set(null);
     this.number.set('');
     this.clearStorage();
@@ -544,6 +661,9 @@ export class ManualInvoiceDraftStore {
     });
 
     this.documentType.set('FACTURE');
+    // A devis never carries a deposit — same reasoning as
+    // InvoiceDraftStore.loadFromInvoice.
+    this.applyCompanyDefaultDeposit(this.company());
     this.sourceDevisId.set(source.id);
     // Same "a converted facture always gets its own fresh number" rule as
     // InvoiceDraftStore.loadFromInvoice.
@@ -607,6 +727,14 @@ export class ManualInvoiceDraftStore {
       totalOverrideCents: totalOverride !== null ? Math.round(totalOverride * 100) : undefined,
       vatApplicableOverride: vatChoice?.applicable,
       vatRateBasisPointsOverride: vatChoice?.rateBasisPoints,
+      // Phase 1.1-3: FACTURE-only, same reasoning as
+      // InvoiceDraftStore.buildInvoiceRequest.
+      ...(this.documentType() === 'FACTURE' && this.deposit().requested
+        ? {
+            depositPercentageBasisPoints: this.deposit().percentageBasisPoints,
+            depositAmountCents: this.depositAmountCents(),
+          }
+        : {}),
       convertedFromDevisId: this.sourceDevisId() ?? undefined,
       number: this.number().trim() || undefined,
     };
@@ -664,6 +792,14 @@ export class ManualInvoiceDraftStore {
       }
       if (typeof parsed.number === 'string') {
         this.number.set(parsed.number);
+      }
+      if (
+        parsed.deposit &&
+        typeof parsed.deposit.requested === 'boolean' &&
+        typeof parsed.deposit.percentageBasisPoints === 'number'
+      ) {
+        this.deposit.set({ ...EMPTY_DEPOSIT, ...parsed.deposit });
+        this.depositWasHydrated = true;
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

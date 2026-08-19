@@ -121,6 +121,7 @@ export class CompanySettingsPage {
     city: ['', Validators.required],
     email: [''],
     phone: [''],
+    invoiceMailCustomMessage: ['', Validators.maxLength(500)],
     legalStatus: ['MICRO_ENTREPRENEUR' as LegalStatus, Validators.required],
     // Entered as a plain percentage (e.g. 20) and converted to basis points on submit.
     vatRatePercent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
@@ -130,6 +131,13 @@ export class CompanySettingsPage {
     // (not 0) means "no ceiling set", same "null is the not-set value"
     // convention as ProductFormPage's packagingQuantity.
     microEntrepreneurCeilingEuros: this.fb.control<number | null>(null, Validators.min(0)),
+    // Phase 1.1-3: entered as a plain percentage, converted to basis points
+    // on submit — same null-means-unset convention as
+    // microEntrepreneurCeilingEuros above.
+    defaultDepositPercent: this.fb.control<number | null>(null, [
+      Validators.min(0),
+      Validators.max(100),
+    ]),
     // Phase 17 (charges estimate): entered as plain percentages, converted
     // to basis points on submit — same boundary-conversion convention as
     // vatRatePercent. Pre-filled with the official rates in effect when this
@@ -187,11 +195,15 @@ export class CompanySettingsPage {
             city: profile.city,
             email: profile.email ?? '',
             phone: profile.phone ?? '',
+            invoiceMailCustomMessage: profile.invoiceMailCustomMessage ?? '',
             legalStatus: profile.legalStatus,
             vatRatePercent: profile.vatRateBasisPoints / 100,
             declarationFrequency: profile.declarationFrequency,
             microEntrepreneurCeilingEuros: profile.microEntrepreneurCeiling
               ? profile.microEntrepreneurCeiling / 100
+              : null,
+            defaultDepositPercent: profile.defaultDepositPercentageBasisPoints
+              ? profile.defaultDepositPercentageBasisPoints / 100
               : null,
             cotisationVentePercent: profile.cotisationVenteBasisPoints / 100,
             cotisationPrestationBicPercent: profile.cotisationPrestationBicBasisPoints / 100,
@@ -277,12 +289,17 @@ export class CompanySettingsPage {
         city: value.city,
         email: value.email || undefined,
         phone: value.phone || undefined,
+        invoiceMailCustomMessage: value.invoiceMailCustomMessage || undefined,
         legalStatus: value.legalStatus,
         vatRateBasisPoints: Math.round(value.vatRatePercent * 100),
         declarationFrequency: value.declarationFrequency,
         microEntrepreneurCeiling:
           value.microEntrepreneurCeilingEuros != null
             ? Math.round(value.microEntrepreneurCeilingEuros * 100)
+            : undefined,
+        defaultDepositPercentageBasisPoints:
+          value.defaultDepositPercent != null
+            ? Math.round(value.defaultDepositPercent * 100)
             : undefined,
         cotisationVenteBasisPoints: Math.round(value.cotisationVentePercent * 100),
         cotisationPrestationBicBasisPoints: Math.round(value.cotisationPrestationBicPercent * 100),

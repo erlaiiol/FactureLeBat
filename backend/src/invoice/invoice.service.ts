@@ -5,7 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { DocumentType, InvoiceEntryMode, InvoiceStatus } from '../../generated/prisma/enums';
+import {
+  DocumentType,
+  InvoiceEntryMode,
+  InvoiceStatus,
+  SignatureMethod,
+} from '../../generated/prisma/enums';
 import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
@@ -139,6 +144,10 @@ export class InvoiceService {
       // createInvoiceRow/computeNextDocumentNumber.
       number: dto.number,
       simplifiedDisplay: dto.simplifiedDisplay ?? false,
+      // Phase 1.1-3: DepositFieldsConsistency already guarantees these are
+      // both present or both absent, and only ever present for a FACTURE.
+      depositPercentageBasisPoints: dto.depositPercentageBasisPoints,
+      depositAmountCents: dto.depositAmountCents,
       // ManualModeFieldsConsistency guarantees `lines` is a non-empty array
       // whenever entryMode is GUIDED (the only branch that reads it below).
       lines:
@@ -448,6 +457,12 @@ export class InvoiceService {
     if (invoice.documentType !== DocumentType.FACTURE) {
       throw new BadRequestException(`Invoice ${id} is not a facture`);
     }
+    // Phase 1.1-3: ACOMPTE_VERSE only makes sense on a facture that actually
+    // has a deposit requested — see schema.prisma's comment on
+    // InvoiceStatus.
+    if (dto.status === InvoiceStatus.ACOMPTE_VERSE && invoice.depositAmountCents === null) {
+      throw new BadRequestException(`Invoice ${id} has no deposit requested`);
+    }
 
     // paidAt records the fact of being marked PAYEE, same "records the fact,
     // not a log" convention as sentAt: set on entering PAYEE, cleared when
@@ -459,6 +474,13 @@ export class InvoiceService {
         : dto.status !== invoice.status
           ? null
           : invoice.paidAt;
+    // Same "records the fact, not a log" convention, for ACOMPTE_VERSE.
+    const depositPaidAt =
+      dto.status === InvoiceStatus.ACOMPTE_VERSE
+        ? (invoice.depositPaidAt ?? new Date())
+        : dto.status !== invoice.status
+          ? null
+          : invoice.depositPaidAt;
 
     const updated = await this.invoiceRepository.updateStatus(companyId, id, {
       status: dto.status,
@@ -467,6 +489,7 @@ export class InvoiceService {
       // silently cleared by an update that isn't about the due date at all.
       dueDate: dto.dueDate !== undefined ? new Date(dto.dueDate) : undefined,
       paidAt,
+      depositPaidAt,
     });
 
     return this.mapper.toInvoiceWithTotals(updated);
@@ -483,11 +506,63 @@ export class InvoiceService {
   }
 
   async getPdfData(companyId: string, id: string): Promise<InvoicePdfData> {
-    const [invoice, logo] = await Promise.all([
+    const [invoice, logo, signature] = await Promise.all([
       this.findRawById(companyId, id),
       this.companyService.getLogo(companyId),
+      this.invoiceRepository.findSignatureImage(companyId, id),
     ]);
-    return this.mapper.toPdfData(invoice, logo);
+    return this.mapper.toPdfData(invoice, logo, signature);
+  }
+
+  // Phase 1.1-1: "Signer" — attaches a drawn or photographed signature,
+  // replacing any existing one for this document. See
+  // InvoiceController.uploadSignature for the upload/validation boundary.
+  async uploadSignature(
+    companyId: string,
+    id: string,
+    data: { image: Buffer; mimeType: string; method: SignatureMethod },
+  ): Promise<InvoiceWithTotals> {
+    await this.findRawById(companyId, id);
+    const invoice = await this.invoiceRepository.upsertSignature(id, data);
+    return this.mapper.toInvoiceWithTotals(invoice);
+  }
+
+  // Reverts the document to its manual/unchecked state — see
+  // schema.prisma's comment on Invoice.manuallySigned.
+  async deleteSignature(companyId: string, id: string): Promise<InvoiceWithTotals> {
+    await this.findRawById(companyId, id);
+    const invoice = await this.invoiceRepository.deleteSignature(id);
+    return this.mapper.toInvoiceWithTotals(invoice);
+  }
+
+  async getSignatureImage(
+    companyId: string,
+    id: string,
+  ): Promise<{ image: Buffer; mimeType: string } | null> {
+    await this.findRawById(companyId, id);
+    return this.invoiceRepository.findSignatureImage(companyId, id);
+  }
+
+  // The freehand fallback checkbox — only interactive while no real
+  // InvoiceSignature is attached (see schema.prisma's comment on
+  // Invoice.manuallySigned); enforced here, not just disabled client-side.
+  async setManuallySigned(
+    companyId: string,
+    id: string,
+    manuallySigned: boolean,
+  ): Promise<InvoiceWithTotals> {
+    const invoice = await this.findRawById(companyId, id);
+    if (invoice.signature) {
+      throw new BadRequestException(
+        'Une signature est déjà attachée à ce document — supprimez-la avant de modifier cette case.',
+      );
+    }
+    const updated = await this.invoiceRepository.updateManuallySigned(
+      companyId,
+      id,
+      manuallySigned,
+    );
+    return this.mapper.toInvoiceWithTotals(updated);
   }
 
   // Phase 6: renders a PDF from an unsaved draft (no id, no invoice number

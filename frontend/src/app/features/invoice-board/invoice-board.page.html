@@ -69,6 +69,17 @@
         <app-icon-close [size]="14" />
       </button>
     }
+    @if (unsignedFilter()) {
+      <button
+        type="button"
+        (click)="clearUnsignedFilter()"
+        title="Afficher tous les documents"
+        class="flex items-center gap-1.5 rounded-lg border border-danger-subtle-border bg-danger-subtle px-3 py-2 text-sm font-medium text-danger-subtle-fg hover:brightness-95"
+      >
+        <span>Factures non signées</span>
+        <app-icon-close [size]="14" />
+      </button>
+    }
   </div>
 
   @if (loading()) {
@@ -144,6 +155,7 @@
               </button>
             </th>
             <th class="px-4 py-3 text-right font-medium">Total</th>
+            <th class="px-4 py-3 text-center font-medium">Signé</th>
             <th class="px-4 py-3 text-right font-medium">Actions</th>
           </tr>
         </thead>
@@ -167,8 +179,13 @@
               (setPaid)="markPaid(item)"
               (setCancelled)="cancelInvoice(item)"
               (setNonPayee)="moveToNonPayee(item)"
+              (setDepositPaid)="markDepositPaid(item)"
               (share)="onShare(item)"
               (rowClick)="openPreview(item)"
+              (toggleManuallySigned)="toggleManuallySigned(item)"
+              (openSignatureModal)="openSignatureModal(item)"
+              (openSignatureView)="openSignatureView(item)"
+              (deleteSignature)="onDeleteSignature(item)"
             />
           }
         </tbody>
@@ -199,6 +216,14 @@
     (closed)="closeEmailModal()"
     (sent)="onEmailSent($event)"
   />
+
+  <app-signature-modal
+    [invoice]="signatureModalInvoice()"
+    (closed)="closeSignatureModal()"
+    (signed)="onSignatureSaved($event)"
+  />
+
+  <app-signature-view-modal [invoice]="signatureViewInvoice()" (closed)="closeSignatureView()" />
 
   <app-invoice-preview-modal
     [invoice]="previewInvoice()"

@@ -55,7 +55,22 @@ async function bootstrap() {
   // process mid-request instead of draining connections cleanly.
   app.enableShutdownHooks();
 
-  app.use(helmet());
+  // helmet's default Cross-Origin-Resource-Policy: same-origin blocks a
+  // browser from loading any resource (an <img src>, notably
+  // CompanyService.logoUrl/InvoiceService.signatureUrl) served by this API
+  // from a page on a different origin — correct and left alone in prod
+  // (Caddy/nginx proxy this API under the page's own origin, see
+  // infra/Caddyfile) and the Capacitor bundle (capacitor.config.ts's
+  // server.hostname trick, same reasoning), but it also silently blocks
+  // those same images in local dev, where Angular (:4200) and Nest (:3000)
+  // are genuinely different origins (same reasoning as enableCors below).
+  // Same isProduction convention as PrismaService/AuthController.
+  const isProduction = config.get<string>('NODE_ENV') === 'production';
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: isProduction ? 'same-origin' : 'cross-origin' },
+    }),
+  );
   // Phase 13: JwtStrategy/CsrfGuard read cookies off the request — without
   // this middleware req.cookies is always undefined.
   app.use(cookieParser());

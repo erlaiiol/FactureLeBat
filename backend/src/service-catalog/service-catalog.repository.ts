@@ -1,14 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { ServiceModel as Service } from '../../generated/prisma/models';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { ServiceProfile } from './entities/service.entity';
+
+// Selects just id/name — see CatalogFolderRef.
+const FOLDERS_INCLUDE = { folders: { select: { id: true, name: true } } } as const;
 
 @Injectable()
 export class ServiceCatalogRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
   // Capped rather than paginated for now — same trade-off as
   // ProductRepository/CustomerRepository/InvoiceRepository: bounds query
   // cost and response size as the catalog grows instead of ever fetching an
@@ -17,7 +18,9 @@ export class ServiceCatalogRepository {
   // everything.
   private static readonly MAX_LISTED_SERVICES = 500;
 
-  findAll(companyId: string, search?: string): Promise<Service[]> {
+  constructor(private readonly prisma: PrismaService) {}
+
+  findAll(companyId: string, search?: string): Promise<ServiceProfile[]> {
     return this.prisma.service.findMany({
       where: {
         companyId,
@@ -32,17 +35,21 @@ export class ServiceCatalogRepository {
       },
       orderBy: { name: 'asc' },
       take: ServiceCatalogRepository.MAX_LISTED_SERVICES,
+      include: FOLDERS_INCLUDE,
     });
   }
 
   // findFirst (not findUnique) so the companyId filter can be part of the
   // same query — a cross-tenant id must read as a plain 404, never leak
   // whether the row exists for someone else.
-  findById(companyId: string, id: string): Promise<Service | null> {
-    return this.prisma.service.findFirst({ where: { id, companyId } });
+  findById(companyId: string, id: string): Promise<ServiceProfile | null> {
+    return this.prisma.service.findFirst({ where: { id, companyId }, include: FOLDERS_INCLUDE });
   }
 
-  create(companyId: string, data: CreateServiceDto): Promise<Service> {
+  // folderIds is already filtered to this company's own folders (see
+  // CatalogFolderService.filterOwnedFolderIds, called from
+  // ServiceCatalogService) before it ever reaches here.
+  create(companyId: string, data: CreateServiceDto, folderIds: string[]): Promise<ServiceProfile> {
     return this.prisma.service.create({
       data: {
         name: data.name,
@@ -54,12 +61,17 @@ export class ServiceCatalogRepository {
         code: data.code,
         activityCategory: data.activityCategory ?? null,
         companyId,
+        folders: { connect: folderIds.map((id) => ({ id })) },
       },
+      include: FOLDERS_INCLUDE,
     });
   }
 
   // updateMany (not update): see CustomerRepository.update's comment — same
   // reasoning applies to every tenant-scoped repository in this retrofit.
+  // updateMany can't write relations though, so the folder sync is a second,
+  // plain `update` by bare id in the same transaction — safe only because
+  // the updateMany above it already proved this id belongs to companyId.
   //
   // Built explicitly (not `data: data`) so an omitted optional field clears
   // to null instead of leaving the previous value in place — same reasoning
@@ -68,23 +80,34 @@ export class ServiceCatalogRepository {
   // PricingConsistency guarantees exactly one is set on the incoming DTO) so
   // switching a service between FIXED and PERCENTAGE never leaves a stale
   // value from the previous mode behind.
-  async update(companyId: string, id: string, data: UpdateServiceDto): Promise<Service> {
-    const { count } = await this.prisma.service.updateMany({
-      where: { id, companyId },
-      data: {
-        name: data.name,
-        description: data.description ?? null,
-        pricingMode: data.pricingMode,
-        priceCents: data.priceCents ?? null,
-        percentageBasisPoints: data.percentageBasisPoints ?? null,
-        defaultVisibility: data.defaultVisibility,
-        code: data.code ?? null,
-        activityCategory: data.activityCategory ?? null,
-      },
+  async update(
+    companyId: string,
+    id: string,
+    data: UpdateServiceDto,
+    folderIds: string[],
+  ): Promise<ServiceProfile> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.service.updateMany({
+        where: { id, companyId },
+        data: {
+          name: data.name,
+          description: data.description ?? null,
+          pricingMode: data.pricingMode,
+          priceCents: data.priceCents ?? null,
+          percentageBasisPoints: data.percentageBasisPoints ?? null,
+          defaultVisibility: data.defaultVisibility,
+          code: data.code ?? null,
+          activityCategory: data.activityCategory ?? null,
+        },
+      });
+      if (count === 0) {
+        throw new NoRowsAffectedError();
+      }
+      return tx.service.update({
+        where: { id },
+        data: { folders: { set: folderIds.map((folderId) => ({ id: folderId })) } },
+        include: FOLDERS_INCLUDE,
+      });
     });
-    if (count === 0) {
-      throw new NoRowsAffectedError();
-    }
-    return this.prisma.service.findFirstOrThrow({ where: { id, companyId } });
   }
 }

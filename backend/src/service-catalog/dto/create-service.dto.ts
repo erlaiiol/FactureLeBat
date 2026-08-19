@@ -1,8 +1,10 @@
 import {
+  IsArray,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -71,4 +73,10 @@ export class CreateServiceDto {
   @IsOptional()
   @IsEnum(ActivityCategory)
   activityCategory?: ActivityCategory;
+
+  // Phase 1.1-2: same folder picker as CreateProductDto.folderIds.
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  folderIds?: string[];
 }

@@ -176,6 +176,14 @@ export class StatsReportsPage {
     void this.router.navigateByUrl('/abonnement');
   }
 
+  // Phase 1.1-1: jumps to "Mes documents" pre-filtered to exactly the
+  // factures counted by unsignedFactureCount — same répertoire-style
+  // query-param filter InvoiceBoardPage already reads for the
+  // client/product/service/discount "Documents" entry points.
+  protected goToUnsignedFactures(): void {
+    void this.router.navigate(['/factures'], { queryParams: { unsigned: '1' } });
+  }
+
   protected previousPeriod(): void {
     this.referenceDate.update((date) => shiftPeriod(this.mode(), date, -1));
     this.loadReport();

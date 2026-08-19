@@ -32,6 +32,16 @@
             >
               Non payée
             </button>
+            @if (invoice().depositAmountCents !== null) {
+              <button
+                type="button"
+                (click)="setDepositPaid.emit()"
+                class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+                [class.font-semibold]="invoice().status === 'ACOMPTE_VERSE'"
+              >
+                Acompte versé
+              </button>
+            }
             <button
               type="button"
               (click)="setPaid.emit()"
@@ -102,6 +112,30 @@
     {{ invoice().totalInclVatCents | centsToEuros }}
   </td>
 
+  <td class="px-4 py-3 align-top text-center" (click)="$event.stopPropagation()">
+    <button
+      type="button"
+      [disabled]="invoice().hasSignatureProof"
+      (click)="toggleManuallySigned.emit()"
+      [attr.aria-label]="signed() ? 'Document signé' : 'Marquer comme signé'"
+      [title]="
+        invoice().hasSignatureProof
+          ? 'Une signature est attachée — retirez-la pour modifier cette case.'
+          : 'Marquer manuellement comme signé'
+      "
+      class="inline-flex size-6 items-center justify-center rounded-md border border-line"
+      [class.bg-success]="signed()"
+      [class.border-success]="signed()"
+      [class.text-white]="signed()"
+      [class.cursor-not-allowed]="invoice().hasSignatureProof"
+      [class.cursor-pointer]="!invoice().hasSignatureProof"
+    >
+      @if (signed()) {
+        <app-icon-check [size]="14" />
+      }
+    </button>
+  </td>
+
   <td class="px-4 py-3 align-top text-right" (click)="$event.stopPropagation()">
     <div class="inline-block">
       <button
@@ -166,6 +200,29 @@
             <span class="block">{{ sharing() ? 'Partage…' : 'Partager' }}</span>
             <span class="block text-xs font-normal text-ink-soft">Email, WhatsApp…</span>
           </button>
+          <button
+            type="button"
+            (click)="openSignatureModal.emit(); toggleActionsMenu.emit()"
+            class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+          >
+            Signer
+          </button>
+          @if (invoice().hasSignatureProof) {
+            <button
+              type="button"
+              (click)="openSignatureView.emit(); toggleActionsMenu.emit()"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+            >
+              Voir la signature
+            </button>
+            <button
+              type="button"
+              (click)="deleteSignature.emit(); toggleActionsMenu.emit()"
+              class="px-3 py-2 text-left text-sm text-danger hover:bg-secondary-subtle"
+            >
+              Supprimer la signature
+            </button>
+          }
         </div>
       }
     </div>

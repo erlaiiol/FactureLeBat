@@ -97,4 +97,8 @@ export interface ActivityAnalytics {
   averageInvoiceValueCents: number;
   activeClientCount: number;
   activeProductCount: number;
+  // Phase 1.1-1: every FACTURE (any status but ANNULEE) with no signature
+  // proof and no manual fallback checked — not scoped to the 12-month
+  // window, same "whole book" treatment as outstandingTotalCents.
+  unsignedFactureCount: number;
 }

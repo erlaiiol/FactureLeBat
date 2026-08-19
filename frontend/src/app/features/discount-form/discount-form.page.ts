@@ -6,14 +6,22 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DiscountType } from '../../core/models/discount.model';
 import { DiscountService } from '../../core/services/discount.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AdvancedSettingsComponent } from '../../shared/components/advanced-settings.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { CatalogFolderMultiSelectComponent } from '../../shared/components/catalog-folder-multi-select.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 
 @Component({
   selector: 'app-discount-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
+  imports: [
+    ReactiveFormsModule,
+    AdvancedSettingsComponent,
+    BigButtonComponent,
+    CatalogFolderMultiSelectComponent,
+    FieldHintComponent,
+  ],
   templateUrl: './discount-form.page.html',
 })
 export class DiscountFormPage {
@@ -46,6 +54,10 @@ export class DiscountFormPage {
     percentage: [0, [Validators.min(0.01), Validators.max(100)]],
   });
 
+  // Phase 1.1-2: zero, one, or several CatalogFolder ids — local,
+  // uncommitted signal, same pattern as ProductFormPage.selectedFolderIds.
+  protected readonly selectedFolderIds = signal<string[]>([]);
+
   protected isPercentageMode(): boolean {
     return this.form.controls.discountType.value === 'PERCENTAGE';
   }
@@ -70,6 +82,7 @@ export class DiscountFormPage {
               percentage:
                 discount.percentageBasisPoints != null ? discount.percentageBasisPoints / 100 : 0,
             });
+            this.selectedFolderIds.set(discount.folders.map((folder) => folder.id));
           },
           error: () => {
             this.loading.set(false);
@@ -100,6 +113,7 @@ export class DiscountFormPage {
         value.discountType === 'FIXED' ? Math.round(value.fixedAmountEuros * 100) : undefined,
       percentageBasisPoints:
         value.discountType === 'PERCENTAGE' ? Math.round(value.percentage * 100) : undefined,
+      folderIds: this.selectedFolderIds(),
     };
 
     this.saving.set(true);

@@ -13,6 +13,9 @@ export interface InvoiceMailTemplateInput {
   // Phase 14.3: a devis is mechanically a facture — see DocumentType
   // (schema.prisma). Only the label below changes.
   documentType: 'DEVIS' | 'FACTURE';
+  // Company.invoiceMailCustomMessage — the artisan's own note, added as an
+  // extra paragraph when set. Null/undefined leaves the template unchanged.
+  customMessage?: string | null;
 }
 
 export interface InvoiceMailTemplate {
@@ -34,6 +37,7 @@ export function buildDefaultInvoiceMailTemplate(
     `Bonjour ${input.customerName},`,
     '',
     `Veuillez trouver ci-joint ${input.documentType === 'DEVIS' ? 'le' : 'la'} ${lowerLabel} ${input.invoiceNumber} d'un montant de ${centsToEuros(input.totalInclVatCents)} TTC.`,
+    ...(input.customMessage ? ['', input.customMessage] : []),
     '',
     'Cordialement,',
     input.companyName,

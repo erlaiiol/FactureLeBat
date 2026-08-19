@@ -196,6 +196,9 @@
                         : '✓ Jusqu’à ' + plan.catalogItemLimit + ' produits/prestations'
                     }}
                   </li>
+                  <li [class.text-ink-soft]="!plan.features.dossiers">
+                    {{ plan.features.dossiers ? '✓' : '✗' }} Dossiers (catalogue par métier)
+                  </li>
                   <li [class.text-ink-soft]="!plan.features.analytics">
                     {{ plan.features.analytics ? '✓' : '✗' }} Statistiques d'activité
                   </li>

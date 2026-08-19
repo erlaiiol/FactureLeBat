@@ -14,6 +14,7 @@ import { ProductService } from '../../core/services/product.service';
 import { ToastService } from '../../core/services/toast.service';
 import { AdvancedSettingsComponent } from '../../shared/components/advanced-settings.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { CatalogFolderMultiSelectComponent } from '../../shared/components/catalog-folder-multi-select.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 import { SourcingPanelComponent } from '../invoice-create/components/sourcing-panel.component';
@@ -25,6 +26,7 @@ import { SourcingPanelComponent } from '../invoice-create/components/sourcing-pa
     ReactiveFormsModule,
     AdvancedSettingsComponent,
     BigButtonComponent,
+    CatalogFolderMultiSelectComponent,
     FieldHintComponent,
     SourcingPanelComponent,
   ],
@@ -75,6 +77,11 @@ export class ProductFormPage {
   // convenience — never sent to the backend; only packagingQuantity (the
   // real content, in the product's own unit) is ever persisted.
   protected readonly packagingItemCount = signal<number | null>(null);
+
+  // Phase 1.1-2: zero, one, or several CatalogFolder ids — same local,
+  // uncommitted signal pattern as packagingItemCount above (see
+  // CatalogFolderMultiSelectComponent's own comment).
+  protected readonly selectedFolderIds = signal<string[]>([]);
 
   protected unitPriceButtonLabel(): string {
     return UNIT_PRICE_BUTTON_LABELS[this.form.controls.unit.value];
@@ -133,6 +140,7 @@ export class ProductFormPage {
                 : null,
               activityCategory: product.activityCategory,
             });
+            this.selectedFolderIds.set(product.folders.map((folder) => folder.id));
           },
           error: () => {
             this.loading.set(false);
@@ -222,6 +230,7 @@ export class ProductFormPage {
       code: value.code || undefined,
       packagingQuantity: value.packagingQuantity ?? undefined,
       activityCategory: value.activityCategory ?? undefined,
+      folderIds: this.selectedFolderIds(),
     };
 
     this.saving.set(true);

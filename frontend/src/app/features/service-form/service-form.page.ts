@@ -9,13 +9,20 @@ import { ServiceCatalogService } from '../../core/services/service-catalog.servi
 import { ToastService } from '../../core/services/toast.service';
 import { AdvancedSettingsComponent } from '../../shared/components/advanced-settings.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { CatalogFolderMultiSelectComponent } from '../../shared/components/catalog-folder-multi-select.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 
 @Component({
   selector: 'app-service-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, AdvancedSettingsComponent, BigButtonComponent, FieldHintComponent],
+  imports: [
+    ReactiveFormsModule,
+    AdvancedSettingsComponent,
+    BigButtonComponent,
+    CatalogFolderMultiSelectComponent,
+    FieldHintComponent,
+  ],
   templateUrl: './service-form.page.html',
 })
 export class ServiceFormPage {
@@ -61,6 +68,10 @@ export class ServiceFormPage {
     activityCategory: this.fb.control<ActivityCategory | null>(null),
   });
 
+  // Phase 1.1-2: zero, one, or several CatalogFolder ids — local,
+  // uncommitted signal, same pattern as ProductFormPage.selectedFolderIds.
+  protected readonly selectedFolderIds = signal<string[]>([]);
+
   protected isPercentageMode(): boolean {
     return this.form.controls.pricingMode.value === 'PERCENTAGE';
   }
@@ -88,6 +99,7 @@ export class ServiceFormPage {
               code: service.code ?? '',
               activityCategory: service.activityCategory,
             });
+            this.selectedFolderIds.set(service.folders.map((folder) => folder.id));
           },
           error: () => {
             this.loading.set(false);
@@ -121,6 +133,7 @@ export class ServiceFormPage {
       defaultVisibility: value.defaultVisibility,
       code: value.code || undefined,
       activityCategory: value.activityCategory ?? undefined,
+      folderIds: this.selectedFolderIds(),
     };
 
     this.saving.set(true);

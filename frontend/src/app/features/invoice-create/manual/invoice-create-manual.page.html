@@ -44,11 +44,21 @@
       <app-big-button>Télécharger le PDF</app-big-button>
     </a>
     <div class="w-full max-w-sm">
+      <app-big-button variant="secondary" tone="subtle" (click)="openSignatureModal(invoice)">
+        Signer
+      </app-big-button>
+    </div>
+    <div class="w-full max-w-sm">
       <app-big-button variant="secondary" tone="subtle" (click)="startNewInvoice()">
         Nouveau document
       </app-big-button>
     </div>
   </div>
+  <app-signature-modal
+    [invoice]="signatureModalInvoice()"
+    (closed)="closeSignatureModal()"
+    (signed)="onSignatureSaved($event)"
+  />
 } @else if (loadingSourceDevis()) {
   <p class="mx-auto max-w-5xl text-sm text-ink-soft">Chargement du devis…</p>
 } @else {
@@ -193,6 +203,19 @@
         + Ajouter un champ
       </button>
     </section>
+
+    @if (store.documentType() === 'FACTURE') {
+      <app-invoice-deposit-field
+        [requested]="store.deposit().requested"
+        [percentageBasisPoints]="store.deposit().percentageBasisPoints"
+        [amountCents]="store.depositAmountCents()"
+        [autoCalc]="store.deposit().amountOverrideEuros === null"
+        (requestedChange)="store.setDepositRequested($event)"
+        (percentageBasisPointsChange)="store.setDepositPercentage($event)"
+        (amountEurosChange)="onDepositAmountChange($event)"
+        (resetAutoCalc)="store.resetDepositAutoCalc()"
+      />
+    }
 
     <section appTourAnchor="manual-table" class="flex flex-col gap-3">
       <div class="overflow-x-auto rounded-xl border border-line bg-surface">
@@ -394,11 +417,22 @@
           [editable]="true"
           (subtotalOverrideChange)="store.setSubtotalOverrideText($event)"
           (vatOverrideChange)="store.setVatOverrideText($event)"
-          (totalOverrideChange)="store.setTotalOverrideText($event)"
+          (totalOverrideChange)="onTotalOverrideChange($event)"
           (vatChoiceChange)="store.setVatChoice($event)"
         />
         <div class="w-full sm:w-64">
-          @if (previewError(); as message) {
+          @if (previewBlockers().length > 0) {
+            <div
+              class="mb-2 rounded-lg border border-danger-subtle-border bg-danger-subtle p-3 text-sm text-danger-subtle-fg"
+            >
+              <p class="font-semibold">Génération de l'aperçu impossible</p>
+              <ul class="mt-1 list-disc pl-4">
+                @for (blocker of previewBlockers(); track blocker) {
+                  <li>{{ blocker }}</li>
+                }
+              </ul>
+            </div>
+          } @else if (previewError(); as message) {
             <p class="mb-2 text-center text-sm font-medium text-danger">{{ message }}</p>
           }
           <app-big-button

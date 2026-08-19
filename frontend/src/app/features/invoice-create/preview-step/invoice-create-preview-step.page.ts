@@ -25,9 +25,11 @@ import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
+import { SignatureModalComponent } from '../../../shared/components/signature-modal.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { delayedSkeleton } from '../../../shared/utils/delayed-skeleton';
 import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
+import { InvoiceDepositFieldComponent } from '../components/invoice-deposit-field.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
 // Phase 15: the mandatory stop between "lignes" and a real, persisted
@@ -55,7 +57,9 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
     UnitLabelPipe,
     PdfPreviewModalComponent,
     SendInvoiceEmailModalComponent,
+    SignatureModalComponent,
     TourAnchorDirective,
+    InvoiceDepositFieldComponent,
   ],
   templateUrl: './invoice-create-preview-step.page.html',
 })
@@ -112,6 +116,8 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly sharingInvoiceId = signal<string | null>(null);
+  // Phase 1.1-1
+  protected readonly signatureModalInvoice = signal<InvoiceWithTotals | null>(null);
 
   // Phase 14.3: the "Créer la facture aussi immédiatement ?" prompt shown
   // after a devis is created — see convertToFacture below. Phase 23: on
@@ -202,6 +208,19 @@ export class InvoiceCreatePreviewStepPage {
     this.draftStore.toggleLineDetail(index, 'showBillingDetail');
   }
 
+  // Phase 1.1-3: typing directly into the deposit's amount field freezes its
+  // automatic link to the percentage × total — the one-time warning toast
+  // the user asked for lives here (the store just reports whether this edit
+  // is what triggered it, see InvoiceDraftStore.setDepositAmountOverride).
+  protected onDepositAmountChange(amountEuros: number): void {
+    const justFroze = this.draftStore.setDepositAmountOverride(amountEuros);
+    if (justFroze) {
+      this.toastService.info(
+        "Le montant de l'acompte ne se recalcule plus automatiquement — cliquez sur « Réinitialiser » pour reprendre le calcul automatique.",
+      );
+    }
+  }
+
   protected back(): void {
     void this.router.navigate(['/factures/nouvelle/rapide/lignes']);
   }
@@ -280,6 +299,24 @@ export class InvoiceCreatePreviewStepPage {
 
   protected closeEmailModal(): void {
     this.emailModalInvoice.set(null);
+  }
+
+  protected openSignatureModal(invoice: InvoiceWithTotals): void {
+    this.signatureModalInvoice.set(invoice);
+  }
+
+  protected closeSignatureModal(): void {
+    this.signatureModalInvoice.set(null);
+  }
+
+  protected onSignatureSaved(updated: InvoiceWithTotals): void {
+    if (this.convertedFacture()?.id === updated.id) {
+      this.convertedFacture.set(updated);
+    } else {
+      this.createdInvoice.set(updated);
+    }
+    this.signatureModalInvoice.set(null);
+    this.toastService.success('Signature enregistrée.');
   }
 
   protected onEmailSent(updated: InvoiceWithTotals): void {

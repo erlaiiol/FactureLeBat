@@ -1,0 +1,58 @@
+<h1 class="font-heading uppercase tracking-wide mb-6 text-2xl font-bold text-ink">
+  {{ isEditing ? 'Modifier le dossier' : 'Nouveau dossier' }}
+</h1>
+
+@if (locked()) {
+  <div class="anim-preview-in flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
+    <p class="text-ink-soft">
+      Les dossiers sont réservés aux offres Pro et Premium. Vos dossiers existants sont conservés et
+      redeviendront accessibles dès votre retour sur une offre supérieure.
+    </p>
+    <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
+      Voir les offres
+    </app-big-button>
+  </div>
+} @else {
+  @if (loading()) {
+    <p class="text-ink-soft">Chargement…</p>
+  }
+
+  <form
+    [formGroup]="form"
+    (ngSubmit)="submit()"
+    class="flex flex-col gap-4"
+    [class.hidden]="loading()"
+  >
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-ink">Nom du dossier</span>
+      <input
+        formControlName="name"
+        type="text"
+        placeholder="Ex : Plomberie"
+        class="rounded-lg border border-line px-4 py-3 text-lg"
+      />
+      <app-field-hint
+        text="Regroupe vos produits, prestations et remises par métier ou par chantier — un même élément peut appartenir à plusieurs dossiers."
+      />
+    </label>
+
+    @if (errorMessage(); as message) {
+      <p class="text-center font-medium text-danger">{{ message }}</p>
+    }
+
+    <app-big-button type="submit" variant="secondary" [disabled]="saving()">
+      {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+    </app-big-button>
+
+    @if (isEditing) {
+      <button
+        type="button"
+        [disabled]="deleting()"
+        (click)="delete()"
+        class="text-sm font-medium text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {{ deleting() ? 'Suppression…' : 'Supprimer ce dossier' }}
+      </button>
+    }
+  </form>
+}

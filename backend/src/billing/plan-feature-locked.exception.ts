@@ -4,6 +4,7 @@ import { GatedFeature } from './plan-config';
 const FEATURE_MESSAGES: Record<GatedFeature, string> = {
   analytics: "Les statistiques d'activité ne sont pas incluses dans votre offre actuelle.",
   aiSourcing: "L'assistant IA fournisseurs n'est pas inclus dans votre offre actuelle.",
+  dossiers: 'Les dossiers ne sont pas inclus dans votre offre actuelle.',
 };
 
 // Thrown by PlanGateService.assertFeatureAccess for a feature the

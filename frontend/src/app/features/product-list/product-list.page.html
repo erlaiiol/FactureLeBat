@@ -1,8 +1,13 @@
 <div class="mb-6 flex items-center justify-between gap-4">
   <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-ink">Mes produits</h1>
-  <a routerLink="/produits/nouveau" class="shrink-0">
-    <app-big-button appTourAnchor="catalog-new-product">+ Nouveau produit</app-big-button>
-  </a>
+  <div class="flex shrink-0 items-center gap-3">
+    <a routerLink="/dossiers" class="text-sm font-medium text-primary hover:underline">
+      Mes dossiers
+    </a>
+    <a routerLink="/produits/nouveau">
+      <app-big-button appTourAnchor="catalog-new-product">+ Nouveau produit</app-big-button>
+    </a>
+  </div>
 </div>
 
 <input

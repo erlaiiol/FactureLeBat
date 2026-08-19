@@ -92,8 +92,8 @@
       <app-field-hint text="Facultatif — bâtiment, étage, zone d'activité…" />
     </label>
 
-    <div class="flex gap-4">
-      <label class="flex flex-1 flex-col gap-1">
+    <div class="flex flex-col gap-4 sm:flex-row">
+      <label class="flex min-w-0 flex-col gap-1 sm:flex-1">
         <span class="text-sm font-medium text-atelier-ink-soft">Code postal</span>
         <input
           formControlName="postalCode"
@@ -105,7 +105,7 @@
         />
         <app-field-hint text="Le code postal de votre entreprise." />
       </label>
-      <label class="flex flex-[2] flex-col gap-1">
+      <label class="flex min-w-0 flex-col gap-1 sm:flex-[2]">
         <span class="text-sm font-medium text-atelier-ink-soft">Ville</span>
         <input
           formControlName="city"
@@ -135,6 +135,22 @@
         class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint text="Facultatif — affiché sur vos factures pour vous contacter." />
+    </label>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-atelier-ink-soft"
+        >Message personnalisé (facultatif)</span
+      >
+      <textarea
+        formControlName="invoiceMailCustomMessage"
+        rows="3"
+        maxlength="500"
+        placeholder="Ex : Merci pour votre confiance, n'hésitez pas à me contacter pour toute question !"
+        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-base text-atelier-ink"
+      ></textarea>
+      <app-field-hint
+        text="Ajouté automatiquement au message qui accompagne vos factures/devis, que vous utilisiez le bouton « Partager » ou l'envoi par email — modifiable ici à tout moment, sur mobile comme sur ordinateur."
+      />
     </label>
 
     <label class="flex flex-col gap-1">
@@ -252,6 +268,24 @@
       />
       <app-field-hint
         text="Facultatif — laissez vide pour ne pas afficher d'avertissement. Ce plafond dépend de votre activité et évolue dans le temps : vérifiez-le vous-même auprès de l'URSSAF."
+      />
+    </label>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-atelier-ink-soft"
+        >Acompte habituel (%, facultatif)</span
+      >
+      <input
+        formControlName="defaultDepositPercent"
+        type="number"
+        step="1"
+        min="0"
+        max="100"
+        placeholder="Ex : 30"
+        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+      />
+      <app-field-hint
+        text="Facultatif — laissez vide pour ne rien pré-remplir. Ce taux pré-remplit automatiquement le toggle « Demander un acompte » sur chaque nouvelle facture, toujours modifiable document par document."
       />
     </label>
 

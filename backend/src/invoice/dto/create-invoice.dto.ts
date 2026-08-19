@@ -21,6 +21,7 @@ import { CreateInvoiceCustomerFieldDto } from './create-invoice-customer-field.d
 import { CreateInvoiceDiscountLineDto } from './create-invoice-discount-line.dto';
 import { CreateInvoiceLineDto } from './create-invoice-line.dto';
 import { CreateInvoiceServiceLineDto } from './create-invoice-service-line.dto';
+import { DepositFieldsConsistency } from './deposit-fields-consistency.validator';
 import { DiscountTargetMatchesLines } from './discount-target-matches-lines.validator';
 import { CreateManualTableDto } from './manual/create-manual-table.dto';
 import { ManualModeFieldsConsistency } from './manual-mode-fields-consistency.validator';
@@ -189,6 +190,26 @@ export class CreateInvoiceDto {
   @IsOptional()
   @IsBoolean()
   simplifiedDisplay?: boolean = false;
+
+  // Phase 1.1-3: the requested deposit — see schema.prisma's comment on
+  // Invoice.depositPercentageBasisPoints/depositAmountCents.
+  // depositAmountCents is the resolved euro amount actually printed/tracked
+  // (same "resolved once, client computes it" precedent as a PERCENTAGE
+  // discount line's amountCents); depositPercentageBasisPoints is kept
+  // alongside purely so the PDF can print the rate that produced it. Both
+  // required together, FACTURE-only — see DepositFieldsConsistency.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  depositPercentageBasisPoints?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_OVERRIDE_CENTS)
+  @DepositFieldsConsistency()
+  depositAmountCents?: number;
 
   // "Créer la facture à partir du devis" (editable flow): the artisan
   // re-entered the creation wizard pre-filled from this devis and may have

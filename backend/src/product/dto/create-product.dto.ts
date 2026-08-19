@@ -1,11 +1,13 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUrl,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -76,4 +78,14 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ActivityCategory)
   activityCategory?: ActivityCategory;
+
+  // Phase 1.1-2: zero, one, or several CatalogFolder ids this product should
+  // belong to — committed only when the form is actually saved (see
+  // AdvancedSettingsComponent's picker). Cross-tenant ids are silently
+  // dropped, never trusted outright (see CatalogFolderService.
+  // filterOwnedFolderIds).
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  folderIds?: string[];
 }

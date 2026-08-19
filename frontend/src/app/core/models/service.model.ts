@@ -1,3 +1,4 @@
+import { CatalogFolderRef } from './catalog-folder.model';
 import { ActivityCategory } from './report.model';
 
 export type ServiceVisibility = 'VISIBLE' | 'REDISTRIBUTED';
@@ -23,6 +24,8 @@ export interface ServiceProfile {
   code: string | null;
   // Phase 17: same URSSAF turnover categorization as ProductProfile.activityCategory.
   activityCategory: ActivityCategory | null;
+  // Phase 1.1-2: zero, one, or several dossiers this service belongs to.
+  folders: CatalogFolderRef[];
   createdAt: string;
   updatedAt: string;
 }
@@ -36,4 +39,5 @@ export interface UpsertServiceRequest {
   defaultVisibility: ServiceVisibility;
   code?: string;
   activityCategory?: ActivityCategory;
+  folderIds?: string[];
 }

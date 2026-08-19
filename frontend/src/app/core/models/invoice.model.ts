@@ -18,7 +18,11 @@ export type DocumentType = 'DEVIS' | 'FACTURE';
 // deliberately not a value here — it's NON_PAYEE + dueDate in the past,
 // computed client-side (see invoice-status.util.ts's isOverdue) never
 // persisted.
-export type InvoiceStatus = 'NON_PAYEE' | 'PAYEE' | 'ANNULEE';
+export type InvoiceStatus = 'NON_PAYEE' | 'ACOMPTE_VERSE' | 'PAYEE' | 'ANNULEE';
+
+// Phase 1.1-1: how a signature proof was captured — see
+// InvoiceWithTotals.signatureMethod.
+export type SignatureMethod = 'DRAWN' | 'PHOTO';
 
 // A manual invoice's column role. LINE_TOTAL is the artisan's own freehand
 // row price — never derived from QUANTITY x UNIT_PRICE, which stay purely
@@ -159,6 +163,13 @@ export interface CreateInvoiceRequest {
   // spirit as a line's showUnitDetail/showBillingDetail; defaults to false
   // backend-side when omitted.
   simplifiedDisplay?: boolean;
+  // Phase 1.1-3: the requested deposit — both required together, FACTURE-only
+  // (mirrors the backend's DepositFieldsConsistency rule). depositAmountCents
+  // is the resolved euro amount actually tracked; depositPercentageBasisPoints
+  // is kept alongside purely so the PDF can print the rate that produced it —
+  // see InvoiceDraftStore/ManualInvoiceDraftStore's deposit autoCalc.
+  depositPercentageBasisPoints?: number;
+  depositAmountCents?: number;
   // "Créer la facture à partir du devis": set when this draft was seeded
   // from an existing devis (see InvoiceDraftStore.loadFromInvoice /
   // ManualInvoiceDraftStore.loadFromInvoice) so the resulting facture stays
@@ -319,6 +330,20 @@ export interface InvoiceWithTotals {
   lastReminderAt: string | null;
   // Phase 23: see CreateInvoiceRequest.simplifiedDisplay.
   simplifiedDisplay: boolean;
+  // Phase 1.1-1: whether a real signature proof (drawn or photographed) is
+  // attached — never the image bytes themselves (see
+  // InvoiceService.signatureUrl for how those are fetched). The "signed"
+  // checkbox shown on "Mes documents" is the computed
+  // hasSignatureProof || manuallySigned, never a persisted field of its own.
+  hasSignatureProof: boolean;
+  signatureMethod: SignatureMethod | null;
+  manuallySigned: boolean;
+  // Phase 1.1-3: the requested deposit — both null when none was requested,
+  // both set together. depositPaidAt mirrors paidAt's "records the fact, not
+  // a log" convention, set when status enters ACOMPTE_VERSE.
+  depositPercentageBasisPoints: number | null;
+  depositAmountCents: number | null;
+  depositPaidAt: string | null;
 }
 
 // Phase 16: drives both the board's drag/button status changes and a

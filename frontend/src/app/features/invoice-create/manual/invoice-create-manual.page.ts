@@ -22,9 +22,11 @@ import { BigButtonComponent } from '../../../shared/components/big-button.compon
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
 import { IconTrashComponent } from '../../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
+import { SignatureModalComponent } from '../../../shared/components/signature-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
+import { InvoiceDepositFieldComponent } from '../components/invoice-deposit-field.component';
 import { InvoiceTotalsSummaryComponent } from '../components/invoice-totals-summary.component';
 import {
   ManualColumnDraft,
@@ -51,8 +53,10 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
     IconCloseComponent,
     IconTrashComponent,
     PdfPreviewModalComponent,
+    SignatureModalComponent,
     TourAnchorDirective,
     InvoiceTotalsSummaryComponent,
+    InvoiceDepositFieldComponent,
     ManualResizeHandleDirective,
     CentsToEurosPipe,
   ],
@@ -76,12 +80,18 @@ export class InvoiceCreateManualPage {
 
   protected readonly previewing = signal(false);
   protected readonly previewError = signal<string | null>(null);
+  // Populated from store.previewBlockers() the moment "Aperçu" is clicked on
+  // an incomplete draft — see preview() below for why this check happens
+  // before the API call rather than after a 400.
+  protected readonly previewBlockers = signal<string[]>([]);
   protected readonly previewPdfUrl = signal<string | null>(null);
   private previewSubscription?: Subscription;
 
   protected readonly creating = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
+  // Phase 1.1-1
+  protected readonly signatureModalInvoice = signal<InvoiceWithTotals | null>(null);
 
   // Phase 14.3: same "Créer la facture aussi immédiatement ?" prompt as
   // mode rapide's preview step — see InvoiceCreatePreviewStepPage.
@@ -198,14 +208,51 @@ export class InvoiceCreateManualPage {
     this.store.renameColumn(column.id, value);
   }
 
-  // Deliberately not gated on store.canPreview() — manual mode's whole
-  // principle is that nothing blocks the artisan from looking at their
-  // work-in-progress invoice at any point; an incomplete draft just surfaces
-  // the backend's validation error below instead of a disabled button.
+  // Phase 1.1-3: same one-time warning toast as InvoiceCreatePreviewStepPage
+  // — the store reports whether this specific edit is what froze the
+  // deposit's automatic calc.
+  protected onDepositAmountChange(amountEuros: number): void {
+    const justFroze = this.store.setDepositAmountOverride(amountEuros);
+    if (justFroze) {
+      this.toastService.info(
+        "Le montant de l'acompte ne se recalcule plus automatiquement — cliquez sur « Réinitialiser » pour reprendre le calcul automatique.",
+      );
+    }
+  }
+
+  // Same reasoning, triggered by editing the invoice's own Total TTC
+  // override directly (see ManualInvoiceDraftStore.setTotalOverrideText).
+  protected onTotalOverrideChange(text: string): void {
+    const justFroze = this.store.setTotalOverrideText(text);
+    if (justFroze) {
+      this.toastService.info(
+        "Le montant de l'acompte ne se recalcule plus automatiquement (le total de la facture vient d'être modifié à la main) — cliquez sur « Réinitialiser » pour reprendre le calcul automatique.",
+      );
+    }
+  }
+
+  // Not gated on a *disabled* button — manual mode's whole principle is that
+  // nothing blocks the artisan from clicking around their work-in-progress
+  // invoice at any point. But an incomplete draft used to reach the backend
+  // anyway and 400: PdfPreviewModalComponent's isOpen is loading() ||
+  // pdfBlobUrl() !== null, so the modal opened on the spinner the instant
+  // previewing() went true, then instantly closed the moment the error
+  // handler below set it back to false without ever setting a blob URL —
+  // a flash the artisan could easily miss, leaving only the small text
+  // message as an explanation. Checking store.previewBlockers() first skips
+  // the API call and the modal entirely for exactly this case, replacing it
+  // with an itemized "here's what's missing" callout (see the template).
   protected preview(): void {
     if (this.previewing()) {
       return;
     }
+    const blockers = this.store.previewBlockers();
+    if (blockers.length > 0) {
+      this.previewBlockers.set(blockers);
+      this.previewError.set(null);
+      return;
+    }
+    this.previewBlockers.set([]);
     this.previewing.set(true);
     this.previewError.set(null);
 
@@ -254,6 +301,20 @@ export class InvoiceCreateManualPage {
     this.errorMessage.set(null);
     this.conversionDeclined.set(false);
     this.store.reset();
+  }
+
+  protected openSignatureModal(invoice: InvoiceWithTotals): void {
+    this.signatureModalInvoice.set(invoice);
+  }
+
+  protected closeSignatureModal(): void {
+    this.signatureModalInvoice.set(null);
+  }
+
+  protected onSignatureSaved(updated: InvoiceWithTotals): void {
+    this.createdInvoice.set(updated);
+    this.signatureModalInvoice.set(null);
+    this.toastService.success('Signature enregistrée.');
   }
 
   // Phase 14.3: see InvoiceCreatePreviewStepPage.convertToFacture — same

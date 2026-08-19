@@ -268,6 +268,12 @@ export class InvoiceMapper {
       paidAt: invoice.paidAt,
       lastReminderAt: invoice.lastReminderAt,
       simplifiedDisplay: invoice.simplifiedDisplay,
+      hasSignatureProof: invoice.signature !== null,
+      signatureMethod: invoice.signature?.method ?? null,
+      manuallySigned: invoice.manuallySigned,
+      depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
+      depositAmountCents: invoice.depositAmountCents,
+      depositPaidAt: invoice.depositPaidAt,
     };
   }
 
@@ -354,18 +360,29 @@ export class InvoiceMapper {
       paidAt: invoice.paidAt,
       lastReminderAt: invoice.lastReminderAt,
       simplifiedDisplay: invoice.simplifiedDisplay,
+      hasSignatureProof: invoice.signature !== null,
+      signatureMethod: invoice.signature?.method ?? null,
+      manuallySigned: invoice.manuallySigned,
+      depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
+      depositAmountCents: invoice.depositAmountCents,
+      depositPaidAt: invoice.depositPaidAt,
     };
   }
 
-  toPdfData(invoice: InvoiceWithLines, logo?: CompanyLogoData | null): InvoicePdfData {
+  toPdfData(
+    invoice: InvoiceWithLines,
+    logo?: CompanyLogoData | null,
+    signature?: { image: Buffer; mimeType: string } | null,
+  ): InvoicePdfData {
     const withTotals = this.toInvoiceWithTotals(invoice);
 
     if (withTotals.entryMode === InvoiceEntryMode.MANUAL) {
-      return this.toManualPdfData(invoice, withTotals, logo);
+      return this.toManualPdfData(invoice, withTotals, logo, signature);
     }
 
     return {
       ...this.issuerFields(invoice.company, logo),
+      signature: this.signatureField(signature),
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
@@ -412,6 +429,9 @@ export class InvoiceMapper {
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
       vatAmountCents: withTotals.vatAmountCents,
       totalInclVatCents: withTotals.totalInclVatCents,
+      depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
+      depositAmountCents: withTotals.depositAmountCents,
+      depositPaidAt: withTotals.depositPaidAt,
     };
   }
 
@@ -423,6 +443,7 @@ export class InvoiceMapper {
     invoice: InvoiceWithLines,
     withTotals: InvoiceWithTotals,
     logo?: CompanyLogoData | null,
+    signature?: { image: Buffer; mimeType: string } | null,
   ): InvoicePdfData {
     const table = withTotals.manualTable!;
     // LINE_TOTAL is excluded from the PDF's per-column cells — it's already
@@ -439,6 +460,7 @@ export class InvoiceMapper {
 
     return {
       ...this.issuerFields(invoice.company, logo),
+      signature: this.signatureField(signature),
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
@@ -465,6 +487,9 @@ export class InvoiceMapper {
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
       vatAmountCents: withTotals.vatAmountCents,
       totalInclVatCents: withTotals.totalInclVatCents,
+      depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
+      depositAmountCents: withTotals.depositAmountCents,
+      depositPaidAt: withTotals.depositPaidAt,
     };
   }
 
@@ -662,6 +687,20 @@ export class InvoiceMapper {
       paidAt: null,
       lastReminderAt: null,
       simplifiedDisplay: dto.simplifiedDisplay ?? false,
+      // Phase 1.1-1: an unsaved draft has no id yet, so it can never have a
+      // signature attached — always this fixed default, same reasoning as
+      // status/dueDate/paidAt above.
+      hasSignatureProof: false,
+      signatureMethod: null,
+      manuallySigned: false,
+      // Phase 1.1-3: mirrors the artisan's not-yet-submitted deposit toggle
+      // straight from the DTO — the preview/aperçu screen is what renders
+      // this, same "no business-logic duplication" reasoning as every other
+      // figure here. Never depositPaidAt: an unsaved draft has no lifecycle
+      // yet, same reasoning as status/dueDate/paidAt above.
+      depositPercentageBasisPoints: dto.depositPercentageBasisPoints ?? null,
+      depositAmountCents: dto.depositAmountCents ?? null,
+      depositPaidAt: null,
     };
   }
 
@@ -754,6 +793,16 @@ export class InvoiceMapper {
       // Manual mode's freehand column set has no fixed Quantité/Prix
       // unitaire columns to hide — see InvoicePdfData.simplifiedDisplay.
       simplifiedDisplay: false,
+      // Phase 1.1-1: same "unsaved draft has no signature" reasoning as the
+      // GUIDED preview branch above.
+      hasSignatureProof: false,
+      signatureMethod: null,
+      manuallySigned: false,
+      // Phase 1.1-3: same "mirror the not-yet-submitted DTO" reasoning as
+      // toPreviewInvoiceWithTotals above.
+      depositPercentageBasisPoints: dto.depositPercentageBasisPoints ?? null,
+      depositAmountCents: dto.depositAmountCents ?? null,
+      depositPaidAt: null,
     };
   }
 
@@ -774,6 +823,9 @@ export class InvoiceMapper {
       const table = withTotals.manualTable!;
       return {
         ...issuer,
+        // Phase 1.1-1: a preview has no id yet, so it can never have a
+        // signature attached — see InvoiceService.previewPdf.
+        signature: null,
         number: withTotals.number,
         documentType: withTotals.documentType,
         date: withTotals.date,
@@ -799,11 +851,15 @@ export class InvoiceMapper {
         subtotalExclVatCents: withTotals.subtotalExclVatCents,
         vatAmountCents: withTotals.vatAmountCents,
         totalInclVatCents: withTotals.totalInclVatCents,
+        depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
+        depositAmountCents: withTotals.depositAmountCents,
+        depositPaidAt: null,
       };
     }
 
     return {
       ...issuer,
+      signature: null,
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
@@ -837,6 +893,9 @@ export class InvoiceMapper {
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
       vatAmountCents: withTotals.vatAmountCents,
       totalInclVatCents: withTotals.totalInclVatCents,
+      depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
+      depositAmountCents: withTotals.depositAmountCents,
+      depositPaidAt: null,
     };
   }
 
@@ -896,5 +955,20 @@ export class InvoiceMapper {
             }
           : null,
     };
+  }
+
+  // Phase 1.1-1: same base64-data-URI shape as issuerLogo above, just kept
+  // separate since a signature is invoice-specific, not company-specific
+  // (issuerFields is shared by every PDF-shaping method regardless of
+  // which invoice, or none yet for a preview).
+  private signatureField(
+    signature?: { image: Buffer; mimeType: string } | null,
+  ): { base64: string; mimeType: string } | null {
+    return signature
+      ? {
+          base64: `data:${signature.mimeType};base64,${signature.image.toString('base64')}`,
+          mimeType: signature.mimeType,
+        }
+      : null;
   }
 }

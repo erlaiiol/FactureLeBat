@@ -16,11 +16,13 @@ export type ShareOutcome = 'shared' | 'compose-email' | 'mailto-fallback';
 
 // The three-tier "Partager" fallback chain, tried in this fixed order and
 // never re-attempted further down after a real user action (a share-sheet
-// cancel is not a failure): native Web Share with the PDF file attached,
-// then the artisan's own configured SMTP (reuses the existing compose
-// modal), then a plain mailto — browsers can't attach a file to a mailto
-// link, so the PDF is downloaded alongside it for the artisan to attach by
-// hand.
+// cancel is not a failure): native Web Share with the PDF file attached and
+// the default mail template's text (including the artisan's own custom
+// message, if any) as the share text, then the artisan's own configured
+// SMTP (reuses the existing compose modal, which loads and lets them edit
+// that same template), then a plain mailto pre-filled with it — browsers
+// can't attach a file to a mailto link, so the PDF is downloaded alongside
+// it for the artisan to attach by hand.
 @Injectable({ providedIn: 'root' })
 export class InvoiceShareService {
   private readonly http = inject(HttpClient);
@@ -31,14 +33,22 @@ export class InvoiceShareService {
 
   async share(invoice: InvoiceWithTotals): Promise<ShareOutcome> {
     const fileName = this.fileName(invoice);
-    const pdfBlob = await firstValueFrom(
-      this.http.get(this.invoiceService.pdfUrl(invoice.id), { responseType: 'blob' }),
-    );
+    // Fetched up front (parallel with the PDF, which is normally the
+    // slower of the two) so the artisan's custom message —
+    // Company.invoiceMailCustomMessage, baked into this template by the
+    // backend — is available for the native tier's `text` below, not just
+    // the mailto fallback further down.
+    const [pdfBlob, template] = await Promise.all([
+      firstValueFrom(
+        this.http.get(this.invoiceService.pdfUrl(invoice.id), { responseType: 'blob' }),
+      ),
+      firstValueFrom(this.invoiceService.getMailTemplate(invoice.id)),
+    ]);
     const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
     if ('canShare' in navigator && navigator.canShare({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: fileName });
+        await navigator.share({ files: [file], title: fileName, text: template.text });
         // navigator.share() only resolves once the OS has handed the PDF to
         // whichever app the artisan picked (Gmail, WhatsApp…) — it says
         // nothing about whether that app's own send/post action was ever
@@ -65,7 +75,6 @@ export class InvoiceShareService {
     }
 
     this.downloadBlob(pdfBlob, fileName);
-    const template = await firstValueFrom(this.invoiceService.getMailTemplate(invoice.id));
     const to = invoice.customerEmail ?? '';
     const mailto =
       `mailto:${encodeURIComponent(to)}` +

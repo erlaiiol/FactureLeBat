@@ -28,6 +28,7 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     smtpSecure: true,
     smtpUser: null,
     smtpPasswordEncrypted: null,
+    invoiceMailCustomMessage: null,
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     subscriptionStatus: 'NONE',
@@ -41,6 +42,7 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     trialOfferExpiresAt: null,
     declarationFrequency: 'TRIMESTRIELLE',
     microEntrepreneurCeiling: null,
+    defaultDepositPercentageBasisPoints: null,
     cotisationVenteBasisPoints: 1230,
     cotisationPrestationBicBasisPoints: 2120,
     cotisationPrestationBncBasisPoints: 2110,
@@ -102,6 +104,11 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     convertedToFacture: null,
     createdFromFactureId: null,
     retroactiveDevis: null,
+    signature: null,
+    manuallySigned: false,
+    depositPercentageBasisPoints: null,
+    depositAmountCents: null,
+    depositPaidAt: null,
     simplifiedDisplay: false,
     lines: [
       {
@@ -498,6 +505,41 @@ describe('InvoiceMapper', () => {
       expect(result.lines[0].unit).toBe('');
       expect(result.lines[0].billedQuantity).toBeUndefined();
       expect(result.lines[0].totalCents).toBe(27 * 4500);
+    });
+
+    it('composites the signature as a base64 data URI when one is passed, null otherwise', () => {
+      const invoice = invoiceWithLines();
+      const signed = mapper.toPdfData(invoice, null, {
+        image: Buffer.from('fake-png-bytes'),
+        mimeType: 'image/png',
+      });
+      expect(signed.signature).toEqual({
+        base64: `data:image/png;base64,${Buffer.from('fake-png-bytes').toString('base64')}`,
+        mimeType: 'image/png',
+      });
+
+      const unsigned = mapper.toPdfData(invoice, null, null);
+      expect(unsigned.signature).toBeNull();
+    });
+  });
+
+  describe('Phase 1.1-1 signature fields', () => {
+    it('derives hasSignatureProof/signatureMethod from the signature relation, and passes manuallySigned through', () => {
+      const signed = mapper.toInvoiceWithTotals(
+        invoiceWithLines({
+          signature: { method: 'DRAWN', createdAt: new Date('2026-01-15') },
+          manuallySigned: false,
+        }),
+      );
+      expect(signed.hasSignatureProof).toBe(true);
+      expect(signed.signatureMethod).toBe('DRAWN');
+
+      const manuallySigned = mapper.toInvoiceWithTotals(
+        invoiceWithLines({ signature: null, manuallySigned: true }),
+      );
+      expect(manuallySigned.hasSignatureProof).toBe(false);
+      expect(manuallySigned.signatureMethod).toBeNull();
+      expect(manuallySigned.manuallySigned).toBe(true);
     });
   });
 

@@ -1,26 +1,49 @@
 import {
+  BadRequestException,
   Controller,
+  Delete,
   Get,
   Header,
+  NotFoundException,
   Param,
   Patch,
   Post,
   Body,
   Query,
+  Res,
   StreamableFile,
+  UnsupportedMediaTypeException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import {
+  ALLOWED_RASTER_IMAGE_MIME_TYPES,
+  matchesDeclaredImageType,
+} from '../common/raster-image-upload.util';
 import { ConvertToDevisDto } from './dto/convert-to-devis.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { GetNextNumberQueryDto } from './dto/get-next-number-query.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
+import { UpdateManuallySignedDto } from './dto/update-manually-signed.dto';
+import { UploadInvoiceSignatureDto } from './dto/upload-invoice-signature.dto';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceService } from './invoice.service';
 import { SendInvoiceEmailDto } from './mail/dto/send-invoice-email.dto';
 import { InvoiceMailTemplate } from './mail/invoice-mail-template.util';
 import { InvoiceMailService } from './mail/invoice-mail.service';
 import { PdfService } from './pdf/pdf.service';
+
+// A generous bound for a signature image, not a real limit — the "Importer
+// une photo" tab already compresses/resizes client-side before upload (see
+// SignatureModalComponent), and a drawn signature is a small canvas PNG; this
+// just keeps a single attachment (base64-embedded into every render of this
+// document, see InvoiceMapper.signatureField) from bloating the PDF.
+const MAX_SIGNATURE_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
 
 @Controller('invoices')
 export class InvoiceController {
@@ -157,5 +180,74 @@ export class InvoiceController {
     @Body() dto: SendInvoiceEmailDto,
   ): Promise<InvoiceWithTotals> {
     return this.invoiceMailService.send(user.companyId, id, dto);
+  }
+
+  // Phase 1.1-1: "Signer" — attaches a drawn or photographed signature,
+  // replacing any existing one for this document. Same PNG/JPEG allow-list +
+  // magic-byte validation as CompanyController.uploadLogo, factored into
+  // common/raster-image-upload.util.ts.
+  @Post(':id/signature')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_SIGNATURE_SIZE_BYTES },
+    }),
+  )
+  async uploadSignature(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UploadInvoiceSignatureDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<InvoiceWithTotals> {
+    if (!file) {
+      throw new BadRequestException('Aucun fichier reçu.');
+    }
+    if (!ALLOWED_RASTER_IMAGE_MIME_TYPES[file.mimetype]) {
+      throw new UnsupportedMediaTypeException('La signature doit être une image PNG ou JPEG.');
+    }
+    if (!matchesDeclaredImageType(file.buffer, file.mimetype)) {
+      throw new UnsupportedMediaTypeException("Ce fichier n'est pas une image PNG ou JPEG valide.");
+    }
+    return this.invoiceService.uploadSignature(user.companyId, id, {
+      image: file.buffer,
+      mimeType: file.mimetype,
+      method: dto.method,
+    });
+  }
+
+  @Delete(':id/signature')
+  deleteSignature(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.deleteSignature(user.companyId, id);
+  }
+
+  // "Voir la signature" — streams the raw image bytes, mirrors
+  // CompanyController.serveLogo.
+  @Get(':id/signature')
+  async serveSignature(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const signature = await this.invoiceService.getSignatureImage(user.companyId, id);
+    if (!signature) {
+      throw new NotFoundException('Aucune signature attachée à ce document.');
+    }
+    res.setHeader('Content-Type', signature.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(signature.image);
+  }
+
+  // The freehand fallback checkbox — see schema.prisma's comment on
+  // Invoice.manuallySigned.
+  @Patch(':id/manually-signed')
+  setManuallySigned(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateManuallySignedDto,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.setManuallySigned(user.companyId, id, dto.manuallySigned);
   }
 }

@@ -5,18 +5,24 @@
     <title>FactureLe</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Same CSP as index.html's, except connect-src also allows the local
-    backend on :3000 — see environment.capacitor-dev.ts's own comment for why
-    the WebView's origin (server.hostname, port 80 implicit) and the local
-    API's origin (:3000) are NOT actually same-origin here, unlike real prod
-    (Caddy/nginx proxy) or a store build (still same-origin, this file isn't
-    used there). REPLACE_WITH_CAPACITOR_LOCAL_HOST is patched by
-    scripts/run-android.sh (dev mode) with the same LAN IP passed to
-    capacitor.config.ts/network_security_config.xml/environment.capacitor-dev.ts,
+    <!-- Same CSP as index.html's, except connect-src and img-src also allow
+    the local backend on :3000 — see environment.capacitor-dev.ts's own
+    comment for why the WebView's origin (server.hostname, port 80 implicit)
+    and the local API's origin (:3000) are NOT actually same-origin here,
+    unlike real prod (Caddy/nginx proxy) or a store build (still
+    same-origin, this file isn't used there). img-src needs the same
+    carve-out as connect-src: CompanyService.logoUrl/InvoiceService.
+    signatureUrl bind an <img [src]> straight to environment.apiBaseUrl, not
+    a fetched blob/data URI — without it the logo preview and "Voir la
+    signature" image silently fail to load under local device testing, same
+    issue as index.dev.html's (see that file's comment, confirmed via a
+    headless-browser run there). REPLACE_WITH_CAPACITOR_LOCAL_HOST is
+    patched by scripts/run-android.sh (dev mode) with the same LAN IP passed
+    to capacitor.config.ts/network_security_config.xml/environment.capacitor-dev.ts,
     then reverted via `git checkout` on script exit — ships inert here. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob: http://REPLACE_WITH_CAPACITOR_LOCAL_HOST:3000; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://REPLACE_WITH_CAPACITOR_LOCAL_HOST:3000; font-src 'self'; connect-src 'self' blob: http://REPLACE_WITH_CAPACITOR_LOCAL_HOST:3000; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />

@@ -13,7 +13,7 @@ export interface PlanOption {
   tagline: string;
   customerLimit: number | null;
   catalogItemLimit: number | null;
-  features: { analytics: boolean; aiSourcing: boolean };
+  features: { analytics: boolean; aiSourcing: boolean; dossiers: boolean };
   prioritySupport: boolean;
   highlight: boolean;
   removesWatermark: boolean;

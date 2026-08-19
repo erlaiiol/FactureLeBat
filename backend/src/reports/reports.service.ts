@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ActivityCategory, LegalStatus } from '../../generated/prisma/enums';
+import { ActivityCategory, InvoiceStatus, LegalStatus } from '../../generated/prisma/enums';
 import { CompanyModel } from '../../generated/prisma/models';
 import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
@@ -99,9 +99,10 @@ export class ReportsService {
     const now = new Date();
     const windowStart = startOfMonthsAgo(now, ANALYTICS_WINDOW_MONTHS - 1);
 
-    const [rawPaid, rawOutstanding] = await Promise.all([
+    const [rawPaid, rawOutstanding, unsignedFactureCount] = await Promise.all([
       this.invoiceRepository.findPaidInRange(companyId, windowStart, now),
       this.invoiceRepository.findOutstanding(companyId),
+      this.invoiceRepository.countUnsigned(companyId),
     ]);
     const paid = rawPaid.map((invoice) => this.invoiceMapper.toInvoiceWithTotals(invoice));
     const outstanding = rawOutstanding.map((invoice) =>
@@ -110,7 +111,7 @@ export class ReportsService {
 
     const totalHtCents = paid.reduce((sum, invoice) => sum + invoice.subtotalExclVatCents, 0);
     const outstandingTotalCents = outstanding.reduce(
-      (sum, invoice) => sum + invoice.subtotalExclVatCents,
+      (sum, invoice) => sum + outstandingHtCents(invoice),
       0,
     );
 
@@ -149,6 +150,7 @@ export class ReportsService {
       averageInvoiceValueCents: paid.length > 0 ? Math.round(totalHtCents / paid.length) : 0,
       activeClientCount: clientIds.size,
       activeProductCount: productKeys.size,
+      unsignedFactureCount,
     };
   }
 
@@ -275,6 +277,30 @@ export class ReportsService {
       totalEstimatedCents: cotisationsSocialesCents + versementLiberatoireCents,
     };
   }
+}
+
+// Phase 1.1-3: findOutstanding now also returns ACOMPTE_VERSE factures —
+// still owed, just not for their full amount anymore. This report is HT
+// throughout (see this file's class comment), but the deposit itself is
+// snapshotted against Total TTC (docs/roadmap.md Phase 1.1-3's own
+// decision), so the remaining HT balance is the same *proportion* of the HT
+// subtotal that's still unpaid TTC — not a raw cents subtraction, which
+// would double-count VAT relief the deposit doesn't actually grant. Floored
+// at 0 (an over-recorded deposit must never make "outstanding" negative);
+// falls back to the plain subtotal on the zero-total edge case (never
+// divides by zero).
+function outstandingHtCents(invoice: InvoiceWithTotals): number {
+  if (invoice.status !== InvoiceStatus.ACOMPTE_VERSE || !invoice.depositAmountCents) {
+    return invoice.subtotalExclVatCents;
+  }
+  if (invoice.totalInclVatCents <= 0) {
+    return invoice.subtotalExclVatCents;
+  }
+  const remainingRatio = Math.max(
+    0,
+    (invoice.totalInclVatCents - invoice.depositAmountCents) / invoice.totalInclVatCents,
+  );
+  return Math.round(invoice.subtotalExclVatCents * remainingRatio);
 }
 
 function addToTopEntry(map: Map<string, TopEntry>, label: string, cents: number): void {

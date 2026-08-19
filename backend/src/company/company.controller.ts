@@ -17,36 +17,18 @@ import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import {
+  ALLOWED_RASTER_IMAGE_MIME_TYPES,
+  matchesDeclaredImageType,
+} from '../common/raster-image-upload.util';
 import { CompanyService } from './company.service';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyProfile } from './entities/company.entity';
 
-// pdfMake (see PdfService) can only embed PNG/JPEG raster images — anything
-// else is rejected up front rather than accepted and only failing (possibly
-// breaking every future PDF for this company) at generation time.
-const ALLOWED_LOGO_MIME_TYPES: Record<string, true> = { 'image/png': true, 'image/jpeg': true };
 // A generous bound for a logo image, not a real limit — keeps a single
 // upload (base64-embedded into every generated PDF, see InvoiceMapper.
 // issuerFields) from bloating every invoice PDF this company ever generates.
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
-
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
-
-// The browser-supplied mimetype is trivially spoofable — this checks the
-// file's actual leading bytes match what it claims to be, cheap insurance
-// against a mislabeled upload later crashing pdfMake's image decoder deep
-// inside PdfService.generateInvoicePdf (which would then fail *every*
-// invoice PDF this company generates, not just show a missing logo).
-function matchesDeclaredImageType(buffer: Buffer, mimetype: string): boolean {
-  if (mimetype === 'image/png') {
-    return buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE);
-  }
-  if (mimetype === 'image/jpeg') {
-    return buffer.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE);
-  }
-  return false;
-}
 
 @Controller('company')
 export class CompanyController {
@@ -82,7 +64,7 @@ export class CompanyController {
     if (!file) {
       throw new BadRequestException('Aucun fichier reçu.');
     }
-    if (!ALLOWED_LOGO_MIME_TYPES[file.mimetype]) {
+    if (!ALLOWED_RASTER_IMAGE_MIME_TYPES[file.mimetype]) {
       throw new UnsupportedMediaTypeException('Le logo doit être une image PNG ou JPEG.');
     }
     if (!matchesDeclaredImageType(file.buffer, file.mimetype)) {

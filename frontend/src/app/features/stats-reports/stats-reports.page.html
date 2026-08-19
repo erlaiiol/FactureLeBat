@@ -77,6 +77,27 @@
         </div>
       </div>
 
+      @if (data.unsignedFactureCount > 0) {
+        <div
+          class="mb-6 flex flex-col items-start gap-2 rounded-xl border border-danger-subtle-border bg-danger-subtle p-4 text-danger-subtle-fg sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p class="text-sm">
+            <span class="font-semibold">
+              {{ data.unsignedFactureCount }}
+              {{ data.unsignedFactureCount === 1 ? 'facture non signée' : 'factures non signées' }}
+            </span>
+            — sans preuve que le client les a acceptées, en cas de litige.
+          </p>
+          <button
+            type="button"
+            (click)="goToUnsignedFactures()"
+            class="shrink-0 rounded-lg border border-danger-subtle-border px-3 py-2 text-sm font-medium hover:brightness-95"
+          >
+            Voir ces factures →
+          </button>
+        </div>
+      }
+
       <p class="mb-2 text-sm font-medium text-ink-soft">Chiffre d'affaires encaissé HT, par mois</p>
       <app-revenue-bar-chart
         appTourAnchor="stats-chart"

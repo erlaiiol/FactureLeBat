@@ -1,3 +1,4 @@
+import { CatalogFolderRef } from './catalog-folder.model';
 import { ActivityCategory } from './report.model';
 import { Unit } from './unit.model';
 
@@ -19,6 +20,8 @@ export interface ProductProfile {
   // Phase 17: which URSSAF turnover category this product's sales fall
   // under — artisan-set, null when left uncategorized.
   activityCategory: ActivityCategory | null;
+  // Phase 1.1-2: zero, one, or several dossiers this product belongs to.
+  folders: CatalogFolderRef[];
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +36,7 @@ export interface UpsertProductRequest {
   code?: string;
   packagingQuantity?: number;
   activityCategory?: ActivityCategory;
+  folderIds?: string[];
 }
 
 // Best-effort draft returned by POST /products/import — every field is

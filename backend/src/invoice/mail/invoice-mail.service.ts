@@ -42,6 +42,7 @@ export class InvoiceMailService {
       invoiceNumber: invoice.number,
       totalInclVatCents: invoice.totalInclVatCents,
       documentType: invoice.documentType,
+      customMessage: raw.company.invoiceMailCustomMessage,
     });
   }
 
@@ -72,10 +73,14 @@ export class InvoiceMailService {
       invoiceNumber: invoice.number,
       totalInclVatCents: invoice.totalInclVatCents,
       documentType: invoice.documentType,
+      customMessage: raw.company.invoiceMailCustomMessage,
     });
 
-    const logo = await this.companyService.getLogo(companyId);
-    const pdfData = this.mapper.toPdfData(raw, logo);
+    const [logo, signature] = await Promise.all([
+      this.companyService.getLogo(companyId),
+      this.invoiceRepository.findSignatureImage(companyId, invoiceId),
+    ]);
+    const pdfData = this.mapper.toPdfData(raw, logo, signature);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(pdfData);
     const filePrefix = invoice.documentType === 'DEVIS' ? 'devis' : 'facture';
 

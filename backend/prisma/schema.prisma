@@ -94,8 +94,18 @@ enum DocumentType {
 // Invoice.dueDate in the past, computed at read time (see
 // InvoiceMapper/frontend invoice-status.util.ts), same "derived data is
 // never persisted" rule as invoice totals — see docs/conventions.md.
+//
+// Phase 1.1-3: ACOMPTE_VERSE sits between NON_PAYEE and PAYEE — an
+// artisan-driven step recording that the requested deposit (see
+// Invoice.depositAmountCents below) actually landed, same "the system can't
+// observe a bank deposit, so it's a deliberate board action" reasoning as
+// every other status here. Only offered as a transition on a facture that
+// actually has a deposit set (see InvoiceService.updateStatus). No
+// partial-deposit/refund tracking beyond this single flag — see
+// docs/roadmap.md Phase 1.1-3's non-goals.
 enum InvoiceStatus {
   NON_PAYEE
+  ACOMPTE_VERSE
   PAYEE
   ANNULEE
 }
@@ -246,6 +256,14 @@ model Company {
   smtpUser              String?
   smtpPasswordEncrypted String?
 
+  // A short personal note the artisan writes once, appended to the default
+  // invoice/devis message on every send — the native "Partager" share sheet,
+  // the SMTP compose modal, and the mailto fallback all read this same value
+  // (see buildDefaultInvoiceMailTemplate), so it stays consistent regardless
+  // of which of the three the artisan (or their platform) ends up using.
+  // Null means no custom line is added, keeping today's message unchanged.
+  invoiceMailCustomMessage String?
+
   // Phase 14: Stripe subscription billing. stripeCustomerId is created lazily
   // (on the first checkout attempt), not at Company creation — most
   // companies never subscribe, and creating a Stripe Customer for every
@@ -331,6 +349,14 @@ model Company {
   declarationFrequency     DeclarationFrequency @default(TRIMESTRIELLE)
   microEntrepreneurCeiling Int?
 
+  // Phase 1.1-3: the artisan's habitual acompte rate, basis points (3000 =
+  // 30.00%) — same convention as vatRateBasisPoints, editable in company
+  // settings. Null means no default: mode rapide/mode manuel's "Demander un
+  // acompte" toggle stays off until the artisan opts in per-document; when
+  // set, it's the toggle's pre-filled (never locked) starting point on every
+  // new FACTURE draft from then on.
+  defaultDepositPercentageBasisPoints Int?
+
   // Phase 17 (charges estimate): the micro-entrepreneur "cotisations
   // sociales" rate per URSSAF turnover category, basis points (1230 =
   // 12.30%) — same convention as vatRateBasisPoints. Pre-filled with the
@@ -376,6 +402,7 @@ model Company {
   products         Product[]
   services         Service[]
   discounts        Discount[]
+  catalogFolders   CatalogFolder[]
   promoRedemptions PromoCodeRedemption[]
 
   // Company logo (top-right corner of every invoice/devis PDF), kept in its
@@ -413,6 +440,30 @@ model CompanyLogo {
   // upload endpoint (CompanyController.uploadLogo), not re-checked here.
   mimeType  String
   updatedAt DateTime @updatedAt
+}
+
+// Phase 1.1-1: how a signature proof was captured — see InvoiceSignature
+// below.
+enum SignatureMethod {
+  DRAWN
+  PHOTO
+}
+
+// Phase 1.1-1: a signature proof attached to a devis/facture — either drawn
+// on-screen by the client or a photographed paper signature, composited
+// onto the PDF at render time (see PdfService.buildSignatureBlock). Same
+// "keep the payload out of the main row" reasoning as CompanyLogo above.
+// Only one signature per document — attaching a new one replaces the old
+// (InvoiceService.uploadSignature upserts by invoiceId).
+model InvoiceSignature {
+  invoiceId String          @id
+  invoice   Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  image     Bytes
+  // image/png or image/jpeg only, same allow-list/magic-byte validation as
+  // CompanyLogo — see common/raster-image-upload.util.ts.
+  mimeType  String
+  method    SignatureMethod
+  createdAt DateTime        @default(now())
 }
 
 // Phase 13: one artisan account. Strictly 1:1 with Company (companyId is
@@ -665,6 +716,33 @@ model Invoice {
   // within the same day.
   lastPushReminderAt DateTime?
 
+  // Phase 1.1-1: the freehand fallback the "signed" checkbox falls back to
+  // when no InvoiceSignature exists below — only interactive while that's
+  // the case (see InvoiceService.setManuallySigned); attaching a real
+  // signature locks the checkbox checked and stops this from being toggled.
+  manuallySigned Boolean           @default(false)
+  signature      InvoiceSignature?
+
+  // Phase 1.1-3: the requested deposit, snapshotted at creation the same way
+  // vatApplicable/vatRateBasisPoints are — both null means no deposit was
+  // requested, both set together (enforced by DepositFieldsConsistency at
+  // the DTO boundary, not the DB), FACTURE-only (same scope as
+  // vatApplicable's FACTURE/DEVIS-agnostic snapshot, but this one is never
+  // set on a DEVIS — a quote isn't something a client pays a deposit
+  // against yet). depositPercentageBasisPoints is basis points against the
+  // invoice's own Total TTC (same convention as vatRateBasisPoints);
+  // depositAmountCents is the resolved euro amount, freehand-editable
+  // independent of the percentage once the artisan types over it directly
+  // (see InvoiceDraftStore/ManualInvoiceDraftStore's autoCalc — the two can
+  // legitimately disagree once decoupled, same "resolved once, not a live
+  // formula" spirit as InvoiceDiscountLine, just keeping both figures since
+  // the PDF prints them together: "Acompte demandé : 30 % soit 450,00 €").
+  depositPercentageBasisPoints Int?
+  depositAmountCents           Int?
+  // Set when the board status moves into ACOMPTE_VERSE, cleared if moved
+  // back out — same "records the fact, not a log" convention as paidAt.
+  depositPaidAt                DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -722,6 +800,32 @@ model Customer {
   @@index([companyId])
 }
 
+// Phase 1.1-2: an artisan-created, type-agnostic grouping an item can
+// optionally belong to (e.g. "Plomberie") — see CatalogFolder below.
+model CatalogFolder {
+  id String @id @default(uuid())
+
+  name String
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Phase 1.1-2: implicit many-to-many, one join table per pair — Prisma has
+  // no single polymorphic m2m across three models, and a folder is a
+  // type-agnostic list (one folder can hold products, services, and
+  // discounts alike, since a trade isn't just one catalog type). Deleting
+  // this folder just drops its join rows; an item with no folders left
+  // simply falls back to the unassigned list.
+  products  Product[]
+  services  Service[]
+  discounts Discount[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+}
+
 model Product {
   id String @id @default(uuid())
 
@@ -757,6 +861,10 @@ model Product {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   invoiceLines InvoiceLine[]
+
+  // Phase 1.1-2: zero, one, or several dossiers this product belongs to —
+  // see CatalogFolder above.
+  folders CatalogFolder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -806,6 +914,10 @@ model Service {
 
   invoiceServiceLines InvoiceServiceLine[]
 
+  // Phase 1.1-2: zero, one, or several dossiers this service belongs to —
+  // see CatalogFolder above.
+  folders CatalogFolder[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -833,6 +945,10 @@ model Discount {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   invoiceDiscountLines InvoiceDiscountLine[]
+
+  // Phase 1.1-2: zero, one, or several dossiers this discount belongs to —
+  // see CatalogFolder above.
+  folders CatalogFolder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

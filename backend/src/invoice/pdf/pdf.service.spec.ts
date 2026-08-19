@@ -18,6 +18,7 @@ function samplePdfData(): InvoicePdfData {
     issuerLogo: null,
     showWatermark: true,
     decennialInsurance: null,
+    signature: null,
     customerName: 'M. Dupont',
     customerAddress: null,
     customerEmail: null,
@@ -41,6 +42,9 @@ function samplePdfData(): InvoicePdfData {
     subtotalExclVatCents: 45000,
     vatAmountCents: 0,
     totalInclVatCents: 45000,
+    depositPercentageBasisPoints: null,
+    depositAmountCents: null,
+    depositPaidAt: null,
   };
 }
 
@@ -112,6 +116,36 @@ describe('PdfService', () => {
         policyNumber: '123456789',
         coverageArea: 'France métropolitaine',
       },
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  // A real, minimal 1x1 transparent PNG — pdfMake actually decodes this
+  // (unlike the other fixtures above, which never touch the image path).
+  const TINY_PNG_BASE64 =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+  it('generates a non-empty PDF buffer with the signature block when one is attached (Phase 1.1-1)', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      signature: { base64: TINY_PNG_BASE64, mimeType: 'image/png' },
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('retries without the signature (and issuer logo) if pdfMake fails to decode either image, rather than throwing', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      issuerLogo: { base64: 'data:image/png;base64,not-a-real-image', mimeType: 'image/png' },
+      signature: { base64: 'data:image/png;base64,not-a-real-image', mimeType: 'image/png' },
     };
     const buffer = await service.generateInvoicePdf(data);
 

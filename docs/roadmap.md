@@ -1574,6 +1574,7 @@ Replace the single flat 15€/month "Premium" plan (Phase 14) with three tiers �
   | Produits + prestations au catalogue | 30 | 150 | Illimité |
   | Statistiques d'activité (Phase 17 analytics) | ✗ | ✓ | ✓ |
   | Assistant IA fournisseurs (Phase 10) | ✗ | ✗ | ✓ |
+  | Dossiers (Phase 1.1-2, added by its own later amendment) | ✗ | ✓ | ✓ |
   | Déclaration trimestrielle (Phase 17 quarterly) | ✓ | ✓ | ✓ |
   | Support | Standard | Standard | Prioritaire |
 
@@ -1716,3 +1717,336 @@ A personal, time-boxed conversion push at the single moment an artisan is most l
 
 - Depends on Phase 14 (the free-trial gate this hooks into) and Phase 30 (the 3-tier `PLAN_DEFINITIONS`/Stripe coupon patterns this reuses).
 - `convertToFacture()` also calls `recordInvoiceCreated` for consistency, but it's a no-op in practice there: reaching it requires an existing devis, which already means `invoiceCount >= 1` before this call, so it can never be the 0→1 transition the offer is keyed on.
+
+---
+
+# Phase 1.1-1 — Signature Preuve: Digital Draw or Signed-Photo Proof
+
+*(Numbered outside the main Phase 1–33 sequence: the codebase has already moved past what's documented there, so this and the two phases after it are tracked as their own 1.1-x sub-track to avoid colliding with phase numbers that no longer line up with the code.)*
+
+## Objective
+
+Give a devis/facture a signature record, reachable from every place the document itself is reachable: "Mes documents" (Phase 16's board), and the success card shown right after creation in both mode rapide (`InvoiceCreatePreviewStepPage`) and mode manuel (`InvoiceCreateManualPage`) — the same card that already offers "Télécharger"/"Partager". Either the client signs on-screen right there (the artisan hands over the phone/tablet when presenting the document in person) or the artisan prints, gets the paper signed, and uploads a photo of the signed page back onto the document. Once a signature is attached, it's baked into the PDF itself, so "Partager" from that point on sends the signed document, not a plain copy with a proof record on the side. A document with no proof at all can still be marked signed by hand, for the artisan's own bookkeeping.
+
+## Data Model
+
+- `InvoiceSignature` (1:1 optional on `Invoice`, `onDelete: Cascade`) — same "keep the payload out of the main row" reasoning as `CompanyLogo` off `Company`: `image` (`Bytes`), `method` (`DRAWN` | `PHOTO`), `createdAt`. Only one signature record per document — attaching a new one replaces the old.
+- `Invoice.manuallySigned` (`Boolean`, default `false`) — the freehand fallback used only when no `InvoiceSignature` exists.
+
+The document's signed checkbox reads `hasSignatureProof || manuallySigned`. It is only interactive (checkable/uncheckable) while `InvoiceSignature` is absent; the moment a drawn signature or photo is attached, the checkbox locks checked and can't be manually unchecked — same "derived state, not a fabricatable flag" instinct as the rest of this app's proof-bearing fields. Removing the attached signature (a distinct, deliberate action, not the checkbox) drops back to the manual, freely-toggleable state.
+
+## Features
+
+- [x] A "Signer" action reachable from three places: the actions menu on "Mes documents", and the post-creation success card in both mode rapide's preview step and mode manuel's canvas — same modal, same two tabs, wherever it's opened from
+- [x] The modal has two tabs: "Dessiner" (a hand-built HTML5 canvas signature pad — client draws with finger/stylus while the artisan hands over the device) and "Importer une photo" (file input, `capture="environment"` on mobile so it opens the camera directly rather than a file browser)
+- [x] Either tab's result is stored as one `InvoiceSignature` (`DRAWN` or `PHOTO`) via a dedicated upload endpoint, mirroring `CompanyController.uploadLogo`'s existing pattern for `Bytes` payloads
+- [x] Once an `InvoiceSignature` exists, `PdfService` composites it onto the generated PDF (its own "Signature" block near the totals, alongside the existing logo-compositing precedent) on every render — download, email attachment, and `InvoiceShareService.share()` all go through the same PDF generation path, so there is never a separate "signed" vs. "unsigned" file to keep in sync; the signature is drawn fresh from `InvoiceSignature.image` each time, same "derived at render time, not cached" rule as everything else in the PDF pipeline
+- [x] Signed-state checkbox visible directly on "Mes documents" (its own "Signé" column), locked (non-uncheckable) whenever an `InvoiceSignature` exists, freely toggleable otherwise
+- [x] "Voir la signature" action opens the stored image (drawn or photographed) full-size for the artisan to review
+- [x] Deleting the attached signature is its own explicit action (distinct from the checkbox), reverting the document to the manual/unchecked state and the PDF to its unsigned rendering
+
+## Non-goals
+
+- No signature request sent by email/link for the client to sign remotely (a DocuSign-style flow) — both of the roadmap's requested paths assume the artisan and client are physically together (in-app draw) or the paper already changed hands (photo upload).
+- No re-editable signature block on the manual mode canvas (Phase 9.5) — the signature is an image composited at render time, not a canvas row the artisan types into, so it needs no manual-mode-specific handling beyond the same "Signer" action being reachable from that mode's success card.
+
+## Implementation notes
+
+- **Shared image-upload validation, not duplicated.** `CompanyController.uploadLogo`'s PNG/JPEG allow-list + magic-byte sniffing was extracted into `common/raster-image-upload.util.ts` (`ALLOWED_RASTER_IMAGE_MIME_TYPES`, `matchesDeclaredImageType`) and both the logo and signature upload endpoints import it — one place validating "is this actually a raster image pdfMake can embed," not two copies drifting apart.
+- **The "Importer une photo" tab downscales/recompresses client-side before upload** (max ~1600px on the longest side, JPEG quality 0.8, via an offscreen canvas) rather than accepting a raw phone-camera file — decided with the user specifically so storage/PDF size stays predictable regardless of the device's camera resolution, and it reuses the same canvas machinery the "Dessiner" tab already needs.
+- **The "Signé" column is its own dedicated table column** on "Mes documents" (between Total and Actions), not squeezed under the invoice number — also decided with the user, for at-a-glance scannability on a screen every artisan checks often.
+- **`PdfService`'s existing best-effort retry (drops a broken `issuerLogo` and re-renders) now also drops `signature`** on the same retry pass — an upload that's only best-effort-validated at upload time must never break every future render of that document, same reasoning that already applied to the logo.
+- **A real bug caught before shipping: `InvoiceMailService.send()` built its PDF through its own `InvoiceMapper.toPdfData()` call, separate from `InvoiceController.downloadPdf`'s** — the signature parameter was wired into the download/`getPdfData` path first, and the email path was missed on the first pass, which would have silently sent an unsigned copy by email even after the artisan attached a signature. Caught by re-reading this phase's own "email attachment... same PDF generation path" claim before checking it off, fixed by having `InvoiceMailService.send()` fetch `InvoiceRepository.findSignatureImage` alongside the logo, and covered by a dedicated spec asserting the signature reaches `toPdfData`.
+- **Extended into "Statistiques" beyond this phase's original scope, per a follow-up request**: `ActivityAnalytics.unsignedFactureCount` (`InvoiceRepository.countUnsigned`) counts every FACTURE — any status but `ANNULEE`, unpaid or already paid alike, never a `DEVIS` — with neither a real `InvoiceSignature` nor `manuallySigned` checked. Deliberately not scoped to the same 12-month window as the rest of Activity Analytics (a legal-risk count should surface the whole book, same "one more exception" reasoning `outstandingTotalCents` already established). Renders as a danger-colored callout on the "Vue d'ensemble" tab only when the count is above zero, with a "Voir ces factures →" link to `/factures?unsigned=1` — a new independent filter on `InvoiceBoardPage` (own chip, combinable with the existing répertoire/search/date filters), matching the exact same predicate client-side (`isUnsignedAtRisk` in `invoice-status.util.ts`) so the count and the filtered list can never disagree.
+
+## Notes
+
+- Depends on Phase 16 ("Mes documents" board), Phase 6/15 (mode rapide's preview/success card), Phase 9.5 (mode manuel's canvas and success card), and reuses `CompanyLogo`'s `Bytes`-off-the-main-row storage precedent plus its PDF-compositing precedent.
+
+---
+
+# Phase 1.1-2 — Dossiers: Catalog Folders for Multi-Trade Artisans
+
+## Objective
+
+An artisan working more than one trade (the plombier/serrurier case this phase is written for) wants their produits/prestations/remises organized by job type instead of one flat catalog. This phase adds a lightweight, artisan-created "dossier" (folder) an item can optionally belong to — to **more than one at once**, if that's how the artisan actually works (e.g. a universal fitting belongs in both "Plomberie" and "Serrurerie") — and reshapes mode rapide's "ajouter un produit/une prestation/une remise" flyout to browse by folder first.
+
+## Data Model
+
+- `CatalogFolder` (`name`, company-scoped) — a single, type-agnostic list: one folder (e.g. "Plomberie") can hold products, services, and discounts alike, since a trade isn't just one catalog type.
+- `Product`/`Service`/`Discount` each get an implicit many-to-many relation to `CatalogFolder` (`folders CatalogFolder[]`, one join table per pair — Prisma has no single polymorphic m2m across three models) — an item can belong to zero, one, or several folders at once. Deleting a folder just drops its join rows; an item with no folders left simply falls back to the unassigned list, same end state the earlier soft-reference design had, reached a different way.
+
+## Features
+
+- [x] "Mes dossiers" management screen (mirrors `discount-list`'s minimal CRUD: create by name, delete, no fields beyond the name) — reachable from the catalog list pages (`product-list`/`service-list`/`discount-list`) rather than a new top-level nav entry, so the nav stays uncluttered for artisans who never touch this feature
+- [x] A collapsed-by-default "Paramètres avancés" section on the product/service/discount forms, holding a multi-select folder dropdown: opening it lists every folder by name, clicking one toggles it (a checkmark on the right / a color change marks the selected ones), and any number can be selected at once — no separate "confirm" step inside the dropdown itself
+- [x] The selection is only committed when the artisan saves the product/service/discount form ("Enregistrer" on create or edit) — the dropdown holds local, uncommitted state until then, same "nothing writes until the form is actually submitted" rule as every other field on that form
+- [x] Mode rapide's "ajouter un produit"/"ajouter une prestation"/"ajouter une remise" flyout browses by folder first: each non-empty folder shown as a tappable group that expands to that folder's items of the matching type — an item in several folders simply appears once under each one — with every item that belongs to zero folders listed below exactly as the flat list works today
+- [x] Empty folders (no items of the given type) don't clutter that flyout — a folder only appears once it actually has a matching item
+- [x] Zero behavior change for any artisan who never creates a folder — every item stays in the unassigned list exactly as before
+- [x] Dossiers is Pro+/Premium-exclusive — see the amendment below.
+
+## Non-goals
+
+- No nesting (folders of folders) — one flat set of dossiers is what was asked for and what a trade-based grouping actually needs.
+- ~~No plan-tier cap on the number of folders...~~ **Superseded** — see the amendment below: this phase shipped ungated, then was locked to Pro+/Premium shortly after. Not a numeric cap either way (an artisan on a qualifying tier still has unlimited folders) — the amendment is a binary feature gate, the kind this non-goal never actually ruled out.
+- No cross-company sharing of folders — company-scoped like every other catalog entity.
+
+## Amendment — Pro+/Premium exclusivity
+
+Dossiers shipped ungated on every tier, then was restricted to Pro+/Premium shortly after — same treatment as Phase 17's analytics and Phase 10's AI assistant (`PlanGateService.assertFeatureAccess`, a new `dossiers` entry in `PlanDefinition.features`), not a numeric cap like `assertCatalogCapacity`.
+
+- **Downgrade never deletes anything.** A company that drops from Pro/Premium back to Essentiel keeps every `CatalogFolder` row and every `Product`/`Service`/`Discount.folders` assignment exactly as it was — nothing in this codebase deletes on downgrade, and this amendment adds no exception. Only the feature *surface* locks: `CatalogFolderController`'s endpoints (list/get/create/update/delete — the whole controller, not just create) now 402 with `PlanFeatureLocked` for a company below Pro. The moment the company is back at Pro+, every dossier and assignment reappears exactly as left, with zero re-entry.
+- **Product/Service/Discount's own `folderIds` handling is deliberately left ungated.** Gating `CatalogFolderService.filterOwnedFolderIds` too would mean an Essentiel-downgraded artisan silently loses their existing folder assignments on the *next unrelated edit* — the product/service/discount forms always resend the item's current `folderIds` on save (full-replace PATCH, same as every other field), so filtering it to `[]` for a locked company would wipe assignments as a side effect of e.g. a price change. Ownership is still checked; feature access isn't, on this one path.
+- **Three separate frontend surfaces lock, all with the same "Voir les offres" upsell card as `StatsReportsPage`'s `analyticsLocked`, never a bare error:**
+  - "Mes dossiers" (list + form pages) — the whole screen.
+  - The folder multi-select in the product/service/discount forms' "Paramètres avancés" — replaced by a compact locked notice; the item's already-selected folder ids stay in the form's local `selectedFolderIds` signal regardless (read off the item's own already-embedded `folders` array, no separate call), so resaving the rest of the form never drops them.
+  - Mode rapide's three flyouts — fall back to the flat list exactly as they rendered before this phase existed, even for an item whose `folders` array is non-empty (pre-existing assignment from before the downgrade). Detected the same way as the other two: a `GET /catalog-folders` call whose only purpose here is reading the 402, not its payload.
+- **Pricing page** (`/abonnement`) lists "Dossiers" alongside "Statistiques d'activité" in the Pro/Premium columns, sourced from `GET /billing/plans`'s `features.dossiers`, same as every other feature flag there — never hardcoded in the template.
+
+## Notes
+
+- Motivated by a specific dual-trade artisan (plombier + serrurier) rather than a general request — validate the flyout's folder-browsing UX with them once built, since "folders first, then orphans below" (now with an item potentially repeated across several folder groups) is a real interaction change to a screen every artisan uses on every invoice.
+
+---
+
+# Phase 1.1-3 — Acompte: Deposit Tracking on Factures
+
+## Objective
+
+Let an artisan request and record a deposit ("acompte") on a facture — most commonly 30% or 40% of the total — with the percentage they habitually ask for saved once in "Mon entreprise" (company settings) and auto-applied to every new mode rapide facture from then on, always editable per-document. The requested deposit prints as a written line on the document, and once actually received, the artisan marks it so on "Mes documents" — a new lifecycle state, not just a note.
+
+## Data Model
+
+- `Company.defaultDepositPercentageBasisPoints` (nullable `Int`, basis-points like `Discount.percentageBasisPoints`) — the artisan's habitual rate, editable in company settings. `null` = no default; deposit stays off unless turned on per-document.
+- `Invoice.depositPercentageBasisPoints` / `Invoice.depositAmountCents` (both nullable, FACTURE-only) — snapshotted at creation the same way `vatApplicable`/`vatRateBasisPoints` are: mode rapide's preview step pre-fills the percentage from the company default (when set) and live-recomputes the amount off the invoice's own total; both stay freehand-editable up until the facture is actually created, same "autofill, not a lock" rule as every other prefill in this app. Never set on a DEVIS, mirroring `InvoiceStatus`'s existing FACTURE-only scope.
+- `Invoice.depositPaidAt` (nullable `DateTime`) — set when the board status moves into the new `ACOMPTE_VERSE` value below, cleared if moved back out.
+- `InvoiceStatus` gains `ACOMPTE_VERSE` (`NON_PAYEE` | `ACOMPTE_VERSE` | `PAYEE` | `ANNULEE`) — a genuine artisan-driven lifecycle step, not a derived value like "en retard": the system has no way to observe that a deposit landed in the artisan's bank account, so like every other status change it's a deliberate action on the board. Only offered as a transition on a facture that actually has `depositAmountCents` set, validated the same way `InvoiceService.updateStatus` already guards status changes by `documentType`.
+
+## Features
+
+- [x] Editable "Acompte habituel" percentage field in company settings ("Mon entreprise"), saved once and reused as the default for every new mode rapide facture
+- [x] Mode rapide: a "Demander un acompte" toggle + percentage/amount field on the Phase 15 preview step — on and pre-filled by default whenever the company default is set, off by default otherwise, always editable before creation
+- [x] Mode manuel: the same toggle/field on the manual canvas (Phase 9.5), computed off the manual invoice's own displayed total (override if set, otherwise the computed row-sum) rather than a structured lines subtotal, since manual mode has no such structure
+- [x] PDF/preview totals block prints the requested deposit ("Acompte demandé : 30 % soit 450,00 €") whenever one was set, pixel-identical to today when none was — same "only render when present" precedent as Phase 32's discount line
+- [x] Once `depositPaidAt` is set, the same block also prints when it was received ("Acompte réglé le 12/09/2026") — the written trace the artisan actually asked for, living on the facture itself rather than a separate receipt document
+- [x] "Mes documents" board gains the `ACOMPTE_VERSE` state between "Non payée" and "Payée" — same status-menu interaction as the three existing values (the board itself is Phase 23's sortable list, not Phase 16's original Kanban — see `InvoiceListRowComponent`'s status menu), and only offered on factures that have a deposit set
+
+## Non-goals
+
+- No separate "reçu d'acompte" PDF/document type — the written trace lives on the facture's own totals block, not a new document, keeping this phase inside the existing PDF pipeline.
+- No deposit on a DEVIS — a quote isn't something a client pays a deposit against yet; matches `InvoiceStatus`'s existing FACTURE-only scope.
+- No partial-deposit or refund tracking — `ACOMPTE_VERSE` records that the requested amount was received, nothing finer-grained, same spirit as `PAYEE` not tracking partial payments today.
+
+## Notes
+
+- Percentage base decision: computed against the invoice's own **Total TTC**, not the pre-tax subtotal Phase 32's remise uses — an acompte is a portion of what the client will actually hand over up front, not a taxable-base concept the way a discount reducing the taxable base is.
+- Depends on Phase 15 (mode rapide's preview step), Phase 9.5 (mode manuel's canvas), and Phase 16 ("Mes documents" board and its status-transition machinery).
+- **Percentage/amount editing, decided with the user:** the two stay auto-synced (editing either recomputes the other off the current Total TTC) for as long as neither the amount field nor — mode manuel only — the invoice's own Total TTC override has been touched directly. The moment one of those two is edited by hand, the automatic link freezes exactly where it stood (a toast announces it), and a "Réinitialiser le calcul automatique" control (shown only while frozen) resumes it. Implemented identically in both modes via a shared `InvoiceDepositFieldComponent` and each draft store's own `deposit` signal (`InvoiceDraftStore`/`ManualInvoiceDraftStore`) — `amountOverrideEuros: null` is the "auto" state, non-null is "frozen", same "blank/null means derived, a value means overridden" convention the rest of this app's overridable fields already use.
+- **Scope call, decided with the user:** `InvoiceRepository.findOutstanding` (Activity Analytics' "reste dû") now also includes `ACOMPTE_VERSE` factures — a deposit received doesn't mean the balance is settled. Since that figure is HT throughout (`ReportsService`) while the deposit itself is snapshotted against Total TTC, the remaining HT balance is the *proportional* share still unpaid TTC, not a raw cents subtraction (see `outstandingHtCents` in `reports.service.ts`) — deliberately widened beyond this phase's original Features list, at the user's explicit request, rather than left as a known gap.
+- Not touched, deliberately out of scope: `ReminderCronService`'s late/unpaid digest queries (`reminder-query.util.ts`) and `InvoiceMailService`'s reminder bump stay `NON_PAYEE`-only — an `ACOMPTE_VERSE` facture simply stops generating "en retard" reminders until moved back or to `PAYEE`, matching this phase's own "nothing finer-grained" non-goal.
+
+---
+
+# Phase 1.1-4 — Devis/Facture Toggle: Stamped-Badge Treatment in `info` Blue
+
+## Objective
+
+The devis/facture slider at the top of "Nouveau document" (`InvoiceCreateModeChoicePage`) is the first decision an artisan makes on every new document, but its selected state uses the same flat `bg-primary` orange as everything else on the page — including the "Recommandé" badge sitting a few pixels below it, competing for the exact same color. Nothing currently points a new artisan's eye toward it on first login.
+
+Rather than reach for a new one-off color, this phase borrows the visual *language* of the Phase 5 line-marking badge (`app-line-badge`) — the physically-stamped look (sharp 2px corners, thin darker-tint border, 1px offset shadow, -1.5° rotation) — for the toggle's active side, but in `info` blue (`#2E5D82`/`#DCEAF2`), never the badge's chartreuse. Decided with the user: orange and chartreuse were both considered and rejected (orange blends with the rest of the page, chartreuse is deliberately reserved for the redistribution badge alone — see design-system.md); blue contrasts hard against the app's orange without visually competing with it, since nothing else in "Chantier calibré" currently uses that hue at this weight.
+
+This is the second use of the stamp motif, not a copy of the badge itself — see design-system.md's amended shape rule: the two stay unmistakable from each other because color, not shape, carries the meaning in this app's system (same reasoning already applied to `danger` vs. `primary`).
+
+## Features
+
+- [x] Selected side of the toggle gets the stamp treatment: `info`-blue background instead of `bg-primary`, sharp 2px corners instead of the pill's current full radius, a thin darker-blue border, 1px offset shadow, -1.5° rotation
+- [x] Unselected side stays a flat, muted `bg-surface`/`text-ink-soft` rectangle (no stamp) — the stamp only ever marks the *active* choice, same "the badge marks a real state" principle Phase 5's badge already follows
+- [x] `badgeStamp` (the existing motion primitive — scale-in from 40% with overshoot and rotation settle) replays on the active side whenever the artisan switches Devis ↔ Facture, reusing the primitive as-is rather than inventing a new transition
+- [x] Bigger touch target and bolder type on the toggle overall (larger padding/font size) — it currently reads at the same scale as the surrounding page's smaller text, low for what's meant to be the first control an artisan interacts with
+- [x] Re-check spacing against the "Recommandé" badge directly below (Mode rapide card) now that the toggle no longer shares its color — confirm the two don't read as competing "badges" once blue and orange are both stamped shapes on the same screen
+
+## Non-goals
+
+- No new color token — `info` already exists in design-system.md's semantic table; this phase is a new *use* of it, not a new definition.
+- No change to the toggle's interaction (still two click targets, no drag) — the ask was about visibility, not behavior.
+- No third reuse of the stamp motif elsewhere without re-applying this phase's own reasoning (a genuinely distinct hue, a genuinely distinct meaning) — see the amended shape rule.
+
+## Notes
+
+- Component: `frontend/src/app/features/invoice-create/mode-choice/invoice-create-mode-choice.page.html:7-28`. Reference implementation for the stamp geometry: `frontend/src/app/shared/components/line-badge.component.ts`.
+- design-system.md's "Shape rule" (Semantic colors section) updated to record this as a deliberate, reasoned second exception rather than an erosion of the rule.
+- Verify at phone width first (ux-roadmap.md's primary real-device context for this app) — first login on a phone is exactly the moment this needs to land well.
+- **Visually verified** (headless-browser screenshots against `make demo`, phone width and desktop, both themes): the "Recommandé" badge and the toggle read as clearly distinct — different shape context (a floating corner tag vs. a segmented control), different color, no clash. Verification also surfaced that the original 1px border/shadow was too subtle to count as "can't miss it" (see the border/shadow tuning note above `STAMP_CLASSES`, `invoice-create-mode-choice.page.ts`) — bumped to 2px with the border/shadow colors split (border in `info-fg` against the fill, shadow in `info-subtle-fg` against the page) once a plain white shadow turned out to be invisible against this app's light page background.
+
+---
+
+# Phase 1.1-5 — Demo Seed Refresh for the 1.1-x Features
+
+## Objective
+
+`backend/prisma/seed-demo.ts` (the two `make demo` tenants — "Bâti Rénov", a multi-corps-d'état renovation artisan, and "L'Atelier Beauté", a Paris beauty institute) predates every 1.1-x phase and shows none of it: no signature, no folders, no deposit, and — a pre-existing gap this phase closes along the way since it directly blocks demonstrating folders properly — no `Discount`/`Remise` at all despite Phase 32 shipping it. This phase updates the seed so both demo accounts show every 1.1-x feature working, without changing what already exists in either persona's story.
+
+Depends on Phase 1.1-1/1.1-2/1.1-3 actually being implemented first (schema, backend, frontend) — this phase only seeds data for models/fields that don't exist yet.
+
+## What to add per tenant
+
+- **Signature (1.1-1):** at least one FACTURE with a real `InvoiceSignature` attached (photo method — the simplest to seed, a small demo image read from a new `backend/prisma/seed-assets/` file via `fs.readFileSync`, the first binary-asset seed this file will need), one FACTURE left `manuallySigned: true` with no attached image (the freehand fallback path), and the rest untouched (no signature at all) so the default/most-common state is still represented.
+- **Dossiers (1.1-2):** a handful of `CatalogFolder` rows per tenant matching each persona's real work — e.g. "Sol" / "Peinture" / "Plâtrerie" for Bâti Rénov, "Soins visage" / "Soins corps" / "Prestations groupe" for L'Atelier Beauté — with several existing products/services (and the new discounts below) assigned, **at least one item assigned to two folders at once** to actually exercise the many-to-many picker, and several items left unassigned so the flyout's "orphan list below" behavior still has something to show.
+- **Remises (Phase 32, closed here):** 1–2 `Discount` rows per tenant (one `FIXED`, one `PERCENTAGE`) via the "Mes remises" pattern, at least one attached to a folder above and one left unassigned, and at least one demo invoice that actually uses a discount line so the PDF's "Sous-total HT / remise / Total HT" breakdown has a real example in the demo too.
+- **Acompte (1.1-3):** `Company.defaultDepositPercentageBasisPoints` set for Bâti Rénov (e.g. 30%) and deliberately left `null` for L'Atelier Beauté, so the demo shows both the auto-filled and the opt-in path. At least three FACTUREs: one with a deposit requested but still `NON_PAYEE`, one moved to `ACOMPTE_VERSE` (`depositPaidAt` set, so the board shows the new column with a real card in it), and existing FACTUREs left as-is with no deposit at all.
+
+## Features
+
+- [x] `SeedDocument`/`createDocuments()` extended to accept `discountLines`, `depositPercentageBasisPoints`/`depositAmountCents`/`depositPaidAt`, and the `ACOMPTE_VERSE` status — same data-driven shape the function already uses for `lines`/`serviceLines`, not a one-off special case
+- [x] `ProductDef`/`ServiceDef`/a new `DiscountDef` gain an optional `folderKeys` so folder assignment reads the same way `packagingQuantity`/`supplierName` already do in the existing product literals; a new `createFolders()`/`createDiscounts()` pair (mirroring the existing `createCustomers()`) creates the dossiers first so the catalog loop can `connect` into them
+- [x] A small demo signature image asset added under `backend/prisma/seed-assets/demo-signature.png`, loaded once (`DEMO_SIGNATURE_IMAGE`, `process.cwd()`-relative — see the constant's own comment for why not `__dirname`-relative) and reused across whichever invoice(s) get the photo-method signature
+- [x] `wipeExistingDemoData()` needed no code change — `CatalogFolder`/`Discount` are already `companyId`-cascaded and `InvoiceSignature` cascades off its `Invoice`, so the pre-existing single `company.deleteMany` already wipes all three; confirmed by re-running the seed twice against the same database with no unique-constraint errors and identical row counts both times
+- [x] Both `seedArtisanBatiment()` and `seedInstitutBeaute()` touched — the point is both personas show the full 1.1-x feature set, not just one
+
+## Non-goals
+
+- `seed-playstore-demo.ts` (the single production store-reviewer account) is untouched — its own header already states it's deliberately not the same thing as the `make demo` stack, and its job is proving login + Premium-screen access to a reviewer, not full feature richness. Revisit separately if a reviewer specifically needs to see one of these features.
+- No new demo customers/tenants — this phase enriches the two existing personas' existing documents/catalog, it doesn't grow the roster.
+
+## Notes
+
+- Depends on Phase 1.1-1, 1.1-2, and 1.1-3 shipping first; can be done in one pass once all three land, since the changes to `seed-demo.ts` touch the same document/catalog literals.
+- The Discount/Remise gap (Phase 32) is pre-existing and not caused by any 1.1-x phase — called out here because 1.1-2's folder picker explicitly includes discounts in its many-to-many relation, so demonstrating folders without a single demo `Discount` to assign would leave that part of the feature unshown.
+
+---
+
+# Phase 1.1-6 — Custom Footer Mention on Company Settings
+
+## Objective
+
+A free-text field in "Mon entreprise" the artisan can write anything into — their own mandatory mentions, a policy line, whatever — printed centered at the bottom of the PDF, independently toggleable per document type (facture and/or devis). This is the general-purpose escape hatch for any legal or commercial mention this app doesn't model as its own structured field; Phases 1.1-7/1.1-8 below cover the specific mentions worth automating instead of leaving to free text.
+
+## Data Model
+
+- `Company.customFooterMessage` (`String?`) — free text, no format imposed.
+- `Company.customFooterOnFacture` / `Company.customFooterOnDevis` (`Boolean`, both default `false`) — independent toggles; the artisan can show it on one document type only, both, or neither. `null`/empty message with either toggle on simply renders nothing, same "absent input, no output" precedent as every other optional PDF block.
+
+## Features
+
+- [ ] Textarea + two checkboxes ("Afficher sur les factures" / "Afficher sur les devis") in company settings, next to the existing decennial-insurance and franchise-en-base fields
+- [ ] `PdfService.buildFooter` renders it as its own centered block (distinct from the existing left-aligned 7pt legal-mentions stack — this one is the artisan's own words, not a statutory citation, so it gets its own visual treatment), shown only when the toggle matching the current document's `documentType` is on and the message isn't empty
+- [ ] Zero behavior change for any company that never fills this in — no block rendered, matching every other optional PDF section in this app
+
+## Non-goals
+
+- No rich text/formatting — plain text only, same "PdfService only ever renders plain text" boundary the manual-mode table already follows.
+- No per-invoice override — this is a company-wide setting, not a per-document one; an artisan needing a one-off different mention on a single document already has Phase 1.1-1's signature-adjacent workflow or can just edit the message before creating that particular document (accepting the tradeoff that it then applies to every document after, until changed back).
+
+---
+
+# Phase 1.1-7 — Client Professionnel: Conditions de Paiement (Art. L441-9)
+
+## Objective
+
+Requested alongside Phase 1.1-6: a review of which of the mandatory-mention situations the user researched are worth automating, given this app's "extremely fast, minimal typing" mandate. This phase covers the one that's both legally significant and applies broadly, not to a narrow trade: **payment terms on a facture to a professional client** (Art. L441-9 du Code de commerce — date/délai de règlement, conditions d'escompte, taux de pénalités, indemnité forfaitaire de 40€). It also fixes an existing gap found while reviewing this: `PdfService.buildFooter` already prints the 40€/pénalités mention today, but **unconditionally, on every invoice regardless of client type** — technically over-broad, since L441-9 only governs commercial relations between professionals, not sales to individual consumers.
+
+Bundled in for the same "genuinely broad, not sector-specific" reason: **autoliquidation for BTP subcontracting**, since it's a VAT-correctness issue (not just a footer mention) that applies directly to this app's core BTP-artisan persona, not a narrow edge case.
+
+## Data Model
+
+- `Customer.isProfessional` (`Boolean`, default `false`) — the artisan's own declaration, same spirit as `decennialInsuranceApplicable`: not reliably inferable (a `siret`/`companyName` filled in is a *hint*, pre-checking the box when either is present, but never a lock — a sole-trader client without a SIRET on file is still legally "professionnel" if they're buying for their business).
+- `Company.earlyPaymentDiscountMention` (`String?`, pre-filled with the standard "Pas d'escompte pour paiement anticipé." on first save) — L441-9 requires *stating* the escompte policy even when there isn't one; pre-filling the standard "none offered" sentence means an artisan who never touches this field is still compliant, not silently missing a mandatory line.
+- `Invoice.reverseChargeApplicable` (`Boolean`, default `false`, FACTURE-only, per-document not per-company — whether a given job is subcontracted work depends on that specific chantier, never a fixed company-wide fact) — when set, reuses the existing zero-VAT computation path (`vatApplicable = false`, same as franchise en base) but prints the distinct legal citation below instead of art. 293 B's.
+
+## Features
+
+- [ ] "Client professionnel" checkbox on the customer form, pre-checked when `companyName` or `siret` is filled, always overridable — and, since `companyName`/`siret` only ever matter for a professional client in the first place, both fields move from always-visible to **revealed only once the checkbox is checked** (the field hints already said "si professionnel"/"facultatif — uniquement si ce client facture lui-même en tant que professionnel"; this phase makes that conditionality structural instead of just worded). Same progressive-disclosure precedent as Phase 1.1-2's collapsed "Paramètres avancés".
+- [ ] Customer list cards (`customer-list`) gain a small "Pro" badge (`app-badge`, `secondary` or `info` variant — reuses the semantic badge component, no new one-off style) next to `companyName` when `isProfessional` is set, so the distinction is visible at a glance without opening each card
+- [ ] `PdfService.buildFooter`'s existing 40€/pénalités mention gated on `data.customerIsProfessional` — no longer shown to individual-consumer clients
+- [ ] When professional: footer also prints the existing `Invoice.dueDate` as "Délai de règlement : [date]" (the date already exists and already drives Phase 16's "en retard" board logic — this phase is the first time it's actually rendered as the legal mention it's also required to be) and the company's escompte mention
+- [ ] "Autoliquidation (sous-traitance BTP)" checkbox on a facture, available in both mode rapide's preview step and mode manuel — when checked, the invoice computes with no VAT (same mechanism as franchise en base) and the footer prints "Autoliquidation - Article 242 nonies A, 13° de l'annexe II au CGI" in place of the franchise-en-base citation
+- [ ] Zero behavior change for a professional-only artisan who never touches the reverse-charge checkbox, and no change at all to a DEVIS's footer (this phase is FACTURE-scoped, matching L441-9's own "facture" wording and this app's existing FACTURE-only precedent for `InvoiceStatus`/deposits)
+
+## Notes
+
+- The late-payment penalty *rate* itself stays the existing fixed "taux d'intérêt légal en vigueur" phrasing (no per-company rate field needed) — French law permits citing the reference rate by name rather than a hardcoded number, so nothing here changes on that front.
+- Depends on Phase 1.1-6 existing first only in the loose sense that both touch `PdfService.buildFooter`'s mentions list — no hard data dependency between them.
+
+---
+
+# Phase 1.1-8 — 2026 E-Invoicing Reform: Baseline Mandatory Fields
+
+## Objective
+
+The user's research flagged four fields the French e-invoicing reform adds to the mandatory list: SIREN client, delivery address (if different), nature of the operation (goods / services / both), and the "option pour le paiement de la taxe d'après les débits" mention. All four are cheap here specifically because of how this app already models data — worth building now rather than deferring, unlike the sector-specific mentions declined below.
+
+## Data Model
+
+- `Invoice.customerSiret` (`String?`) — a genuine gap found while reviewing this: `Customer.siret` exists, but nothing snapshots it onto the `Invoice` the way `customerName`/`customerAddress`/`customerEmail`/`customerPhone` already are. Without this, "SIREN client" literally can't be printed on an issued invoice today, even when the saved `Customer` has one — same autofill-then-freehand-editable, same soft-reference reasoning as those four existing fields.
+- `Invoice.deliveryAddress` (`String?`) — **autofilled from the picked `Customer.address` at pick time**, same "autofill, not a lock" precedent as `customerName`/`customerAddress` themselves, so the artisan never retypes an address that's already on file; freely editable per document when a job site genuinely differs from the billing address.
+- `Company.vatOnDebitsOption` (`Boolean`, default `false`) — same toggle-prints-a-fixed-mention pattern as `decennialInsuranceApplicable`/franchise en base.
+- No new field for "nature de l'opération" — see Features below, it's derived.
+
+## Features
+
+- [ ] SIREN rendered on the PDF as the first 9 digits of `Invoice.customerSiret` when present — no separate SIREN field, since a SIRET already contains its SIREN
+- [ ] "Adresse de livraison" field on the invoice form (mode rapide's client step and mode manuel), pre-filled with the picked customer's address the moment they're selected — editable, "sauf mention explicite" (the artisan overwrites it only when the job site genuinely isn't the billing address)
+- [ ] PDF prints the delivery-address line only when it actually differs from `customerAddress` at render time — since the two start identical by default, an untouched invoice renders nothing extra (matching the reform's own "si différente" wording), and an explicit edit is exactly what makes them differ and triggers the line
+- [ ] "Nature de l'opération" derived at PDF-render time for GUIDED invoices — "Livraison de biens" / "Prestation de services" / "Livraison de biens et prestation de services", purely from whether the invoice has product `lines` and/or VISIBLE `serviceLines`, zero artisan input, same "derived, never persisted" convention as everything else in this app's calculation layer
+- [ ] MANUAL mode gets an explicit 3-way selector for the same mention (defaulting to "Prestation de services") since its free-form canvas has no structured biens/services split to derive from
+- [ ] "Option pour le paiement de la taxe d'après les débits" toggle in company settings, printing the fixed mention on every facture when on
+
+## Non-goals — sector-specific mentions considered and declined for now
+
+Reviewed against this app's "extremely fast, minimal typing" mandate and its actual user base (artisans/craftsmen, not electronics retailers or media resellers) — declined, not forgotten. Phase 1.1-6's free-text footer field is the pragmatic escape hatch for the rare artisan who genuinely needs one of these:
+
+- **Membre d'un organisme de gestion agréé (mention chèque/carte)** — a narrow, largely legacy mention tied to a specific accreditation status very few artisans in this app's target base hold.
+- **Éco-participation DEEE** (electronics) and **rémunération pour copie privée** (blank media) — both would need a per-product eco-tax/RCP amount modeled as its own priced line, real complexity for a customer base that's overwhelmingly not selling DEEE-covered equipment or recordable media.
+- **Autofacturation** — the client issuing the invoice on the supplier's behalf is a fundamentally different creation flow (client-initiated, not artisan-initiated), not a mention to bolt onto the existing one.
+- **Client professionnel étranger / UE** — legitimate and likely worth doing eventually as this app scales past France (see roadmap.md's "FactureLeBat → FactureLe" direction), but it's a real feature on its own (VAT number capture/validation, intra-EU reverse-charge rules, cross-border delivery-vs-service treatment) — deserves its own dedicated phase when an actual user needs it, not a bullet bundled into this one.
+- **Client public / marché public** (bon de commande, référence marché) — this app's own demo data already includes a public-sector customer (`seed-demo.ts`'s "Mairie de Villefranche-sur-Saône"), so it's not hypothetical, but the real need is a general "référence commande" field usable in mode rapide (today's `InvoiceCustomerField` freehand-extra-field mechanism is manual-mode only) rather than a public-sector-specific feature — worth a future phase in its own right, not this one.
+
+## Notes
+
+- Depends on nothing else in the 1.1-x track; can ship independently of 1.1-6/1.1-7.
+
+---
+
+# Phase 1.1-10 — Guided Tour Rework for the 1.1-x Features
+
+*(1.1-9 intentionally left unassigned — numbered as explicitly requested.)*
+
+## Objective
+
+None of the five existing declarative mini-tours (`invoice-creation`, `invoice-creation-manual`, `catalog`, `customers`, `stats-reports` — see Phase 8/18/19's `tour-definitions.ts` engine) say anything about what the 1.1-x track adds: the devis/facture toggle isn't tour-anchored at all today, dossiers/acompte/signature don't exist in any step, and the customer form's new "Client professionnel" checkbox (1.1-7) is invisible to a new artisan clicking through. This phase extends the existing tours at the exact route/anchor each feature actually lives on, rather than inventing a new sixth tour — same "one mini-tour per real workflow" precedent Phase 8 set originally.
+
+Closes one pre-existing gap discovered while reviewing this, same spirit as 1.1-5's demo-seed catch: **`catalog` has never mentioned "Mes remises" at all** — Phase 32 (Discount) shipped between Phase 19 and this one, and neither tour phase since has added it. Folded in here since it's the same tour, the same kind of step, and the same produit/prestation pattern to extend.
+
+## Engine additions
+
+- `TourStepCondition` gains `hasFolders`/`noFolders` and `hasDiscounts`/`noDiscounts`, resolved by `TourService.evaluateShowIf` the exact same way as the existing `hasProducts`/`hasServices` pair (an awaited `getAllCached()`-equivalent call, false on fetch failure so both alternatives skip rather than guess).
+- No other engine change needed — `showIf`, `next`/`nextByAnchor`, `celebrate`, and route-matching already cover everything below.
+
+## Features
+
+**`invoice-creation`:**
+- [ ] New anchor on the devis/facture toggle itself (currently un-anchored — only the mode-choice cards container below it is), spotlighted in a new first step before the existing `invoice-mode-choice` step: "C'est le premier choix à faire à chaque nouveau document."
+- [ ] `add-line`'s product/service branches gain a `showIf: 'hasFolders'` alternative explaining the folder-first flyout — skipped entirely for an artisan with zero folders, so nothing is said about a feature they haven't touched
+- [ ] A new step on the preview screen's "Demander un acompte" toggle (1.1-3), inserted between the existing `total` and `preview` steps
+- [ ] A new step spotlighting the "Signer" action on the post-save success card (the same card Phase 19 already reaches and celebrates on), explaining it also works later from "Mes documents"
+
+**`catalog`:**
+- [ ] Both `produit-form-hint` and `prestation-form-hint` gain one added sentence pointing at the "Paramètres avancés" folder picker (1.1-2), reusing one shared anchor id across the two forms (same "never mounted simultaneously" precedent as `invoice-line-quantity`'s shared id)
+- [ ] A full "Mes remises" detour, mirroring the produit/prestation structure exactly (`remise-cta` → `remise-new-reminder` → `remise-form-hint` → `remise-celebrate`, `showIf: noDiscounts`/`hasDiscounts`), inserted after `prestation-celebrate` and before `catalog-done` — closing the gap above
+- [ ] `catalog-done`'s closing copy updated to mention all three catalog entities, not just produits/prestations
+
+**`customers`:**
+- [ ] A new step anchored on the "Client professionnel" checkbox (1.1-7), inserted after `customer-form-hint`, explaining that checking it reveals the raison sociale/SIRET fields — introduces the progressive-disclosure behavior explicitly rather than leaving a new artisan to discover it by accident
+
+**`invoice-creation-manual` / `stats-reports`:** untouched — manual mode's own tour was already left alone by Phase 18 for the same reason it is here (nothing in 1.1-x is manual-mode-specific beyond what mode rapide's tour already covers), and nothing in the 1.1-x track touches reports (1.1-3's non-goals explicitly excluded deposit reporting, matching Phase 32's own precedent for discounts).
+
+## Non-goals
+
+- No new, seventh tour dedicated to "what's new in 1.1" — every addition lives inside whichever existing tour already owns that route, same reasoning Phase 8 used against one continuous cross-app tour.
+- No tour coverage for Phase 1.1-6's custom footer field or 1.1-8's e-invoicing fields (delivery address, débits option, autoliquidation) — these are company-settings/low-frequency fields an artisan sets once, not a repeated per-document action; `app-field-hint`'s existing persistent-caption pattern (Phase 7) already covers them adequately without a guided-tour step.
+
+## Notes
+
+- Depends on Phase 1.1-1 through 1.1-3 and 1.1-7 shipping first — this phase only adds tour steps for UI that has to already exist.
+- Reference implementation for every mechanism named above: `frontend/src/app/shared/tour/tour-definitions.ts`, `tour.service.ts`, `tour-anchor-registry.service.ts`.

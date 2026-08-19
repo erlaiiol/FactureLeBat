@@ -87,6 +87,11 @@ export interface InvoicePdfData {
   // garantie décennale, in which case PdfService.buildFooter prints nothing
   // extra for it.
   decennialInsurance: { insurerName: string; policyNumber: string; coverageArea: string } | null;
+  // Phase 1.1-1: the attached signature proof (drawn or photographed), if
+  // any — null for a preview (no id yet) and for a persisted invoice with
+  // none attached. PdfService composites it near the totals block whenever
+  // present, same rendering precedent as issuerLogo above.
+  signature: { base64: string; mimeType: string } | null;
 
   customerName: string;
   customerAddress: string | null;
@@ -116,4 +121,13 @@ export interface InvoicePdfData {
   subtotalExclVatCents: number;
   vatAmountCents: number;
   totalInclVatCents: number;
+
+  // Phase 1.1-3: the requested deposit — both null whenever none was
+  // requested, in which case PdfService.buildTotals prints nothing extra
+  // (pixel-identical to before this phase, same "only render when present"
+  // precedent as discountLines). depositPaidAt renders a second line once
+  // set ("Acompte réglé le ...").
+  depositPercentageBasisPoints: number | null;
+  depositAmountCents: number | null;
+  depositPaidAt: Date | null;
 }

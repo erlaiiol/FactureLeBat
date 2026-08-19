@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PlanGateService } from '../billing/plan-gate.service';
+import { CatalogFolderService } from '../catalog-folder/catalog-folder.service';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { ProductRepository } from './product.repository';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -12,6 +13,7 @@ export class ProductService {
   constructor(
     private readonly productRepository: ProductRepository,
     private readonly planGateService: PlanGateService,
+    private readonly catalogFolderService: CatalogFolderService,
   ) {}
 
   findAll(companyId: string, search?: string): Promise<ProductProfile[]> {
@@ -30,8 +32,12 @@ export class ProductService {
   // docs/roadmap.md Phase 30 and CustomerService.create's equivalent check.
   async create(companyId: string, dto: CreateProductDto): Promise<ProductProfile> {
     await this.planGateService.assertCatalogCapacity(companyId, 'catalogItem');
+    const folderIds = await this.catalogFolderService.filterOwnedFolderIds(
+      companyId,
+      dto.folderIds ?? [],
+    );
     try {
-      return await this.productRepository.create(companyId, dto);
+      return await this.productRepository.create(companyId, dto, folderIds);
     } catch (error) {
       throw this.mapKnownError(error);
     }
@@ -44,8 +50,12 @@ export class ProductService {
   // fires for .update()/.delete(), not the *Many variants a compound
   // {id, companyId} filter requires.
   async update(companyId: string, id: string, dto: UpdateProductDto): Promise<ProductProfile> {
+    const folderIds = await this.catalogFolderService.filterOwnedFolderIds(
+      companyId,
+      dto.folderIds ?? [],
+    );
     try {
-      return await this.productRepository.update(companyId, id, dto);
+      return await this.productRepository.update(companyId, id, dto, folderIds);
     } catch (error) {
       if (error instanceof NoRowsAffectedError) {
         throw new NotFoundException(`Product ${id} not found`);
