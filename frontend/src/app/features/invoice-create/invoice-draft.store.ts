@@ -544,6 +544,31 @@ export class InvoiceDraftStore {
     );
   }
 
+  // Bug fix: `this.company()` is a one-shot snapshot fetched once by this
+  // singleton store's own constructor and never otherwise refreshed — if
+  // the artisan edits "Mon entreprise" (its own separate
+  // CompanyService.getProfile() round trip, company-settings.page.ts) at
+  // any point afterward in the same session, this store's cached copy goes
+  // stale and every later "nouvelle facture" silently keeps proposing the
+  // OLD habitual acompte rate (or none, if it was still null on first
+  // load), only self-correcting on a hard page reload. Called by every
+  // place that wants "the current habitual rate" applied (reset(),
+  // loadFromInvoice()): applies immediately from whatever's cached (so
+  // there's no blank flash while the request is in flight), then re-fetches
+  // and re-applies once a genuinely current profile comes back.
+  private applyCurrentCompanyDefaultDeposit(): void {
+    this.applyCompanyDefaultDeposit(this.company());
+    this.companyService
+      .getProfile()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (profile) => {
+          this.company.set(profile);
+          this.applyCompanyDefaultDeposit(profile);
+        },
+      });
+  }
+
   setDepositRequested(requested: boolean): void {
     this.deposit.update((deposit) => ({ ...deposit, requested }));
   }
@@ -649,9 +674,11 @@ export class InvoiceDraftStore {
     this.sourceDevisId.set(null);
     this.number.set('');
     // Phase 1.1-3: "auto-applied to every new mode rapide facture from then
-    // on" — re-derive from the company profile (already cached) rather than
-    // just blanking it, same as every fresh draft.
-    this.applyCompanyDefaultDeposit(this.company());
+    // on" — re-derive from the company's current habitual rate rather than
+    // just blanking it, same as every fresh draft. Refreshes the company
+    // profile too (not just re-reading the cache) — see
+    // applyCurrentCompanyDefaultDeposit's own comment for why.
+    this.applyCurrentCompanyDefaultDeposit();
     this.reverseChargeApplicable.set(false);
     this.clearStorage();
   }
@@ -775,7 +802,7 @@ export class InvoiceDraftStore {
     // A devis never carries a deposit (FACTURE-only, see schema.prisma) —
     // same "auto-applied to every new FACTURE draft" rule as reset() above,
     // rather than leaving whatever was left over from a previous draft.
-    this.applyCompanyDefaultDeposit(this.company());
+    this.applyCurrentCompanyDefaultDeposit();
     this.sourceDevisId.set(source.id);
     // A converted facture always gets its own fresh number, never the
     // devis's — left blank so ensureNumberSuggestion() computes a real one

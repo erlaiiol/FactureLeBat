@@ -599,4 +599,58 @@ describe('InvoiceDraftStore', () => {
       expect(store.buildInvoiceRequest().manualNatureOfOperation).toBeUndefined();
     });
   });
+
+  describe('Phase 1.1-3 — habitual deposit default', () => {
+    it('pre-fills the deposit toggle from defaultDepositPercentageBasisPoints on construction', () => {
+      const store = TestBed.inject(InvoiceDraftStore);
+      httpMock
+        .expectOne(`${environment.apiBaseUrl}/company`)
+        .flush({ ...companyFixture, defaultDepositPercentageBasisPoints: 3000 });
+      httpMock.expectOne(`${environment.apiBaseUrl}/customers`).flush([]);
+      httpMock.expectOne(`${environment.apiBaseUrl}/products`).flush([]);
+      httpMock.expectOne(`${environment.apiBaseUrl}/services`).flush([]);
+      httpMock.expectOne(`${environment.apiBaseUrl}/discounts`).flush([]);
+
+      expect(store.deposit()).toEqual({
+        requested: true,
+        percentageBasisPoints: 3000,
+        amountOverrideEuros: null,
+      });
+    });
+
+    it('leaves the deposit toggle off when no habitual rate is set', () => {
+      const store = createStore(); // companyFixture.defaultDepositPercentageBasisPoints is null
+
+      expect(store.deposit().requested).toBe(false);
+    });
+
+    // Regression test for a real bug found while live-testing Phase 1.1-10:
+    // this store is providedIn:'root' and used to cache the company profile
+    // it fetched once in its constructor forever — reset() (called by every
+    // "nouvelle facture" entry point, e.g. InvoiceCreateModeChoicePage) just
+    // re-read that stale cache instead of asking the backend again, so an
+    // artisan who changed their habitual rate in "Mon entreprise" after this
+    // store's first construction would keep getting the OLD default (or
+    // none) until a hard page reload. reset() must now re-fetch and re-apply
+    // once the fresh profile comes back — this test would have failed
+    // before that fix (deposit would have stayed at the stale 0%/off state).
+    it('resyncs the deposit default from a fresh company fetch on reset(), not the stale cached profile', () => {
+      const store = createStore(); // defaultDepositPercentageBasisPoints: null at construction
+      expect(store.deposit().requested).toBe(false);
+
+      // The artisan raises their habitual rate in "Mon entreprise" sometime
+      // later in the same session — this store's cached `company` signal
+      // has no way to know that happened.
+      store.reset();
+      httpMock
+        .expectOne(`${environment.apiBaseUrl}/company`)
+        .flush({ ...companyFixture, defaultDepositPercentageBasisPoints: 4000 });
+
+      expect(store.deposit()).toEqual({
+        requested: true,
+        percentageBasisPoints: 4000,
+        amountOverrideEuros: null,
+      });
+    });
+  });
 });
