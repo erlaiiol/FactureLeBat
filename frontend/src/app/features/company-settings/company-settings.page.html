@@ -229,6 +229,51 @@
       }
     </div>
 
+    <div class="flex flex-col gap-3 rounded-lg border border-[var(--color-atelier-walnut)]/25 p-4">
+      <span class="text-sm font-medium text-atelier-ink">Mention personnalisée en bas de page</span>
+      <app-field-hint
+        text="Un texte libre imprimé centré en bas de vos documents — vos propres mentions obligatoires, une clause commerciale, ou toute autre information que l'application ne gère pas déjà par un champ dédié."
+      />
+      <textarea
+        formControlName="customFooterMessage"
+        rows="3"
+        maxlength="1000"
+        placeholder="Ex : Devis gratuit, valable 30 jours."
+        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-base text-atelier-ink"
+      ></textarea>
+      <label class="flex items-center gap-2">
+        <input type="checkbox" class="h-5 w-5" formControlName="customFooterOnFacture" />
+        <span class="text-sm font-medium text-atelier-ink">Afficher sur les factures</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input type="checkbox" class="h-5 w-5" formControlName="customFooterOnDevis" />
+        <span class="text-sm font-medium text-atelier-ink">Afficher sur les devis</span>
+      </label>
+    </div>
+
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-atelier-ink-soft">Mention d'escompte</span>
+      <textarea
+        formControlName="earlyPaymentDiscountMention"
+        rows="2"
+        maxlength="500"
+        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-base text-atelier-ink"
+      ></textarea>
+      <app-field-hint
+        text="Obligatoire sur une facture à un client professionnel (art. L441-9 du Code de commerce) : la loi impose d'indiquer votre politique d'escompte, même pour dire qu'il n'y en a pas — pré-rempli avec la formule standard, modifiable si vous proposez réellement un escompte."
+      />
+    </label>
+
+    <label class="flex items-center gap-2">
+      <input type="checkbox" class="h-5 w-5" formControlName="vatOnDebitsOption" />
+      <span class="text-sm font-medium text-atelier-ink">
+        Option pour le paiement de la TVA d'après les débits
+      </span>
+    </label>
+    <app-field-hint
+      text="À cocher uniquement si vous avez formellement opté pour ce régime auprès de l'administration fiscale — imprime la mention correspondante sur vos factures (réforme de facturation électronique 2026)."
+    />
+
     <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-atelier-ink-soft">Taux de TVA (%)</span>
       <input

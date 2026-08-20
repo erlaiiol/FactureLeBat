@@ -15,9 +15,9 @@ If you're touching `PrismaService`, `prisma.config.ts`, or the generator block i
 
 ## Schema
 
-### `Company` — singleton artisan profile
+### `Company` — the artisan's business profile
 
-There is no multi-tenant auth yet (Phase 1 scope): exactly one row exists, always addressed by a fixed constant id (`SINGLETON_COMPANY_ID` in `src/company/company.constants.ts`). `CompanyRepository.findOrCreateDefault()` uses an `upsert`, not a `findUnique` + `create`, specifically to stay race-safe if two requests both hit the API before any company row exists yet.
+**Stale note found and corrected while auditing this doc (Phase 1.1-12)**: this used to be a true Phase 1 singleton (one fixed-id row, no auth). Phase 13 made it multi-tenant — `User` is strictly 1:1 with `Company` (`User.companyId @unique`, `onDelete: Cascade`), one row per registered artisan account, addressed everywhere by the authenticated request's own `companyId` (from the JWT), never a fixed constant id. `SINGLETON_COMPANY_ID`/`CompanyRepository.findOrCreateDefault()` no longer exist. See [roadmap.md](roadmap.md)'s Phase 13 notes for the auth model itself — a full `User`/auth write-up here is out of scope for this pass, which only corrects what was actively wrong.
 
 | Field                 | Notes                                                                 |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -122,6 +122,18 @@ afterward.
   redistributed cents are **never persisted** — `InvoiceMapper` recomputes
   them from the stored weights on every read and folds them into the
   targeted `InvoiceLine`'s displayed total.
+
+### `Discount` (Phase 32) / `InvoiceDiscountLine` (Phase 32, `targetLineIndex`/`targetServiceLineIndex` added Phase 34)
+
+A "remise" catalog entry — `name`, `discountType` (`FIXED` | `PERCENTAGE`, default `FIXED`), `fixedAmountCents` or `percentageBasisPoints` depending on the type, and zero-or-more `folders` (Phase 1.1-2, see `CatalogFolder` below). Adding one to an invoice creates an `InvoiceDiscountLine` — a soft reference to the `Discount` (`discountId`, `onDelete: SetNull`, same "autofill, not a lock" rule as every other saved-record attachment) with its own snapshotted `name`/`amountCents`; a `PERCENTAGE` discount is resolved to a concrete `amountCents` client-side before it's ever sent, so the backend never stores a rate on the invoice. `targetLineIndex`/`targetServiceLineIndex` (Phase 34, mutually exclusive, both null by default) scope the remise to one product/service line already on the invoice instead of the general total — see [architecture.md](architecture.md#discount-lines-phase-32).
+
+### `CatalogFolder` (Phase 1.1-2, "Mes dossiers")
+
+An artisan-created, company-scoped grouping — just `name`. A single, type-agnostic list: one folder (e.g. "Plomberie") can hold `Product`/`Service`/`Discount` rows alike, since a trade isn't just one catalog type — three implicit many-to-many join tables (`products`/`services`/`discounts` on the Prisma model), one per pair, since Prisma has no single polymorphic m2m across three models. An item can belong to zero, one, or several folders at once; deleting a folder just drops its join rows, never the items themselves. Pro+/Premium-gated at the feature-surface level (`PlanGateService`), not by a DB constraint — see [roadmap.md](roadmap.md) Phase 1.1-2's amendment for why a downgraded company keeps every row and assignment, only the UI/endpoints lock.
+
+### `InvoiceSignature` (Phase 1.1-1)
+
+At most one per `Invoice` (`invoiceId @id`, `onDelete: Cascade`) — either a drawn-on-screen or photographed-paper signature. `method` (`SignatureMethod`: `DRAWN` | `PHOTO`) records which; `image`/`mimeType` (PNG or JPEG only, same allow-list/magic-byte validation as `CompanyLogo`) hold the actual bytes for the `PHOTO` method. A freehand "signé sur papier, pas de photo" acknowledgement is `Invoice.manuallySigned` (a plain boolean column on `Invoice` itself, not a row here) — the two are independent: a facture can have neither, just `manuallySigned`, or a real `InvoiceSignature` row.
 
 ### `PushDevice` (Phase 22)
 

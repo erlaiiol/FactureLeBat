@@ -5,7 +5,9 @@ import {
   InvoiceEntryMode,
   InvoiceStatus,
   ManualColumnRole,
+  NatureOperation,
   PlanTier,
+  ServiceVisibility,
 } from '../../generated/prisma/enums';
 import { CompanyModel as Company } from '../../generated/prisma/models';
 import { getEffectivePlanTier } from '../billing/plan-gate.service';
@@ -245,6 +247,8 @@ export class InvoiceMapper {
       customerAddress: invoice.customerAddress,
       customerEmail: invoice.customerEmail,
       customerPhone: invoice.customerPhone,
+      customerSiret: invoice.customerSiret,
+      deliveryAddress: invoice.deliveryAddress,
       customerId: invoice.customerId,
       customerFields: mapCustomerFields(invoice),
       documentType: invoice.documentType,
@@ -274,6 +278,8 @@ export class InvoiceMapper {
       depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
       depositAmountCents: invoice.depositAmountCents,
       depositPaidAt: invoice.depositPaidAt,
+      reverseChargeApplicable: invoice.reverseChargeApplicable,
+      manualNatureOfOperation: invoice.manualNatureOfOperation,
     };
   }
 
@@ -336,6 +342,8 @@ export class InvoiceMapper {
       customerAddress: invoice.customerAddress,
       customerEmail: invoice.customerEmail,
       customerPhone: invoice.customerPhone,
+      customerSiret: invoice.customerSiret,
+      deliveryAddress: invoice.deliveryAddress,
       customerId: invoice.customerId,
       customerFields: mapCustomerFields(invoice),
       documentType: invoice.documentType,
@@ -366,6 +374,8 @@ export class InvoiceMapper {
       depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
       depositAmountCents: invoice.depositAmountCents,
       depositPaidAt: invoice.depositPaidAt,
+      reverseChargeApplicable: invoice.reverseChargeApplicable,
+      manualNatureOfOperation: invoice.manualNatureOfOperation,
     };
   }
 
@@ -381,15 +391,18 @@ export class InvoiceMapper {
     }
 
     return {
-      ...this.issuerFields(invoice.company, logo),
+      ...this.issuerFields(invoice.company, withTotals.documentType, logo),
       signature: this.signatureField(signature),
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
+      customerIsProfessional: invoice.customer?.isProfessional ?? false,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,
       customerEmail: withTotals.customerEmail,
       customerPhone: withTotals.customerPhone,
+      customerSiret: withTotals.customerSiret,
+      deliveryAddress: withTotals.deliveryAddress,
       customerFields: withTotals.customerFields,
       entryMode: InvoiceEntryMode.GUIDED,
       lines: withTotals.lines.map((line) => ({
@@ -426,9 +439,12 @@ export class InvoiceMapper {
       simplifiedDisplay: withTotals.simplifiedDisplay,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
+      reverseChargeApplicable: withTotals.reverseChargeApplicable,
+      natureOfOperation: this.deriveNatureOfOperation(withTotals.lines, withTotals.serviceLines),
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
       vatAmountCents: withTotals.vatAmountCents,
       totalInclVatCents: withTotals.totalInclVatCents,
+      dueDate: withTotals.dueDate,
       depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
       depositAmountCents: withTotals.depositAmountCents,
       depositPaidAt: withTotals.depositPaidAt,
@@ -459,15 +475,18 @@ export class InvoiceMapper {
     }));
 
     return {
-      ...this.issuerFields(invoice.company, logo),
+      ...this.issuerFields(invoice.company, withTotals.documentType, logo),
       signature: this.signatureField(signature),
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
+      customerIsProfessional: invoice.customer?.isProfessional ?? false,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,
       customerEmail: withTotals.customerEmail,
       customerPhone: withTotals.customerPhone,
+      customerSiret: withTotals.customerSiret,
+      deliveryAddress: withTotals.deliveryAddress,
       customerFields: withTotals.customerFields,
       entryMode: InvoiceEntryMode.MANUAL,
       lines: [],
@@ -484,9 +503,12 @@ export class InvoiceMapper {
       simplifiedDisplay: false,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
+      reverseChargeApplicable: withTotals.reverseChargeApplicable,
+      natureOfOperation: withTotals.manualNatureOfOperation ?? NatureOperation.PRESTATION_SERVICES,
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
       vatAmountCents: withTotals.vatAmountCents,
       totalInclVatCents: withTotals.totalInclVatCents,
+      dueDate: withTotals.dueDate,
       depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
       depositAmountCents: withTotals.depositAmountCents,
       depositPaidAt: withTotals.depositPaidAt,
@@ -515,7 +537,13 @@ export class InvoiceMapper {
       return this.toManualPreviewInvoiceWithTotals(dto, company);
     }
 
-    const vatApplicable = isVatApplicable(company.legalStatus);
+    // Phase 1.1-7: same "reverseChargeApplicable always wins" precedence as
+    // InvoiceService.create — GUIDED has no vatApplicableOverride to
+    // consider (ManualModeFieldsConsistency forbids it here), so this is
+    // simpler than the MANUAL preview's equivalent line below.
+    const vatApplicable = dto.reverseChargeApplicable
+      ? false
+      : isVatApplicable(company.legalStatus);
     const vatRateBasisPoints = company.vatRateBasisPoints;
 
     const lineCalculations = dto.lines!.map((line) =>
@@ -661,6 +689,8 @@ export class InvoiceMapper {
       customerAddress: dto.customerAddress ?? null,
       customerEmail: dto.customerEmail ?? null,
       customerPhone: dto.customerPhone ?? null,
+      customerSiret: dto.customerSiret ?? null,
+      deliveryAddress: dto.deliveryAddress ?? null,
       customerId: dto.customerId ?? null,
       customerFields: mapDtoCustomerFields(dto).map((field) => ({ id: '', ...field })),
       documentType: dto.documentType ?? DocumentType.FACTURE,
@@ -701,6 +731,13 @@ export class InvoiceMapper {
       depositPercentageBasisPoints: dto.depositPercentageBasisPoints ?? null,
       depositAmountCents: dto.depositAmountCents ?? null,
       depositPaidAt: null,
+      // Phase 1.1-7: mirrors the not-yet-submitted DTO, same reasoning as
+      // the deposit fields above.
+      reverseChargeApplicable: dto.reverseChargeApplicable ?? false,
+      // Phase 1.1-8: GUIDED never persists this — see NatureOperation's own
+      // comment. ManualModeFieldsConsistency guarantees
+      // dto.manualNatureOfOperation is undefined here anyway.
+      manualNatureOfOperation: null,
     };
   }
 
@@ -716,7 +753,11 @@ export class InvoiceMapper {
     // Same override precedence as InvoiceService.create — run directly off
     // the not-yet-persisted DTO so a draft preview/PDF aperçu can never
     // disagree with the real created invoice on which VAT treatment applies.
-    const vatApplicable = dto.vatApplicableOverride ?? isVatApplicable(company.legalStatus);
+    // Phase 1.1-7: reverseChargeApplicable wins over vatApplicableOverride,
+    // same precedence as InvoiceService.create.
+    const vatApplicable = dto.reverseChargeApplicable
+      ? false
+      : (dto.vatApplicableOverride ?? isVatApplicable(company.legalStatus));
     const vatRateBasisPoints = dto.vatRateBasisPointsOverride ?? company.vatRateBasisPoints;
     const table = dto.manualTable!;
 
@@ -755,6 +796,8 @@ export class InvoiceMapper {
       customerAddress: dto.customerAddress ?? null,
       customerEmail: dto.customerEmail ?? null,
       customerPhone: dto.customerPhone ?? null,
+      customerSiret: dto.customerSiret ?? null,
+      deliveryAddress: dto.deliveryAddress ?? null,
       customerId: dto.customerId ?? null,
       customerFields: mapDtoCustomerFields(dto).map((field) => ({ id: '', ...field })),
       documentType: dto.documentType ?? DocumentType.FACTURE,
@@ -803,6 +846,12 @@ export class InvoiceMapper {
       depositPercentageBasisPoints: dto.depositPercentageBasisPoints ?? null,
       depositAmountCents: dto.depositAmountCents ?? null,
       depositPaidAt: null,
+      // Phase 1.1-7: mirrors the not-yet-submitted DTO, same reasoning as
+      // the deposit fields above.
+      reverseChargeApplicable: dto.reverseChargeApplicable ?? false,
+      // Phase 1.1-8: mirrors InvoiceService.create's own default-fill, so
+      // this JSON preview can never disagree with what actually persists.
+      manualNatureOfOperation: dto.manualNatureOfOperation ?? NatureOperation.PRESTATION_SERVICES,
     };
   }
 
@@ -815,9 +864,15 @@ export class InvoiceMapper {
     dto: CreateInvoiceDto,
     company: Company,
     logo?: CompanyLogoData | null,
+    // Phase 1.1-7: resolved by the caller (InvoiceService.previewPdf) from
+    // dto.customerId, since this method — unlike toPdfData — has no
+    // InvoiceWithLines to read a live-joined customer off. Defaults false so
+    // every pre-1.1-7 caller (there are none besides previewPdf, but kept
+    // for signature safety) still compiles/behaves unchanged.
+    customerIsProfessional = false,
   ): InvoicePdfData {
     const withTotals = this.toPreviewInvoiceWithTotals(dto, company);
-    const issuer = this.issuerFields(company, logo);
+    const issuer = this.issuerFields(company, withTotals.documentType, logo);
 
     if (withTotals.entryMode === InvoiceEntryMode.MANUAL) {
       const table = withTotals.manualTable!;
@@ -829,10 +884,13 @@ export class InvoiceMapper {
         number: withTotals.number,
         documentType: withTotals.documentType,
         date: withTotals.date,
+        customerIsProfessional,
         customerName: withTotals.customerName,
         customerAddress: withTotals.customerAddress,
         customerEmail: withTotals.customerEmail,
         customerPhone: withTotals.customerPhone,
+        customerSiret: withTotals.customerSiret,
+        deliveryAddress: withTotals.deliveryAddress,
         customerFields: withTotals.customerFields,
         entryMode: InvoiceEntryMode.MANUAL,
         lines: [],
@@ -848,9 +906,15 @@ export class InvoiceMapper {
         simplifiedDisplay: false,
         vatApplicable: withTotals.vatApplicable,
         vatRateBasisPoints: withTotals.vatRateBasisPoints,
+        reverseChargeApplicable: withTotals.reverseChargeApplicable,
+        natureOfOperation:
+          withTotals.manualNatureOfOperation ?? NatureOperation.PRESTATION_SERVICES,
         subtotalExclVatCents: withTotals.subtotalExclVatCents,
         vatAmountCents: withTotals.vatAmountCents,
         totalInclVatCents: withTotals.totalInclVatCents,
+        // A preview has no lifecycle yet, same reasoning as the deposit
+        // fields below.
+        dueDate: null,
         depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
         depositAmountCents: withTotals.depositAmountCents,
         depositPaidAt: null,
@@ -863,10 +927,13 @@ export class InvoiceMapper {
       number: withTotals.number,
       documentType: withTotals.documentType,
       date: withTotals.date,
+      customerIsProfessional,
       customerName: withTotals.customerName,
       customerAddress: withTotals.customerAddress,
       customerEmail: withTotals.customerEmail,
       customerPhone: withTotals.customerPhone,
+      customerSiret: withTotals.customerSiret,
+      deliveryAddress: withTotals.deliveryAddress,
       customerFields: withTotals.customerFields,
       entryMode: InvoiceEntryMode.GUIDED,
       lines: withTotals.lines.map((line) => ({
@@ -890,13 +957,38 @@ export class InvoiceMapper {
       simplifiedDisplay: withTotals.simplifiedDisplay,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
+      reverseChargeApplicable: withTotals.reverseChargeApplicable,
+      natureOfOperation: this.deriveNatureOfOperation(withTotals.lines, withTotals.serviceLines),
       subtotalExclVatCents: withTotals.subtotalExclVatCents,
       vatAmountCents: withTotals.vatAmountCents,
       totalInclVatCents: withTotals.totalInclVatCents,
+      dueDate: null,
       depositPercentageBasisPoints: withTotals.depositPercentageBasisPoints,
       depositAmountCents: withTotals.depositAmountCents,
       depositPaidAt: null,
     };
+  }
+
+  // Phase 1.1-8: GUIDED's "nature de l'opération" — purely mechanical, zero
+  // artisan input, matching docs/roadmap.md Phase 1.1-8's own wording: a
+  // GUIDED invoice with lines but no VISIBLE service line reads as
+  // LIVRAISON_BIENS even when every line typed in is conceptually labor
+  // (e.g. "Pose parquet"), since `lines` vs `serviceLines` is a structural
+  // split, not a semantic one — this is the literal rule asked for, not an
+  // attempt at smarter classification.
+  private deriveNatureOfOperation(
+    lines: unknown[],
+    serviceLines: { visibility: ServiceVisibility }[],
+  ): NatureOperation {
+    const hasGoods = lines.length > 0;
+    const hasVisibleServices = serviceLines.some((line) => line.visibility === 'VISIBLE');
+    if (hasGoods && hasVisibleServices) {
+      return NatureOperation.BIENS_ET_SERVICES;
+    }
+    if (hasGoods) {
+      return NatureOperation.LIVRAISON_BIENS;
+    }
+    return NatureOperation.PRESTATION_SERVICES;
   }
 
   // Shared by every PDF-shaping method (persisted and preview alike) — the
@@ -907,7 +999,13 @@ export class InvoiceMapper {
   // schema.prisma's comment on Company.logo for why it's kept out of the
   // ordinary Company read. undefined for a not-yet-persisted preview when
   // the caller hasn't fetched it; treated the same as "no logo".
-  private issuerFields(company: Company, logo?: CompanyLogoData | null) {
+  // documentType (Phase 1.1-6) only feeds customFooterMessage's resolution
+  // below — every other field here is still documentType-independent.
+  private issuerFields(
+    company: Company,
+    documentType: DocumentType,
+    logo?: CompanyLogoData | null,
+  ) {
     return {
       issuerName: company.name,
       issuerAddressLine1: company.addressLine1,
@@ -954,6 +1052,25 @@ export class InvoiceMapper {
               coverageArea: company.decennialInsuranceCoverageArea,
             }
           : null,
+      // Phase 1.1-6: resolved here (not in PdfService) since "which toggle
+      // applies" is a business rule, same reasoning as companyVatExempt
+      // above — null whenever the toggle for this document's type is off or
+      // the message is blank, in which case PdfService prints nothing extra.
+      customFooterMessage:
+        (documentType === DocumentType.FACTURE
+          ? company.customFooterOnFacture
+          : company.customFooterOnDevis) && company.customFooterMessage
+          ? company.customFooterMessage
+          : null,
+      // Phase 1.1-7: raw passthrough — whether it actually prints depends on
+      // customerIsProfessional too (a per-invoice fact this method doesn't
+      // have), so that gating lives in PdfService.buildFooter instead of
+      // here, unlike customFooterMessage above.
+      earlyPaymentDiscountMention: company.earlyPaymentDiscountMention,
+      // Phase 1.1-8: raw passthrough — FACTURE-only gating lives in
+      // PdfService.buildFooter, same split as earlyPaymentDiscountMention
+      // above.
+      vatOnDebitsOption: company.vatOnDebitsOption,
     };
   }
 

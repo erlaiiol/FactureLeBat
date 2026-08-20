@@ -11,6 +11,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { CatalogFolderProfile } from '../../core/models/catalog-folder.model';
 import { CatalogFolderService } from '../../core/services/catalog-folder.service';
+import { ToastService } from '../../core/services/toast.service';
 import { planFeatureLockedMessage } from '../utils/plan-error.util';
 import { IconCheckComponent } from './icon-check.component';
 import { IconChevronDownComponent } from './icon-chevron-down.component';
@@ -22,6 +23,12 @@ import { IconChevronDownComponent } from './icon-chevron-down.component';
 // field on those forms (see ProductFormPage.packagingItemCount for the same
 // pattern: a signal outside the reactive FormGroup, merged in at payload
 // time).
+//
+// Phase 1.1-9: "+ Créer un dossier" is real, immediate persistence though
+// (unlike selectedIds above) — it calls CatalogFolderService.create()
+// straight away, the same create the standalone "Mes dossiers" form uses,
+// so the artisan never has to leave this form to add a folder that doesn't
+// exist yet. The new folder is pre-checked into selectedIds on success.
 @Component({
   selector: 'app-catalog-folder-multi-select',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -63,13 +70,29 @@ import { IconChevronDownComponent } from './icon-chevron-down.component';
 
         @if (panelOpen()) {
           <div class="anim-preview-in mt-1 flex flex-col gap-2 rounded-lg border border-line p-2">
+            <div class="flex items-center gap-2 border-b border-line pb-2">
+              <input
+                type="text"
+                placeholder="+ Créer un dossier"
+                maxlength="200"
+                class="flex-1 rounded-lg border border-line px-3 py-2 text-sm"
+                [value]="newFolderName()"
+                (input)="newFolderName.set($any($event.target).value)"
+                (keydown.enter)="createFolder()"
+              />
+              <button
+                type="button"
+                (click)="createFolder()"
+                [disabled]="creatingFolder() || newFolderName().trim().length === 0"
+                class="shrink-0 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-fg hover:brightness-90 disabled:opacity-50"
+              >
+                {{ creatingFolder() ? '…' : 'Créer' }}
+              </button>
+            </div>
+
             @if (folders().length === 0) {
               <p class="p-2 text-sm text-ink-soft">
-                Aucun dossier créé pour l'instant —
-                <a routerLink="/dossiers" class="font-medium text-primary hover:underline">
-                  créez-en un
-                </a>
-                pour organiser votre catalogue par métier.
+                Aucun dossier créé pour l'instant — organisez votre catalogue par métier.
               </p>
             } @else {
               @for (folder of folders(); track folder.id) {
@@ -95,6 +118,7 @@ import { IconChevronDownComponent } from './icon-chevron-down.component';
 })
 export class CatalogFolderMultiSelectComponent {
   private readonly catalogFolderService = inject(CatalogFolderService);
+  private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly selectedIds = input<string[]>([]);
@@ -103,6 +127,8 @@ export class CatalogFolderMultiSelectComponent {
   protected readonly folders = signal<CatalogFolderProfile[]>([]);
   protected readonly panelOpen = signal(false);
   protected readonly locked = signal(false);
+  protected readonly newFolderName = signal('');
+  protected readonly creatingFolder = signal(false);
 
   constructor() {
     this.catalogFolderService
@@ -132,5 +158,39 @@ export class CatalogFolderMultiSelectComponent {
       ? current.filter((id) => id !== folderId)
       : [...current, folderId];
     this.selectedIdsChange.emit(next);
+  }
+
+  // Phase 1.1-9: same CatalogFolderController.create the standalone "Mes
+  // dossiers" form uses — this just skips its navigate-to-/dossiers step,
+  // since here the artisan is meant to stay on the product/service/discount
+  // form they were already filling in. Pre-checks the new folder into
+  // selectedIds immediately, same "just created it, of course it's
+  // selected" expectation as picking an existing one.
+  protected createFolder(): void {
+    const name = this.newFolderName().trim();
+    if (this.creatingFolder() || name.length === 0) {
+      return; // already in flight, or nothing typed yet — ignore
+    }
+    this.creatingFolder.set(true);
+    this.catalogFolderService
+      .create({ name })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (folder) => {
+          this.creatingFolder.set(false);
+          this.newFolderName.set('');
+          // Sorted the same way CatalogFolderRepository.findAll orders the
+          // list this component's own initial load reads — keeps the panel
+          // consistent with what a fresh getAllCached() would return.
+          this.folders.update((current) =>
+            [...current, folder].sort((a, b) => a.name.localeCompare(b.name)),
+          );
+          this.selectedIdsChange.emit([...this.selectedIds(), folder.id]);
+        },
+        error: () => {
+          this.creatingFolder.set(false);
+          this.toastService.error('Impossible de créer ce dossier pour le moment.');
+        },
+      });
   }
 }

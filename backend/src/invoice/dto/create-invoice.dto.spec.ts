@@ -372,6 +372,113 @@ describe('CreateInvoiceDto — VAT applicability/rate override', () => {
   });
 });
 
+describe('CreateInvoiceDto — Phase 1.1-7 reverse charge (autoliquidation)', () => {
+  it('accepts reverseChargeApplicable true on a FACTURE (default documentType)', async () => {
+    const errors = await validateDto(basePayload({ reverseChargeApplicable: true }));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts reverseChargeApplicable true on an entryMode MANUAL FACTURE, unlike vatApplicableOverride', async () => {
+    const manualTable = {
+      columns: [
+        { role: 'DESCRIPTION', label: 'Désignation' },
+        { role: 'QUANTITY', label: 'Quantité' },
+        { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+        { role: 'LINE_TOTAL', label: 'Total' },
+      ],
+      rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+    };
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      reverseChargeApplicable: true,
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects reverseChargeApplicable true on a DEVIS', async () => {
+    const errors = await validateDto(
+      basePayload({ documentType: 'DEVIS', reverseChargeApplicable: true }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('accepts reverseChargeApplicable false on a DEVIS', async () => {
+    const errors = await validateDto(
+      basePayload({ documentType: 'DEVIS', reverseChargeApplicable: false }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+});
+
+describe('CreateInvoiceDto — Phase 1.1-8 e-invoicing reform baseline fields', () => {
+  it('accepts a well-formed customerSiret', async () => {
+    const errors = await validateDto(basePayload({ customerSiret: '12345678900012' }));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a customerSiret that is not exactly 14 digits', async () => {
+    const errors = await validateDto(basePayload({ customerSiret: '123' }));
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('accepts a deliveryAddress up to the same 300-char bound as customerAddress', async () => {
+    const errors = await validateDto(basePayload({ deliveryAddress: 'Chantier - 5 rue du Port' }));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a deliveryAddress over 300 characters', async () => {
+    const errors = await validateDto(basePayload({ deliveryAddress: 'x'.repeat(301) }));
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects manualNatureOfOperation on entryMode GUIDED — GUIDED always derives it', async () => {
+    const errors = await validateDto(
+      basePayload({ manualNatureOfOperation: 'PRESTATION_SERVICES' }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('accepts manualNatureOfOperation on entryMode MANUAL', async () => {
+    const manualTable = {
+      columns: [
+        { role: 'DESCRIPTION', label: 'Désignation' },
+        { role: 'QUANTITY', label: 'Quantité' },
+        { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+        { role: 'LINE_TOTAL', label: 'Total' },
+      ],
+      rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+    };
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      manualNatureOfOperation: 'BIENS_ET_SERVICES',
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects an unknown manualNatureOfOperation value', async () => {
+    const manualTable = {
+      columns: [
+        { role: 'DESCRIPTION', label: 'Désignation' },
+        { role: 'QUANTITY', label: 'Quantité' },
+        { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+        { role: 'LINE_TOTAL', label: 'Total' },
+      ],
+      rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+    };
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'MANUAL',
+      manualTable,
+      manualNatureOfOperation: 'AUTRE_CHOSE',
+    });
+    expect(errors).not.toHaveLength(0);
+  });
+});
+
 describe('CreateInvoiceDto — Phase 34 discount line targeting', () => {
   it('accepts a discount line targeting a valid invoice line index', async () => {
     const errors = await validateDto(

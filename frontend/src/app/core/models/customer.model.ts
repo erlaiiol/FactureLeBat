@@ -6,6 +6,10 @@ export interface CustomerProfile {
   email: string | null;
   phone: string | null;
   siret: string | null;
+  // Phase 1.1-7: the artisan's own declaration — pre-checked in the form
+  // when companyName/siret is filled, always overridable. Drives the "Pro"
+  // badge on this list and the Art. L441-9 mentions on a FACTURE.
+  isProfessional: boolean;
   // Phase 14.5: freehand, optional — feeds search alongside name/companyName/
   // address (see CustomerService.getAll).
   description: string | null;
@@ -33,5 +37,6 @@ export interface UpsertCustomerRequest {
   email?: string;
   phone?: string;
   siret?: string;
+  isProfessional?: boolean;
   description?: string;
 }

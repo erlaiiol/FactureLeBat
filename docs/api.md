@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:3000/api` in dev, `/api` (same-origin, proxied by Nginx) in prod. All bodies are JSON unless noted.
 
-No authentication yet (Phase 1 scope — see [roadmap.md](roadmap.md)). All requests are rate-limited to 100/min/IP.
+Every route below except `GET /health` requires a Bearer access token (Phase 13 — see [roadmap.md](roadmap.md)'s auth phases); this doc omits the header from each example for brevity. All requests are rate-limited to 100/min/IP.
 
 ## Health
 
@@ -14,11 +14,11 @@ No authentication yet (Phase 1 scope — see [roadmap.md](roadmap.md)). All requ
 
 ## Company
 
-The artisan's own business profile. Singleton — there is only ever one, auto-created with placeholder values on first `GET` if it doesn't exist yet.
+The artisan's own business profile — one per registered account (`Company` is 1:1 with `User`, created at signup), scoped to whichever account the Bearer token belongs to. See [database.md](database.md#company--the-artisans-business-profile) for the corrected note on this (it used to be a true Phase 1 singleton before Phase 13's auth).
 
 ### `GET /company`
 
-Returns the current profile (auto-creating a default one if none exists yet).
+Returns the authenticated account's profile.
 
 ```json
 {
@@ -70,9 +70,28 @@ Full replace of the editable fields (not a partial patch despite the verb — ev
 | `city`                | string, 1-100 chars               |                                   |
 | `email`               | string, valid email, optional     |                                   |
 | `phone`               | string, ≤30 chars, optional       |                                   |
+| `invoiceMailCustomMessage` | string, ≤500 chars, optional | appended to the default invoice/devis mail template on every send |
 | `legalStatus`         | `"MICRO_ENTREPRENEUR"` \| `"COMPANY"` | drives VAT applicability on future invoices |
 | `vatRateBasisPoints`  | integer, 0-10000                  | rate × 100, e.g. `2000` = 20.00% |
 | `invoiceNumberPrefix` | string, 1-20 chars, optional      |                                   |
+| `declarationFrequency` | `"MENSUELLE"` \| `"TRIMESTRIELLE"`, optional | Phase 17 — which period the quarterly-report screen preselects |
+| `microEntrepreneurCeiling` | integer (cents) ≥ 0, optional | Phase 17 — the artisan's own plafond, indicative only (drives a warning banner, never a computed total) |
+| `defaultDepositPercentageBasisPoints` | integer, 0-10000, optional | Phase 1.1-3 — habitual acompte rate, auto-proposed on every new FACTURE; omitted/`null` means no default |
+| `cotisationVenteBasisPoints` | integer, 0-10000, optional | Phase 17 — micro-entrepreneur "cotisations sociales" rate for vente (marchandises) revenue |
+| `cotisationPrestationBicBasisPoints` | integer, 0-10000, optional | Phase 17 — same, for BIC (prestations de service) revenue |
+| `cotisationPrestationBncBasisPoints` | integer, 0-10000, optional | Phase 17 — same, for BNC (prestations libérales) revenue |
+| `versementLiberatoireOptIn` | boolean, optional | Phase 17 — whether the charges estimate also includes versement libératoire |
+| `decennialInsuranceApplicable` | boolean | BTP mandatory mention (art. L243-2 du Code des assurances) — makes the three fields below required when `true` |
+| `decennialInsurerName` | string, 1-200 chars, required iff `decennialInsuranceApplicable` | |
+| `decennialInsurancePolicyNumber` | string, 1-100 chars, required iff `decennialInsuranceApplicable` | |
+| `decennialInsuranceCoverageArea` | string, 1-200 chars, required iff `decennialInsuranceApplicable` | |
+| `customFooterMessage` | string, ≤1000 chars, optional | Phase 1.1-6 — free-text footer mention, no format imposed |
+| `customFooterOnFacture` | boolean | Phase 1.1-6 — show `customFooterMessage` on factures |
+| `customFooterOnDevis` | boolean | Phase 1.1-6 — show `customFooterMessage` on devis |
+| `earlyPaymentDiscountMention` | string, ≤500 chars, optional | Phase 1.1-7 (Art. L441-9) — escompte-policy mention, DB-defaulted to "Pas d'escompte pour paiement anticipé." on every company so this is never silently missing |
+| `vatOnDebitsOption` | boolean | Phase 1.1-8 (2026 e-invoicing reform) — "option pour le paiement de la taxe d'après les débits" |
+
+Every optional field above follows the same full-replace convention as the whole endpoint: an omitted optional field is cleared to `null`, not left unchanged. Fields marked `boolean` with no "optional" note are required on every request (the four toggles above and `decennialInsuranceApplicable`) — omitting one is rejected with a validation error, not defaulted.
 
 Returns the updated profile, same shape as `GET /company`.
 
@@ -113,6 +132,8 @@ Returns a single customer. `404` if the id doesn't exist.
 | `email`       | string, valid email, optional |                                 |
 | `phone`       | string, ≤30 chars, optional   |                                 |
 | `siret`       | string, optional              | exactly 14 digits when present |
+| `isProfessional` | boolean, optional (default `false`) | Phase 1.1-7 — the artisan's own declaration that this client buys for their business, not personally; drives L441-9 mentions on their factures. Not reliably inferable from `companyName`/`siret` alone, so never auto-derived server-side |
+| `description` | string, ≤1000 chars, optional | Phase 14.5 — freehand notes; also searched by `?search=` alongside `name`/`companyName` |
 
 **Response** `201 Created` — full customer record (`id`, `createdAt`, `updatedAt` included).
 
@@ -303,10 +324,18 @@ Creates an invoice: computes totals server-side, assigns the next sequential num
 
 | Field                             | Type                        | Notes                                                             |
 | ----------------------------------- | ----------------------------- | --------------------------------------------------------------------- |
+| `documentType`                    | `"DEVIS"` \| `"FACTURE"`, optional (default `"FACTURE"`) | Phase 14.3 — a devis is mechanically a facture: same fields, same pipeline, just a different label/numbering sequence and a handful of FACTURE-only fields below |
 | `customerName`                    | string, 1-200 chars           |                                                                     |
 | `customerAddress`/`Email`/`Phone` | string, optional              | `Email` must be a valid email if present                          |
-| `customerId`                      | string (UUID), optional       | soft reference to a saved `Customer` — confirmed to exist (`404` if not) but never overrides `customerName`/`Address`/`Email`/`Phone` above |
-| `lines`                           | array, 1-200 items            |                                                                     |
+| `customerSiret`                   | string, optional              | Phase 1.1-8 — exactly 14 digits when present; snapshotted separately from the saved `Customer.siret` since this app has to print it even when no `customerId` is attached |
+| `deliveryAddress`                 | string, ≤300 chars, optional  | Phase 1.1-8 — the job-site address, when it differs from `customerAddress` |
+| `customerFields`                  | array, ≤20 items, optional    | Phase 14.5 — freehand extra client fields, no fixed vocabulary     |
+| `customerFields[].label`          | string, 1-100 chars           |                                                                     |
+| `customerFields[].value`          | string, 1-300 chars           |                                                                     |
+| `customerId`                      | string (UUID), optional       | soft reference to a saved `Customer` — confirmed to exist (`404` if not) but never overrides `customerName`/`Address`/`Email`/`Phone`/`Siret` above |
+| `number`                          | string, 1-50 chars, optional  | Phase 27 — the artisan's own explicit document number, overriding the auto-suggested next number; letters/digits/spaces/`.`/`-`/`_` only |
+| `convertedFromDevisId`            | string (UUID), optional       | Phase 14.3 — set only by the "Créer la facture à partir du devis" (editable) flow; must be one of this tenant's own devis |
+| `lines`                           | array, 1-200 items (required for `entryMode: "GUIDED"`, forbidden for `"MANUAL"`) |                                                                     |
 | `lines[].description`             | string, 1-300 chars           |                                                                     |
 | `lines[].unit`                    | `Unit` enum                    | Phase 7 — `"SQUARE_METER"` \| `"LINEAR_METER"` \| `"UNIT"` \| `"LUMP_SUM"` \| `"HOUR"` \| `"DAY"` \| `"KILOGRAM"` \| `"LITER"` \| `"CUBIC_METER"`. Determines the calculation mode: only `"SQUARE_METER"` bills as quantity × unit price × (1 + waste %); every other unit bills as plain quantity × unit price, waste ignored. There is no separate `mode` field — the unit *is* the mode. |
 | `lines[].quantity`                | number ≥ 0, ≤3 decimal places |                                                                     |
@@ -320,6 +349,17 @@ Creates an invoice: computes totals server-side, assigns the next sequential num
 | `serviceLines[].visibility`       | `"VISIBLE"` \| `"REDISTRIBUTED"` | `VISIBLE`: own entry in the response/PDF. `REDISTRIBUTED`: hidden, folded into `lines[]` totals instead |
 | `serviceLines[].redistributionStrategy` | `"EQUAL"` \| `"WEIGHTED"`, required iff `visibility` is `REDISTRIBUTED`, forbidden otherwise | `EQUAL`: split evenly across every `lines[]` entry. `WEIGHTED`: split per `weights` |
 | `serviceLines[].weights`          | integer[] ≥ 0, required iff `redistributionStrategy` is `WEIGHTED`, forbidden otherwise | **Positional**, aligned with `lines` (`weights[i]` targets `lines[i]`) — length must equal `lines.length`, and must sum to more than zero |
+| `discountLines`                   | array, ≤50 items, optional    | Phase 32 — remises applied to the invoice, forbidden for entryMode `MANUAL` |
+| `discountLines[].discountId`      | string (UUID), optional       | soft reference to a saved `Discount` — `name`/`amountCents` below are always what's actually persisted, never re-read from the record |
+| `discountLines[].name`           | string, 1-200 chars           |                                                                     |
+| `discountLines[].amountCents`    | integer ≥ 0                   | resolved amount — a `PERCENTAGE` discount is resolved to a concrete cents figure client-side before sending |
+| `discountLines[].targetLineIndex` | integer ≥ 0, optional         | Phase 34 — scopes this remise to `lines[i]`; mutually exclusive with `targetServiceLineIndex`, both absent means it applies to the invoice's general total |
+| `discountLines[].targetServiceLineIndex` | integer ≥ 0, optional | same as `targetLineIndex`, aligned with `serviceLines` instead |
+| `simplifiedDisplay`               | boolean, optional (default `false`) | Phase 23 — hides the Quantité/Prix unitaire columns on the PDF, leaving only description + line total |
+| `depositPercentageBasisPoints`/`depositAmountCents` | integer, optional, required together | Phase 1.1-3 — the requested acompte; FACTURE-only. `depositAmountCents` (0-100,000,000) is the resolved euro amount actually printed/tracked, `depositPercentageBasisPoints` (0-10000) is kept alongside purely so the PDF can print the rate that produced it |
+| `reverseChargeApplicable`        | boolean, optional              | Phase 1.1-7 — "Autoliquidation (sous-traitance BTP)", art. 242 nonies A 13° de l'annexe II au CGI. FACTURE-only, but usable from both `GUIDED` and `MANUAL` (unlike the VAT overrides below) since VAT correctness for BTP subcontracting can't wait for manual mode |
+
+`vatApplicableOverride`/`vatRateBasisPointsOverride`/`subtotalOverrideCents`/`vatOverrideCents`/`totalOverrideCents`/`manualNatureOfOperation` are manual-mode-only (forbidden for `GUIDED`, where all six stay purely derived) — see [Manual invoice mode](#manual-invoice-mode-phase-95) below.
 
 Redistribution math is always integer-cents, with any rounding remainder
 assigned deterministically (largest-remainder method) — see
@@ -361,6 +401,12 @@ The body above is for the default `entryMode: "GUIDED"`. Setting `entryMode: "MA
 | `manualTable.rows`                | array, 1-200 items              |                                                                     |
 | `manualTable.rows[].heightPx`     | integer, 24-400, optional       | persisted row height from the canvas's drag-resize handle             |
 | `manualTable.rows[].cells`        | string[], ≤2000 chars each      | **Positional**, aligned with `manualTable.columns` (`cells[i]` targets `columns[i]`) — same convention as `serviceLines[].weights`. The `DESCRIPTION` cell must be non-empty; the `QUANTITY`/`UNIT_PRICE` cells must parse as a non-negative decimal (comma or dot separator accepted) |
+| `subtotalOverrideCents`          | integer ≥ 0, optional          | manual mode's own aggregate figures, freely overridable — same "nothing computed behind the artisan's back" principle as a `LINE_TOTAL` cell, extended to the whole invoice. Forbidden for `GUIDED`, where this stays purely derived |
+| `vatOverrideCents`               | integer ≥ 0, optional          | same as `subtotalOverrideCents`, for the VAT figure |
+| `totalOverrideCents`             | integer ≥ 0, optional          | same as `subtotalOverrideCents`, for the grand total |
+| `vatApplicableOverride`          | boolean, optional              | whether VAT applies at all on this one manual invoice, overriding the company's own fixed treatment — e.g. mixing a 5.5% énergie-rénovation job with a standard 20% one in the same week. Forbidden for `GUIDED` |
+| `vatRateBasisPointsOverride`     | integer, 0-10000, optional     | the rate itself, same scope as `vatApplicableOverride` |
+| `manualNatureOfOperation`        | `"LIVRAISON_BIENS"` \| `"PRESTATION_SERVICES"` \| `"BIENS_ET_SERVICES"`, optional | Phase 1.1-8 — explicit "nature de l'opération" (`GUIDED` derives this instead); omitted here defaults to `"PRESTATION_SERVICES"` |
 
 A manual row is priced exactly like a `GUIDED` line whose `unit` is `"UNIT"` — plain `quantity × unitPriceCents`, no waste surcharge, no packaging (neither concept exists on the manual canvas). A `CUSTOM` column's cells are informational text only, never summed into any total.
 
@@ -458,6 +504,8 @@ an additional amount to add anywhere. `distribution` is only present for
 ```
 
 `manualTable.rows[].lineTotalExclVatCents` is never persisted — recomputed on every read from the `QUANTITY`/`UNIT_PRICE` cells, same "derived data is never persisted" rule as every other total in this API.
+
+> The two JSON examples above predate several 1.1-x/Phase 16+ additions (`documentType`/`status`, `discountLines`, the deposit fields, `customerSiret`/`deliveryAddress`, `reverseChargeApplicable`, signature presence, folder assignments, …) — this phase brought the **request** table above current but didn't rebuild these **response** examples field-by-field; every response field is still exactly what its own request-side row above describes, just not re-illustrated here. Treat the request table as authoritative until a future pass rebuilds these examples too.
 
 ### `GET /invoices/:id/pdf`
 

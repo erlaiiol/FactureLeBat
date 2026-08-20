@@ -5,13 +5,16 @@
       Mes dossiers
     </a>
     <a routerLink="/remises/nouvelle">
-      <app-big-button variant="warning">+ Nouvelle remise</app-big-button>
+      <app-big-button appTourAnchor="catalog-new-discount" variant="warning">
+        + Nouvelle remise
+      </app-big-button>
     </a>
   </div>
 </div>
 
 <input
   [formControl]="search"
+  appTourAnchor="discounts-search"
   type="text"
   placeholder="Rechercher une remise…"
   class="mb-6 w-full rounded-lg border border-line px-4 py-3 text-lg"

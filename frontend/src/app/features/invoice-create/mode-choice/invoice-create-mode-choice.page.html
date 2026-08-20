@@ -4,7 +4,10 @@
     <p class="mt-1 text-ink-soft">Comment souhaitez-vous le créer ?</p>
   </div>
 
-  <div class="mx-auto flex gap-1 rounded-lg border border-line bg-surface p-1">
+  <div
+    appTourAnchor="invoice-devis-facture-toggle"
+    class="mx-auto flex gap-1 rounded-lg border border-line bg-surface p-1"
+  >
     <button type="button" [class]="toggleClasses('DEVIS')" (click)="selectDocumentType('DEVIS')">
       Devis
     </button>

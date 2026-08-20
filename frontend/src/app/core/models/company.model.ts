@@ -50,6 +50,20 @@ export interface CompanyProfile {
   decennialInsurerName: string | null;
   decennialInsurancePolicyNumber: string | null;
   decennialInsuranceCoverageArea: string | null;
+  // Phase 1.1-6: free-text footer mention printed centered at the bottom of
+  // the PDF, independently toggleable per document type — null message or
+  // both toggles off means nothing extra is printed.
+  customFooterMessage: string | null;
+  customFooterOnFacture: boolean;
+  customFooterOnDevis: boolean;
+  // Phase 1.1-7: Art. L441-9's escompte-policy mention — pre-filled by the
+  // backend's own DB default, editable like customFooterMessage above.
+  // Printed only on a FACTURE to a Customer.isProfessional client.
+  earlyPaymentDiscountMention: string | null;
+  // Phase 1.1-8 (2026 e-invoicing reform): "option pour le paiement de la
+  // taxe d'après les débits" — same toggle-prints-a-fixed-mention pattern
+  // as customFooterOnFacture, printed only on a FACTURE.
+  vatOnDebitsOption: boolean;
   // Whether a logo has been uploaded (CompanyService.uploadLogo) — never the
   // image bytes themselves, see CompanyService.logoUrl for how the frontend
   // actually displays it.
@@ -80,4 +94,9 @@ export interface UpdateCompanyRequest {
   decennialInsurerName?: string;
   decennialInsurancePolicyNumber?: string;
   decennialInsuranceCoverageArea?: string;
+  customFooterMessage?: string;
+  customFooterOnFacture: boolean;
+  customFooterOnDevis: boolean;
+  earlyPaymentDiscountMention?: string;
+  vatOnDebitsOption: boolean;
 }

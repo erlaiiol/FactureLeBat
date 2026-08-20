@@ -31,6 +31,11 @@ const companyFixture: CompanyProfile = {
   decennialInsurerName: null,
   decennialInsurancePolicyNumber: null,
   decennialInsuranceCoverageArea: null,
+  customFooterMessage: null,
+  customFooterOnFacture: false,
+  customFooterOnDevis: false,
+  earlyPaymentDiscountMention: null,
+  vatOnDebitsOption: false,
   hasLogo: false,
 };
 
@@ -87,6 +92,7 @@ describe('ManualInvoiceDraftStore', () => {
         customerAddress: '',
         customerEmail: '',
         customerPhone: '',
+        deliveryAddress: '',
         customFields: [],
       });
       const rowId = store.rows()[0].id;
@@ -118,6 +124,7 @@ describe('ManualInvoiceDraftStore', () => {
         customerAddress: '',
         customerEmail: '',
         customerPhone: '',
+        deliveryAddress: '',
         customFields: [
           { id: 'f1', label: 'SIRET', value: '123 456 789 00012' },
           { id: 'f2', label: '', value: '' },
@@ -360,6 +367,80 @@ describe('ManualInvoiceDraftStore', () => {
     });
   });
 
+  describe('Phase 1.1-7 reverse charge (autoliquidation)', () => {
+    it('overrides an explicit "TVA 20%" choice — autoliquidation always wins over a manual VAT pick', () => {
+      const store = createStore();
+      store.setVatChoice({ applicable: true, rateBasisPoints: 2000 });
+
+      store.setReverseChargeApplicable(true);
+
+      expect(store.vatApplicable()).toBe(false);
+    });
+
+    it('sends reverseChargeApplicable only when true and documentType is FACTURE', () => {
+      const store = createStore();
+      store.setDocumentType('FACTURE');
+      store.setReverseChargeApplicable(true);
+
+      expect(store.buildInvoiceRequest().reverseChargeApplicable).toBe(true);
+    });
+
+    it('omits reverseChargeApplicable from the request for a DEVIS, even if the toggle is on', () => {
+      const store = createStore();
+      store.setDocumentType('DEVIS');
+      store.setReverseChargeApplicable(true);
+
+      expect(store.buildInvoiceRequest().reverseChargeApplicable).toBeUndefined();
+    });
+
+    it('reset() clears the toggle', () => {
+      const store = createStore();
+      store.setReverseChargeApplicable(true);
+
+      store.reset();
+
+      expect(store.reverseChargeApplicable()).toBe(false);
+    });
+  });
+
+  describe('Phase 1.1-8 e-invoicing reform baseline fields', () => {
+    it('starts on PRESTATION_SERVICES and always sends the current choice, both document types', () => {
+      const store = createStore();
+      expect(store.manualNatureOfOperation()).toBe('PRESTATION_SERVICES');
+      expect(store.buildInvoiceRequest().manualNatureOfOperation).toBe('PRESTATION_SERVICES');
+
+      store.setNatureOfOperation('BIENS_ET_SERVICES');
+      expect(store.buildInvoiceRequest().manualNatureOfOperation).toBe('BIENS_ET_SERVICES');
+
+      store.setDocumentType('DEVIS');
+      expect(store.buildInvoiceRequest().manualNatureOfOperation).toBe('BIENS_ET_SERVICES');
+    });
+
+    it('reset() falls back to PRESTATION_SERVICES', () => {
+      const store = createStore();
+      store.setNatureOfOperation('LIVRAISON_BIENS');
+
+      store.reset();
+
+      expect(store.manualNatureOfOperation()).toBe('PRESTATION_SERVICES');
+    });
+
+    it('sends deliveryAddress only when actually filled in', () => {
+      const store = createStore();
+      expect(store.buildInvoiceRequest().deliveryAddress).toBeUndefined();
+
+      store.setCustomer({
+        customerName: 'M. Dupont',
+        customerAddress: '',
+        customerEmail: '',
+        customerPhone: '',
+        deliveryAddress: '9 rue du Chantier',
+        customFields: [],
+      });
+      expect(store.buildInvoiceRequest().deliveryAddress).toBe('9 rue du Chantier');
+    });
+  });
+
   describe('canPreview', () => {
     it('is false with no customer name and no description', () => {
       const store = createStore();
@@ -373,6 +454,7 @@ describe('ManualInvoiceDraftStore', () => {
         customerAddress: '',
         customerEmail: '',
         customerPhone: '',
+        deliveryAddress: '',
         customFields: [],
       });
       store.setCellValue(store.rows()[0].id, descriptionColumnId(store), 'Parquet');
@@ -391,6 +473,7 @@ describe('ManualInvoiceDraftStore', () => {
         customerAddress: '',
         customerEmail: '',
         customerPhone: '',
+        deliveryAddress: '',
         customFields: [],
       });
 

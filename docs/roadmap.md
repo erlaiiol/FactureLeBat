@@ -1778,7 +1778,7 @@ An artisan working more than one trade (the plombier/serrurier case this phase i
 
 ## Features
 
-- [x] "Mes dossiers" management screen (mirrors `discount-list`'s minimal CRUD: create by name, delete, no fields beyond the name) — reachable from the catalog list pages (`product-list`/`service-list`/`discount-list`) rather than a new top-level nav entry, so the nav stays uncluttered for artisans who never touch this feature
+- [x] "Mes dossiers" management screen (mirrors `discount-list`'s minimal CRUD: create by name, delete, no fields beyond the name) — ~~reachable from the catalog list pages (`product-list`/`service-list`/`discount-list`) rather than a new top-level nav entry, so the nav stays uncluttered for artisans who never touch this feature~~ **superseded by Phase 1.1-9**, which adds it to "Mon répertoire" as a fifth nav entry alongside the other four; the catalog-list-page links stay too
 - [x] A collapsed-by-default "Paramètres avancés" section on the product/service/discount forms, holding a multi-select folder dropdown: opening it lists every folder by name, clicking one toggles it (a checkmark on the right / a color change marks the selected ones), and any number can be selected at once — no separate "confirm" step inside the dropdown itself
 - [x] The selection is only committed when the artisan saves the product/service/discount form ("Enregistrer" on create or edit) — the dropdown holds local, uncommitted state until then, same "nothing writes until the form is actually submitted" rule as every other field on that form
 - [x] Mode rapide's "ajouter un produit"/"ajouter une prestation"/"ajouter une remise" flyout browses by folder first: each non-empty folder shown as a tappable group that expands to that folder's items of the matching type — an item in several folders simply appears once under each one — with every item that belongs to zero folders listed below exactly as the flat list works today
@@ -1929,14 +1929,23 @@ A free-text field in "Mon entreprise" the artisan can write anything into — th
 
 ## Features
 
-- [ ] Textarea + two checkboxes ("Afficher sur les factures" / "Afficher sur les devis") in company settings, next to the existing decennial-insurance and franchise-en-base fields
-- [ ] `PdfService.buildFooter` renders it as its own centered block (distinct from the existing left-aligned 7pt legal-mentions stack — this one is the artisan's own words, not a statutory citation, so it gets its own visual treatment), shown only when the toggle matching the current document's `documentType` is on and the message isn't empty
-- [ ] Zero behavior change for any company that never fills this in — no block rendered, matching every other optional PDF section in this app
+- [x] Textarea + two checkboxes ("Afficher sur les factures" / "Afficher sur les devis") in company settings, next to the existing decennial-insurance and franchise-en-base fields
+- [x] `PdfService.buildFooter` renders it as its own centered block (distinct from the existing left-aligned 7pt legal-mentions stack — this one is the artisan's own words, not a statutory citation, so it gets its own visual treatment), shown only when the toggle matching the current document's `documentType` is on and the message isn't empty
+- [x] Zero behavior change for any company that never fills this in — no block rendered, matching every other optional PDF section in this app
 
 ## Non-goals
 
 - No rich text/formatting — plain text only, same "PdfService only ever renders plain text" boundary the manual-mode table already follows.
 - No per-invoice override — this is a company-wide setting, not a per-document one; an artisan needing a one-off different mention on a single document already has Phase 1.1-1's signature-adjacent workflow or can just edit the message before creating that particular document (accepting the tradeoff that it then applies to every document after, until changed back).
+
+## Notes
+
+- Migration: `backend/prisma/migrations/20260820005248_add_custom_footer_mention`. `customFooterMessage` `TEXT` (max 1000 chars, enforced by `UpdateCompanyDto`), `customFooterOnFacture`/`customFooterOnDevis` `BOOLEAN NOT NULL DEFAULT false`.
+- `InvoiceMapper.issuerFields` now takes `documentType` as an explicit parameter (previously only the seven issuer-identity fields, all documentType-independent) — it resolves which of the two toggles applies and hands `PdfService` an already-resolved `customFooterMessage: string | null`, the same "business rule decided in the mapper, not the PDF layer" precedent `companyVatExempt`/`decennialInsurance` already follow. `PdfService` itself never reads the raw `Company` toggles.
+- `CompanyRepository.update` follows the file's own full-replace convention: an omitted `customFooterMessage` clears to `null`, same as `microEntrepreneurCeiling`/`invoiceMailCustomMessage`.
+- Demo seed (`backend/prisma/seed-demo.ts`): Bâti Rénov gets a real message with both toggles on; L'Atelier Beauté is left at the default (both toggles `false`), so `make demo` shows both states.
+- Tests added: `invoice.mapper.spec.ts` (`Phase 1.1-6 custom footer mention` — toggle/documentType resolution, the actual business rule) and `pdf.service.spec.ts` (smoke test with a message set). Full backend suite (366 tests) and frontend suite green after this phase; `tsc --noEmit` clean on both sides.
+- No tour step and no `seed-playstore-demo.ts` change — out of scope per this phase's own Non-goals/Phase 1.1-10's own non-goals (company-settings fields set once, not a repeated per-document action).
 
 ---
 
@@ -1956,17 +1965,22 @@ Bundled in for the same "genuinely broad, not sector-specific" reason: **autoliq
 
 ## Features
 
-- [ ] "Client professionnel" checkbox on the customer form, pre-checked when `companyName` or `siret` is filled, always overridable — and, since `companyName`/`siret` only ever matter for a professional client in the first place, both fields move from always-visible to **revealed only once the checkbox is checked** (the field hints already said "si professionnel"/"facultatif — uniquement si ce client facture lui-même en tant que professionnel"; this phase makes that conditionality structural instead of just worded). Same progressive-disclosure precedent as Phase 1.1-2's collapsed "Paramètres avancés".
-- [ ] Customer list cards (`customer-list`) gain a small "Pro" badge (`app-badge`, `secondary` or `info` variant — reuses the semantic badge component, no new one-off style) next to `companyName` when `isProfessional` is set, so the distinction is visible at a glance without opening each card
-- [ ] `PdfService.buildFooter`'s existing 40€/pénalités mention gated on `data.customerIsProfessional` — no longer shown to individual-consumer clients
-- [ ] When professional: footer also prints the existing `Invoice.dueDate` as "Délai de règlement : [date]" (the date already exists and already drives Phase 16's "en retard" board logic — this phase is the first time it's actually rendered as the legal mention it's also required to be) and the company's escompte mention
-- [ ] "Autoliquidation (sous-traitance BTP)" checkbox on a facture, available in both mode rapide's preview step and mode manuel — when checked, the invoice computes with no VAT (same mechanism as franchise en base) and the footer prints "Autoliquidation - Article 242 nonies A, 13° de l'annexe II au CGI" in place of the franchise-en-base citation
-- [ ] Zero behavior change for a professional-only artisan who never touches the reverse-charge checkbox, and no change at all to a DEVIS's footer (this phase is FACTURE-scoped, matching L441-9's own "facture" wording and this app's existing FACTURE-only precedent for `InvoiceStatus`/deposits)
+- [x] "Client professionnel" checkbox on the customer form, pre-checked when `companyName` or `siret` is filled, always overridable — and, since `companyName`/`siret` only ever matter for a professional client in the first place, both fields move from always-visible to **revealed only once the checkbox is checked** (the field hints already said "si professionnel"/"facultatif — uniquement si ce client facture lui-même en tant que professionnel"; this phase makes that conditionality structural instead of just worded). Same progressive-disclosure precedent as Phase 1.1-2's collapsed "Paramètres avancés".
+- [x] Customer list cards (`customer-list`) gain a small "Pro" badge (`app-badge`, `secondary` or `info` variant — reuses the semantic badge component, no new one-off style) next to `companyName` when `isProfessional` is set, so the distinction is visible at a glance without opening each card
+- [x] `PdfService.buildFooter`'s existing 40€/pénalités mention gated on `data.customerIsProfessional` — no longer shown to individual-consumer clients
+- [x] When professional: footer also prints the existing `Invoice.dueDate` as "Délai de règlement : [date]" (the date already exists and already drives Phase 16's "en retard" board logic — this phase is the first time it's actually rendered as the legal mention it's also required to be) and the company's escompte mention
+- [x] "Autoliquidation (sous-traitance BTP)" checkbox on a facture, available in both mode rapide's preview step and mode manuel — when checked, the invoice computes with no VAT (same mechanism as franchise en base) and the footer prints "Autoliquidation - Article 242 nonies A, 13° de l'annexe II au CGI" in place of the franchise-en-base citation
+- [x] Zero behavior change for a professional-only artisan who never touches the reverse-charge checkbox, and no change at all to a DEVIS's footer (this phase is FACTURE-scoped, matching L441-9's own "facture" wording and this app's existing FACTURE-only precedent for `InvoiceStatus`/deposits)
 
 ## Notes
 
 - The late-payment penalty *rate* itself stays the existing fixed "taux d'intérêt légal en vigueur" phrasing (no per-company rate field needed) — French law permits citing the reference rate by name rather than a hardcoded number, so nothing here changes on that front.
 - Depends on Phase 1.1-6 existing first only in the loose sense that both touch `PdfService.buildFooter`'s mentions list — no hard data dependency between them.
+- **`customerIsProfessional` is resolved live, never snapshotted onto `Invoice`** — a deliberate departure from the `customerName`/`Address`/`Email`/`Phone` snapshot precedent: `InvoiceMapper`/`PdfService` already treat every other footer/legal-mention input (`companyVatExempt`, `decennialInsurance`, `customFooterMessage`) as read fresh from current state on every render, not frozen at invoice-creation time, and this field follows that same rule. `InvoiceRepository.INVOICE_INCLUDE` now joins `customer: { select: { isProfessional: true } }`; the not-yet-persisted preview path (`InvoiceService.previewPdf`) resolves it via a new lenient `CustomerService.findByIdOrNull` (never throws on a stale/typo'd `customerId`, matching that method's existing "nothing here is persisted" posture).
+- **`reverseChargeApplicable` always wins over `vatApplicableOverride`**, in both entryMode GUIDED and MANUAL — autoliquidation is a VAT-correctness fact about the specific job, not a stylistic pick the manual VAT selector should be able to override. Implemented as its own independent DTO field (`ReverseChargeFactureOnly` validator, not gated by `ManualModeFieldsConsistency`), since `vatApplicableOverride` itself stays MANUAL-only by design. In mode manuel's UI, the VAT `<select>` is disabled (not hidden) while the checkbox is on, via a new `InvoiceTotalsSummaryComponent.vatSelectDisabled` input — it already displays "TVA non applicable" correctly on its own (driven by the store's resolved `vatApplicable()`), the `disabled` state just avoids the confusing "I picked 20%, it snapped back" moment an interactive-looking select would otherwise produce.
+- **`Company.earlyPaymentDiscountMention` is pre-filled via a DB-level default** (`@default("Pas d'escompte pour paiement anticipé.")` in schema.prisma), not application code — Postgres backfills every pre-existing row when the migration runs and applies the same default to every row inserted afterward, so "an artisan who never touches this field is still compliant" holds for both existing and brand-new companies with zero bespoke logic. Made editable in "Mon entreprise" (next to the Phase 1.1-6 custom-footer block), matching this app's "legally-sensitive fields stay editable, never locked" precedent.
+- Tests: backend — `create-invoice.dto.spec.ts` (`ReverseChargeFactureOnly`, including the MANUAL-allowed case `vatApplicableOverride` itself is forbidden from), `invoice.mapper.spec.ts` (`Phase 1.1-7` describe block: VAT-precedence in both preview paths, live `customerIsProfessional` resolution, `earlyPaymentDiscountMention`/`reverseChargeApplicable`/`dueDate` passthrough), `pdf.service.spec.ts` (two new smoke tests), `customer.e2e-spec.ts` (`isProfessional` default/round-trip through a full-replace `PATCH`). Frontend — `invoice-draft.store.spec.ts`/`manual-invoice-draft.store.spec.ts` (`Phase 1.1-7` describe blocks: VAT precedence, FACTURE-only request gating, `reset()`). Full backend suite (379 tests) and frontend suite (133 tests) green; `tsc --noEmit` clean on both sides. The new `customer.e2e-spec.ts` case could not be executed live in this session — registering a test user against a freshly created local Postgres container returned an unrelated 400 that reproduces identically on `product.e2e-spec.ts` (untouched by this phase), confirming a pre-existing local test-environment gap rather than a regression; worth a follow-up outside this phase.
+- No change to `docs/api.md`'s `PATCH /company`/`POST /customers`/`POST /invoices` field tables — that doc was already stale before this phase (missing several fields from earlier phases too). Deferred to a dedicated documentation pass (see the roadmap's closing note).
 
 ---
 
@@ -1985,12 +1999,12 @@ The user's research flagged four fields the French e-invoicing reform adds to th
 
 ## Features
 
-- [ ] SIREN rendered on the PDF as the first 9 digits of `Invoice.customerSiret` when present — no separate SIREN field, since a SIRET already contains its SIREN
-- [ ] "Adresse de livraison" field on the invoice form (mode rapide's client step and mode manuel), pre-filled with the picked customer's address the moment they're selected — editable, "sauf mention explicite" (the artisan overwrites it only when the job site genuinely isn't the billing address)
-- [ ] PDF prints the delivery-address line only when it actually differs from `customerAddress` at render time — since the two start identical by default, an untouched invoice renders nothing extra (matching the reform's own "si différente" wording), and an explicit edit is exactly what makes them differ and triggers the line
-- [ ] "Nature de l'opération" derived at PDF-render time for GUIDED invoices — "Livraison de biens" / "Prestation de services" / "Livraison de biens et prestation de services", purely from whether the invoice has product `lines` and/or VISIBLE `serviceLines`, zero artisan input, same "derived, never persisted" convention as everything else in this app's calculation layer
-- [ ] MANUAL mode gets an explicit 3-way selector for the same mention (defaulting to "Prestation de services") since its free-form canvas has no structured biens/services split to derive from
-- [ ] "Option pour le paiement de la taxe d'après les débits" toggle in company settings, printing the fixed mention on every facture when on
+- [x] SIREN rendered on the PDF as the first 9 digits of `Invoice.customerSiret` when present — no separate SIREN field, since a SIRET already contains its SIREN
+- [x] "Adresse de livraison" field on the invoice form (mode rapide's client step and mode manuel), pre-filled with the picked customer's address the moment they're selected — editable, "sauf mention explicite" (the artisan overwrites it only when the job site genuinely isn't the billing address)
+- [x] PDF prints the delivery-address line only when it actually differs from `customerAddress` at render time — since the two start identical by default, an untouched invoice renders nothing extra (matching the reform's own "si différente" wording), and an explicit edit is exactly what makes them differ and triggers the line
+- [x] "Nature de l'opération" derived at PDF-render time for GUIDED invoices — "Livraison de biens" / "Prestation de services" / "Livraison de biens et prestation de services", purely from whether the invoice has product `lines` and/or VISIBLE `serviceLines`, zero artisan input, same "derived, never persisted" convention as everything else in this app's calculation layer
+- [x] MANUAL mode gets an explicit 3-way selector for the same mention (defaulting to "Prestation de services") since its free-form canvas has no structured biens/services split to derive from
+- [x] "Option pour le paiement de la taxe d'après les débits" toggle in company settings, printing the fixed mention on every facture when on
 
 ## Non-goals — sector-specific mentions considered and declined for now
 
@@ -2004,13 +2018,81 @@ Reviewed against this app's "extremely fast, minimal typing" mandate and its act
 
 ## Notes
 
+- **The Data Model section's original "no new field for nature de l'opération, it's derived" was incomplete** — confirmed with the user before implementation: MANUAL mode's own explicit 3-way selector genuinely needs somewhere to persist (there's nothing to derive it from on a free-form canvas), or the artisan's choice would silently reset to the default every time the PDF is re-rendered. Added `Invoice.manualNatureOfOperation` (`NatureOperation?`, new enum `LIVRAISON_BIENS` / `PRESTATION_SERVICES` / `BIENS_ET_SERVICES`) — always `null` for GUIDED (forbidden there by `ManualModeFieldsConsistency`, same treatment as `vatApplicableOverride`), defaults to `PRESTATION_SERVICES` at the service layer (`InvoiceService.create`) when omitted for MANUAL. GUIDED's own value is never persisted, resolved fresh on every render by `InvoiceMapper.deriveNatureOfOperation` from `lines.length > 0` / any VISIBLE `serviceLines` — mechanically, exactly as specified, not an attempt at smarter classification (a GUIDED invoice whose lines are 100% typed-in labor still reads as "Livraison de biens" unless a Phase 5 service line is also present, since `lines` vs `serviceLines` is a structural split in this app, not a semantic one).
+- **`customerSiret` has no dedicated input in mode manuel** — unlike `deliveryAddress` (explicitly called out for both modes since its "print only when it differs from `customerAddress`" rule can't be reproduced by a generic field), a SIRET on a manual invoice was already fully expressible via the pre-existing freehand `InvoiceCustomerField` mechanism, whose own placeholder text literally already suggests "SIRET" as the example. Adding a second, dedicated way to say the same thing would have duplicated it for no behavioral gain, and manual mode's own documented design principle is "no picker, no separate form" beyond that freehand mechanism.
+- **`customerSiret` validated as exactly 14 digits** (same `@Matches` pattern as `Customer.siret`), not left as arbitrary freehand text like `customerAddress` — needed so "first 9 digits" reliably yields a real SIREN rather than truncating whatever punctuation/spacing an artisan typed.
+- **SIREN/delivery-address/nature-of-operation apply to both DEVIS and FACTURE**, matching the existing `customerName`/`customerAddress`/`customerEmail`/`customerPhone` snapshot precedent (no FACTURE-only gate) — only `vatOnDebitsOption`'s mention is FACTURE-only, per its own explicit "on every facture" wording in this phase's original spec (a devis collects no tax, so the débits option is meaningless there). This mirrors Phase 1.1-7's narrower FACTURE-only scope for a different reason (L441-9 itself only governs factures) — here the other three fields are just customer/document facts with no such legal restriction.
+- `customerSiret`/`deliveryAddress` are one-shot autofills at pick time (mode rapide), never live-linked back to the picked `Customer` afterward — identical "autofill, not a lock" spirit as the four pre-existing snapshot fields, not the live-join precedent Phase 1.1-7 used for `customerIsProfessional` (that one is a rendering-gate flag re-read fresh on every render; these two are billed content, meant to freeze at the moment they were set).
+- `docs/api.md` and `backend/prisma/seed-demo.ts` intentionally untouched, consistent with Phase 1.1-7's own precedent (which also didn't touch either) — the `api.md` catch-up is tracked in Phase 1.1-13 below.
+- Tests: backend — `create-invoice.dto.spec.ts` (`customerSiret` format, `deliveryAddress` bound, `manualNatureOfOperation` GUIDED-forbidden/MANUAL-allowed/enum-validated), `invoice.mapper.spec.ts` (`Phase 1.1-8` describe block: snapshot passthrough, GUIDED derivation across all three line combinations, MANUAL persisted-value + default-fallback resolution in both the persisted and preview paths, `vatOnDebitsOption` passthrough), `pdf.service.spec.ts` (3 new smoke tests). Frontend — `invoice-draft.store.spec.ts`/`manual-invoice-draft.store.spec.ts` (`Phase 1.1-8` describe blocks). Full backend suite (400 tests) and frontend suite (138 tests) green; `tsc --noEmit` clean on both sides.
 - Depends on nothing else in the 1.1-x track; can ship independently of 1.1-6/1.1-7.
+
+---
+
+# Phase 1.1-9 — Dossiers: Inline Creation & "Mon répertoire" Nav Entry
+
+## Objective
+
+Two rough edges left by Phase 1.1-2's initial "Dossiers" shipment, found in actual use: creating a new folder requires leaving the product/service/discount form entirely (there's no way to add one from inside the "Paramètres avancés" multi-select itself, only existing folders are listed there), and "Mes dossiers" is reachable only as a link tucked inside `product-list`/`service-list`/`discount-list`, not from "Mon répertoire" — the nav dropdown that already lists Mes clients/Mes produits/Mes prestations/Mes remises — even though dossiers is now a first-class, Pro+/Premium catalog concept sitting right alongside those four. This phase supersedes 1.1-2's original "reachable from the catalog list pages rather than a new top-level nav entry" call: dossiers has earned the same nav-level standing as the other four "Mon répertoire" entries.
+
+## Features
+
+- [x] An inline "+ Créer un dossier" text input pinned above the existing folder list inside the multi-select dropdown itself (product/service/discount forms' "Paramètres avancés") — typing a name and confirming creates the `CatalogFolder` immediately (same `CatalogFolderController.create` the standalone "Mes dossiers" form already calls) and adds it, pre-checked, to the item's local `selectedFolderIds` — no navigation away from the form, no lost in-progress edits to the rest of it
+- [x] "Mes dossiers" added as a fifth entry in the "Mon répertoire" nav dropdown (`app.html`, alongside Mes clients/Mes produits/Mes prestations/Mes remises), `routerLink="/dossiers"` — same plain `<a routerLinkActive>` pattern as the other four, no new component
+- [x] The nav entry is always visible to every plan tier — same "Statistiques" precedent (`StatsReportsPage.analyticsLocked`): the link itself isn't hidden, the destination page is what shows the existing "Voir les offres" upsell card for a company below Pro. An artisan below Pro+ clicking it discovers the feature exists and what unlocks it, rather than the nav silently pretending it doesn't exist.
+- [x] The existing links from `product-list`/`service-list`/`discount-list` to "Mes dossiers" stay exactly as they are — this phase adds a second way in, it doesn't remove the first
+
+## Non-goals
+
+- No change to the plan-gating mechanics themselves (`PlanGateService.assertFeatureAccess`, the `dossiers` feature flag) — this phase only adds two new *paths* to functionality 1.1-2 already gated correctly.
+- No inline folder creation from mode rapide's flyout — that flyout only ever *browses* folders (1.1-2's own scope), and adding a create action there would duplicate the "Paramètres avancés" dropdown's new inline input for a flow that's meant to be about picking items fast, not managing the catalog's organization.
+
+## Notes
+
+- Supersedes one specific line in Phase 1.1-2's original Features list ("reachable from the catalog list pages rather than a new top-level nav entry") — the reasoning that held at the time (nav stays uncluttered for artisans who never touch folders) is superseded by dossiers having since become a real, Pro+/Premium-gated catalog concept on par with clients/produits/prestations/remises, not a niche toggle.
+- **Zero backend changes** — confirmed before implementing: `POST /catalog-folders` already takes exactly `{ name }`, is already gated by `PlanGateService.assertFeatureAccess(companyId, 'dossiers')` (so the inline input can only ever be reached when the picker isn't already showing its own `locked()` state), and already returns the full `CatalogFolderProfile` the picker needs to both display and pre-check immediately.
+- **The nav entry was also added to the separate mobile menu** (`app.html`'s flat mobile link list, structurally distinct from the desktop "Mon répertoire" dropdown this phase's Features literally describe) — not explicitly asked for in those words, but leaving mobile without a path to "Mes dossiers" in the nav at all (only reachable via the product/service/discount list pages' existing links) would contradict this app's own phone-first priority (see ux-roadmap.md) and leave Mes dossiers alone among the five "Mon répertoire" entries missing from mobile.
+- `app.ts`'s `DATA_SECTION_ROUTES` (drives the "Mon répertoire" button's own active-highlight state) got `/dossiers` added alongside `/clients`/`/produits`/`/prestations`, so the button highlights while browsing it too — same standing as those three. Found and deliberately left alone: `/remises` is missing from that same array, a pre-existing gap that predates this phase; not fixed here since it's unrelated to dossiers.
+- The folder picker's empty-state copy (previously "Aucun dossier créé pour l'instant — [créez-en un](/dossiers) pour organiser votre catalogue par métier") was simplified to drop the navigate-away link, since the inline input directly above it is now the primary (and faster) way to create one — the whole point of this phase. The standalone "Mes dossiers" page is still reachable via the nav/list-page links for bulk management, just no longer suggested from inside this empty state.
+- **No new automated tests** — this phase adds real logic to `CatalogFolderMultiSelectComponent` (a double-submit guard, a local-signal update sorted to match `CatalogFolderRepository.findAll`'s ordering, and an output emission), but this codebase's frontend testing convention — confirmed by checking every existing `*.spec.ts` file — unit-tests stores/services/utils, never presentational form/list components (`customer-form`, `customer-list`, `company-settings`, `catalog-folder-list`, `catalog-folder-form` all have zero test coverage despite some carrying comparable logic, e.g. Phase 1.1-7's `customer-form` live-follow derivation). Followed that same precedent here rather than introducing a one-off component-testing pattern with no other example in the codebase to match. Backend is untouched, so its own existing (already-passing) suite needed no changes — worth flagging separately that the `catalog-folder` backend domain itself has zero unit/e2e coverage of its own, a pre-existing gap from Phase 1.1-2, not introduced or worsened by this phase.
+
+---
+
+# Phase 1.1-9.5 — Dossiers: Folder-Card Item Association
+
+## Objective
+
+From "Mes dossiers", associating a product/prestation/remise with a given folder currently only works from the *item's* own form (its "Paramètres avancés" multi-select, Phase 1.1-2). This phase adds the reverse direction: from a folder's own card, check which products/prestations/remises belong to it — using the same round pill-button language mode rapide's "Ajouter un produit/une prestation/une remise" buttons already established (Phase 13.5/32), for visual consistency, but adapted from that flow's fixed vertical stack into three buttons laid out horizontally inside the folder card itself.
+
+## Features
+
+- [x] Each folder card on "Mes dossiers" gets three round pill buttons (Produit/Prestation/Remise — same `bg-primary`/`bg-info`/`bg-warning` color coding as mode rapide's own three buttons), in a horizontal row rather than mode rapide's vertical stack, reusing the exact same `.fixed-add-button`/`.is-open` CSS-grid expansion (`styles.css`: a fixed 3.5rem icon cell, `grid-template-columns` animating the label cell from `0rem` to its expanded width) — the "+" stays pinned left in its own cell as the button opens, the label sliding in to its right, identical mechanics to mode rapide's buttons, just reused rather than reinvented
+- [x] Because the three buttons sit in one horizontal flex row, an expanding button naturally pushes whichever sibling(s) are positioned to its right further along the row (plain flex reflow, no extra positioning code) and leaves anything to its left untouched — exactly the "pousse les 2 autres boutons à sa droite s'il n'y a pas la place" behavior asked for, and exactly nothing happens when there's already enough slack in the card for the label to fit
+- [x] The expanded button reveals an inline checklist panel — grown *inside* the folder's own card (ux-roadmap.md's `panelStretch`/"stretch, not swap" principle), not mode rapide's viewport-anchored fixed flyout, since this list lives inside a scrolling grid of many folder cards, not a single full-screen flow — listing every product/prestation/remise of that type, each with a checkbox reflecting whether it currently belongs to this folder
+- [x] Toggling a checkbox writes immediately (no separate "Enregistrer" step — this screen's whole job is folder membership), reusing the exact same `folderIds` full-replace PATCH the item's own "Paramètres avancés" multi-select already calls (Phase 1.1-2), just initiated from the folder side: toggle this one folder's id in or out of that item's existing `folderIds`, resend the full list
+- [x] Only one of the three panels open per card at a time — opening "Prestation" on a card closes an already-open "Produit" panel on that same card, same single-flyout-at-a-time discipline mode rapide already follows; other folder cards' own open panels are unaffected
+
+## Non-goals
+
+- No bulk/multi-item actions from this checklist — one checkbox, one item, one immediate write, matching "Mes dossiers" staying a lightweight membership-management screen rather than growing into a second catalog editor.
+- No reordering or search inside the checklist for this phase — revisit only if a real artisan's catalog is large enough that scrolling an unfiltered list actually becomes the bottleneck.
+
+## Notes
+
+- Depends on Phase 1.1-2 (the `folderIds` full-replace mechanism this reuses) and Phase 1.1-9 (the "Mes dossiers" nav entry this screen is reached through).
+- Reference for the button mechanics being reused: `frontend/src/styles.css` (`.fixed-add-button`/`.is-open`) and `invoice-create-lines-step.page.html`'s three existing buttons.
+- **Implemented** in `catalog-folder-list.page.ts`/`.html` (`frontend/src/app/features/catalog-folder-list/`), reusing `ProductService`/`ServiceCatalogService`/`DiscountService`'s existing `getAllCached()`/`all()` cache signals rather than issuing per-folder fetches — the three catalogs are loaded once for the whole page and every card's checklist just filters/reads that shared signal.
+- Per-card open-panel state is a single `Partial<Record<folderId, 'product' | 'service' | 'discount'>>` signal, not N×3 booleans — mode rapide's own three-boolean precedent (`invoice-create-lines-step.page.ts`) doesn't scale to an arbitrary `@for` list of folder cards, so this phase deliberately deviates from that literal precedent while keeping its "only one open at a time" behavior, per-card.
+- The item-side update endpoints are a full replace (`UpdateXDto extends CreateXDto`, no partial-update variant — `ProductRepository.update`'s `folders: { set: ... } }`), so toggling a folder's membership from the folder side has to resend the item's entire current field set, not just `folderIds`, or a partial payload would wipe every other field back to its DTO default. Three small pure payload builders (`productUpdatePayload`/`serviceUpdatePayload`/`discountUpdatePayload`) reconstruct that full payload from the already-cached profile, mirroring the same null→undefined and string→number conversions each item's own form page (`product-form.page.ts` etc.) already applies.
+- Fixed a stale claim in `design-system.md` (`panelStretch`/`scrollReveal`/`cardMorph` all listed as "not yet implemented") — `panelStretch` has in fact been implemented as `.panel-stretch`/`.is-open` since the navbar dropdowns; this phase adds its second real usage. `scrollReveal`/`cardMorph` remain genuinely unimplemented.
+- No new automated tests — consistent with this codebase's existing convention for presentational list/toggle components (matches Phase 1.1-9's own "Mes dossiers" list page, which also has no dedicated spec file); the reused `folderIds` full-replace PATCH path itself is already covered by Phase 1.1-2's backend tests.
+- Manually verified in a real browser (Playwright-driven headless Chromium against the live dev stack) at both a 390px phone width and a 1280px desktop width per `ux-roadmap.md`'s testing rule: pill buttons render and expand correctly, the panel-stretch checklist grows inside the card, toggling a checkbox round-trips through the API and persists across a fresh page load, mutual exclusivity within a card and independence across cards both hold, and the browser console showed no errors at either width.
 
 ---
 
 # Phase 1.1-10 — Guided Tour Rework for the 1.1-x Features
 
-*(1.1-9 intentionally left unassigned — numbered as explicitly requested.)*
+*(Renumbered to close out the 1.1-x track as its last phase, per the user's explicit request — 1.1-11 is not used.)*
 
 ## Objective
 
@@ -2026,18 +2108,18 @@ Closes one pre-existing gap discovered while reviewing this, same spirit as 1.1-
 ## Features
 
 **`invoice-creation`:**
-- [ ] New anchor on the devis/facture toggle itself (currently un-anchored — only the mode-choice cards container below it is), spotlighted in a new first step before the existing `invoice-mode-choice` step: "C'est le premier choix à faire à chaque nouveau document."
-- [ ] `add-line`'s product/service branches gain a `showIf: 'hasFolders'` alternative explaining the folder-first flyout — skipped entirely for an artisan with zero folders, so nothing is said about a feature they haven't touched
-- [ ] A new step on the preview screen's "Demander un acompte" toggle (1.1-3), inserted between the existing `total` and `preview` steps
-- [ ] A new step spotlighting the "Signer" action on the post-save success card (the same card Phase 19 already reaches and celebrates on), explaining it also works later from "Mes documents"
+- [x] New anchor on the devis/facture toggle itself (currently un-anchored — only the mode-choice cards container below it is), spotlighted in a new first step before the existing `invoice-mode-choice` step: "C'est le premier choix à faire à chaque nouveau document."
+- [x] `add-line`'s product/service branches gain a `showIf: 'hasFolders'` alternative explaining the folder-first flyout — skipped entirely for an artisan with zero folders, so nothing is said about a feature they haven't touched
+- [x] A new step on the preview screen's "Demander un acompte" toggle (1.1-3), inserted between the existing `total` and `preview` steps
+- [x] A new step spotlighting the "Signer" action on the post-save success card (the same card Phase 19 already reaches and celebrates on), explaining it also works later from "Mes documents"
 
 **`catalog`:**
-- [ ] Both `produit-form-hint` and `prestation-form-hint` gain one added sentence pointing at the "Paramètres avancés" folder picker (1.1-2), reusing one shared anchor id across the two forms (same "never mounted simultaneously" precedent as `invoice-line-quantity`'s shared id)
-- [ ] A full "Mes remises" detour, mirroring the produit/prestation structure exactly (`remise-cta` → `remise-new-reminder` → `remise-form-hint` → `remise-celebrate`, `showIf: noDiscounts`/`hasDiscounts`), inserted after `prestation-celebrate` and before `catalog-done` — closing the gap above
-- [ ] `catalog-done`'s closing copy updated to mention all three catalog entities, not just produits/prestations
+- [x] Both `produit-form-hint` and `prestation-form-hint` gain one added sentence pointing at the "Paramètres avancés" folder picker (1.1-2), reusing one shared anchor id across the two forms (same "never mounted simultaneously" precedent as `invoice-line-quantity`'s shared id)
+- [x] A full "Mes remises" detour, mirroring the produit/prestation structure exactly (`remise-cta` → `remise-new-reminder` → `remise-form-hint` → `remise-celebrate`, `showIf: noDiscounts`/`hasDiscounts`), inserted after `prestation-celebrate` and before `catalog-done` — closing the gap above
+- [x] `catalog-done`'s closing copy updated to mention all three catalog entities, not just produits/prestations
 
 **`customers`:**
-- [ ] A new step anchored on the "Client professionnel" checkbox (1.1-7), inserted after `customer-form-hint`, explaining that checking it reveals the raison sociale/SIRET fields — introduces the progressive-disclosure behavior explicitly rather than leaving a new artisan to discover it by accident
+- [x] A new step anchored on the "Client professionnel" checkbox (1.1-7), inserted after `customer-form-hint`, explaining that checking it reveals the raison sociale/SIRET fields — introduces the progressive-disclosure behavior explicitly rather than leaving a new artisan to discover it by accident
 
 **`invoice-creation-manual` / `stats-reports`:** untouched — manual mode's own tour was already left alone by Phase 18 for the same reason it is here (nothing in 1.1-x is manual-mode-specific beyond what mode rapide's tour already covers), and nothing in the 1.1-x track touches reports (1.1-3's non-goals explicitly excluded deposit reporting, matching Phase 32's own precedent for discounts).
 
@@ -2045,8 +2127,72 @@ Closes one pre-existing gap discovered while reviewing this, same spirit as 1.1-
 
 - No new, seventh tour dedicated to "what's new in 1.1" — every addition lives inside whichever existing tour already owns that route, same reasoning Phase 8 used against one continuous cross-app tour.
 - No tour coverage for Phase 1.1-6's custom footer field or 1.1-8's e-invoicing fields (delivery address, débits option, autoliquidation) — these are company-settings/low-frequency fields an artisan sets once, not a repeated per-document action; `app-field-hint`'s existing persistent-caption pattern (Phase 7) already covers them adequately without a guided-tour step.
+- No dedicated tour for "Mes dossiers" itself (1.1-9/1.1-9.5) — same reasoning as the bullet above: a catalog-organization screen an artisan visits occasionally to tidy things up, not a per-document action. The `catalog` tour's new folder-picker mention (above) is the one place this feature actually needs introducing.
 
 ## Notes
 
 - Depends on Phase 1.1-1 through 1.1-3 and 1.1-7 shipping first — this phase only adds tour steps for UI that has to already exist.
 - Reference implementation for every mechanism named above: `frontend/src/app/shared/tour/tour-definitions.ts`, `tour.service.ts`, `tour-anchor-registry.service.ts`.
+- **A real bug caught by live-browser testing, not just unit tests**: the new `deposit` step declared no `route` of its own, unlike `submit-cta` — it silently inherited `total`'s route (still the lines step), where `invoice-deposit-toggle` (living on the preview step's own page, `invoice-create-preview-step.page.html`) never mounts. In the unit-test suite this was invisible (the anchor-not-found path is a *correct*, exercised branch), but a Playwright walkthrough against a running `make demo`-equivalent stack showed the step permanently skipped straight to `preview` for every artisan, on every FACTURE, regardless of anchor registration. Fixed by giving `deposit` its own `route: '/factures/nouvelle/rapide/apercu'`, matching `submit-cta`; a new spec (`tour.service.spec.ts`, "navigates to the preview route to reach the deposit step") asserts the router actually lands there.
+- **`add-line`'s folder-aware alternative is two new steps (`product-folders-hint`/`service-folders-hint`), not a branch on the existing `product-pick`/`service-margin` steps** — inserted right after each via their own `next` override, `showIf: 'hasFolders'`, falling through to `product-quantity`/`service-card` untouched when there are none. Simpler than branching `nextByAnchor` dynamically (which can't itself depend on a showIf-style runtime condition) and needed no engine change beyond the two new `TourStepCondition` values.
+- **`AdvancedSettingsComponent` gained an optional `tourAnchorId` input**, applied via `[appTourAnchor]="anchorId"` inside an `@if`/`@else` pair rather than binding the directive unconditionally — `appTourAnchor` is `input.required<string>()`, so a `null` id can't just flow through it. Only `product-form`/`service-form` pass one (`catalog-folder-picker`, shared between the two — their "Paramètres avancés" toggles are never mounted at once, same registry precedent as `invoice-line-quantity`); `invoice-line-form`, `customer-step`, and `discount-form`'s own `<app-advanced-settings>` are unaffected. Caught live: this dynamic binding never reflects back as a literal DOM attribute (unlike every other `appTourAnchor="literal-id"` in this codebase), which only mattered for how this phase's own Playwright script had to select the element — the tour engine itself reads the directive's input directly and was unaffected.
+- **The "Mes remises" detour mirrors the produit/prestation structure exactly, including the unnamed search step** (`discounts-search`) between `remise-cta` and `remise-new-reminder` — `prestation-new-reminder` and `prestation-celebrate`'s `next` both now point at `remise-cta` instead of `catalog-done`, splicing the detour in between. New anchors: `catalog-new-discount` ("+ Nouvelle remise", `discount-list.page.html`) and `discounts-search` (its search input).
+- **Two small, tasteful additions beyond the roadmap's literal checklist, per the user's explicit request while reviewing this phase**: the `catalog-done`/`customers-done` closing steps now each end on a forward-looking sentence — a growing catalog is worth organizing into dossiers early (multi-trade artisans), and a growing répertoire pays off precisely because every client already resurfaces in the picker on the next devis/facture. The `sign-action` step's title gained "(facultatif)" (matching `deposit`'s own naming), and the `menu` step now also mentions that "Mes documents" is what feeds "Statistiques" — small, occasional cross-tab callouts (répertoire ↔ facture rapide, catalogue ↔ dossiers, documents ↔ statistiques), not a rewrite of the existing copy.
+- **Verified with a live Playwright walkthrough** (phone width first, then desktop — same precedent as Phase 1.1-4) against a throwaway `docker compose` stack seeded via `seed-demo.ts` (Bâti Rénov, which already has folders/discounts/a deposit default from Phase 1.1-5): every new anchor was confirmed genuinely clickable/writable through its spotlight (devis/facture toggle switched for real; the folder flyout's folder-expand and product-pick both worked; the deposit checkbox toggled; the professional checkbox revealed raison sociale/SIRET; the Signer button opened the real signature modal) — the one architectural property this phase depended on throughout. Not separately re-verified live: the `noFolders`/`noDiscounts`/`noCustomers` skip branches, already covered by dedicated `tour.service.spec.ts` cases exercising the same `showIf` mechanism the "has" branches share.
+
+---
+
+# Phase 1.1-11 — "Partager": Auto-Fill Client Email
+
+## Objective
+
+Requested: when a document's customer has an email on file, "Partager" should use it automatically, the same way it already bakes in the artisan's own custom mail message — never a blank "à" field the artisan has to fill in by hand.
+
+**Found while grounding this phase: two of `InvoiceShareService.share()`'s three tiers already do this**, and have since Phase 12 — this was not a gap in the 1.1-x sense, more a case of confirming existing behavior and documenting the one tier that structurally can't match it:
+
+- The **mailto fallback** already builds its link with `to: invoice.customerEmail ?? ''` (`invoice-share.service.ts:78`).
+- The **SMTP compose modal** (`'compose-email'` outcome) already resets its `to` form control from `invoice.customerEmail ?? ''` on open (`send-invoice-email-modal.component.ts:60`).
+- The **native Web Share tier** (`navigator.share({ files, title, text })`, tried first) is the one that can't: the Web Share API spec has no recipient parameter at all — it only ever hands off a title/text/files/url to whichever app the artisan picks from the OS share sheet, which is why the chosen app's own "to" field stays blank regardless of what this codebase does. Not a bug this app can route around; a platform-level ceiling.
+
+## Features
+
+- [x] No code change needed for the mailto and SMTP-compose tiers — confirmed already correct, called out here so this request has a documented answer instead of silently vanishing
+- [x] `InvoiceShareService`'s own doc comment (currently describing only the custom-message behavior) extended to state the email-prefill behavior explicitly for the two tiers where it applies, so this isn't rediscovered as a "missing feature" again later
+- [x] No workaround attempted for the native tier — documented as a known, permanent limitation rather than a deferred TODO, so it doesn't get silently re-requested
+
+## Non-goals
+
+- No custom in-app share sheet replacing `navigator.share()` just to gain a recipient field — would trade a native, familiar OS picker (Gmail, WhatsApp, Mail, AirDrop, etc.) for a worse, FactureLe-maintained reimplementation of the same chooser, to fix a cosmetic gap the two other tiers already cover.
+
+## Notes
+
+- No dependency on any other 1.1-x phase — this is a verification, not new functionality.
+- Re-verified both claims by reading the current source directly (`invoice-share.service.ts:78`, `send-invoice-email-modal.component.ts:60`) rather than trusting the roadmap's own prior description of them — both still hold exactly as written. The extended doc comment now states the per-tier prefill behavior explicitly and spells out why the native tier is a permanent, unfixable ceiling (Web Share has no recipient parameter at all), so this can't be silently rediscovered as a bug later.
+
+---
+
+# Phase 1.1-12 — Documentation Catch-Up: `docs/api.md` and Other Stale `.md` Files
+
+## Objective
+
+Deferred from Phase 1.1-6/1.1-7/1.1-8 (explicit user request: fix it once, at the end of the 1.1-x track, rather than patching it incrementally phase by phase). `docs/api.md`'s request/response field tables — `PATCH /company` most visibly, but worth auditing `POST/PATCH /customers` and `POST /invoices` too — have been drifting out of date for several phases now, not just these three: `PATCH /company`'s table is still missing `invoiceMailCustomMessage`, `declarationFrequency`, `microEntrepreneurCeiling`, `defaultDepositPercentageBasisPoints`, the three `cotisation*BasisPoints` fields, `versementLiberatoireOptIn`, and all four `decennialInsurance*` fields — none of which are new to 1.1-6/1.1-7/1.1-8. This phase is a documentation-only audit/catch-up, not a code change.
+
+## Features
+
+- [x] `docs/api.md`'s `PATCH /company` field table brought current: every field `UpdateCompanyDto` actually accepts, including `customFooterMessage`/`customFooterOnFacture`/`customFooterOnDevis` (1.1-6), `earlyPaymentDiscountMention` (1.1-7), and `vatOnDebitsOption` (1.1-8), plus the pre-existing gaps listed above
+- [x] `docs/api.md`'s `POST/PATCH /customers` section checked for `isProfessional` (1.1-7) and any other pre-existing drift
+- [x] `docs/api.md`'s `POST /invoices` section checked for `reverseChargeApplicable` (1.1-7), `customerSiret`/`deliveryAddress`/`manualNatureOfOperation` (1.1-8), and any other pre-existing drift (e.g. `depositPercentageBasisPoints`/`depositAmountCents` from 1.1-3, `vatApplicableOverride`/`vatRateBasisPointsOverride`)
+- [x] A quick pass over `docs/database.md`/`docs/architecture.md`/`docs/conventions.md` for anything the 1.1-x track should have touched but didn't (these three were largely left alone across 1.1-1 through 1.1-12 on the reasoning that they document patterns/architecture rather than exhaustive field lists — confirm that reasoning still holds rather than assuming it)
+
+## Non-goals
+
+- No code changes — this phase exists purely to close the documentation gap the user explicitly chose to defer rather than fix piecemeal.
+
+## Notes
+
+- No dependency on any other 1.1-x phase.
+- **`docs/api.md`**: brought current well beyond the three named gaps. `PATCH /company` now lists all 19 fields `UpdateCompanyDto` accepts (was 11); `POST/PATCH /customers` gained `isProfessional` (1.1-7) and a pre-existing miss, `description` (Phase 14.5); `POST /invoices` gained `documentType`, `customerSiret`/`deliveryAddress`/`customerFields` (1.1-8/14.5), `discountLines` (Phase 32), `number`/`convertedFromDevisId` (Phase 27/14.3), `simplifiedDisplay` (Phase 23), the deposit pair (1.1-3), `reverseChargeApplicable` (1.1-7), and the six manual-mode-only fields (`vatApplicableOverride`/`vatRateBasisPointsOverride`/`subtotalOverrideCents`/`vatOverrideCents`/`totalOverrideCents`/`manualNatureOfOperation`) — none of which had ever been documented, not just the three the roadmap named going in. The two response-shape JSON examples under `GET /invoices/:id` were **not** rebuilt field-by-field (a genuinely bigger job than a field-table pass) — flagged with an explicit note instead of silently left looking current.
+- **A real, actively-misleading finding, not just missing rows**: `docs/api.md`'s Company section and `docs/database.md`'s `Company` model both still described Phase 1's original fixed-id singleton with no auth (`SINGLETON_COMPANY_ID`, `CompanyRepository.findOrCreateDefault()`) — neither exists anymore. Phase 13 made `Company` 1:1 with `User`, one row per registered account. Corrected in both places, scoped narrowly (a corrected paragraph, not a new `User`/auth write-up) since a full auth-model section is its own, larger undertaking than this phase's "quick pass" framing.
+- **`docs/database.md`'s reasoning ("documents patterns, not exhaustive field lists") holds for field-level drift but not for missing models**: added concise entries for three models this "Schema" doc had zero mention of — `Discount` (Phase 32, pre-1.1-x but never documented here), `CatalogFolder` (1.1-2), and `InvoiceSignature` (1.1-1) — matching the file's existing terse per-model style. No changes needed for `Company`/`Invoice`/etc.'s own field tables beyond the singleton correction above; `api.md`'s DTO tables are the more precise source for exhaustive field lists, this doc stays at the "what exists and why" level it already was.
+- **`docs/architecture.md`**: backend module tree gained `discount/`/`catalog-folder/` (the two this track actually introduced); the tour engine paragraph's stale "four mini-tours" corrected to five (Phase 18's `stats-reports` was never counted) with a note that Phase 1.1-10 extended the existing five rather than adding a sixth. Left an explicit, un-fixed note that the same tree is *also* missing `auth/`/`billing/`/`mail-settings/`/`mailer/`/`referral/`/`reports/`/`site-legal/`/`sourcing/`/`admin/` — all pre-1.1-x gaps, out of scope for this pass, called out so the finding isn't silently lost.
+- **`docs/conventions.md`**: read in full — its reasoning holds as-is. Nothing in the 1.1-x track introduced a new pattern/convention this file should describe (every 1.1-x addition is either a new DTO field following existing validation/full-replace conventions already documented, or a new model following the existing "soft reference, autofill not a lock" precedent) — no edit made.

@@ -31,6 +31,11 @@ const companyFixture: CompanyProfile = {
   decennialInsurerName: null,
   decennialInsurancePolicyNumber: null,
   decennialInsuranceCoverageArea: null,
+  customFooterMessage: null,
+  customFooterOnFacture: false,
+  customFooterOnDevis: false,
+  earlyPaymentDiscountMention: null,
+  vatOnDebitsOption: false,
   hasLogo: false,
 };
 
@@ -40,6 +45,8 @@ const customerFixture: InvoiceCustomerDraft = {
   customerAddress: '',
   customerEmail: '',
   customerPhone: '',
+  customerSiret: '',
+  deliveryAddress: '',
   saveAsNewCustomer: false,
 };
 
@@ -522,6 +529,74 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]);
 
       expect(store.canPreview()).toBe(true);
+    });
+  });
+
+  describe('Phase 1.1-7 reverse charge (autoliquidation)', () => {
+    it('forces vatApplicable false when reverseChargeApplicable is set, even for a VAT-registered company', () => {
+      const store = createStore();
+      expect(store.vatApplicable()).toBe(true); // companyFixture is legalStatus COMPANY
+
+      store.setReverseChargeApplicable(true);
+
+      expect(store.vatApplicable()).toBe(false);
+    });
+
+    it('sends reverseChargeApplicable only when true and documentType is FACTURE', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]);
+      store.setDocumentType('FACTURE');
+      store.setReverseChargeApplicable(true);
+
+      expect(store.buildInvoiceRequest().reverseChargeApplicable).toBe(true);
+    });
+
+    it('omits reverseChargeApplicable from the request for a DEVIS, even if the toggle is on', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]);
+      store.setDocumentType('DEVIS');
+      store.setReverseChargeApplicable(true);
+
+      expect(store.buildInvoiceRequest().reverseChargeApplicable).toBeUndefined();
+    });
+
+    it('omits reverseChargeApplicable from the request when off', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]);
+
+      expect(store.buildInvoiceRequest().reverseChargeApplicable).toBeUndefined();
+    });
+  });
+
+  describe('Phase 1.1-8 e-invoicing reform baseline fields', () => {
+    it('sends customerSiret/deliveryAddress only when actually filled in', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]);
+
+      const emptyRequest = store.buildInvoiceRequest();
+      expect(emptyRequest.customerSiret).toBeUndefined();
+      expect(emptyRequest.deliveryAddress).toBeUndefined();
+
+      store.setCustomer({
+        ...customerFixture,
+        customerSiret: '12345678900012',
+        deliveryAddress: '9 rue du Chantier',
+      });
+      const filledRequest = store.buildInvoiceRequest();
+      expect(filledRequest.customerSiret).toBe('12345678900012');
+      expect(filledRequest.deliveryAddress).toBe('9 rue du Chantier');
+    });
+
+    it('never sends manualNatureOfOperation — GUIDED has no such field to send', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setLines([lineFixture]);
+
+      expect(store.buildInvoiceRequest().manualNatureOfOperation).toBeUndefined();
     });
   });
 });

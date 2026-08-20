@@ -5,7 +5,16 @@ import { TourId } from '../../core/models/onboarding.model';
 // Keeps tour-definitions.ts purely declarative: it names *what* to check,
 // never *how*.
 export type TourStepCondition =
-  'noCustomers' | 'hasCustomers' | 'noProducts' | 'hasProducts' | 'noServices' | 'hasServices';
+  | 'noCustomers'
+  | 'hasCustomers'
+  | 'noProducts'
+  | 'hasProducts'
+  | 'noServices'
+  | 'hasServices'
+  | 'noFolders'
+  | 'hasFolders'
+  | 'noDiscounts'
+  | 'hasDiscounts';
 
 export interface TourStepDefinition {
   // A stable name other steps can jump to via `next`/`nextByAnchor`. Only
@@ -81,6 +90,11 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         body: 'Créons votre première facture ensemble, étape par étape.',
       },
       {
+        anchorId: 'invoice-devis-facture-toggle',
+        title: 'Devis ou facture ?',
+        body: "C'est le premier choix à faire à chaque nouveau document. Un devis se convertit ensuite en facture identique en un clic, une fois accepté par le client — inutile de tout ressaisir.",
+      },
+      {
         anchorId: 'invoice-mode-choice',
         title: 'Deux façons de facturer',
         body: 'Le mode rapide (recommandé) vous guide pas à pas. Le mode manuel ouvre un tableau libre, à remplir comme sur la facture finale. Cliquez sur celui que vous préférez, ou laissez-vous guider en mode rapide avec "Suivant".',
@@ -141,10 +155,25 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         // reachable.
         id: 'product-pick',
         anchorId: 'invoice-product-flyout',
-        next: 'product-quantity',
+        next: 'product-folders-hint',
         popoverPlacement: 'corner',
         title: 'Choisissez un produit',
         body: 'Cliquez sur un produit déjà enregistré pour l’ajouter à la facture, ou choisissez « + Nouveau produit » pour en créer un. Le catalogue reste ouvert : vous pouvez en ajouter plusieurs à la suite.',
+      },
+      {
+        // Only reached by an artisan who's already created at least one
+        // dossier (Phase 1.1-2) — an artisan with none is never told about a
+        // feature they haven't touched, same reasoning as every other
+        // showIf-gated step in this file. Skipped entirely otherwise,
+        // landing straight on 'product-quantity' just like before this
+        // phase existed.
+        id: 'product-folders-hint',
+        showIf: 'hasFolders',
+        anchorId: 'invoice-product-flyout',
+        next: 'product-quantity',
+        popoverPlacement: 'corner',
+        title: 'Vos produits, classés par dossier',
+        body: 'Vos dossiers apparaissent en premier dans cette liste — dépliez celui du chantier en cours pour retrouver vos produits plus vite. Ceux qui n’appartiennent à aucun dossier restent listés en dessous.',
       },
       {
         id: 'product-quantity',
@@ -164,13 +193,24 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       {
         id: 'service-margin',
         anchorId: 'invoice-service-flyout',
-        next: 'service-card',
+        next: 'service-folders-hint',
         // Same reasoning as 'add-line': the flyout panel sits close enough
         // to the top of the viewport that the default math's "flip above"
         // fallback still lands the popover on its own header/first rows.
         popoverPlacement: 'corner',
         title: 'Votre marge, calculée pour vous',
         body: 'Que vous préfériez fixer un montant net ou une marge en pourcentage, le calcul se fait tout seul et de la même façon pour chaque facture — aucun favoritisme, le même mode de calcul pour tous vos clients. Choisissez « + Nouvelle prestation » pour en créer une, ou cliquez sur une prestation déjà enregistrée.',
+      },
+      {
+        // Mirrors 'product-folders-hint' above — same showIf-gated,
+        // no-op-if-unused reasoning.
+        id: 'service-folders-hint',
+        showIf: 'hasFolders',
+        anchorId: 'invoice-service-flyout',
+        next: 'service-card',
+        popoverPlacement: 'corner',
+        title: 'Vos prestations, classées par dossier',
+        body: 'Vos dossiers apparaissent en premier ici aussi — dépliez celui du chantier en cours pour retrouver vos prestations plus vite. Celles qui n’appartiennent à aucun dossier restent listées en dessous.',
       },
       {
         id: 'service-card',
@@ -184,6 +224,25 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         anchorId: 'invoice-total',
         title: 'Le total, en direct',
         body: 'Le montant total se met à jour automatiquement au fur et à mesure de la saisie.',
+      },
+      {
+        // FACTURE-only (Phase 1.1-3's own scope) — on a DEVIS this anchor
+        // never mounts (see the preview step's own @if), so this step times
+        // out and is silently skipped, exactly like every other
+        // missing-anchor case in this file. No showIf needed: the anchor's
+        // own conditional rendering already does the gating.
+        id: 'deposit',
+        // Unlike 'total'/'preview' (invoice-create-shell.page.html, mounted
+        // across every child route of this flow), the deposit field only
+        // exists on the preview step's own page — found the hard way while
+        // testing this phase: without an explicit route here, this step
+        // inherited 'total''s route (still the lines step), where
+        // 'invoice-deposit-toggle' never mounts, and always silently timed
+        // out straight through to 'preview'.
+        route: '/factures/nouvelle/rapide/apercu',
+        anchorId: 'invoice-deposit-toggle',
+        title: 'Demander un acompte (facultatif)',
+        body: 'Souvent 30 ou 40 % du total, à recevoir avant de commencer le chantier. Une fois votre pourcentage habituel enregistré dans « Mon entreprise », il se propose automatiquement ici — toujours modifiable pour ce document précis.',
       },
       {
         id: 'preview',
@@ -217,10 +276,21 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         body: 'Téléchargez-le ou envoyez-le par mail juste au-dessus. Et si c’était votre premier client, produit ou prestation aujourd’hui : ils sont désormais enregistrés et réutilisables sur toutes vos prochaines factures.',
       },
       {
+        // Shared anchor id across the two "Signer" buttons that can exist
+        // at once (the DEVIS card and its just-converted FACTURE card — see
+        // invoice-create-preview-step.page.html) — same "never both really
+        // in play for the artisan's attention, registry picks the visible
+        // one" precedent as 'invoice-line-quantity'.
+        id: 'sign-action',
+        anchorId: 'invoice-sign-action',
+        title: 'Faites signer votre client (facultatif)',
+        body: 'Signature à l’écran ou photo d’un papier déjà signé : rien d’obligatoire pour enregistrer le document, et cette action reste aussi accessible plus tard, depuis « Mes documents », sans avoir à rouvrir ce document.',
+      },
+      {
         id: 'menu',
         anchorId: 'nav-my-documents',
         title: 'Vos documents, toujours accessibles',
-        body: 'Une fois enregistrée, votre facture (ou devis) apparaît ici, dans « Mes documents » — modifiable, à relancer, ou à marquer payée en un clic. Et chaque client, produit ou prestation ajouté aujourd’hui rend votre prochaine visite de chantier encore plus rapide à facturer.',
+        body: 'Une fois enregistrée, votre facture (ou devis) apparaît ici, dans « Mes documents » — modifiable, à relancer, ou à marquer payée en un clic. C’est aussi ce qui alimente vos « Statistiques » : rien à ressaisir. Et chaque client, produit ou prestation ajouté aujourd’hui rend votre prochaine visite de chantier encore plus rapide à facturer.',
       },
       {
         title: 'Vous êtes prêt !',
@@ -325,10 +395,15 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         body: 'Créez un produit pour l’ajouter facilement à vos prochaines factures.',
       },
       {
+        // Shared anchor id with 'prestation-form-hint' below — the two
+        // forms' own "Paramètres avancés" toggles never mount at once (only
+        // one form is ever open at a time), same registry-picks-the-visible-
+        // one precedent as 'invoice-line-quantity'.
         id: 'produit-form-hint',
         route: '/produits/nouveau',
+        anchorId: 'catalog-folder-picker',
         title: 'Le strict minimum',
-        body: 'Un nom, une unité et un prix suffisent. Vous pourrez enrichir la fiche plus tard.',
+        body: 'Un nom, une unité et un prix suffisent. Vous pourrez enrichir la fiche plus tard — notamment via « Paramètres avancés » ci-dessous, qui permet de ranger ce produit dans un ou plusieurs dossiers si vous travaillez plusieurs corps de métier.',
       },
       {
         id: 'produit-celebrate',
@@ -357,29 +432,72 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       {
         id: 'prestation-new-reminder',
         anchorId: 'catalog-new-service',
-        next: 'catalog-done',
+        next: 'remise-cta',
         title: 'Ajoutez une prestation',
         body: 'La main-d’œuvre et les autres prestations se gèrent ici, de la même façon. Essayez par exemple de créer « Marge 30% » en mode Pourcentage : elle s’appliquera ensuite automatiquement sur chaque facture, sans jamais recalculer votre marge à la main.',
       },
       {
         id: 'prestation-form-hint',
         route: '/prestations/nouvelle',
+        anchorId: 'catalog-folder-picker',
         title: 'FIXE ou POURCENTAGE, à vous de choisir',
-        body: 'Le calcul se fait pour vous ensuite, à chaque facture, de la même façon pour tous vos clients.',
+        body: 'Le calcul se fait pour vous ensuite, à chaque facture, de la même façon pour tous vos clients. Et comme pour un produit, « Paramètres avancés » ci-dessous permet de ranger cette prestation dans un ou plusieurs dossiers.',
       },
       {
         id: 'prestation-celebrate',
         route: '/prestations',
         showIf: 'hasServices',
         celebrate: true,
-        next: 'catalog-done',
+        next: 'remise-cta',
         title: '🎉 Première prestation enregistrée !',
         body: 'Main-d’œuvre, forfait, déplacement… elle est maintenant réutilisable en un clic, avec un calcul automatique et identique pour chaque client.',
+      },
+      // Phase 1.1-10: closes the pre-existing gap where this tour never
+      // mentioned "Mes remises" (Phase 32 shipped between Phase 19 and this
+      // one). Mirrors the produit/prestation cta → search → reminder →
+      // form-hint → celebrate structure exactly, same "mode 1ère fois" vs
+      // "mode guide" split.
+      {
+        id: 'remise-cta',
+        showIf: 'noDiscounts',
+        route: '/remises',
+        anchorId: 'catalog-new-discount',
+        title: 'Créez votre première remise',
+        body: 'Remise fidélité, promotion ponctuelle… un nom et un montant (fixe ou en pourcentage) suffisent pour commencer.',
+      },
+      {
+        anchorId: 'discounts-search',
+        advanceOn: 'input',
+        route: '/remises',
+        title: 'Recherchez',
+        body: 'Retrouvez rapidement une remise déjà enregistrée.',
+      },
+      {
+        id: 'remise-new-reminder',
+        anchorId: 'catalog-new-discount',
+        next: 'catalog-done',
+        title: 'Ajoutez une remise',
+        body: 'Une remise créée ici reste disponible sur toutes vos prochaines factures et vos prochains devis, sans jamais recalculer le montant à la main.',
+      },
+      {
+        id: 'remise-form-hint',
+        route: '/remises/nouvelle',
+        title: 'Fixe ou en pourcentage, à vous de choisir',
+        body: 'Le montant retiré se calcule ensuite tout seul sur chaque document où vous l’appliquez.',
+      },
+      {
+        id: 'remise-celebrate',
+        route: '/remises',
+        showIf: 'hasDiscounts',
+        celebrate: true,
+        next: 'catalog-done',
+        title: '🎉 Première remise enregistrée !',
+        body: 'Elle est maintenant prête à être appliquée en un clic sur vos prochains devis et factures.',
       },
       {
         id: 'catalog-done',
         title: 'Catalogue prêt !',
-        body: 'Un catalogue bien rempli rend vos prochaines factures deux fois plus rapides à créer.',
+        body: 'Produits, prestations, remises : chacun est directement réutilisable sur vos prochains devis et factures, sans ressaisie. Et si vous travaillez plusieurs corps de métier, pensez aux dossiers dès maintenant (« Mes dossiers ») — plus votre catalogue grandit, plus ranger tôt vous fera gagner du temps plus tard.',
       },
     ],
   },
@@ -416,6 +534,11 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         body: 'Un nom suffit pour enregistrer ce client. Vous pourrez compléter ses coordonnées plus tard.',
       },
       {
+        anchorId: 'customer-professional-checkbox',
+        title: 'Un client professionnel ?',
+        body: 'Cochez cette case si ce client achète pour son entreprise, pas à titre personnel — cela révèle sa raison sociale et son SIRET, et ajuste automatiquement certaines mentions légales sur ses futures factures.',
+      },
+      {
         id: 'customer-celebrate',
         route: '/clients',
         showIf: 'hasCustomers',
@@ -427,7 +550,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       {
         id: 'customers-done',
         title: 'Parfait !',
-        body: 'Vos clients sont maintenant à portée de clic.',
+        body: 'Vos clients sont maintenant à portée de clic : ils apparaissent directement dans le sélecteur au démarrage de chaque nouveau devis ou facture, sans jamais ressaisir leurs coordonnées. Plus votre répertoire grandit, plus une fiche bien remplie (notes, historique) vous fera gagner du temps au prochain chantier.',
       },
     ],
   },

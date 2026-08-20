@@ -88,9 +88,10 @@ function formatRateLabel(basisPoints: number): string {
         <div class="flex w-64 items-center justify-between text-ink">
           <span class="flex items-center gap-1">
             <select
-              class="rounded border-none bg-secondary-subtle/40 px-1 py-0.5 text-xs text-ink outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle"
+              class="rounded border-none bg-secondary-subtle/40 px-1 py-0.5 text-xs text-ink outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle disabled:opacity-50"
               aria-label="Régime de TVA de cette facture"
               [value]="selectedVatOptionValue()"
+              [disabled]="vatSelectDisabled()"
               (change)="onVatSelectChange($event)"
             >
               <option [value]="nonApplicableValue">TVA non applicable</option>
@@ -181,6 +182,12 @@ export class InvoiceTotalsSummaryComponent {
   // tooltip and to surface the company's own rate as a select option even
   // when it isn't one of the three standard ones.
   readonly company = input<CompanyProfile | null>(null);
+  // Phase 1.1-7: true while "Autoliquidation (sous-traitance BTP)" is
+  // checked — the select still reflects vatApplicable (already forced false
+  // by the store, see ManualInvoiceDraftStore.vatApplicable), but disabling
+  // it too avoids the confusing "I picked 20%, it snapped back" moment a
+  // still-interactive select would otherwise produce.
+  readonly vatSelectDisabled = input(false);
   readonly vatChoiceChange = output<{ applicable: boolean; rateBasisPoints: number }>();
 
   protected readonly editableFieldClasses = EDITABLE_FIELD_CLASSES;

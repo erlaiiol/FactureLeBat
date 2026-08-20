@@ -250,6 +250,14 @@
                     class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
                     >Mes remises</a
                   >
+                  <a
+                    routerLink="/dossiers"
+                    routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+                    (click)="closeDataMenu()"
+                    role="menuitem"
+                    class="rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
+                    >Mes dossiers</a
+                  >
                 </div>
               </div>
             </div>
@@ -477,6 +485,13 @@
               (click)="closeMobileMenu()"
               class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
               >Mes remises</a
+            >
+            <a
+              routerLink="/dossiers"
+              routerLinkActive="bg-info !text-info-fg hover:!bg-info/90"
+              (click)="closeMobileMenu()"
+              class="font-heading rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-ink uppercase hover:bg-secondary-subtle"
+              >Mes dossiers</a
             >
             <a
               routerLink="/statistiques"

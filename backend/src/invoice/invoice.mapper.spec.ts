@@ -51,6 +51,11 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     decennialInsurerName: null,
     decennialInsurancePolicyNumber: null,
     decennialInsuranceCoverageArea: null,
+    customFooterMessage: null,
+    customFooterOnFacture: false,
+    customFooterOnDevis: false,
+    earlyPaymentDiscountMention: null,
+    vatOnDebitsOption: false,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     ...overrides,
@@ -82,6 +87,8 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     customerAddress: null,
     customerEmail: null,
     customerPhone: null,
+    customerSiret: null,
+    deliveryAddress: null,
     customerId: null,
     companyId: 'company-1',
     vatApplicable: true,
@@ -109,7 +116,10 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     depositPercentageBasisPoints: null,
     depositAmountCents: null,
     depositPaidAt: null,
+    reverseChargeApplicable: false,
+    manualNatureOfOperation: null,
     simplifiedDisplay: false,
+    customer: null,
     lines: [
       {
         id: 'line-1',
@@ -520,6 +530,56 @@ describe('InvoiceMapper', () => {
 
       const unsigned = mapper.toPdfData(invoice, null, null);
       expect(unsigned.signature).toBeNull();
+    });
+  });
+
+  describe('Phase 1.1-6 custom footer mention', () => {
+    it('renders the message on a FACTURE when customFooterOnFacture is set', () => {
+      const invoice = invoiceWithLines({
+        documentType: 'FACTURE',
+        company: companyFixture({
+          customFooterMessage: 'Merci de votre confiance.',
+          customFooterOnFacture: true,
+          customFooterOnDevis: false,
+        }),
+      });
+      expect(mapper.toPdfData(invoice).customFooterMessage).toBe('Merci de votre confiance.');
+    });
+
+    it('omits the message on a DEVIS when only customFooterOnFacture is set', () => {
+      const invoice = invoiceWithLines({
+        documentType: 'DEVIS',
+        company: companyFixture({
+          customFooterMessage: 'Merci de votre confiance.',
+          customFooterOnFacture: true,
+          customFooterOnDevis: false,
+        }),
+      });
+      expect(mapper.toPdfData(invoice).customFooterMessage).toBeNull();
+    });
+
+    it('omits the message when both toggles are off, regardless of a saved message', () => {
+      const invoice = invoiceWithLines({
+        documentType: 'FACTURE',
+        company: companyFixture({
+          customFooterMessage: 'Merci de votre confiance.',
+          customFooterOnFacture: false,
+          customFooterOnDevis: false,
+        }),
+      });
+      expect(mapper.toPdfData(invoice).customFooterMessage).toBeNull();
+    });
+
+    it('omits the message when the matching toggle is on but the message is empty', () => {
+      const invoice = invoiceWithLines({
+        documentType: 'FACTURE',
+        company: companyFixture({
+          customFooterMessage: null,
+          customFooterOnFacture: true,
+          customFooterOnDevis: false,
+        }),
+      });
+      expect(mapper.toPdfData(invoice).customFooterMessage).toBeNull();
     });
   });
 
@@ -1102,6 +1162,252 @@ describe('InvoiceMapper', () => {
         expect(preview.vatApplicable).toBe(true);
         expect(preview.vatRateBasisPoints).toBe(2000);
       });
+    });
+  });
+
+  describe('Phase 1.1-7 professional client / reverse charge', () => {
+    it('toInvoiceWithTotals passes reverseChargeApplicable through from the persisted row', () => {
+      const result = mapper.toInvoiceWithTotals(
+        invoiceWithLines({ reverseChargeApplicable: true }),
+      );
+      expect(result.reverseChargeApplicable).toBe(true);
+    });
+
+    it('toPdfData resolves customerIsProfessional live from the joined customer, false when none is linked', () => {
+      const withCustomer = mapper.toPdfData(
+        invoiceWithLines({ customer: { isProfessional: true } }),
+      );
+      expect(withCustomer.customerIsProfessional).toBe(true);
+
+      const withoutCustomer = mapper.toPdfData(invoiceWithLines({ customer: null }));
+      expect(withoutCustomer.customerIsProfessional).toBe(false);
+    });
+
+    it('toPdfData passes reverseChargeApplicable and dueDate through', () => {
+      const dueDate = new Date('2026-03-01');
+      const result = mapper.toPdfData(invoiceWithLines({ reverseChargeApplicable: true, dueDate }));
+      expect(result.reverseChargeApplicable).toBe(true);
+      expect(result.dueDate).toBe(dueDate);
+    });
+
+    it("issuerFields passes the company's earlyPaymentDiscountMention through unconditionally, regardless of documentType", () => {
+      const company = companyFixture({
+        earlyPaymentDiscountMention: 'Escompte de 2% si réglé sous 8 jours.',
+      });
+      const facture = mapper.toPdfData(invoiceWithLines({ company, documentType: 'FACTURE' }));
+      const devis = mapper.toPdfData(invoiceWithLines({ company, documentType: 'DEVIS' }));
+      expect(facture.earlyPaymentDiscountMention).toBe('Escompte de 2% si réglé sous 8 jours.');
+      expect(devis.earlyPaymentDiscountMention).toBe('Escompte de 2% si réglé sous 8 jours.');
+    });
+
+    it('toPreviewInvoiceWithTotals (GUIDED) zeroes VAT when reverseChargeApplicable is set, even for a VAT-registered company', () => {
+      const preview = mapper.toPreviewInvoiceWithTotals(
+        createInvoiceDtoFixture({ reverseChargeApplicable: true }),
+        companyFixture({ legalStatus: 'COMPANY', vatRateBasisPoints: 2000 }),
+      );
+      expect(preview.vatApplicable).toBe(false);
+      expect(preview.vatAmountCents).toBe(0);
+      expect(preview.reverseChargeApplicable).toBe(true);
+    });
+
+    it('toPreviewInvoiceWithTotals (MANUAL) lets reverseChargeApplicable override vatApplicableOverride, not just the company default', () => {
+      const preview = mapper.toPreviewInvoiceWithTotals(
+        createInvoiceDtoFixture({
+          entryMode: 'MANUAL',
+          lines: undefined,
+          manualTable: {
+            columns: [
+              { role: 'DESCRIPTION', label: 'Désignation' },
+              { role: 'QUANTITY', label: 'Quantité' },
+              { role: 'UNIT_PRICE', label: 'Prix unitaire' },
+              { role: 'LINE_TOTAL', label: 'Total' },
+            ],
+            rows: [{ cells: ['Parquet chêne massif', '10', '45.00', '450.00'] }],
+          },
+          // The artisan explicitly picked a 20% rate — reverseChargeApplicable
+          // must still win, since autoliquidation is a VAT-correctness fact
+          // about the job, not a stylistic choice the manual VAT picker
+          // should be able to override.
+          vatApplicableOverride: true,
+          vatRateBasisPointsOverride: 2000,
+          reverseChargeApplicable: true,
+        }),
+        companyFixture({ legalStatus: 'COMPANY', vatRateBasisPoints: 2000 }),
+      );
+      expect(preview.vatApplicable).toBe(false);
+      expect(preview.vatAmountCents).toBe(0);
+    });
+
+    it('toPreviewPdfData carries the caller-supplied customerIsProfessional through', () => {
+      const preview = mapper.toPreviewPdfData(
+        createInvoiceDtoFixture(),
+        companyFixture(),
+        null,
+        true,
+      );
+      expect(preview.customerIsProfessional).toBe(true);
+    });
+  });
+
+  describe('Phase 1.1-8 e-invoicing reform baseline fields', () => {
+    it('toInvoiceWithTotals passes customerSiret/deliveryAddress through from the persisted row', () => {
+      const result = mapper.toInvoiceWithTotals(
+        invoiceWithLines({ customerSiret: '12345678900012', deliveryAddress: '9 rue du Chantier' }),
+      );
+      expect(result.customerSiret).toBe('12345678900012');
+      expect(result.deliveryAddress).toBe('9 rue du Chantier');
+    });
+
+    it('toPdfData passes customerSiret/deliveryAddress through', () => {
+      const result = mapper.toPdfData(
+        invoiceWithLines({ customerSiret: '12345678900012', deliveryAddress: '9 rue du Chantier' }),
+      );
+      expect(result.customerSiret).toBe('12345678900012');
+      expect(result.deliveryAddress).toBe('9 rue du Chantier');
+    });
+
+    describe('GUIDED nature-of-operation derivation', () => {
+      it('derives LIVRAISON_BIENS for product lines with no VISIBLE service line', () => {
+        const result = mapper.toPdfData(invoiceWithLines());
+        expect(result.natureOfOperation).toBe('LIVRAISON_BIENS');
+      });
+
+      it('derives BIENS_ET_SERVICES once a VISIBLE service line is present', () => {
+        const invoice = invoiceWithLines({
+          serviceLines: [
+            {
+              id: 'svc-1',
+              invoiceId: 'inv-1',
+              position: 0,
+              serviceId: null,
+              name: "Main-d'œuvre",
+              description: null,
+              amountCents: 10000,
+              visibility: 'VISIBLE',
+              activityCategory: null,
+              createdAt: new Date('2026-01-15'),
+              weights: [],
+            },
+          ],
+        });
+        const result = mapper.toPdfData(invoice);
+        expect(result.natureOfOperation).toBe('BIENS_ET_SERVICES');
+      });
+
+      it('stays LIVRAISON_BIENS for a REDISTRIBUTED (non-VISIBLE) service line — it folds into the product lines, not a separate service', () => {
+        const invoice = invoiceWithLines({
+          serviceLines: [
+            {
+              id: 'svc-1',
+              invoiceId: 'inv-1',
+              position: 0,
+              serviceId: null,
+              name: 'Savoir-faire',
+              description: null,
+              amountCents: 10000,
+              visibility: 'REDISTRIBUTED',
+              activityCategory: null,
+              createdAt: new Date('2026-01-15'),
+              weights: [
+                {
+                  id: 'weight-1',
+                  invoiceServiceLineId: 'svc-1',
+                  invoiceLineId: 'line-1',
+                  weight: 1,
+                },
+              ],
+            },
+          ],
+        });
+        const result = mapper.toPdfData(invoice);
+        expect(result.natureOfOperation).toBe('LIVRAISON_BIENS');
+      });
+
+      it('toPreviewPdfData (GUIDED) derives the same way as the persisted path', () => {
+        const preview = mapper.toPreviewPdfData(createInvoiceDtoFixture(), companyFixture());
+        expect(preview.natureOfOperation).toBe('LIVRAISON_BIENS');
+      });
+    });
+
+    describe('MANUAL nature-of-operation selector', () => {
+      it('toManualPdfData reads the persisted manualNatureOfOperation', () => {
+        const invoice = invoiceWithLines({
+          entryMode: 'MANUAL',
+          manualNatureOfOperation: 'BIENS_ET_SERVICES',
+          manualColumns: [
+            {
+              id: 'col-1',
+              invoiceId: 'inv-1',
+              position: 0,
+              role: 'DESCRIPTION',
+              label: 'Désignation',
+              widthPx: null,
+            },
+          ],
+          manualRows: [],
+        });
+        const result = mapper.toPdfData(invoice);
+        expect(result.natureOfOperation).toBe('BIENS_ET_SERVICES');
+      });
+
+      it('toManualPdfData defaults to PRESTATION_SERVICES when null', () => {
+        const invoice = invoiceWithLines({
+          entryMode: 'MANUAL',
+          manualNatureOfOperation: null,
+          manualColumns: [
+            {
+              id: 'col-1',
+              invoiceId: 'inv-1',
+              position: 0,
+              role: 'DESCRIPTION',
+              label: 'Désignation',
+              widthPx: null,
+            },
+          ],
+          manualRows: [],
+        });
+        const result = mapper.toPdfData(invoice);
+        expect(result.natureOfOperation).toBe('PRESTATION_SERVICES');
+      });
+
+      it('toPreviewPdfData (MANUAL) defaults to PRESTATION_SERVICES when the dto omits it, mirroring InvoiceService.create', () => {
+        const preview = mapper.toPreviewPdfData(
+          {
+            customerName: 'M. Dupont',
+            entryMode: 'MANUAL',
+            manualTable: {
+              columns: [{ role: 'DESCRIPTION', label: 'Désignation' }],
+              rows: [{ cells: ['Parquet'] }],
+            },
+          },
+          companyFixture(),
+        );
+        expect(preview.natureOfOperation).toBe('PRESTATION_SERVICES');
+      });
+
+      it('toPreviewPdfData (MANUAL) honors an explicit dto.manualNatureOfOperation', () => {
+        const preview = mapper.toPreviewPdfData(
+          {
+            customerName: 'M. Dupont',
+            entryMode: 'MANUAL',
+            manualTable: {
+              columns: [{ role: 'DESCRIPTION', label: 'Désignation' }],
+              rows: [{ cells: ['Parquet'] }],
+            },
+            manualNatureOfOperation: 'LIVRAISON_BIENS',
+          },
+          companyFixture(),
+        );
+        expect(preview.natureOfOperation).toBe('LIVRAISON_BIENS');
+      });
+    });
+
+    it("issuerFields passes the company's vatOnDebitsOption through unconditionally, regardless of documentType", () => {
+      const company = companyFixture({ vatOnDebitsOption: true });
+      const facture = mapper.toPdfData(invoiceWithLines({ company, documentType: 'FACTURE' }));
+      const devis = mapper.toPdfData(invoiceWithLines({ company, documentType: 'DEVIS' }));
+      expect(facture.vatOnDebitsOption).toBe(true);
+      expect(devis.vatOnDebitsOption).toBe(true);
     });
   });
 });

@@ -23,6 +23,23 @@ export type ShareOutcome = 'shared' | 'compose-email' | 'mailto-fallback';
 // that same template), then a plain mailto pre-filled with it — browsers
 // can't attach a file to a mailto link, so the PDF is downloaded alongside
 // it for the artisan to attach by hand.
+//
+// Phase 1.1-11 — recipient auto-fill, tier by tier (requested: "never a
+// blank 'à' field the artisan has to fill in by hand"):
+// - mailto fallback (below): `to` is built from `invoice.customerEmail ?? ''`.
+// - SMTP compose modal ('compose-email' outcome): its own `to` form control
+//   is reset from `invoice.customerEmail ?? ''` on open, at the caller's
+//   modal (`send-invoice-email-modal.component.ts`), not here.
+// - Native Web Share (tried first, above): CANNOT be prefilled, permanently.
+//   The Web Share API spec has no recipient parameter at all — it only ever
+//   hands a title/text/files/url to whichever app the artisan picks from the
+//   OS share sheet, and that app's own "to" field is what stays blank. This
+//   is a platform ceiling, not a gap in this codebase, and no workaround is
+//   planned (a custom in-app share sheet replacing navigator.share() would
+//   trade a familiar native picker for a worse, FactureLe-maintained
+//   reimplementation of the same chooser, just to close this one cosmetic
+//   gap the other two tiers already cover) — don't re-litigate this as a
+//   missing feature.
 @Injectable({ providedIn: 'root' })
 export class InvoiceShareService {
   private readonly http = inject(HttpClient);

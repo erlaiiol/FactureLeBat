@@ -10,6 +10,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CustomerProfile } from '../../../core/models/customer.model';
+import { AdvancedSettingsComponent } from '../../../shared/components/advanced-settings.component';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
@@ -24,7 +25,13 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
 @Component({
   selector: 'app-invoice-create-customer-step-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent, TourAnchorDirective],
+  imports: [
+    ReactiveFormsModule,
+    AdvancedSettingsComponent,
+    BigButtonComponent,
+    FieldHintComponent,
+    TourAnchorDirective,
+  ],
   templateUrl: './invoice-create-customer-step.page.html',
 })
 export class InvoiceCreateCustomerStepPage {
@@ -75,6 +82,8 @@ export class InvoiceCreateCustomerStepPage {
     customerAddress: [this.draftStore.customer().customerAddress],
     customerEmail: [this.draftStore.customer().customerEmail],
     customerPhone: [this.draftStore.customer().customerPhone],
+    customerSiret: [this.draftStore.customer().customerSiret],
+    deliveryAddress: [this.draftStore.customer().deliveryAddress],
     saveAsNewCustomer: [this.draftStore.customer().saveAsNewCustomer],
   });
 
@@ -99,6 +108,10 @@ export class InvoiceCreateCustomerStepPage {
       customerAddress: customer.address ?? '',
       customerEmail: customer.email ?? '',
       customerPhone: customer.phone ?? '',
+      // Phase 1.1-8: one-shot autofill at pick time, same spirit as the
+      // three fields above — freely editable afterward, never re-synced.
+      customerSiret: customer.siret ?? '',
+      deliveryAddress: customer.address ?? '',
       saveAsNewCustomer: false,
     });
     this.draftStore.setCustomer({
@@ -116,6 +129,8 @@ export class InvoiceCreateCustomerStepPage {
       customerAddress: '',
       customerEmail: '',
       customerPhone: '',
+      customerSiret: '',
+      deliveryAddress: '',
       saveAsNewCustomer: false,
     });
     this.mode.set('create');

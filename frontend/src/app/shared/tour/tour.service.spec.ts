@@ -2,12 +2,14 @@ import { Component, ElementRef } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 import { environment } from '../../../environments/environment';
 import { OnboardingState } from '../../core/models/onboarding.model';
+import { CatalogFolderService } from '../../core/services/catalog-folder.service';
 import { CustomerService } from '../../core/services/customer.service';
+import { DiscountService } from '../../core/services/discount.service';
 import { ProductService } from '../../core/services/product.service';
 import { TourAnchorRegistryService } from './tour-anchor-registry.service';
 import { TourService } from './tour.service';
@@ -28,9 +30,12 @@ const routes = [
   { path: 'produits/import-test', component: BlankTestComponent },
   { path: 'prestations', component: BlankTestComponent },
   { path: 'prestations/nouvelle', component: BlankTestComponent },
+  { path: 'remises', component: BlankTestComponent },
+  { path: 'remises/nouvelle', component: BlankTestComponent },
   { path: 'factures/nouvelle', component: BlankTestComponent },
   { path: 'factures/nouvelle/rapide/client', component: BlankTestComponent },
   { path: 'factures/nouvelle/rapide/lignes', component: BlankTestComponent },
+  { path: 'factures/nouvelle/rapide/apercu', component: BlankTestComponent },
   { path: 'factures/nouvelle/manuel', component: BlankTestComponent },
 ];
 
@@ -89,6 +94,12 @@ describe('TourService', () => {
     const productService = TestBed.inject(ProductService);
     productService.getAllCached().subscribe();
     httpMock.expectOne(`${environment.apiBaseUrl}/products`).flush(products);
+  }
+
+  function seedDiscounts(discounts: unknown[]): void {
+    const discountService = TestBed.inject(DiscountService);
+    discountService.getAllCached().subscribe();
+    httpMock.expectOne(`${environment.apiBaseUrl}/discounts`).flush(discounts);
   }
 
   it('auto-starts the matching tour on first visit to a known section', async () => {
@@ -213,14 +224,22 @@ describe('TourService', () => {
     expect(service.stepIndex()).toBe(0);
     seedCustomers([]); // noCustomers, so the branch below is the one that matches
 
-    registerAnchor('invoice-mode-choice');
+    // Phase 1.1-10 inserted the devis/facture toggle step (1) before
+    // 'invoice-mode-choice' (now 2) — two "Suivant"-equivalent next() calls
+    // to reach the mode-choice step instead of one.
+    registerAnchor('invoice-devis-facture-toggle');
     service.next();
     await flushAsync();
     expect(service.stepIndex()).toBe(1);
 
+    registerAnchor('invoice-mode-choice');
+    service.next();
+    await flushAsync();
+    expect(service.stepIndex()).toBe(2);
+
     // The artisan clicks the real "mode rapide" card themselves — the app
     // navigates for real to the client step, which happens to be exactly
-    // step 2's own route. Before the fix, this real navigation looked
+    // step 3's own route. Before the fix, this real navigation looked
     // identical to "left the flow" and dropped the tour, which then
     // immediately relaunched from its own welcome step on the very next
     // tick — jarring, and it never responded to the click that was
@@ -232,7 +251,7 @@ describe('TourService', () => {
     await harness.navigateByUrl('/factures/nouvelle/rapide/client');
 
     expect(service.activeTourId()).toBe('invoice-creation');
-    expect(service.stepIndex()).toBe(2);
+    expect(service.stepIndex()).toBe(3);
   });
 
   it("continues the tour, not abandons it, when a real navigation lands on a step's route plus an extra query string", async () => {
@@ -241,10 +260,15 @@ describe('TourService', () => {
     expect(service.activeTourId()).toBe('invoice-creation');
     seedCustomers([{ id: 'c1', name: 'Client Test' }]); // hasCustomers branch
 
-    registerAnchor('invoice-mode-choice');
+    registerAnchor('invoice-devis-facture-toggle');
     service.next();
     await flushAsync();
     expect(service.stepIndex()).toBe(1);
+
+    registerAnchor('invoice-mode-choice');
+    service.next();
+    await flushAsync();
+    expect(service.stepIndex()).toBe(2);
 
     // The real "Mode rapide" card (InvoiceCreateModeChoicePage) carries
     // `[queryParams]="{ type: documentType() }"`, so clicking it for real —
@@ -255,13 +279,13 @@ describe('TourService', () => {
     // it reached the client-choice page.
     registerAnchor('invoice-customer-picker');
     await harness.navigateByUrl('/factures/nouvelle/rapide/client?type=FACTURE');
-    // advanceToStep recurses past both noCustomers-only steps (2, 3) before
-    // landing on 4 — several more microtask hops than navigateByUrl's own
+    // advanceToStep recurses past both noCustomers-only steps (3, 4) before
+    // landing on 5 — several more microtask hops than navigateByUrl's own
     // flush covers, same reasoning as the showIf-skip test above.
     await flushAsync();
 
     expect(service.activeTourId()).toBe('invoice-creation');
-    expect(service.stepIndex()).toBe(4);
+    expect(service.stepIndex()).toBe(5);
   });
 
   it('quietly stops without immediately relaunching itself, when a real navigation lands on an unplanned route the tour never scripted a step for', async () => {
@@ -284,6 +308,12 @@ describe('TourService', () => {
     await harness.navigateByUrl('/produits');
     expect(service.activeTourId()).toBe('catalog');
     expect(service.stepIndex()).toBe(0);
+    // Phase 1.1-10: 'produit-form-hint' now anchors on the "Paramètres
+    // avancés" folder-picker toggle (see tour-definitions.ts) instead of
+    // being a plain centered/route-only step — register it so
+    // advanceToStep's waitForAnchor resolves on the next microtask instead
+    // of the full 2s timeout.
+    registerAnchor('catalog-folder-picker');
 
     // The artisan clicks the real "+ Nouveau produit" link before ever
     // seeing step 1's own cta — the tour still recognizes where they
@@ -291,6 +321,7 @@ describe('TourService', () => {
     // going, rather than treating this as an unplanned route (as it would
     // have before the catalog tour knew about /produits/nouveau).
     await harness.navigateByUrl('/produits/nouveau');
+    await flushAsync();
 
     expect(service.activeTourId()).toBe('catalog');
     expect(service.currentStep()?.id).toBe('produit-form-hint');
@@ -337,16 +368,16 @@ describe('TourService', () => {
     // route-navigation part of advanceToStep, which showIf doesn't touch.
     await harness.navigateByUrl('/factures/nouvelle/rapide/client');
     service.activeTourId.set('invoice-creation');
-    service.stepIndex.set(1);
+    service.stepIndex.set(2);
     registerAnchor('invoice-customer-picker');
 
     service.next();
     await flushAsync();
 
-    // Index 4: welcome(0), mode-choice(1), the two noCustomers steps(2,3)
-    // skipped since a customer now exists, landing on the hasCustomers
-    // picker step.
-    expect(service.stepIndex()).toBe(4);
+    // Index 5: welcome(0), devis-facture-toggle(1), mode-choice(2), the two
+    // noCustomers steps(3,4) skipped since a customer now exists, landing on
+    // the hasCustomers picker step.
+    expect(service.stepIndex()).toBe(5);
   });
 
   it('branches the add-line step to service-margin, not product-quantity, when the service button is the one clicked', async () => {
@@ -354,7 +385,7 @@ describe('TourService', () => {
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
-    service.stepIndex.set(5); // 'add-line'
+    service.stepIndex.set(6); // 'add-line'
     registerAnchor('invoice-service-flyout');
 
     service.next('invoice-add-service-button');
@@ -368,7 +399,7 @@ describe('TourService', () => {
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
-    service.stepIndex.set(5); // 'add-line'
+    service.stepIndex.set(6); // 'add-line'
     // Mirrors invoice-product-flyout in invoice-create-lines-step.page.html:
     // the flyout panel itself, not the quantity field it doesn't have yet.
     registerAnchor('invoice-product-flyout');
@@ -377,5 +408,215 @@ describe('TourService', () => {
     await Promise.resolve();
 
     expect(service.currentStep()?.id).toBe('product-pick');
+  });
+
+  // Phase 1.1-10: the folder-aware alternative inserted right after
+  // 'product-pick'/'service-margin' — only ever shown to an artisan who's
+  // already created at least one dossier, and a no-op (straight through to
+  // 'product-quantity'/'service-card') otherwise.
+  it('shows the folders hint after product-pick when the artisan already has at least one folder', async () => {
+    const service = createService();
+    const folderService = TestBed.inject(CatalogFolderService);
+
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    service.stepIndex.set(6); // 'add-line'
+    registerAnchor('invoice-product-flyout');
+    folderService.getAllCached().subscribe();
+    httpMock
+      .expectOne(`${environment.apiBaseUrl}/catalog-folders`)
+      .flush([{ id: 'f1', name: 'Plomberie' }]);
+
+    service.next('invoice-add-product-button'); // -> product-pick
+    await flushAsync();
+    expect(service.currentStep()?.id).toBe('product-pick');
+
+    service.next(); // "Suivant" -> should land on product-folders-hint, not product-quantity
+    await flushAsync();
+
+    expect(service.currentStep()?.id).toBe('product-folders-hint');
+  });
+
+  it('skips straight to product-quantity, with no folders hint, for an artisan with zero dossiers', async () => {
+    const service = createService();
+    const folderService = TestBed.inject(CatalogFolderService);
+
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    service.stepIndex.set(6); // 'add-line'
+    registerAnchor('invoice-product-flyout');
+    folderService.getAllCached().subscribe();
+    httpMock.expectOne(`${environment.apiBaseUrl}/catalog-folders`).flush([]);
+    registerAnchor('invoice-line-quantity');
+
+    service.next('invoice-add-product-button'); // -> product-pick
+    await flushAsync();
+    expect(service.currentStep()?.id).toBe('product-pick');
+
+    service.next(); // no folders -> product-folders-hint is skipped entirely
+    await flushAsync();
+
+    expect(service.currentStep()?.id).toBe('product-quantity');
+  });
+
+  // Phase 1.1-10: the acompte step's anchor only mounts on a FACTURE (see
+  // invoice-create-preview-step.page.html's own @if) — on a DEVIS it's
+  // skipped exactly like any other missing anchor, no showIf needed.
+  it('skips the deposit step when its anchor never mounts (e.g. a DEVIS, which has no deposit field)', async () => {
+    vi.useFakeTimers();
+    const service = createService();
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    const totalIndex = service.steps().findIndex((step) => step.id === 'total');
+    service.stepIndex.set(totalIndex);
+    registerAnchor('invoice-preview');
+
+    service.next(); // -> 'deposit', whose anchor is never registered here
+    await vi.advanceTimersByTimeAsync(2100);
+
+    expect(service.currentStep()?.id).toBe('preview');
+  });
+
+  // Regression test: 'deposit' declares its own `route` (the preview step's
+  // page, /apercu) unlike 'total'/'preview' whose anchors live in the
+  // always-mounted invoice-create-shell — without it, this step silently
+  // inherited 'total's route (still the lines step, where
+  // 'invoice-deposit-toggle' never mounts) and always timed out straight
+  // through to 'preview', found live while testing this phase.
+  it('navigates to the preview route to reach the deposit step, on a FACTURE where the anchor exists', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    const totalIndex = service.steps().findIndex((step) => step.id === 'total');
+    service.stepIndex.set(totalIndex);
+    registerAnchor('invoice-deposit-toggle');
+
+    service.next();
+    await flushAsync();
+
+    expect(service.currentStep()?.id).toBe('deposit');
+    expect(TestBed.inject(Router).url).toBe('/factures/nouvelle/rapide/apercu');
+  });
+
+  // Phase 1.1-10: the "Signer" step shares one anchor id across the two
+  // buttons that can both be mounted at once (the DEVIS card and its
+  // just-converted FACTURE card) — same registry precedent as
+  // 'invoice-line-quantity'.
+  it('reaches the sign-action step after the created celebration step', async () => {
+    const service = createService();
+    // 'created'/'sign-action' declare no `route` of their own (they live on
+    // whatever page the preview step's submit already landed on), so no
+    // navigation is attempted regardless of which registered route the
+    // harness starts from.
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    const createdIndex = service.steps().findIndex((step) => step.id === 'created');
+    service.stepIndex.set(createdIndex);
+    registerAnchor('invoice-sign-action');
+
+    service.next();
+    await flushAsync();
+
+    expect(service.currentStep()?.id).toBe('sign-action');
+  });
+
+  // Phase 1.1-10: closes the pre-existing gap where the catalog tour never
+  // mentioned "Mes remises" — mirrors the produit/prestation cta jump
+  // exactly, reached via 'prestation-new-reminder'.next (and
+  // 'prestation-celebrate'.next) rather than plain array adjacency.
+  it('jumps from the prestation reminder straight to the remise cta when no discount exists yet', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/prestations');
+    service.activeTourId.set('catalog');
+    const reminderIndex = service
+      .steps()
+      .findIndex((step) => step.id === 'prestation-new-reminder');
+    service.stepIndex.set(reminderIndex);
+    seedDiscounts([]); // noDiscounts
+    registerAnchor('catalog-new-discount');
+
+    service.next();
+    await flushAsync();
+
+    expect(service.currentStep()?.id).toBe('remise-cta');
+  });
+
+  it('catches up on the remise-creation detour when a real navigation lands on "+ Nouvelle remise"\'s route', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/remises');
+    // Not auto-started here ('/remises' isn't in ROUTE_TOUR_MAP — the
+    // remise detour is only ever reached by walking the catalog tour from
+    // /produits or /prestations, never a fresh auto-launch on /remises
+    // itself), so drive it manually to where a real click on "Mes remises"
+    // mid-tour would have left it.
+    service.activeTourId.set('catalog');
+    const ctaIndex = service.steps().findIndex((step) => step.id === 'remise-cta');
+    service.stepIndex.set(ctaIndex);
+
+    await harness.navigateByUrl('/remises/nouvelle');
+
+    expect(service.activeTourId()).toBe('catalog');
+    expect(service.currentStep()?.id).toBe('remise-form-hint');
+  });
+
+  it('celebrates the first discount once the artisan actually saves one', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/remises');
+    // Populates the shared cache (same reasoning as seedProducts in the
+    // produit-celebrate test above) so the later create()'s upsertInCache
+    // actually updates it, instead of the no-op it is on a never-loaded
+    // cache — see DiscountService.upsertInCache's own comment.
+    seedDiscounts([]);
+    await harness.navigateByUrl('/remises/nouvelle');
+    service.activeTourId.set('catalog');
+    const formHintIndex = service.steps().findIndex((step) => step.id === 'remise-form-hint');
+    service.stepIndex.set(formHintIndex);
+
+    const discountService = TestBed.inject(DiscountService);
+    discountService
+      .create({ name: 'Fidélité', discountType: 'FIXED', fixedAmountCents: 1000 })
+      .subscribe();
+    httpMock
+      .expectOne(`${environment.apiBaseUrl}/discounts`)
+      .flush({ id: 'd1', name: 'Fidélité', discountType: 'FIXED', fixedAmountCents: 1000 });
+    await harness.navigateByUrl('/remises');
+
+    expect(service.activeTourId()).toBe('catalog');
+    expect(service.currentStep()?.id).toBe('remise-celebrate');
+  });
+
+  it('skips the noDiscounts remise cta and lands on the always-shown search step once a discount already exists', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/prestations');
+    service.activeTourId.set('catalog');
+    const reminderIndex = service
+      .steps()
+      .findIndex((step) => step.id === 'prestation-new-reminder');
+    service.stepIndex.set(reminderIndex);
+    seedDiscounts([{ id: 'd1', name: 'Fidélité' }]); // hasDiscounts
+    registerAnchor('discounts-search');
+
+    service.next();
+    await flushAsync();
+
+    expect(service.currentStep()?.anchorId).toBe('discounts-search');
+  });
+
+  // Phase 1.1-10: the "Client professionnel" checkbox step, always shown
+  // (no showIf) right after the customer form-hint — introduces the
+  // progressive-disclosure behavior rather than leaving it to be discovered
+  // by accident.
+  it('reaches the professional-checkbox step right after the customer form hint', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/clients/nouveau');
+    service.activeTourId.set('customers');
+    const formHintIndex = service.steps().findIndex((step) => step.id === 'customer-form-hint');
+    service.stepIndex.set(formHintIndex);
+    registerAnchor('customer-professional-checkbox');
+
+    service.next();
+    await flushAsync();
+
+    expect(service.currentStep()?.anchorId).toBe('customer-professional-checkbox');
   });
 });

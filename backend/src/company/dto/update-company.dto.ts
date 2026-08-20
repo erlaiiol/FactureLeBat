@@ -157,4 +157,37 @@ export class UpdateCompanyDto {
   @MinLength(1)
   @MaxLength(200)
   decennialInsuranceCoverageArea?: string;
+
+  // Phase 1.1-6: free-text footer mention, no format imposed — same bound
+  // as invoiceMailCustomMessage. The two toggles are independent booleans,
+  // not gated on the message being filled in (a company can enable a
+  // toggle before writing the message, same as decennialInsurance's own
+  // toggle-then-details ordering).
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  customFooterMessage?: string;
+
+  @IsBoolean()
+  customFooterOnFacture: boolean;
+
+  @IsBoolean()
+  customFooterOnDevis: boolean;
+
+  // Phase 1.1-7: Art. L441-9's escompte-policy mention — see schema.prisma's
+  // comment on Company.earlyPaymentDiscountMention for why this has a DB
+  // default rather than being pre-filled here. Optional at the DTO level
+  // purely so the field can be cleared back to null like every other
+  // optional company text field; in practice the frontend always sends
+  // whatever text is currently in the field, pre-filled or artisan-edited.
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  earlyPaymentDiscountMention?: string;
+
+  // Phase 1.1-8 (2026 e-invoicing reform): "option pour le paiement de la
+  // taxe d'après les débits" — same toggle-prints-a-fixed-mention pattern
+  // as customFooterOnFacture above.
+  @IsBoolean()
+  vatOnDebitsOption: boolean;
 }

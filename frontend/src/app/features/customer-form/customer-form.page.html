@@ -22,15 +22,46 @@
     <app-field-hint text="Le nom de ce client, tel qu'il apparaîtra sur ses factures." />
   </label>
 
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">Nom de l'entreprise</span>
-    <input
-      formControlName="companyName"
-      type="text"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
+  <div class="flex flex-col gap-3 rounded-lg border border-line p-4">
+    <label appTourAnchor="customer-professional-checkbox" class="flex items-center gap-2">
+      <input
+        type="checkbox"
+        formControlName="isProfessional"
+        (click)="onProfessionalCheckboxClick()"
+        class="h-5 w-5"
+      />
+      <span class="text-sm font-medium text-ink">Client professionnel</span>
+    </label>
+    <app-field-hint
+      text="Ce client achète pour son entreprise, pas à titre personnel — se coche automatiquement dès que vous renseignez une raison sociale ou un SIRET, mais reste modifiable à tout moment (un indépendant sans SIRET renseigné peut rester professionnel)."
     />
-    <app-field-hint text="Facultatif — si ce client est une entreprise plutôt qu'un particulier." />
-  </label>
+
+    @if (form.value.isProfessional) {
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Nom de l'entreprise</span>
+        <input
+          formControlName="companyName"
+          type="text"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        <app-field-hint text="La raison sociale de ce client, si elle diffère de son nom." />
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">SIRET</span>
+        <input
+          formControlName="siret"
+          type="text"
+          inputmode="numeric"
+          maxlength="14"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        <app-field-hint
+          text="Facultatif — uniquement si ce client facture lui-même en tant que professionnel."
+        />
+      </label>
+    }
+  </div>
 
   <label class="flex flex-col gap-1">
     <span class="text-sm font-medium text-ink">Adresse</span>
@@ -64,20 +95,6 @@
       <app-field-hint text="Facultatif — pour le recontacter facilement." />
     </label>
   </div>
-
-  <label class="flex flex-col gap-1">
-    <span class="text-sm font-medium text-ink">SIRET (si professionnel)</span>
-    <input
-      formControlName="siret"
-      type="text"
-      inputmode="numeric"
-      maxlength="14"
-      class="rounded-lg border border-line px-4 py-3 text-lg"
-    />
-    <app-field-hint
-      text="Facultatif — uniquement si ce client facture lui-même en tant que professionnel."
-    />
-  </label>
 
   <label class="flex flex-col gap-1">
     <span class="text-sm font-medium text-ink">Notes</span>

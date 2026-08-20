@@ -58,6 +58,11 @@ export class CompanyRepository {
         decennialInsuranceCoverageArea: data.decennialInsuranceApplicable
           ? data.decennialInsuranceCoverageArea
           : null,
+        customFooterMessage: data.customFooterMessage ?? null,
+        customFooterOnFacture: data.customFooterOnFacture,
+        customFooterOnDevis: data.customFooterOnDevis,
+        earlyPaymentDiscountMention: data.earlyPaymentDiscountMention ?? null,
+        vatOnDebitsOption: data.vatOnDebitsOption,
       },
     });
   }

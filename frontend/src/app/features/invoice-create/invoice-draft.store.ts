@@ -36,6 +36,12 @@ export interface InvoiceCustomerDraft {
   customerAddress: string;
   customerEmail: string;
   customerPhone: string;
+  // Phase 1.1-8 (2026 e-invoicing reform): autofilled from the picked
+  // Customer at pick time (see InvoiceCreateCustomerStepPage.pickCustomer),
+  // freehand-editable afterward, same "one-shot snapshot" spirit as the
+  // fields above — never live-linked back to the picked Customer.
+  customerSiret: string;
+  deliveryAddress: string;
   saveAsNewCustomer: boolean;
 }
 
@@ -171,6 +177,8 @@ const EMPTY_CUSTOMER: InvoiceCustomerDraft = {
   customerAddress: '',
   customerEmail: '',
   customerPhone: '',
+  customerSiret: '',
+  deliveryAddress: '',
   saveAsNewCustomer: false,
 };
 
@@ -237,6 +245,7 @@ interface PersistedDraft {
   sourceDevisId: string | null;
   number: string;
   deposit: InvoiceDepositDraft;
+  reverseChargeApplicable: boolean;
 }
 
 // Shared, in-progress state for the whole "nouvelle facture" flow (Phase 6):
@@ -312,7 +321,15 @@ export class InvoiceDraftStore {
   // own explicit choice on a resumed draft (see the constructor).
   private depositWasHydrated = false;
 
-  readonly vatApplicable = computed(() => this.company()?.legalStatus === 'COMPANY');
+  // Phase 1.1-7: "Autoliquidation (sous-traitance BTP)" — FACTURE-only (see
+  // buildInvoiceRequest), forces vatApplicable false below regardless of the
+  // company's own legal status, same precedence the backend's VAT
+  // computation gives it (InvoiceService.create/InvoiceMapper).
+  readonly reverseChargeApplicable = signal(false);
+
+  readonly vatApplicable = computed(
+    () => !this.reverseChargeApplicable() && this.company()?.legalStatus === 'COMPANY',
+  );
 
   private readonly lineInputs = computed(() =>
     this.lines().map((line) => ({
@@ -508,6 +525,7 @@ export class InvoiceDraftStore {
         sourceDevisId: this.sourceDevisId(),
         number: this.number(),
         deposit: this.deposit(),
+        reverseChargeApplicable: this.reverseChargeApplicable(),
       };
       this.writeToStorage(snapshot);
     });
@@ -559,6 +577,10 @@ export class InvoiceDraftStore {
   // silently flips it back to FACTURE.
   setDocumentType(type: DocumentType): void {
     this.documentType.set(type);
+  }
+
+  setReverseChargeApplicable(value: boolean): void {
+    this.reverseChargeApplicable.set(value);
   }
 
   setNumber(number: string): void {
@@ -630,6 +652,7 @@ export class InvoiceDraftStore {
     // on" — re-derive from the company profile (already cached) rather than
     // just blanking it, same as every fresh draft.
     this.applyCompanyDefaultDeposit(this.company());
+    this.reverseChargeApplicable.set(false);
     this.clearStorage();
   }
 
@@ -655,6 +678,8 @@ export class InvoiceDraftStore {
       customerAddress: source.customerAddress ?? '',
       customerEmail: source.customerEmail ?? '',
       customerPhone: source.customerPhone ?? '',
+      customerSiret: source.customerSiret ?? '',
+      deliveryAddress: source.deliveryAddress ?? '',
       saveAsNewCustomer: false,
     });
 
@@ -757,6 +782,9 @@ export class InvoiceDraftStore {
     // for FACTURE (the devis's own suggestion, if any was fetched earlier,
     // was for a DEVIS number and would be meaningless here).
     this.number.set('');
+    // A devis can never carry reverseChargeApplicable (FACTURE-only) — same
+    // "never inherit a stale value" reasoning as the deposit reset above.
+    this.reverseChargeApplicable.set(false);
   }
 
   // Builds the exact payload shape the backend expects, for both the real
@@ -839,6 +867,8 @@ export class InvoiceDraftStore {
       customerAddress: customer.customerAddress || undefined,
       customerEmail: customer.customerEmail || undefined,
       customerPhone: customer.customerPhone || undefined,
+      customerSiret: customer.customerSiret || undefined,
+      deliveryAddress: customer.deliveryAddress || undefined,
       customerId,
       documentType: this.documentType(),
       lines,
@@ -854,6 +884,12 @@ export class InvoiceDraftStore {
             depositPercentageBasisPoints: this.deposit().percentageBasisPoints,
             depositAmountCents: this.depositAmountCents(),
           }
+        : {}),
+      // Phase 1.1-7: FACTURE-only, mirrors the backend's
+      // ReverseChargeFactureOnly rule — same "never send it for a DEVIS"
+      // reasoning as the deposit fields above.
+      ...(this.documentType() === 'FACTURE' && this.reverseChargeApplicable()
+        ? { reverseChargeApplicable: true }
         : {}),
       convertedFromDevisId: this.sourceDevisId() ?? undefined,
       number: this.number().trim() || undefined,
@@ -1075,6 +1111,9 @@ export class InvoiceDraftStore {
         // re-overridden by the company default once the profile loads (see
         // the constructor).
         this.depositWasHydrated = true;
+      }
+      if (typeof parsed.reverseChargeApplicable === 'boolean') {
+        this.reverseChargeApplicable.set(parsed.reverseChargeApplicable);
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather

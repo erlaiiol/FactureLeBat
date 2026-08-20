@@ -107,6 +107,34 @@
         </label>
       </div>
 
+      <app-advanced-settings>
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink">SIRET client</span>
+          <input
+            formControlName="customerSiret"
+            type="text"
+            inputmode="numeric"
+            maxlength="14"
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+          <app-field-hint
+            text="Le SIREN (9 premiers chiffres) est imprimé sur la facture — mention obligatoire de la réforme de facturation électronique 2026."
+          />
+        </label>
+
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink">Adresse de livraison</span>
+          <input
+            formControlName="deliveryAddress"
+            type="text"
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+          <app-field-hint
+            text="Pré-remplie avec l'adresse ci-dessus — à modifier uniquement si le chantier est ailleurs. N'apparaît sur la facture que si elle diffère de l'adresse de facturation."
+          />
+        </label>
+      </app-advanced-settings>
+
       @if (!selectedCustomerId()) {
         <label class="flex items-center gap-2">
           <input formControlName="saveAsNewCustomer" type="checkbox" class="h-5 w-5" />

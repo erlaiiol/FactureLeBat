@@ -1,4 +1,4 @@
-import { DocumentType, InvoiceEntryMode } from '../../../generated/prisma/enums';
+import { DocumentType, InvoiceEntryMode, NatureOperation } from '../../../generated/prisma/enums';
 
 export interface InvoicePdfLine {
   description: string;
@@ -87,16 +87,47 @@ export interface InvoicePdfData {
   // garantie décennale, in which case PdfService.buildFooter prints nothing
   // extra for it.
   decennialInsurance: { insurerName: string; policyNumber: string; coverageArea: string } | null;
+  // Phase 1.1-6: the artisan's free-text footer mention, already resolved
+  // against this document's documentType by InvoiceMapper.issuerFields
+  // (customFooterOnFacture/customFooterOnDevis) — null whenever the toggle
+  // for this document type is off or the message is empty, in which case
+  // PdfService.buildFooter renders nothing extra for it. PdfService itself
+  // never reads the two raw Company toggles.
+  customFooterMessage: string | null;
+  // Phase 1.1-7: Art. L441-9's escompte-policy mention, raw from Company —
+  // gating on whether it actually prints (customerIsProfessional AND
+  // documentType FACTURE) happens in PdfService.buildFooter, not here, since
+  // that's a plain per-document-type rendering choice PdfService already
+  // makes elsewhere (see buildHeader's own documentType branch). Almost
+  // never null in practice (DB default, see schema.prisma) — null only for
+  // a Company row that had it explicitly cleared.
+  earlyPaymentDiscountMention: string | null;
+  // Phase 1.1-8 (2026 e-invoicing reform): same toggle-prints-a-fixed-mention
+  // pattern as earlyPaymentDiscountMention — raw from Company, FACTURE-only
+  // gating happens in PdfService.buildFooter.
+  vatOnDebitsOption: boolean;
   // Phase 1.1-1: the attached signature proof (drawn or photographed), if
   // any — null for a preview (no id yet) and for a persisted invoice with
   // none attached. PdfService composites it near the totals block whenever
   // present, same rendering precedent as issuerLogo above.
   signature: { base64: string; mimeType: string } | null;
 
+  // Phase 1.1-7: live from Customer.isProfessional (never snapshotted, see
+  // InvoiceWithLines.customer's own comment) — false whenever no Customer is
+  // linked. Gates the 40€/pénalités mention, the "Délai de règlement" line,
+  // and earlyPaymentDiscountMention, all FACTURE-only (see buildFooter).
+  customerIsProfessional: boolean;
   customerName: string;
   customerAddress: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  // Phase 1.1-8 (2026 e-invoicing reform): PdfService prints the SIREN (its
+  // first 9 digits) when present — see schema.prisma's comment on
+  // Invoice.customerSiret.
+  customerSiret: string | null;
+  // Printed only when it actually differs from customerAddress above, at
+  // render time — see schema.prisma's comment on Invoice.deliveryAddress.
+  deliveryAddress: string | null;
   // Freehand, artisan-named extra client fields (e.g. "SIRET") — rendered
   // after the fixed fields above, same order they were entered in.
   customerFields: { label: string; value: string }[];
@@ -121,6 +152,29 @@ export interface InvoicePdfData {
   subtotalExclVatCents: number;
   vatAmountCents: number;
   totalInclVatCents: number;
+
+  // Phase 1.1-7: whether vatApplicable === false is specifically because of
+  // an autoliquidation, not franchise en base (companyVatExempt) or a
+  // manual-mode artisan pick — the one thing that decides which of the two
+  // zero-VAT legal citations PdfService.buildFooter prints. Always false
+  // when vatApplicable is true (ReverseChargeFactureOnly + the VAT
+  // computation in InvoiceService/InvoiceMapper guarantee the two never
+  // disagree).
+  reverseChargeApplicable: boolean;
+
+  // Phase 1.1-8 (2026 e-invoicing reform): "nature de l'opération" — already
+  // resolved by InvoiceMapper (derived from lines/serviceLines for GUIDED,
+  // read from Invoice.manualNatureOfOperation — defaulting to
+  // PRESTATION_SERVICES — for MANUAL). Always a real value, never null:
+  // every invoice has one, whether derived or explicitly chosen.
+  natureOfOperation: NatureOperation;
+
+  // Phase 16: null for a preview (nothing persisted yet, see
+  // InvoiceMapper.toPreviewPdfData) and for a persisted invoice with none
+  // set (dueDate is captured lazily, see schema.prisma). Phase 1.1-7:
+  // printed as "Délai de règlement" on a FACTURE to a professional client —
+  // the first time this field is rendered as the legal mention it also is.
+  dueDate: Date | null;
 
   // Phase 1.1-3: the requested deposit — both null whenever none was
   // requested, in which case PdfService.buildTotals prints nothing extra

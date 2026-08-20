@@ -39,7 +39,12 @@
           class="flex flex-1 items-center justify-between gap-4"
         >
           <div>
-            <p class="font-semibold text-ink">{{ customer.name }}</p>
+            <p class="flex items-center gap-1.5 font-semibold text-ink">
+              {{ customer.name }}
+              @if (customer.isProfessional) {
+                <app-badge variant="secondary" tone="subtle">Pro</app-badge>
+              }
+            </p>
             @if (customer.companyName) {
               <p class="text-sm text-ink-soft">{{ customer.companyName }}</p>
             }

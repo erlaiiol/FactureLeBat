@@ -24,7 +24,12 @@
           </p>
         </div>
         <div class="w-full max-w-sm">
-          <app-big-button variant="secondary" tone="subtle" (click)="openSignatureModal(facture)">
+          <app-big-button
+            appTourAnchor="invoice-sign-action"
+            variant="secondary"
+            tone="subtle"
+            (click)="openSignatureModal(facture)"
+          >
             Signer
           </app-big-button>
         </div>
@@ -90,7 +95,12 @@
         </p>
       </div>
       <div class="w-full max-w-sm">
-        <app-big-button variant="secondary" tone="subtle" (click)="openSignatureModal(invoice)">
+        <app-big-button
+          appTourAnchor="invoice-sign-action"
+          variant="secondary"
+          tone="subtle"
+          (click)="openSignatureModal(invoice)"
+        >
           Signer
         </app-big-button>
       </div>
@@ -143,7 +153,7 @@
   </label>
 
   @if (draftStore.documentType() === 'FACTURE') {
-    <div class="mb-4">
+    <div appTourAnchor="invoice-deposit-toggle" class="mb-4">
       <app-invoice-deposit-field
         [requested]="draftStore.deposit().requested"
         [percentageBasisPoints]="draftStore.deposit().percentageBasisPoints"
@@ -155,6 +165,19 @@
         (resetAutoCalc)="draftStore.resetDepositAutoCalc()"
       />
     </div>
+
+    <label
+      class="mb-4 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
+      title="Sous-traitance BTP : la TVA n'est pas facturée par vous, mais autoliquidée par votre client (art. 242 nonies A, 13° de l'annexe II au CGI)."
+    >
+      <input
+        type="checkbox"
+        [checked]="draftStore.reverseChargeApplicable()"
+        (change)="draftStore.setReverseChargeApplicable($any($event.target).checked)"
+        class="h-4 w-4 rounded border-line"
+      />
+      <span class="font-medium text-ink">Autoliquidation (sous-traitance BTP)</span>
+    </label>
   }
 
   @if (missingSiret()) {

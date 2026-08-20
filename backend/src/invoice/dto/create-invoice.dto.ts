@@ -16,7 +16,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { DocumentType, InvoiceEntryMode } from '../../../generated/prisma/enums';
+import { DocumentType, InvoiceEntryMode, NatureOperation } from '../../../generated/prisma/enums';
 import { CreateInvoiceCustomerFieldDto } from './create-invoice-customer-field.dto';
 import { CreateInvoiceDiscountLineDto } from './create-invoice-discount-line.dto';
 import { CreateInvoiceLineDto } from './create-invoice-line.dto';
@@ -25,6 +25,7 @@ import { DepositFieldsConsistency } from './deposit-fields-consistency.validator
 import { DiscountTargetMatchesLines } from './discount-target-matches-lines.validator';
 import { CreateManualTableDto } from './manual/create-manual-table.dto';
 import { ManualModeFieldsConsistency } from './manual-mode-fields-consistency.validator';
+import { ReverseChargeFactureOnly } from './reverse-charge-facture-only.validator';
 import { ServiceLineWeightsMatchLines } from './service-line-weights-match-lines.validator';
 
 // No real invoice needs more lines than this — capping it bounds the cost of
@@ -61,6 +62,22 @@ export class CreateInvoiceDto {
   @IsString()
   @MaxLength(30)
   customerPhone?: string;
+
+  // Phase 1.1-8 (2026 e-invoicing reform): same "SIRET" format as
+  // Customer.siret's own DTO validation (CreateCustomerDto) — freehand-
+  // editable once autofilled, but still a real SIRET, not arbitrary text,
+  // since PdfService prints its first 9 digits as the SIREN.
+  @IsOptional()
+  @Matches(/^\d{14}$/, { message: 'customerSiret must be exactly 14 digits' })
+  customerSiret?: string;
+
+  // Same bound as customerAddress — the job-site address, when it differs
+  // from the billing address above (see schema.prisma's comment on
+  // Invoice.deliveryAddress).
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  deliveryAddress?: string;
 
   // Freehand, artisan-named extra client fields (e.g. "SIRET") — no fixed
   // vocabulary, see CreateInvoiceCustomerFieldDto/InvoiceCustomerField.
@@ -210,6 +227,27 @@ export class CreateInvoiceDto {
   @Max(MAX_OVERRIDE_CENTS)
   @DepositFieldsConsistency()
   depositAmountCents?: number;
+
+  // Phase 1.1-7: "Autoliquidation (sous-traitance BTP)" — art. 242 nonies A,
+  // 13° de l'annexe II au CGI. Unlike vatApplicableOverride, this is usable
+  // from BOTH entryMode GUIDED and MANUAL (ManualModeFieldsConsistency
+  // doesn't forbid it) — see schema.prisma's comment on
+  // Invoice.reverseChargeApplicable for why VAT correctness for BTP
+  // subcontracting can't wait for manual mode. FACTURE-only, enforced by
+  // ReverseChargeFactureOnly.
+  @IsOptional()
+  @IsBoolean()
+  @ReverseChargeFactureOnly()
+  reverseChargeApplicable?: boolean;
+
+  // Phase 1.1-8 (2026 e-invoicing reform): MANUAL mode's explicit "nature de
+  // l'opération" choice — GUIDED derives this instead (see PdfService), so
+  // it's forbidden there (ManualModeFieldsConsistency). Omitted for MANUAL
+  // defaults to PRESTATION_SERVICES (InvoiceService.create) — see
+  // schema.prisma's comment on Invoice.manualNatureOfOperation.
+  @IsOptional()
+  @IsEnum(NatureOperation)
+  manualNatureOfOperation?: NatureOperation;
 
   // "Créer la facture à partir du devis" (editable flow): the artisan
   // re-entered the creation wizard pre-filled from this devis and may have

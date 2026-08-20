@@ -35,8 +35,12 @@ src/
   service-catalog/ non-material work catalog (Phase 5) — CRUD + search, same shape as product/
                    (named service-catalog, not service, to avoid a ServiceService class name
                    stuttering against NestJS's own "service" layering term)
+  discount/        "remise" catalog (Phase 32) — CRUD + search, same shape as product/
+  catalog-folder/  "Mes dossiers" (Phase 1.1-2) — company-scoped groupings products/
+                   services/discounts can optionally join; Pro+/Premium-gated via
+                   PlanGateService, not a DB constraint (see database.md#catalogfolder)
   onboarding/      Phase 8 tour state (tourEnabled/completedTours) — a thin module of its
-                   own reading/writing two columns on the Company singleton, kept out of
+                   own reading/writing two columns on Company, kept out of
                    company/ so its GET/PATCH never has to go through CompanyController's
                    full-replace UpdateCompanyDto
   push-notification/  Phase 22 mobile push: PushDevice registration (artisan-facing),
@@ -68,6 +72,7 @@ src/
     invoice.repository.ts Prisma calls only
 ```
 
+> **Found while auditing this doc (Phase 1.1-12), left as-is**: the tree above is still missing several modules that predate the 1.1-x track and aren't its responsibility to backfill in one pass — `auth/`, `billing/`, `mail-settings/`, `mailer/`, `referral/`, `reports/`, `site-legal/`, `sourcing/`, `admin/` all exist under `backend/src/` with no entry here. Only `discount/`/`catalog-folder/` were added above, since those two are what this track's own phases (32, 1.1-2) actually introduced. A future pass should backfill the rest rather than have this note keep getting rediscovered.
 **Why this split matters in practice**: `InvoiceService` never touches Prisma directly and never computes a total — it asks `InvoiceRepository` to persist, `InvoiceMapper` to shape the response, and (transitively, via the mapper) `InvoiceCalculationService` to do the math. Each of those can be unit-tested — or replaced — without touching the others. `InvoiceCalculationService` in particular has no NestJS or Prisma dependency at all; it's plain TypeScript, which is why it has the most thorough test suite in the codebase (see `invoice-calculation.service.spec.ts`).
 
 ### Service lines (Phase 5)
@@ -179,10 +184,12 @@ src/app/
     pipes/       e.g. centsToEuros, unitLabel (Unit enum -> French display string)
     tour/        Phase 8 onboarding tour engine, hand-built (no third-party tour
                  library, same precedent as app-field-hint): tour-definitions.ts
-                 declares the four mini-tours' steps (Phase 9.5 adds
+                 declares five mini-tours' steps (Phase 9.5 adds
                  'invoice-creation-manual', route-mapped to factures/nouvelle/manuel
                  ahead of the general factures/nouvelle prefix in ROUTE_TOUR_MAP so
-                 the more specific prefix wins); TourService
+                 the more specific prefix wins; Phase 18 adds a fifth, 'stats-reports';
+                 Phase 1.1-10 extends the existing five with new steps/showIf
+                 conditions rather than adding a sixth); TourService
                  (providedIn: 'root') is the single source of truth for tour
                  state, auto-launching a tour on first visit to its section and
                  walking it (including cross-route steps) via the router;

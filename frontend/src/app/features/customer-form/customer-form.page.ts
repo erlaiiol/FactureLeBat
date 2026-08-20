@@ -2,16 +2,18 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { merge } from 'rxjs';
 import { CustomerService } from '../../core/services/customer.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
+import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 
 @Component({
   selector: 'app-customer-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent],
+  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent, TourAnchorDirective],
   templateUrl: './customer-form.page.html',
 })
 export class CustomerFormPage {
@@ -35,6 +37,7 @@ export class CustomerFormPage {
 
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
+    isProfessional: [false],
     companyName: [''],
     address: [''],
     email: [''],
@@ -42,6 +45,12 @@ export class CustomerFormPage {
     siret: ['', Validators.pattern(/^$|^\d{14}$/)],
     description: [''],
   });
+
+  // Phase 1.1-7: "Client professionnel" auto-follows companyName/siret live
+  // — as soon as the artisan clicks the checkbox directly (see
+  // onProfessionalCheckboxClick), their choice sticks for the rest of this
+  // form session, even if they go on to edit companyName/siret afterward.
+  private professionalManuallySet = false;
 
   constructor() {
     if (this.customerId) {
@@ -51,15 +60,24 @@ export class CustomerFormPage {
         .subscribe({
           next: (customer) => {
             this.loading.set(false);
-            this.form.patchValue({
-              name: customer.name,
-              companyName: customer.companyName ?? '',
-              address: customer.address ?? '',
-              email: customer.email ?? '',
-              phone: customer.phone ?? '',
-              siret: customer.siret ?? '',
-              description: customer.description ?? '',
-            });
+            // emitEvent: false — patching the persisted isProfessional here
+            // must not be immediately overwritten by the auto-follow
+            // subscription below, which would wrongly force it back to
+            // Boolean(companyName || siret) even for a deliberately-set
+            // sole-trader professional with no companyName/siret on file.
+            this.form.patchValue(
+              {
+                name: customer.name,
+                isProfessional: customer.isProfessional,
+                companyName: customer.companyName ?? '',
+                address: customer.address ?? '',
+                email: customer.email ?? '',
+                phone: customer.phone ?? '',
+                siret: customer.siret ?? '',
+                description: customer.description ?? '',
+              },
+              { emitEvent: false },
+            );
           },
           error: () => {
             this.loading.set(false);
@@ -67,6 +85,26 @@ export class CustomerFormPage {
           },
         });
     }
+
+    merge(this.form.controls.companyName.valueChanges, this.form.controls.siret.valueChanges)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.professionalManuallySet) {
+          return;
+        }
+        const derived = Boolean(
+          this.form.controls.companyName.value || this.form.controls.siret.value,
+        );
+        this.form.controls.isProfessional.setValue(derived, { emitEvent: false });
+      });
+  }
+
+  // The one direct interaction with the checkbox — locks in the artisan's
+  // own choice from here on, same "own declaration, never a lock the app
+  // silently overrides" spirit as the field itself (see
+  // schema.prisma's comment on Customer.isProfessional).
+  protected onProfessionalCheckboxClick(): void {
+    this.professionalManuallySet = true;
   }
 
   protected submit(): void {
@@ -81,6 +119,7 @@ export class CustomerFormPage {
     const value = this.form.getRawValue();
     const payload = {
       name: value.name,
+      isProfessional: value.isProfessional,
       companyName: value.companyName || undefined,
       address: value.address || undefined,
       email: value.email || undefined,

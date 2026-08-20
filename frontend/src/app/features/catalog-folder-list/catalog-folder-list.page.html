@@ -36,13 +36,146 @@
   } @else {
     <ul class="anim-preview-in flex flex-col gap-3">
       @for (folder of folders(); track folder.id) {
-        <li class="rounded-xl border border-line bg-surface">
-          <a
-            [routerLink]="['/dossiers', folder.id]"
-            class="flex items-center justify-between gap-4 p-4 hover:bg-bg"
-          >
-            <p class="font-semibold text-ink">{{ folder.name }}</p>
+        <li class="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+          <a [routerLink]="['/dossiers', folder.id]" class="font-semibold text-ink hover:underline">
+            {{ folder.name }}
           </a>
+
+          <!-- Phase 1.1-9.5: same .fixed-add-button/.is-open mechanics as
+               mode rapide's own three "Ajouter…" buttons
+               (invoice-create-lines-step.page.html), horizontal here
+               instead of that flow's fixed vertical stack — an expanding
+               button's own grid-track growth naturally pushes whichever
+               sibling(s) sit to its right along this flex row, no extra
+               positioning code needed. -->
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              (click)="togglePanel(folder.id, 'product')"
+              class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-primary text-primary-fg shadow-sm"
+              [class.is-open]="isPanelOpen(folder.id, 'product')"
+              [attr.aria-expanded]="isPanelOpen(folder.id, 'product')"
+              aria-label="Produits de ce dossier"
+            >
+              <span
+                class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none"
+                >+</span
+              >
+              <span
+                class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200"
+                [class.opacity-100]="isPanelOpen(folder.id, 'product')"
+                >Produits</span
+              >
+            </button>
+            <button
+              type="button"
+              (click)="togglePanel(folder.id, 'service')"
+              class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-info text-info-fg shadow-sm"
+              [class.is-open]="isPanelOpen(folder.id, 'service')"
+              [attr.aria-expanded]="isPanelOpen(folder.id, 'service')"
+              aria-label="Prestations de ce dossier"
+            >
+              <span
+                class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none"
+                >+</span
+              >
+              <span
+                class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200"
+                [class.opacity-100]="isPanelOpen(folder.id, 'service')"
+                >Prestations</span
+              >
+            </button>
+            <button
+              type="button"
+              (click)="togglePanel(folder.id, 'discount')"
+              class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-warning text-warning-fg shadow-sm"
+              [class.is-open]="isPanelOpen(folder.id, 'discount')"
+              [attr.aria-expanded]="isPanelOpen(folder.id, 'discount')"
+              aria-label="Remises de ce dossier"
+            >
+              <span
+                class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none"
+                >+</span
+              >
+              <span
+                class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200"
+                [class.opacity-100]="isPanelOpen(folder.id, 'discount')"
+                >Remises</span
+              >
+            </button>
+          </div>
+
+          <!-- Grown *inside* the card (docs/design-system.md's panelStretch)
+               rather than mode rapide's viewport-anchored flyout — this list
+               lives inside a scrolling grid of many folder cards, not a
+               single full-screen flow. -->
+          <div class="panel-stretch" [class.is-open]="hasOpenPanel(folder.id)">
+            <div class="flex flex-col gap-1 pt-1">
+              @if (isPanelOpen(folder.id, 'product')) {
+                @if (products().length === 0) {
+                  <p class="p-2 text-sm text-ink-soft">Aucun produit dans votre catalogue.</p>
+                } @else {
+                  @for (product of products(); track product.id) {
+                    @let checked = isMember(product.folders, folder.id);
+                    <button
+                      type="button"
+                      (click)="toggleProduct(folder, product)"
+                      [disabled]="isSaving(product.id)"
+                      class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-bg disabled:opacity-50"
+                      [class.bg-primary-subtle]="checked"
+                    >
+                      {{ product.name }}
+                      @if (checked) {
+                        <span class="text-primary"><app-icon-check [size]="14" /></span>
+                      }
+                    </button>
+                  }
+                }
+              }
+              @if (isPanelOpen(folder.id, 'service')) {
+                @if (services().length === 0) {
+                  <p class="p-2 text-sm text-ink-soft">Aucune prestation dans votre catalogue.</p>
+                } @else {
+                  @for (service of services(); track service.id) {
+                    @let checked = isMember(service.folders, folder.id);
+                    <button
+                      type="button"
+                      (click)="toggleService(folder, service)"
+                      [disabled]="isSaving(service.id)"
+                      class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-bg disabled:opacity-50"
+                      [class.bg-info-subtle]="checked"
+                    >
+                      {{ service.name }}
+                      @if (checked) {
+                        <span class="text-info"><app-icon-check [size]="14" /></span>
+                      }
+                    </button>
+                  }
+                }
+              }
+              @if (isPanelOpen(folder.id, 'discount')) {
+                @if (discounts().length === 0) {
+                  <p class="p-2 text-sm text-ink-soft">Aucune remise dans votre catalogue.</p>
+                } @else {
+                  @for (discount of discounts(); track discount.id) {
+                    @let checked = isMember(discount.folders, folder.id);
+                    <button
+                      type="button"
+                      (click)="toggleDiscount(folder, discount)"
+                      [disabled]="isSaving(discount.id)"
+                      class="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-bg disabled:opacity-50"
+                      [class.bg-warning-subtle]="checked"
+                    >
+                      {{ discount.name }}
+                      @if (checked) {
+                        <span class="text-warning"><app-icon-check [size]="14" /></span>
+                      }
+                    </button>
+                  }
+                }
+              }
+            </div>
+          </div>
         </li>
       }
     </ul>

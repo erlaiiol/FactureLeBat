@@ -88,6 +88,18 @@ enum DocumentType {
   FACTURE
 }
 
+// Phase 1.1-8 (2026 e-invoicing reform baseline field): "nature de
+// l'opération" — for a GUIDED invoice this is derived at PDF-render time
+// (never persisted, see InvoiceMapper) from whether the invoice has product
+// `lines` and/or VISIBLE `serviceLines`. MANUAL mode has no such structured
+// split to derive from, so its own choice is the one place this enum is
+// actually persisted — see Invoice.manualNatureOfOperation.
+enum NatureOperation {
+  LIVRAISON_BIENS
+  PRESTATION_SERVICES
+  BIENS_ET_SERVICES
+}
+
 // Phase 16: an artisan-controlled payment lifecycle for a FACTURE — never
 // set/read for a DEVIS (see InvoiceService.updateStatus's documentType
 // guard). "En retard" is deliberately not a 4th value here: it's NON_PAYEE +
@@ -396,6 +408,39 @@ model Company {
   decennialInsurancePolicyNumber String?
   decennialInsuranceCoverageArea String?
 
+  // Phase 1.1-6: general-purpose free-text footer mention — the escape
+  // hatch for any legal/commercial mention this app doesn't model as its
+  // own structured field. No format imposed on customFooterMessage; the
+  // two toggles are independent (facture-only, devis-only, both, or
+  // neither). PdfService.buildFooter renders it as its own centered block
+  // only when the toggle matching the current document's documentType is
+  // on and the message isn't empty — null/empty message with either
+  // toggle on simply renders nothing, same "absent input, no output"
+  // precedent as decennialInsurance above.
+  customFooterMessage   String?
+  customFooterOnFacture Boolean @default(false)
+  customFooterOnDevis   Boolean @default(false)
+
+  // Phase 1.1-7: Art. L441-9 du Code de commerce requires a facture to a
+  // professional client to *state* the escompte (early-payment discount)
+  // policy even when there isn't one — a company that never touches this
+  // field must still be compliant, not silently missing a mandatory line.
+  // DB-level default (not application logic) is what makes that true for
+  // every company, new or existing: this column's default doubles as its
+  // "pre-filled on first save" value, applied by Postgres itself to every
+  // pre-existing row the moment this migration runs, and to every Company
+  // created afterward (see DEFAULT_COMPANY_PROFILE, which sets no value for
+  // this field on purpose). Editable afterward like every other footer
+  // mention; PdfService.buildFooter only prints it on a FACTURE to a
+  // Customer.isProfessional client.
+  earlyPaymentDiscountMention String? @default("Pas d'escompte pour paiement anticipé.")
+
+  // Phase 1.1-8 (2026 e-invoicing reform baseline field): "option pour le
+  // paiement de la taxe d'après les débits" — same toggle-prints-a-fixed-mention
+  // pattern as customFooterOnFacture, FACTURE-only per its own legal
+  // wording (a devis collects no tax, so the option is meaningless there).
+  vatOnDebitsOption Boolean @default(false)
+
   invoices         Invoice[]
   sourcingSearches SourcingSearch[]
   customers        Customer[]
@@ -602,6 +647,21 @@ model Invoice {
   customerAddress String?
   customerEmail   String?
   customerPhone   String?
+  // Phase 1.1-8 (2026 e-invoicing reform baseline field): same
+  // autofill-then-freehand-editable, soft-reference snapshot spirit as the
+  // four fields above — autofilled from Customer.siret at pick time (mode
+  // rapide only; mode manuel has no customer picker and already covers this
+  // via its own freehand InvoiceCustomerField mechanism instead). PdfService
+  // prints the SIREN (its first 9 digits) when present.
+  customerSiret String?
+  // Autofilled from Customer.address at pick time, same spirit as
+  // customerSiret above — but unlike it, also has a dedicated freehand input
+  // in mode manuel (see docs/roadmap.md Phase 1.1-8's notes), since its
+  // "print only when it differs from customerAddress" rendering rule can't
+  // be reproduced by the generic InvoiceCustomerField mechanism. Frozen at
+  // pick time, not live-linked to customerAddress afterward — the two are
+  // free to diverge from the moment they're set.
+  deliveryAddress String?
 
   // Soft reference to the saved Customer this invoice was based on, if any.
   // The fields above remain the source of truth for this invoice (typed or
@@ -743,6 +803,28 @@ model Invoice {
   // back out — same "records the fact, not a log" convention as paidAt.
   depositPaidAt                DateTime?
 
+  // Phase 1.1-7: "Autoliquidation (sous-traitance BTP)" — art. 242 nonies A,
+  // 13° de l'annexe II au CGI. FACTURE-only, per-document (enforced at the
+  // DTO boundary, not the DB — same pattern as depositAmountCents above):
+  // whether a given job is subcontracted work depends on that specific
+  // chantier, never a fixed company-wide fact, and a DEVIS is a quote, not
+  // yet a billable subcontracting relationship. When set, InvoiceService
+  // forces vatApplicable false the same way franchise en base does (see
+  // isVatApplicable/vatApplicableOverride), but PdfService.buildFooter
+  // prints the distinct autoliquidation citation instead of art. 293 B's —
+  // this flag, not vatApplicable alone, is what tells buildFooter which of
+  // the two citations is legally accurate for this document.
+  reverseChargeApplicable Boolean @default(false)
+
+  // Phase 1.1-8: entryMode MANUAL's own explicit "nature de l'opération"
+  // choice — see NatureOperation's own comment for why GUIDED never uses
+  // this column (derived instead). Always null for GUIDED, enforced by
+  // ManualModeFieldsConsistency; defaults to PRESTATION_SERVICES at the
+  // service layer when omitted for MANUAL (InvoiceService.create), so this
+  // column itself stays nullable rather than needing a Prisma-level default
+  // that would be wrong for every GUIDED row.
+  manualNatureOfOperation NatureOperation?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -782,6 +864,20 @@ model Customer {
   email       String?
   phone       String?
   siret       String?
+
+  // Phase 1.1-7: the artisan's own declaration that this client is a
+  // professional (buying for their own business), not an individual
+  // consumer — same "own declaration, never reliably inferable" spirit as
+  // Company.decennialInsuranceApplicable. companyName/siret filled in is a
+  // *hint* the frontend pre-checks this from, but never a lock: a
+  // sole-trader client with no siret on file is still legally
+  // "professionnel" if they're buying for their business, and this stays
+  // independently overridable either way. Drives whether PdfService.buildFooter
+  // prints the Art. L441-9 payment-terms mentions on a FACTURE (resolved
+  // live from this field at PDF-render time, never snapshotted onto
+  // Invoice — same "always live off current state" precedent as
+  // Company.decennialInsurerName/customFooterMessage).
+  isProfessional Boolean @default(false)
 
   // Phase 14.5: freehand, optional — same "autofill, not a lock" spirit as
   // every other optional field here. Feeds customer search alongside name/

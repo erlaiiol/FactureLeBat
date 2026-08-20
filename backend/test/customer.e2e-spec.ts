@@ -56,6 +56,37 @@ describe('Customer pipeline (e2e)', () => {
     expect(results.some((customer) => customer.id === created.id)).toBe(true);
   });
 
+  // Phase 1.1-7: defaults to false when omitted (create() spreads the DTO
+  // straight through to Prisma, letting the schema default apply), then
+  // round-trips through both the dedicated toggle and a plain edit that
+  // doesn't touch it (update() is a full replace of every field it lists —
+  // see CustomerRepository.update — so this also guards against a future
+  // regression silently dropping isProfessional back to false on an
+  // unrelated PATCH).
+  it('defaults isProfessional to false and round-trips it through update', async () => {
+    const createResponse = await authedRequest(app, session)
+      .post('/api/customers')
+      .send({ name: 'E2E Client Pro' })
+      .expect(201);
+    const created = createResponse.body as CustomerProfile;
+    expect(created.isProfessional).toBe(false);
+
+    const setProResponse = await authedRequest(app, session)
+      .patch(`/api/customers/${created.id}`)
+      .send({ name: 'E2E Client Pro', companyName: 'Pro SARL', isProfessional: true })
+      .expect(200);
+    expect((setProResponse.body as CustomerProfile).isProfessional).toBe(true);
+
+    // A later PATCH that omits isProfessional entirely must not silently
+    // keep the previous true — full replace means full replace, same as
+    // every other optional boolean on this DTO.
+    const unsetProResponse = await authedRequest(app, session)
+      .patch(`/api/customers/${created.id}`)
+      .send({ name: 'E2E Client Pro', companyName: 'Pro SARL' })
+      .expect(200);
+    expect((unsetProResponse.body as CustomerProfile).isProfessional).toBe(false);
+  });
+
   it('returns 404 for an unknown customer id', () => {
     return authedRequest(app, session)
       .get('/api/customers/00000000-0000-0000-0000-000000000000')

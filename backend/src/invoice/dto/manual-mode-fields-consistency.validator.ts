@@ -15,7 +15,7 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'entryMode GUIDED requires at least one line, no manualTable, and no totals/VAT override; entryMode MANUAL requires a manualTable and no lines/serviceLines/discountLines',
+          'entryMode GUIDED requires at least one line, no manualTable, and no totals/VAT/nature-of-operation override; entryMode MANUAL requires a manualTable and no lines/serviceLines/discountLines',
         ...options,
       },
       validator: {
@@ -31,7 +31,11 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
               dto.vatOverrideCents === undefined &&
               dto.totalOverrideCents === undefined &&
               dto.vatApplicableOverride === undefined &&
-              dto.vatRateBasisPointsOverride === undefined
+              dto.vatRateBasisPointsOverride === undefined &&
+              // Phase 1.1-8: GUIDED derives "nature de l'opération" from its
+              // own lines/serviceLines at PDF-render time — never a
+              // GUIDED-side input, same reasoning as the VAT overrides above.
+              dto.manualNatureOfOperation === undefined
             );
           }
 

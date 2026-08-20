@@ -18,11 +18,17 @@ function samplePdfData(): InvoicePdfData {
     issuerLogo: null,
     showWatermark: true,
     decennialInsurance: null,
+    customFooterMessage: null,
+    earlyPaymentDiscountMention: "Pas d'escompte pour paiement anticipé.",
+    vatOnDebitsOption: false,
     signature: null,
+    customerIsProfessional: false,
     customerName: 'M. Dupont',
     customerAddress: null,
     customerEmail: null,
     customerPhone: null,
+    customerSiret: null,
+    deliveryAddress: null,
     customerFields: [],
     entryMode: 'GUIDED',
     lines: [
@@ -39,9 +45,12 @@ function samplePdfData(): InvoicePdfData {
     simplifiedDisplay: false,
     vatApplicable: false,
     vatRateBasisPoints: 2000,
+    reverseChargeApplicable: false,
+    natureOfOperation: 'LIVRAISON_BIENS',
     subtotalExclVatCents: 45000,
     vatAmountCents: 0,
     totalInclVatCents: 45000,
+    dueDate: null,
     depositPercentageBasisPoints: null,
     depositAmountCents: null,
     depositPaidAt: null,
@@ -121,6 +130,86 @@ describe('PdfService', () => {
 
     expect(buffer.length).toBeGreaterThan(0);
     expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with the custom footer mention when set (Phase 1.1-6)', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      customFooterMessage: 'Devis gratuit, valable 30 jours.',
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with the Art. L441-9 mentions for a professional-client FACTURE (Phase 1.1-7)', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      documentType: 'FACTURE',
+      customerIsProfessional: true,
+      dueDate: new Date('2026-03-01'),
+      earlyPaymentDiscountMention: "Pas d'escompte pour paiement anticipé.",
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with the autoliquidation citation when reverseChargeApplicable is set (Phase 1.1-7)', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      vatApplicable: false,
+      reverseChargeApplicable: true,
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with the SIREN and a differing delivery address (Phase 1.1-8)', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      customerAddress: '5 avenue des Clients, 69002 Lyon',
+      customerSiret: '12345678900012',
+      deliveryAddress: '9 rue du Chantier, 69003 Lyon',
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with the vatOnDebitsOption mention on a FACTURE (Phase 1.1-8)', async () => {
+    const service = new PdfService();
+    const data: InvoicePdfData = {
+      ...samplePdfData(),
+      documentType: 'FACTURE',
+      vatOnDebitsOption: true,
+    };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer for each natureOfOperation value (Phase 1.1-8)', async () => {
+    const service = new PdfService();
+    for (const natureOfOperation of [
+      'LIVRAISON_BIENS',
+      'PRESTATION_SERVICES',
+      'BIENS_ET_SERVICES',
+    ] as const) {
+      const buffer = await service.generateInvoicePdf({ ...samplePdfData(), natureOfOperation });
+      expect(buffer.length).toBeGreaterThan(0);
+      expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    }
   });
 
   // A real, minimal 1x1 transparent PNG — pdfMake actually decodes this

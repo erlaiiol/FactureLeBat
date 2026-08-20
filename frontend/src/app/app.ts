@@ -58,7 +58,11 @@ const BILLING_DOT_CLASSES: Record<BillingButtonState, string> = {
   trial: 'border border-ink-soft/50',
 };
 
-const DATA_SECTION_ROUTES = ['/clients', '/produits', '/prestations'];
+// Phase 1.1-9: '/dossiers' added so the "Mon répertoire" button highlights
+// while browsing it too, same standing as the three routes already here.
+// Note: '/remises' is a pre-existing gap in this array (predates this
+// phase, not introduced by it) — left alone, out of this phase's scope.
+const DATA_SECTION_ROUTES = ['/clients', '/produits', '/prestations', '/dossiers'];
 
 // Single-line text-entry <input> types — the ones a virtual keyboard's
 // return key can mean "I'm done with this field" for. Deliberately excludes

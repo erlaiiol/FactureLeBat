@@ -1,4 +1,12 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateCustomerDto {
   @IsString()
@@ -31,6 +39,14 @@ export class CreateCustomerDto {
   @IsOptional()
   @Matches(/^\d{14}$/, { message: 'siret must be exactly 14 digits' })
   siret?: string;
+
+  // Phase 1.1-7: the artisan's own declaration — optional (defaults to
+  // false when omitted) rather than required, since this DTO is also used
+  // by InvoiceDraftStore's quick "Enregistrer ce client" save, which never
+  // sends it. See schema.prisma's comment on Customer.isProfessional.
+  @IsOptional()
+  @IsBoolean()
+  isProfessional?: boolean;
 
   // Phase 14.5: freehand, optional — feeds customer search alongside name/
   // companyName/address (see CustomerRepository.findAll).

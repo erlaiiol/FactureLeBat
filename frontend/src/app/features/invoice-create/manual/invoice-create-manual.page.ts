@@ -19,6 +19,7 @@ import { KeyboardVisibilityService } from '../../../core/services/keyboard-visib
 import { ToastService } from '../../../core/services/toast.service';
 import { TrialOfferService } from '../../../core/services/trial-offer.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
 import { IconTrashComponent } from '../../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
@@ -50,6 +51,7 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     BigButtonComponent,
+    FieldHintComponent,
     IconCloseComponent,
     IconTrashComponent,
     PdfPreviewModalComponent,

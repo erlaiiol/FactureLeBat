@@ -4,6 +4,7 @@ import {
   InvoiceEntryMode,
   InvoiceStatus,
   ManualColumnRole,
+  NatureOperation,
   ServiceVisibility,
   SignatureMethod,
   Unit,
@@ -161,6 +162,10 @@ export interface InvoiceWithTotals {
   customerAddress: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  // Phase 1.1-8: see schema.prisma's comments on Invoice.customerSiret/
+  // Invoice.deliveryAddress.
+  customerSiret: string | null;
+  deliveryAddress: string | null;
   customerId: string | null;
   customerFields: InvoiceCustomerFieldWithId[];
   // Phase 14.3: a devis is mechanically a facture — see DocumentType
@@ -216,6 +221,11 @@ export interface InvoiceWithTotals {
   depositPercentageBasisPoints: number | null;
   depositAmountCents: number | null;
   depositPaidAt: Date | null;
+  // Phase 1.1-7: see schema.prisma's comment on Invoice.reverseChargeApplicable.
+  reverseChargeApplicable: boolean;
+  // Phase 1.1-8: MANUAL-only, null for GUIDED — see schema.prisma's comment
+  // on Invoice.manualNatureOfOperation.
+  manualNatureOfOperation: NatureOperation | null;
   // Phase 23: see schema.prisma's comment on Invoice.simplifiedDisplay.
   simplifiedDisplay: boolean;
   // Phase 1.1-1: whether a real InvoiceSignature is attached — never the

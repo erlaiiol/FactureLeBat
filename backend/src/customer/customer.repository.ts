@@ -104,6 +104,7 @@ export class CustomerRepository {
         email: data.email ?? null,
         phone: data.phone ?? null,
         siret: data.siret ?? null,
+        isProfessional: data.isProfessional ?? false,
         description: data.description ?? null,
       },
     });

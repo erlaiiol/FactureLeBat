@@ -165,6 +165,15 @@
           "
         />
       </div>
+      <input
+        type="text"
+        placeholder="Adresse de livraison (si différente)"
+        class="rounded -mx-1 border-b border-transparent bg-secondary-subtle/40 px-1 text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:border-primary focus:bg-secondary-subtle"
+        [value]="store.customer().deliveryAddress"
+        (input)="
+          store.setCustomer({ ...store.customer(), deliveryAddress: $any($event.target).value })
+        "
+      />
 
       <!-- Freehand extra client fields (e.g. SIRET) — no fixed vocabulary,
            same "+ add one, generic placeholder" principle as a CUSTOM table
@@ -204,6 +213,24 @@
       </button>
     </section>
 
+    <label class="flex flex-col gap-1">
+      <span class="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+        Nature de l'opération
+      </span>
+      <select
+        class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+        [value]="store.manualNatureOfOperation()"
+        (change)="store.setNatureOfOperation($any($event.target).value)"
+      >
+        <option value="PRESTATION_SERVICES">Prestation de services</option>
+        <option value="LIVRAISON_BIENS">Livraison de biens</option>
+        <option value="BIENS_ET_SERVICES">Livraison de biens et prestation de services</option>
+      </select>
+      <app-field-hint
+        text="Mention obligatoire de la réforme de facturation électronique 2026 — le mode rapide la déduit automatiquement de vos lignes, mais le mode manuel n'a pas cette structure, d'où ce choix explicite."
+      />
+    </label>
+
     @if (store.documentType() === 'FACTURE') {
       <app-invoice-deposit-field
         [requested]="store.deposit().requested"
@@ -215,6 +242,19 @@
         (amountEurosChange)="onDepositAmountChange($event)"
         (resetAutoCalc)="store.resetDepositAutoCalc()"
       />
+
+      <label
+        class="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
+        title="Sous-traitance BTP : la TVA n'est pas facturée par vous, mais autoliquidée par votre client (art. 242 nonies A, 13° de l'annexe II au CGI)."
+      >
+        <input
+          type="checkbox"
+          [checked]="store.reverseChargeApplicable()"
+          (change)="store.setReverseChargeApplicable($any($event.target).checked)"
+          class="h-4 w-4 rounded border-line"
+        />
+        <span class="font-medium text-ink">Autoliquidation (sous-traitance BTP)</span>
+      </label>
     }
 
     <section appTourAnchor="manual-table" class="flex flex-col gap-3">
@@ -415,6 +455,7 @@
           [vatRateBasisPoints]="store.vatRateBasisPoints()"
           [company]="store.company()"
           [editable]="true"
+          [vatSelectDisabled]="store.reverseChargeApplicable()"
           (subtotalOverrideChange)="store.setSubtotalOverrideText($event)"
           (vatOverrideChange)="store.setVatOverrideText($event)"
           (totalOverrideChange)="onTotalOverrideChange($event)"

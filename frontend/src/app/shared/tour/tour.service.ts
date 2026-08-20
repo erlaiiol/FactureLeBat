@@ -3,7 +3,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { catchError, filter, firstValueFrom, Observable, of, tap } from 'rxjs';
 import { OnboardingState, TourId } from '../../core/models/onboarding.model';
+import { CatalogFolderService } from '../../core/services/catalog-folder.service';
 import { CustomerService } from '../../core/services/customer.service';
+import { DiscountService } from '../../core/services/discount.service';
 import { OnboardingService } from '../../core/services/onboarding.service';
 import { ProductService } from '../../core/services/product.service';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
@@ -52,6 +54,15 @@ export class TourService {
   private readonly customerService = inject(CustomerService);
   private readonly productService = inject(ProductService);
   private readonly serviceCatalogService = inject(ServiceCatalogService);
+  // Phase 1.1-10: same on-demand getAllCached() reasoning as the three
+  // services above — 'hasFolders'/'hasDiscounts' are only ever evaluated
+  // while the tour is already active on an auth-gated catalog route. A
+  // Pro+/Premium-locked company's 402 on catalog-folders is caught by
+  // countFrom's own catchError → [], so 'hasFolders' just reads false for
+  // them, same "nothing said about a feature they can't use" behavior as
+  // every other showIf-gated step.
+  private readonly catalogFolderService = inject(CatalogFolderService);
+  private readonly discountService = inject(DiscountService);
 
   private readonly state = signal<OnboardingState | null>(null);
   // Guards against overlapping advanceToStep() calls — without it, holding
@@ -307,6 +318,16 @@ export class TourService {
       case 'hasServices': {
         const count = await this.countFrom(this.serviceCatalogService.getAllCached());
         return condition === 'hasServices' ? count > 0 : count === 0;
+      }
+      case 'noFolders':
+      case 'hasFolders': {
+        const count = await this.countFrom(this.catalogFolderService.getAllCached());
+        return condition === 'hasFolders' ? count > 0 : count === 0;
+      }
+      case 'noDiscounts':
+      case 'hasDiscounts': {
+        const count = await this.countFrom(this.discountService.getAllCached());
+        return condition === 'hasDiscounts' ? count > 0 : count === 0;
       }
     }
   }

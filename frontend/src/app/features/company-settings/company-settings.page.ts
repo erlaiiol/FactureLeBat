@@ -161,6 +161,22 @@ export class CompanySettingsPage {
     decennialInsurerName: [''],
     decennialInsurancePolicyNumber: [''],
     decennialInsuranceCoverageArea: [''],
+    // Phase 1.1-6: free-text footer mention, independently toggleable per
+    // document type — no cross-field validators, unlike the decennial
+    // fields above, since an artisan is free to enable a toggle before
+    // writing the message.
+    customFooterMessage: ['', Validators.maxLength(1000)],
+    customFooterOnFacture: [false],
+    customFooterOnDevis: [false],
+    // Phase 1.1-7: Art. L441-9's escompte-policy mention — pre-filled by the
+    // backend's own DB default (see schema.prisma's comment on
+    // Company.earlyPaymentDiscountMention), editable like every other
+    // footer field above.
+    earlyPaymentDiscountMention: ['', Validators.maxLength(500)],
+    // Phase 1.1-8 (2026 e-invoicing reform): "option pour le paiement de la
+    // taxe d'après les débits" — same plain boolean toggle as
+    // customFooterOnFacture above.
+    vatOnDebitsOption: [false],
   });
 
   // Phase 12: the artisan's own SMTP account, used to send invoices for
@@ -213,6 +229,11 @@ export class CompanySettingsPage {
             decennialInsurerName: profile.decennialInsurerName ?? '',
             decennialInsurancePolicyNumber: profile.decennialInsurancePolicyNumber ?? '',
             decennialInsuranceCoverageArea: profile.decennialInsuranceCoverageArea ?? '',
+            customFooterMessage: profile.customFooterMessage ?? '',
+            customFooterOnFacture: profile.customFooterOnFacture,
+            customFooterOnDevis: profile.customFooterOnDevis,
+            earlyPaymentDiscountMention: profile.earlyPaymentDiscountMention ?? '',
+            vatOnDebitsOption: profile.vatOnDebitsOption,
           });
         },
         error: () => {
@@ -315,6 +336,11 @@ export class CompanySettingsPage {
         decennialInsuranceCoverageArea: value.decennialInsuranceApplicable
           ? value.decennialInsuranceCoverageArea
           : undefined,
+        customFooterMessage: value.customFooterMessage || undefined,
+        customFooterOnFacture: value.customFooterOnFacture,
+        customFooterOnDevis: value.customFooterOnDevis,
+        earlyPaymentDiscountMention: value.earlyPaymentDiscountMention || undefined,
+        vatOnDebitsOption: value.vatOnDebitsOption,
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({

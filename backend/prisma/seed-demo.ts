@@ -444,6 +444,14 @@ async function seedArtisanBatiment(): Promise<void> {
       // this produces, unchanged from what an artisan setting this in "Mon
       // entreprise" would see).
       defaultDepositPercentageBasisPoints: 3000,
+      // Phase 1.1-6: free-text footer mention, shown on both factures and
+      // devis — L'Atelier Beauté below is left with both toggles at their
+      // default false, so the demo shows both the opted-in and untouched
+      // states.
+      customFooterMessage:
+        'Devis gratuit et sans engagement. Intervention sous 48h en cas d’urgence.',
+      customFooterOnFacture: true,
+      customFooterOnDevis: true,
     },
     email: DEMO_ARTISAN_EMAIL,
     password: DEMO_ARTISAN_PASSWORD,

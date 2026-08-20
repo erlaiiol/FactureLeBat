@@ -114,6 +114,14 @@ export class CustomerService {
     return customer;
   }
 
+  // Phase 1.1-7: lenient counterpart of findById, for InvoiceService.previewPdf
+  // — that path deliberately skips the strict existence check create() does
+  // (see its own comment), so a stale/typo'd customerId in a draft preview
+  // must resolve to "not professional" rather than a 404.
+  findByIdOrNull(companyId: string, id: string): Promise<CustomerProfile | null> {
+    return this.customerRepository.findById(companyId, id);
+  }
+
   // Phase 30: catalog-size cap, one of the 3 tier axes — see
   // docs/roadmap.md Phase 30. Checked before the write, never on list/
   // search/edit of already-saved customers, same "never earlier than the

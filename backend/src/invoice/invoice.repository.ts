@@ -23,6 +23,7 @@ import {
   DocumentType,
   InvoiceStatus,
   SignatureMethod,
+  NatureOperation,
 } from '../../generated/prisma/enums';
 import { computeNextDocumentNumber } from './next-number.util';
 
@@ -44,6 +45,13 @@ export type InvoiceWithLines = Invoice & {
   // Phase 1.1-1: presence/method only — never the image bytes (see
   // InvoiceRepository.findSignatureImage for the one place those are read).
   signature: { method: SignatureMethod; createdAt: Date } | null;
+  // Phase 1.1-7: isProfessional only — a live join, not a snapshot (see
+  // schema.prisma's comment on Customer.isProfessional). Null when
+  // customerId is unset or points at nothing this company still has (the
+  // soft-reference case conventions.md already documents for
+  // customerName/Address/Email/Phone) — InvoiceMapper treats either the
+  // same as "not professional".
+  customer: { isProfessional: boolean } | null;
 };
 
 export interface CreateInvoiceLineData {
@@ -127,6 +135,10 @@ export interface CreateInvoiceData {
   customerAddress?: string;
   customerEmail?: string;
   customerPhone?: string;
+  // Phase 1.1-8: see schema.prisma's comments on Invoice.customerSiret/
+  // Invoice.deliveryAddress.
+  customerSiret?: string;
+  deliveryAddress?: string;
   customerId?: string;
   customerFields: CreateInvoiceCustomerFieldData[];
   vatApplicable: boolean;
@@ -172,6 +184,14 @@ export interface CreateInvoiceData {
   // comment on Invoice.depositPercentageBasisPoints.
   depositPercentageBasisPoints?: number;
   depositAmountCents?: number;
+  // Phase 1.1-7: FACTURE-only (enforced at the DTO boundary, see
+  // ReverseChargeFactureOnly) — see schema.prisma's comment on
+  // Invoice.reverseChargeApplicable.
+  reverseChargeApplicable?: boolean;
+  // Phase 1.1-8: MANUAL-only (enforced at the DTO boundary, see
+  // ManualModeFieldsConsistency) — see schema.prisma's comment on
+  // Invoice.manualNatureOfOperation.
+  manualNatureOfOperation?: NatureOperation;
 }
 
 const INVOICE_INCLUDE = {
@@ -185,6 +205,8 @@ const INVOICE_INCLUDE = {
   convertedToFacture: { select: { id: true, number: true } },
   retroactiveDevis: { select: { id: true, number: true } },
   signature: { select: { method: true, createdAt: true } },
+  // Phase 1.1-7: see InvoiceWithLines.customer's own comment.
+  customer: { select: { isProfessional: true } },
 } as const;
 
 @Injectable()
@@ -252,6 +274,8 @@ export class InvoiceRepository {
           customerAddress: data.customerAddress,
           customerEmail: data.customerEmail,
           customerPhone: data.customerPhone,
+          customerSiret: data.customerSiret,
+          deliveryAddress: data.deliveryAddress,
           customerId: data.customerId,
           vatApplicable: data.vatApplicable,
           vatRateBasisPoints: data.vatRateBasisPoints,
@@ -262,6 +286,8 @@ export class InvoiceRepository {
           simplifiedDisplay: data.simplifiedDisplay,
           depositPercentageBasisPoints: data.depositPercentageBasisPoints,
           depositAmountCents: data.depositAmountCents,
+          reverseChargeApplicable: data.reverseChargeApplicable,
+          manualNatureOfOperation: data.manualNatureOfOperation,
           lines: {
             create: data.lines.map((line, index) => ({
               position: index,

@@ -14,6 +14,12 @@ export type InvoiceEntryMode = 'GUIDED' | 'MANUAL';
 // shape everywhere below, just a different label and numbering sequence.
 export type DocumentType = 'DEVIS' | 'FACTURE';
 
+// Phase 1.1-8 (2026 e-invoicing reform): "nature de l'opération" — GUIDED
+// derives it (never sent by the frontend), MANUAL sends an explicit choice.
+// See CreateInvoiceRequest.manualNatureOfOperation and
+// InvoiceWithTotals.manualNatureOfOperation.
+export type NatureOperation = 'LIVRAISON_BIENS' | 'PRESTATION_SERVICES' | 'BIENS_ET_SERVICES';
+
 // Phase 16: the invoice lifecycle board's payment status. "EN_RETARD" is
 // deliberately not a value here — it's NON_PAYEE + dueDate in the past,
 // computed client-side (see invoice-status.util.ts's isOverdue) never
@@ -126,6 +132,12 @@ export interface CreateInvoiceRequest {
   customerAddress?: string;
   customerEmail?: string;
   customerPhone?: string;
+  // Phase 1.1-8 (2026 e-invoicing reform): autofilled from the picked
+  // Customer at pick time, freehand-editable afterward — same soft-
+  // reference spirit as customerAddress above. See
+  // InvoiceDraftStore/ManualInvoiceDraftStore for where each is set.
+  customerSiret?: string;
+  deliveryAddress?: string;
   customerId?: string;
   customerFields?: CreateInvoiceCustomerFieldRequest[];
   // Phase 9.5: defaults to GUIDED backend-side when omitted, same as before
@@ -170,6 +182,15 @@ export interface CreateInvoiceRequest {
   // see InvoiceDraftStore/ManualInvoiceDraftStore's deposit autoCalc.
   depositPercentageBasisPoints?: number;
   depositAmountCents?: number;
+  // Phase 1.1-7: "Autoliquidation (sous-traitance BTP)" — FACTURE-only,
+  // mirrors the backend's ReverseChargeFactureOnly rule. Unlike
+  // vatApplicableOverride, usable from both entryMode GUIDED and MANUAL.
+  reverseChargeApplicable?: boolean;
+  // Phase 1.1-8: MANUAL-only explicit choice — GUIDED derives its own
+  // "nature de l'opération" backend-side and must never send this (mirrors
+  // ManualModeFieldsConsistency). Omitted for MANUAL defaults to
+  // PRESTATION_SERVICES backend-side.
+  manualNatureOfOperation?: NatureOperation;
   // "Créer la facture à partir du devis": set when this draft was seeded
   // from an existing devis (see InvoiceDraftStore.loadFromInvoice /
   // ManualInvoiceDraftStore.loadFromInvoice) so the resulting facture stays
@@ -290,6 +311,8 @@ export interface InvoiceWithTotals {
   customerAddress: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  customerSiret: string | null;
+  deliveryAddress: string | null;
   customerId: string | null;
   customerFields: InvoiceCustomerFieldWithId[];
   // Phase 14.3: convertedFromDevisId is set on a facture created by
@@ -344,6 +367,11 @@ export interface InvoiceWithTotals {
   depositPercentageBasisPoints: number | null;
   depositAmountCents: number | null;
   depositPaidAt: string | null;
+  // Phase 1.1-7: see CreateInvoiceRequest's own comment.
+  reverseChargeApplicable: boolean;
+  // Phase 1.1-8: MANUAL-only, null for GUIDED — see CreateInvoiceRequest's
+  // own comment.
+  manualNatureOfOperation: NatureOperation | null;
 }
 
 // Phase 16: drives both the board's drag/button status changes and a

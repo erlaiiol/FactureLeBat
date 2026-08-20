@@ -2,6 +2,7 @@ import { dirname } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import pdfMake from 'pdfmake';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
+import { NatureOperation } from '../../../generated/prisma/enums';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const roboto = require('pdfmake/fonts/Roboto') as Record<string, unknown>;
 import { FACTURELE_WATERMARK_LOGO_BASE64 } from './facturele-watermark-logo';
@@ -30,6 +31,17 @@ const ATELIER_FONTS_DIRS = [dirname(ZILLA_SLAB_TTF), dirname(WORK_SANS_REGULAR_T
 
 const ATELIER_WALNUT = '#6B4A34';
 const ATELIER_INK_SOFT = '#746A5D';
+
+// Phase 1.1-8 (2026 e-invoicing reform): "nature de l'opération" — see
+// NatureOperation's own comment (schema.prisma) for GUIDED-derived vs
+// MANUAL-selected. PdfService only ever formats the already-resolved enum
+// value InvoiceMapper hands it, same "plain text rendering" boundary as
+// UNIT_LABELS elsewhere in this pipeline.
+const NATURE_OPERATION_LABELS: Record<NatureOperation, string> = {
+  LIVRAISON_BIENS: 'Livraison de biens',
+  PRESTATION_SERVICES: 'Prestation de services',
+  BIENS_ET_SERVICES: 'Livraison de biens et prestation de services',
+};
 
 const eur = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 // Intl's fr-FR formatting uses narrow no-break/no-break spaces as group and
@@ -344,8 +356,19 @@ export class PdfService {
     const customerLines = [
       data.customerName,
       data.customerAddress ?? '',
+      // Phase 1.1-8 (2026 e-invoicing reform): SIREN is the first 9 digits
+      // of the SIRET — no separate field needed, a SIRET already contains
+      // it.
+      data.customerSiret ? `SIREN : ${data.customerSiret.slice(0, 9)}` : '',
       data.customerEmail ?? '',
       data.customerPhone ?? '',
+      // Printed only when it actually differs from the billing address
+      // above — an untouched invoice's deliveryAddress starts identical to
+      // customerAddress by default (see InvoiceDraftStore), so nothing
+      // extra renders unless the artisan explicitly edited it.
+      data.deliveryAddress && data.deliveryAddress !== (data.customerAddress ?? '')
+        ? `Adresse de livraison : ${data.deliveryAddress}`
+        : '',
       ...data.customerFields.map((field) => `${field.label} : ${field.value}`),
     ].filter(Boolean);
 
@@ -524,28 +547,88 @@ export class PdfService {
   }
 
   private buildFooter(data: InvoicePdfData): Content {
+    // Phase 1.1-7: Art. L441-9 du Code de commerce only governs commercial
+    // relations between professionals — none of the four mentions gated on
+    // this apply to a DEVIS (a quote, not a facture) or to an individual
+    // consumer, regardless of what data.customerIsProfessional says for a
+    // DEVIS's own linked customer.
+    const isProfessionalFacture = data.documentType === 'FACTURE' && data.customerIsProfessional;
+
     const mentions = [
       // The art. 293 B citation is only accurate when the issuing company
       // itself is under the franchise en base — a manual invoice whose
       // vatApplicable was overridden away from that (see
       // InvoiceMapper.issuerFields) gets the plain mention instead, never a
       // legal basis that doesn't actually apply to that company.
+      // Phase 1.1-7: reverseChargeApplicable takes precedence over both —
+      // when the invoice's own zero-VAT treatment comes from autoliquidation
+      // rather than the company's general franchise-en-base status, only the
+      // autoliquidation citation is accurate for this specific document.
       data.vatApplicable
         ? undefined
-        : data.companyVatExempt
-          ? 'TVA non applicable, art. 293 B du CGI.'
-          : 'TVA non applicable.',
-      "En cas de retard de paiement, une indemnité forfaitaire de 40€ pour frais de recouvrement est due, ainsi qu'une pénalité de retard calculée au taux d'intérêt légal en vigueur.",
+        : data.reverseChargeApplicable
+          ? "Autoliquidation - Article 242 nonies A, 13° de l'annexe II au CGI."
+          : data.companyVatExempt
+            ? 'TVA non applicable, art. 293 B du CGI.'
+            : 'TVA non applicable.',
+      // Phase 1.1-7: previously shown unconditionally — L441-9's 40€
+      // indemnité forfaitaire only governs professional-to-professional
+      // sales, so an individual-consumer client (or any DEVIS) must never
+      // see it.
+      isProfessionalFacture
+        ? "En cas de retard de paiement, une indemnité forfaitaire de 40€ pour frais de recouvrement est due, ainsi qu'une pénalité de retard calculée au taux d'intérêt légal en vigueur."
+        : undefined,
+      // Art. L441-9's own required "date/délai de règlement" mention — the
+      // first time dueDate is rendered as this, rather than only driving the
+      // "en retard" board logic (Phase 16).
+      isProfessionalFacture && data.dueDate
+        ? `Délai de règlement : ${data.dueDate.toLocaleDateString('fr-FR')}`
+        : undefined,
+      // Art. L441-9 requires *stating* the escompte policy even when there
+      // isn't one — see schema.prisma's comment on
+      // Company.earlyPaymentDiscountMention for why this is almost never
+      // null in practice.
+      isProfessionalFacture && data.earlyPaymentDiscountMention
+        ? data.earlyPaymentDiscountMention
+        : undefined,
       // BTP mandatory mention (art. L243-2 du Code des assurances) — see
       // InvoiceMapper.issuerFields for when decennialInsurance is non-null.
       data.decennialInsurance
         ? `Assurance de responsabilité civile décennale souscrite auprès de ${data.decennialInsurance.insurerName}, police n°${data.decennialInsurance.policyNumber}, couvrant les chantiers situés en ${data.decennialInsurance.coverageArea}.`
+        : undefined,
+      // Phase 1.1-8 (2026 e-invoicing reform): always present, both
+      // document types — data.natureOfOperation is never null (see
+      // InvoiceMapper), so this line always renders.
+      `Nature de l'opération : ${NATURE_OPERATION_LABELS[data.natureOfOperation]}.`,
+      // Same FACTURE-only scope as the L441-9 mentions above — a devis
+      // collects no tax, so the débits option is meaningless there.
+      data.documentType === 'FACTURE' && data.vatOnDebitsOption
+        ? "Option pour le paiement de la taxe sur la valeur ajoutée d'après les débits."
         : undefined,
     ].filter((mention): mention is string => Boolean(mention));
 
     return {
       stack: [
         { text: mentions.join('\n'), fontSize: 7, color: '#555555' },
+        // Phase 1.1-6: the artisan's own free-text mention — already
+        // resolved against this document's type by
+        // InvoiceMapper.issuerFields, so null here just means "off or
+        // empty, render nothing". Centered and a touch larger than the
+        // statutory-citation stack above on purpose: these are the
+        // artisan's own words, not a legal citation, so they get a
+        // distinct, more prominent visual treatment rather than blending
+        // into the 7pt legal-mentions block.
+        ...(data.customFooterMessage
+          ? [
+              {
+                text: data.customFooterMessage,
+                fontSize: 8,
+                color: '#555555',
+                alignment: 'center' as const,
+                margin: [0, 8, 0, 0] as [number, number, number, number],
+              },
+            ]
+          : []),
         // facturele.net signature — every invoice/devis carries it unless
         // the issuing company's effective plan tier removes it (see
         // PLAN_DEFINITIONS.removesWatermark, InvoiceMapper.issuerFields).

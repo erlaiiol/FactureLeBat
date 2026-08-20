@@ -9,6 +9,7 @@ import {
   DocumentType,
   InvoiceEntryMode,
   InvoiceStatus,
+  NatureOperation,
   SignatureMethod,
 } from '../../generated/prisma/enums';
 import { PlanGateService } from '../billing/plan-gate.service';
@@ -124,6 +125,8 @@ export class InvoiceService {
       customerAddress: dto.customerAddress,
       customerEmail: dto.customerEmail,
       customerPhone: dto.customerPhone,
+      customerSiret: dto.customerSiret,
+      deliveryAddress: dto.deliveryAddress,
       customerId: dto.customerId,
       customerFields: (dto.customerFields ?? []).map((field) => ({
         label: field.label,
@@ -131,8 +134,14 @@ export class InvoiceService {
       })),
       // ManualModeFieldsConsistency guarantees these two overrides are only
       // ever present for entryMode MANUAL, so this can't misfire for a
-      // GUIDED invoice.
-      vatApplicable: dto.vatApplicableOverride ?? isVatApplicable(company.legalStatus),
+      // GUIDED invoice. reverseChargeApplicable (Phase 1.1-7), unlike
+      // vatApplicableOverride, is allowed in both modes and always wins when
+      // set — autoliquidation is a VAT-correctness fact about the job, not a
+      // stylistic choice the artisan's own manual VAT pick should be able to
+      // override.
+      vatApplicable: dto.reverseChargeApplicable
+        ? false
+        : (dto.vatApplicableOverride ?? isVatApplicable(company.legalStatus)),
       vatRateBasisPoints: dto.vatRateBasisPointsOverride ?? company.vatRateBasisPoints,
       subtotalOverrideCents: dto.subtotalOverrideCents,
       vatOverrideCents: dto.vatOverrideCents,
@@ -148,6 +157,16 @@ export class InvoiceService {
       // both present or both absent, and only ever present for a FACTURE.
       depositPercentageBasisPoints: dto.depositPercentageBasisPoints,
       depositAmountCents: dto.depositAmountCents,
+      // ReverseChargeFactureOnly guarantees this is never true for a DEVIS.
+      reverseChargeApplicable: dto.reverseChargeApplicable ?? false,
+      // ManualModeFieldsConsistency guarantees this is only ever present for
+      // entryMode MANUAL; GUIDED derives its own "nature de l'opération"
+      // instead (see InvoiceMapper), so this stays undefined there —
+      // undefined leaves the column NULL, never a meaningless default.
+      manualNatureOfOperation:
+        entryMode === InvoiceEntryMode.MANUAL
+          ? (dto.manualNatureOfOperation ?? NatureOperation.PRESTATION_SERVICES)
+          : undefined,
       // ManualModeFieldsConsistency guarantees `lines` is a non-empty array
       // whenever entryMode is GUIDED (the only branch that reads it below).
       lines:
@@ -232,6 +251,8 @@ export class InvoiceService {
       customerAddress: devis.customerAddress ?? undefined,
       customerEmail: devis.customerEmail ?? undefined,
       customerPhone: devis.customerPhone ?? undefined,
+      customerSiret: devis.customerSiret ?? undefined,
+      deliveryAddress: devis.deliveryAddress ?? undefined,
       customerId: devis.customerId ?? undefined,
       customerFields: devis.customerFields.map((field) => ({
         label: field.label,
@@ -246,6 +267,11 @@ export class InvoiceService {
       documentType: DocumentType.FACTURE,
       convertedFromDevisId: devis.id,
       simplifiedDisplay: devis.simplifiedDisplay,
+      // Phase 1.1-8: carried through, same "untouched one-shot clone"
+      // reasoning as every other field here — a MANUAL devis's own choice
+      // (if any) should survive the conversion, not silently reset to the
+      // default.
+      manualNatureOfOperation: devis.manualNatureOfOperation ?? undefined,
       lines: devis.lines.map((line) => ({
         description: line.description,
         unit: line.unit,
@@ -354,6 +380,8 @@ export class InvoiceService {
       customerAddress: facture.customerAddress ?? undefined,
       customerEmail: facture.customerEmail ?? undefined,
       customerPhone: facture.customerPhone ?? undefined,
+      customerSiret: facture.customerSiret ?? undefined,
+      deliveryAddress: facture.deliveryAddress ?? undefined,
       customerId: facture.customerId ?? undefined,
       customerFields: facture.customerFields.map((field) => ({
         label: field.label,
@@ -369,6 +397,8 @@ export class InvoiceService {
       createdFromFactureId: facture.id,
       number,
       simplifiedDisplay: facture.simplifiedDisplay,
+      // Phase 1.1-8: same carry-through reasoning as convertToFacture above.
+      manualNatureOfOperation: facture.manualNatureOfOperation ?? undefined,
       lines: facture.lines.map((line) => ({
         description: line.description,
         unit: line.unit,
@@ -577,11 +607,16 @@ export class InvoiceService {
     // late point in the flow (see docs/roadmap.md Phase 14).
     await this.premiumGate.assertCanCreateInvoice(companyId);
 
-    const [company, logo] = await Promise.all([
+    const [company, logo, customer] = await Promise.all([
       this.companyService.getProfile(companyId),
       this.companyService.getLogo(companyId),
+      // Phase 1.1-7: same lenient (never-throws) lookup as the rest of this
+      // method's own "stale id can't corrupt anything" reasoning — a
+      // customerId that no longer resolves just previews as "not
+      // professional" rather than failing the whole preview.
+      dto.customerId ? this.customerService.findByIdOrNull(companyId, dto.customerId) : null,
     ]);
-    return this.mapper.toPreviewPdfData(dto, company, logo);
+    return this.mapper.toPreviewPdfData(dto, company, logo, customer?.isProfessional ?? false);
   }
 
   // Phase 15: JSON counterpart of previewPdf, for the mandatory preview

@@ -6,6 +6,7 @@ import { Router, RouterLink } from '@angular/router';
 import { combineLatest, debounceTime, distinctUntilChanged, startWith, switchMap } from 'rxjs';
 import { CustomerSearchResult, CustomerSortBy } from '../../core/models/customer.model';
 import { CustomerService } from '../../core/services/customer.service';
+import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { SkeletonRowsComponent } from '../../shared/components/skeleton-rows.component';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
@@ -25,6 +26,7 @@ const SORT_OPTIONS: ReadonlyArray<{ value: CustomerSortBy; label: string }> = [
   imports: [
     ReactiveFormsModule,
     RouterLink,
+    BadgeComponent,
     BigButtonComponent,
     SkeletonRowsComponent,
     TourAnchorDirective,

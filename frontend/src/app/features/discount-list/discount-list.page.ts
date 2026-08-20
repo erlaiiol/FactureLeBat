@@ -8,6 +8,7 @@ import { DiscountService } from '../../core/services/discount.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { SkeletonRowsComponent } from '../../shared/components/skeleton-rows.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
+import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 @Component({
@@ -19,6 +20,7 @@ import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
     BigButtonComponent,
     SkeletonRowsComponent,
     CentsToEurosPipe,
+    TourAnchorDirective,
   ],
   templateUrl: './discount-list.page.html',
 })

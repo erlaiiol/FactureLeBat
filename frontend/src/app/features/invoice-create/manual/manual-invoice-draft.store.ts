@@ -8,6 +8,7 @@ import {
   DocumentType,
   InvoiceWithTotals,
   ManualColumnRole,
+  NatureOperation,
 } from '../../../core/models/invoice.model';
 import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
@@ -34,6 +35,14 @@ export interface ManualCustomerDraft {
   customerAddress: string;
   customerEmail: string;
   customerPhone: string;
+  // Phase 1.1-8 (2026 e-invoicing reform): freehand, no autofill target —
+  // mode manuel has no saved-customer picker (see this page's own "no
+  // picker, no separate form" comment). Printed only when it differs from
+  // customerAddress at render time. Unlike mode rapide, no dedicated
+  // customerSiret field here — the pre-existing freehand customFields
+  // mechanism below already covers a SIRET on a manual invoice (its own
+  // placeholder literally suggests it).
+  deliveryAddress: string;
   customFields: ManualCustomerFieldDraft[];
 }
 
@@ -95,6 +104,7 @@ const EMPTY_CUSTOMER: ManualCustomerDraft = {
   customerAddress: '',
   customerEmail: '',
   customerPhone: '',
+  deliveryAddress: '',
   customFields: [],
 };
 
@@ -120,6 +130,8 @@ interface PersistedManualDraft {
   sourceDevisId: string | null;
   number: string;
   deposit: InvoiceDepositDraft;
+  reverseChargeApplicable: boolean;
+  manualNatureOfOperation: NatureOperation;
 }
 
 // Phase 9.5 mode manuel: the free-form canvas's shared, in-progress draft
@@ -182,8 +194,24 @@ export class ManualInvoiceDraftStore {
   // to the company default.
   readonly vatChoice = signal<ManualVatChoice | null>(null);
 
+  // Phase 1.1-7: "Autoliquidation (sous-traitance BTP)" — always wins over
+  // vatChoice, same precedence the backend's VAT computation gives it
+  // (InvoiceService.create/InvoiceMapper): a manual VAT pick is a stylistic
+  // choice, autoliquidation is a VAT-correctness fact about the job.
+  readonly reverseChargeApplicable = signal(false);
+
+  // Phase 1.1-8 (2026 e-invoicing reform): MANUAL's explicit "nature de
+  // l'opération" choice — unlike vatChoice above, this always has a
+  // concrete value (the selector itself starts on "Prestation de
+  // services", never a blank/unset state), since GUIDED has no equivalent
+  // to fall back to here — see schema.prisma's comment on
+  // Invoice.manualNatureOfOperation.
+  readonly manualNatureOfOperation = signal<NatureOperation>('PRESTATION_SERVICES');
+
   readonly vatApplicable = computed(
-    () => this.vatChoice()?.applicable ?? this.company()?.legalStatus === 'COMPANY',
+    () =>
+      !this.reverseChargeApplicable() &&
+      (this.vatChoice()?.applicable ?? this.company()?.legalStatus === 'COMPANY'),
   );
   readonly vatRateBasisPoints = computed(
     () => this.vatChoice()?.rateBasisPoints ?? this.company()?.vatRateBasisPoints ?? 0,
@@ -323,6 +351,8 @@ export class ManualInvoiceDraftStore {
         sourceDevisId: this.sourceDevisId(),
         number: this.number(),
         deposit: this.deposit(),
+        reverseChargeApplicable: this.reverseChargeApplicable(),
+        manualNatureOfOperation: this.manualNatureOfOperation(),
       };
       this.writeToStorage(snapshot);
     });
@@ -467,6 +497,14 @@ export class ManualInvoiceDraftStore {
     this.vatChoice.set(choice);
   }
 
+  setReverseChargeApplicable(value: boolean): void {
+    this.reverseChargeApplicable.set(value);
+  }
+
+  setNatureOfOperation(value: NatureOperation): void {
+    this.manualNatureOfOperation.set(value);
+  }
+
   setCellValue(rowId: string, columnId: string, value: string): void {
     this.rows.update((rows) =>
       rows.map((row) =>
@@ -580,6 +618,8 @@ export class ManualInvoiceDraftStore {
     this.applyCompanyDefaultDeposit(this.company());
     this.sourceDevisId.set(null);
     this.number.set('');
+    this.reverseChargeApplicable.set(false);
+    this.manualNatureOfOperation.set('PRESTATION_SERVICES');
     this.clearStorage();
   }
 
@@ -602,6 +642,7 @@ export class ManualInvoiceDraftStore {
       customerAddress: source.customerAddress ?? '',
       customerEmail: source.customerEmail ?? '',
       customerPhone: source.customerPhone ?? '',
+      deliveryAddress: source.deliveryAddress ?? '',
       customFields: source.customerFields.map((field) => ({
         id: crypto.randomUUID(),
         label: field.label,
@@ -668,6 +709,13 @@ export class ManualInvoiceDraftStore {
     // Same "a converted facture always gets its own fresh number" rule as
     // InvoiceDraftStore.loadFromInvoice.
     this.number.set('');
+    // A devis can never carry reverseChargeApplicable (FACTURE-only) — same
+    // reasoning as InvoiceDraftStore.loadFromInvoice.
+    this.reverseChargeApplicable.set(false);
+    // Unlike reverseChargeApplicable, manualNatureOfOperation isn't
+    // FACTURE-only — a MANUAL devis's own choice (if any) carries through,
+    // same "untouched one-shot clone" reasoning as InvoiceService.convertToFacture.
+    this.manualNatureOfOperation.set(source.manualNatureOfOperation ?? 'PRESTATION_SERVICES');
   }
 
   // Builds the exact payload shape the backend expects, for both the real
@@ -717,10 +765,15 @@ export class ManualInvoiceDraftStore {
       customerAddress: customer.customerAddress || undefined,
       customerEmail: customer.customerEmail || undefined,
       customerPhone: customer.customerPhone || undefined,
+      deliveryAddress: customer.deliveryAddress || undefined,
       customerFields: customerFields.length > 0 ? customerFields : undefined,
       entryMode: 'MANUAL',
       documentType: this.documentType(),
       manualTable: { columns: requestColumns, rows: requestRows },
+      // Phase 1.1-8: always sent for MANUAL, unlike the FACTURE-only fields
+      // below — GUIDED is the one entryMode forbidden from sending this
+      // (ManualModeFieldsConsistency).
+      manualNatureOfOperation: this.manualNatureOfOperation(),
       subtotalOverrideCents:
         subtotalOverride !== null ? Math.round(subtotalOverride * 100) : undefined,
       vatOverrideCents: vatOverride !== null ? Math.round(vatOverride * 100) : undefined,
@@ -734,6 +787,11 @@ export class ManualInvoiceDraftStore {
             depositPercentageBasisPoints: this.deposit().percentageBasisPoints,
             depositAmountCents: this.depositAmountCents(),
           }
+        : {}),
+      // Phase 1.1-7: FACTURE-only, same reasoning as the deposit fields
+      // above.
+      ...(this.documentType() === 'FACTURE' && this.reverseChargeApplicable()
+        ? { reverseChargeApplicable: true }
         : {}),
       convertedFromDevisId: this.sourceDevisId() ?? undefined,
       number: this.number().trim() || undefined,
@@ -800,6 +858,16 @@ export class ManualInvoiceDraftStore {
       ) {
         this.deposit.set({ ...EMPTY_DEPOSIT, ...parsed.deposit });
         this.depositWasHydrated = true;
+      }
+      if (typeof parsed.reverseChargeApplicable === 'boolean') {
+        this.reverseChargeApplicable.set(parsed.reverseChargeApplicable);
+      }
+      if (
+        parsed.manualNatureOfOperation === 'LIVRAISON_BIENS' ||
+        parsed.manualNatureOfOperation === 'PRESTATION_SERVICES' ||
+        parsed.manualNatureOfOperation === 'BIENS_ET_SERVICES'
+      ) {
+        this.manualNatureOfOperation.set(parsed.manualNatureOfOperation);
       }
     } catch {
       // Malformed/unavailable storage — start from a blank draft rather
