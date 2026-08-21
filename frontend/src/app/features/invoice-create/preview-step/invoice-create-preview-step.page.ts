@@ -301,6 +301,24 @@ export class InvoiceCreatePreviewStepPage {
     this.emailModalInvoice.set(null);
   }
 
+  // Phase 1.1-11 follow-up: the native Web Share tier has no recipient
+  // parameter at all (see InvoiceShareService's own doc comment) — this is
+  // the artisan's fallback to get the client's email into whichever app
+  // "Partager" opened, without retyping it. Clipboard access can be denied
+  // by the browser; the email is also shown as plain, selectable text right
+  // next to the button, so this is a convenience, never the only way to
+  // get it.
+  protected async copyCustomerEmail(email: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(email);
+      this.toastService.success('Email copié dans le presse-papiers.');
+    } catch {
+      this.toastService.error(
+        'Impossible de copier automatiquement — sélectionnez le texte à la main.',
+      );
+    }
+  }
+
   protected openSignatureModal(invoice: InvoiceWithTotals): void {
     this.signatureModalInvoice.set(invoice);
   }

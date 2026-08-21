@@ -294,6 +294,20 @@ export class InvoiceCreateManualPage {
     return this.invoiceService.pdfUrl(invoiceId);
   }
 
+  // Phase 1.1-11 follow-up: same convenience as mode rapide's preview-step
+  // success card — mode manuel has no "Partager" affordance at all, but the
+  // client's email is just as worth a one-click copy here.
+  protected async copyCustomerEmail(email: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(email);
+      this.toastService.success('Email copié dans le presse-papiers.');
+    } catch {
+      this.toastService.error(
+        'Impossible de copier automatiquement — sélectionnez le texte à la main.',
+      );
+    }
+  }
+
   protected back(): void {
     this.router.navigate(['/factures/nouvelle']);
   }

@@ -43,6 +43,23 @@
     <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
       <app-big-button>Télécharger le PDF</app-big-button>
     </a>
+    @if (invoice.customerEmail; as email) {
+      <div
+        class="flex w-full max-w-sm items-center justify-between gap-2 rounded-lg border border-line bg-surface px-4 py-3 text-left"
+      >
+        <div class="min-w-0">
+          <p class="text-xs text-ink-soft">Email du client</p>
+          <p class="truncate text-sm font-medium text-ink">{{ email }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="copyCustomerEmail(email)"
+          class="shrink-0 text-sm font-medium text-primary hover:underline"
+        >
+          Copier
+        </button>
+      </div>
+    }
     <div class="w-full max-w-sm">
       <app-big-button variant="secondary" tone="subtle" (click)="openSignatureModal(invoice)">
         Signer

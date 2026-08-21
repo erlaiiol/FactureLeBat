@@ -2160,6 +2160,7 @@ Requested: when a document's customer has an email on file, "Partager" should us
 - [x] No code change needed for the mailto and SMTP-compose tiers — confirmed already correct, called out here so this request has a documented answer instead of silently vanishing
 - [x] `InvoiceShareService`'s own doc comment (currently describing only the custom-message behavior) extended to state the email-prefill behavior explicitly for the two tiers where it applies, so this isn't rediscovered as a "missing feature" again later
 - [x] No workaround attempted for the native tier — documented as a known, permanent limitation rather than a deferred TODO, so it doesn't get silently re-requested
+- [x] Follow-up: a "copier l'email" affordance next to the client's email, shown on the success card once a document is created (both modes) — see the Notes below for why this isn't a Non-goals violation
 
 ## Non-goals
 
@@ -2169,6 +2170,7 @@ Requested: when a document's customer has an email on file, "Partager" should us
 
 - No dependency on any other 1.1-x phase — this is a verification, not new functionality.
 - Re-verified both claims by reading the current source directly (`invoice-share.service.ts:78`, `send-invoice-email-modal.component.ts:60`) rather than trusting the roadmap's own prior description of them — both still hold exactly as written. The extended doc comment now states the per-tier prefill behavior explicitly and spells out why the native tier is a permanent, unfixable ceiling (Web Share has no recipient parameter at all), so this can't be silently rediscovered as a bug later.
+- **Follow-up, requested once the native-tier ceiling above was understood**: since the recipient truly can't be pre-filled inside the OS share sheet itself, the created-document success card (`invoice-create-preview-step.page.html`, both the mode rapide preview step and mode manuel's own card) now shows the client's email (when the invoice has one) next to a one-click "Copier" button (`navigator.clipboard.writeText`, `copyCustomerEmail()`), right above "Partager" — lets the artisan paste it into whichever app the share sheet opened. Not a violation of this phase's own "no custom in-app share sheet" non-goal: `navigator.share()` itself is untouched, this is a plain copy affordance sitting next to it. Same fixture logic as the two working tiers (`customerEmail`), so it's gated the same way (nothing rendered when the invoice has no customer email). Verified live (Playwright, both mode rapide and mode manuel success cards): copy button populates the real clipboard content and surfaces a confirmation toast.
 
 ---
 
