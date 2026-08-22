@@ -2199,3 +2199,200 @@ Deferred from Phase 1.1-6/1.1-7/1.1-8 (explicit user request: fix it once, at th
 - **`docs/database.md`'s reasoning ("documents patterns, not exhaustive field lists") holds for field-level drift but not for missing models**: added concise entries for three models this "Schema" doc had zero mention of — `Discount` (Phase 32, pre-1.1-x but never documented here), `CatalogFolder` (1.1-2), and `InvoiceSignature` (1.1-1) — matching the file's existing terse per-model style. No changes needed for `Company`/`Invoice`/etc.'s own field tables beyond the singleton correction above; `api.md`'s DTO tables are the more precise source for exhaustive field lists, this doc stays at the "what exists and why" level it already was.
 - **`docs/architecture.md`**: backend module tree gained `discount/`/`catalog-folder/` (the two this track actually introduced); the tour engine paragraph's stale "four mini-tours" corrected to five (Phase 18's `stats-reports` was never counted) with a note that Phase 1.1-10 extended the existing five rather than adding a sixth. Left an explicit, un-fixed note that the same tree is *also* missing `auth/`/`billing/`/`mail-settings/`/`mailer/`/`referral/`/`reports/`/`site-legal/`/`sourcing/`/`admin/` — all pre-1.1-x gaps, out of scope for this pass, called out so the finding isn't silently lost.
 - **`docs/conventions.md`**: read in full — its reasoning holds as-is. Nothing in the 1.1-x track introduced a new pattern/convention this file should describe (every 1.1-x addition is either a new DTO field following existing validation/full-replace conventions already documented, or a new model following the existing "soft reference, autofill not a lock" precedent) — no edit made.
+
+---
+
+# Phase 1.2 — Mandatory E-Invoicing (Réforme 2026/2027): Track Overview
+
+## Objective
+
+The French e-invoicing reform makes structured, platform-transmitted invoices mandatory in two waves that both hit this app's actual user base (TPE/PME/auto-entrepreneurs): **reception** capability required from **2026-09-01** for every VAT-liable business, **emission** required from **2027-09-01** for TPE/PME/auto-entrepreneurs specifically. Phase 1.1-8 already built the reform's baseline mandatory *fields* (SIREN client, delivery address, nature of operation, TVA sur les débits). What's still missing, confirmed against the current codebase on 2026-08-22, is the bigger structural piece: FactureLe today produces plain PDF only (`pdf.service.ts`, pdfmake) with no structured machine-readable format (Factur-X/UBL/CII) and no integration with any Plateforme Agréée (PA) — invoices are transmitted by the artisan's own SMTP account or manual download, not through the reform's mandated PA channel.
+
+This is a materially bigger and higher-precision undertaking than any single-digit 1.1-x phase: it touches a real external certification ecosystem (PA selection, contractual/API integration), a legally-defined XML schema whose validity is checked by a third party (not just this app's own tests), and — per explicit decisions below — a wholly new "receiving" side of the product that didn't exist before. It's broken into six phases (1.2-1 through 1.2-6) rather than one, following this roadmap's own established granularity precedent (compare the twelve-phase 1.1-x track), each independently shippable where dependencies allow.
+
+## Scope decisions confirmed with the user (2026-08-22)
+
+- **Reception is in scope, not deferred** — FactureLe will ship a basic supplier-e-invoice inbox (Phase 1.2-5), not just emission-side compliance. The user explicitly chose this over an "emission-only, reception left to the artisan's accountant/PA portal" alternative.
+- **PA research/selection is its own phase, not skipped** — no Plateforme Agréée has been chosen yet; Phase 1.2-1 exists specifically so integration work (1.2-4/1.2-5) starts from a known API contract rather than guessing at one.
+
+## Phase sequence & dependency graph
+
+1. **1.2-1 — Plateforme Agréée: Research & Selection** (no code; no dependency)
+2. **1.2-2 — Missing Legal Field: Company TVA Intracommunautaire Number** (no dependency; can run in parallel with 1.2-1)
+3. **1.2-3 — Factur-X Generation: PDF/A-3 + Embedded CII XML** (depends on 1.2-2 for the seller VAT-ID node; independent of 1.2-1 — the file format doesn't require a chosen PA)
+4. **1.2-4 — PA Integration: Emission Transmission** (depends on 1.2-1 for the API contract and 1.2-3 for the file to send)
+5. **1.2-5 — Reception Basique: Supplier E-Invoice Inbox** (depends on 1.2-1; can run in parallel with 1.2-3/1.2-4, distinct pipeline, likely reuses 1.2-4's PA client)
+6. **1.2-6 — Compliance Readiness: Deadlines, Settings & Rollout UX** (depends on 1.2-4 at minimum; ties the track together for the actual artisan-facing rollout ahead of the 2026-09/2027-09 deadlines)
+
+## Non-goals — for the track as a whole
+
+- **FactureLe will not become a Plateforme Agréée itself.** Registration/certification as a PA is a state-regulated undertaking (immatriculation, annuaire integration, ongoing compliance obligations) out of proportion to a solo-built product — confirmed direction from the 2026-08-22 compliance assessment. Every phase below integrates with a third-party PA rather than replacing one.
+- **No accounting/expense-deduction features off the back of reception.** Phase 1.2-5's inbox stores and displays received supplier invoices; it does not feed Phase 17's Quarterly Report or Activity Analytics, which explicitly declined expense/charge tracking. Reversing that non-goal, if ever justified, is its own future phase — same precedent as how Phase 17's "Estimated Charges" addendum only reversed its own original non-goal once the data fully supported it.
+- **No client-side (customer) VAT-intracommunautaire capture in this track.** Phase 1.1-8 already flagged "Client professionnel étranger / UE" (VAT number capture/validation, intra-EU reverse-charge, cross-border delivery-vs-service treatment) as its own future phase, not a bullet to bolt on elsewhere — that decision stands here too. Domestic Factur-X validity does not require a buyer VAT number, so 1.2-3 isn't blocked by this.
+
+---
+
+# Phase 1.2-1 — Plateforme Agréée: Research & Selection
+
+## Objective
+
+No Plateforme Agréée has been chosen yet. This phase is a research/decision spike, not an implementation phase: compare immatriculated PAs on API quality, pricing at this app's likely volume (small artisans, low invoice counts per company), ease of integration (REST vs. SFTP-only, sandbox availability, auth model), and whether the same provider can plausibly serve both emission (1.2-4) and reception (1.2-5) so the app doesn't need two separate integrations. Doing this before writing any integration code is what lets 1.2-4/1.2-5 be scoped against a real API contract instead of a guess.
+
+## Features
+
+- [ ] Survey of currently immatriculated PAs (the official list is published and updated by the administration) with API/developer-facing offerings, filtered to ones realistically reachable by a solo-built SaaS (self-serve signup/sandbox, not enterprise-sales-only)
+- [ ] Comparison written up against: API shape (REST/JSON vs. EDI/SFTP), sandbox/test environment availability, pricing model at low volume, whether it handles both e-invoicing (structured B2B) and e-reporting (B2C/export summary data), and whether it covers both emission and reception
+- [ ] A chosen PA, recorded in this phase's Notes once decided, with a link/reference to its API docs
+- [ ] A short compatibility check: confirm the chosen PA accepts Factur-X specifically (not only raw UBL/CII), since 1.2-3 is scoped to produce Factur-X
+
+## Non-goals
+
+- No code in this phase — pure research and a decision record.
+- Not a commitment to a specific commercial contract yet if the chosen PA requires one; the phase's output is a recommendation reviewed with the user before 1.2-4 starts building against it.
+
+## Notes
+
+- Blocks 1.2-4 and 1.2-5 (both need a concrete API to integrate against); does not block 1.2-2 or 1.2-3.
+- PA landscape and pricing are exactly the kind of externally-changing fact this app's own conventions already distrust baking in as a constant (compare `Company.microEntrepreneurCeiling`/cotisation rates in Phase 17, deliberately editable rather than hardcoded) — record the choice with a date, and revisit before 1.2-4 actually starts if enough time has passed for the landscape to have shifted.
+
+---
+
+# Phase 1.2-2 — Missing Legal Field: Company TVA Intracommunautaire Number
+
+## Objective
+
+The 2026-08-22 compliance assessment found one legally-relevant field genuinely missing from the data model: a dedicated VAT-intracommunautaire number for the issuing `Company`. Today only `Company.siret` exists — sufficient for the SIREN-based mentions Phase 1.1-8 already covers, but not for the seller VAT-ID node Factur-X/EN16931-family XML expects when the company is VAT-registered. Small, self-contained, and unblocks 1.2-3.
+
+## Data Model
+
+- `Company.vatNumber` (`String?`, nullable) — nullable because a franchise-en-base artisan (Phase 9's existing `franchiseEnBase`-style handling) has no VAT number at all; this mirrors the existing optional-legal-field pattern (`microEntrepreneurCeiling`, `Company.vatOnDebitsOption`) rather than forcing a value where none exists.
+- Format validated as `FR` + 2-character key + the company's own 9-digit SIREN (`@Matches`, same validated-not-freehand precedent Phase 1.1-8 used for `customerSiret`), since a malformed VAT ID would make the Factur-X file 1.2-3 generates fail PA-side validation, not just look wrong on screen.
+
+## Features
+
+- [ ] `vatNumber` field in "Mon entreprise" settings, optional, with inline format validation
+- [ ] Printed on the invoice PDF alongside the existing SIRET line, when present — same "print only when set" convention as `deliveryAddress`'s conditional line in Phase 1.1-8
+- [ ] Left blank for companies under franchise en base, with a short tooltip explaining why (consistent with [[feedback_manual_mode_full_editability]]'s established "tooltip over block" convention for legally-sensitive fields)
+
+## Non-goals
+
+- No customer/client-side VAT number capture — see the track-level non-goals above.
+
+## Notes
+
+- No dependency on 1.2-1.
+- Blocks 1.2-3 (the seller VAT-ID XML node needs this field to exist, even though it stays optional there too — an unregistered/franchise company's Factur-X simply omits the node, matching real-world practice for such businesses).
+
+---
+
+# Phase 1.2-3 — Factur-X Generation: PDF/A-3 + Embedded CII XML
+
+## Objective
+
+The core structural gap: today's PDF has no embedded structured data at all. Factur-X is the pragmatic target format for this app's user base — a single hybrid file (human-readable PDF a client can still just open, plus machine-readable CII XML a PA/accounting system can parse), rather than shipping a second, separate UBL/CII-only export. This is the most engineering-heavy phase in the track: it introduces a new XML serialization surface and a PDF/A-3 packaging step neither of which this app's pdfmake pipeline does today, and — unlike this app's own tests — real-world validity is ultimately judged by whichever PA receives the file (1.2-4), so schema precision matters more here than in a typical phase.
+
+## Architecture
+
+- The CII XML is generated from the **same `InvoicePdfData` interface** already driving the pdfmake layout (`invoice/pdf/invoice-pdf-data.interface.ts`) — one source of truth, matching this app's existing "derived, never persisted" convention (Phase 5's redistribution, Phase 1.1-8's GUIDED nature-of-operation derivation). No new persisted "Factur-X snapshot" model; the XML is regenerated at render/transmission time exactly like the PDF itself already is.
+- pdfmake produces PDF/A-1 style output, not PDF/A-3, and has no attachment-embedding support — a post-processing step is needed after pdfmake to (a) embed the CII XML as a PDF attachment and (b) set the PDF/A-3 + Factur-X-required XMP metadata. This is new surface area, not an extension of `pdf.service.ts` itself.
+- Profile choice: target the **BASIC** Factur-X profile (not EN16931/EXTENDED) — matches this app's existing per-invoice data granularity (one VAT rate per invoice today, not per-line VAT category codes) without inventing new per-line fields this app's "extremely fast, minimal typing" mandate has consistently avoided elsewhere (compare Phase 1.1-8's declined sector-specific mentions).
+
+## Features
+
+- [ ] CII XML serializer covering the fields this app already has: invoice number, dates, seller (`Company` name/address/SIRET/`vatNumber` from 1.2-2), buyer (customer name/address/`customerSiret`), line items (products + service lines, including Phase 5 redistribution's already-computed final amounts), VAT rate/amount, totals, payment terms (Phase 1.1-7's L441-9 data), delivery address and nature-of-operation (Phase 1.1-8)
+- [ ] PDF/A-3 packaging step: embed the generated XML as a named attachment (`factur-x.xml`) with the required relationship/XMP metadata Factur-X's spec mandates
+- [ ] New download path exposing the hybrid file (e.g. `GET /invoices/:id/facturx`) alongside the existing plain-PDF endpoint — the plain PDF stays available since not every recipient needs the structured payload (a private individual, for instance)
+- [ ] Validation step before the file is considered "final": run the generated XML against the officially published Factur-X/CII schema (XSD) — a malformed file failing silently at the PA (1.2-4) would be a materially worse failure mode than catching it here first
+
+## Non-goals
+
+- No standalone UBL/CII-only export (without the PDF) in this phase — if the PA chosen in 1.2-1 specifically requires raw UBL/CII rather than Factur-X, revisit this scope rather than assuming Factur-X alone suffices.
+- No per-line VAT-category-code granularity beyond what EN16931/EXTENDED would require — BASIC profile only, per the Architecture section above.
+
+## Notes
+
+- Depends on 1.2-2 (seller `vatNumber` node). Independent of 1.2-1 — the file format itself doesn't require a chosen PA, only its eventual transmission (1.2-4) does.
+- Blocks 1.2-4 (nothing to transmit without this).
+
+---
+
+# Phase 1.2-4 — PA Integration: Emission Transmission
+
+## Objective
+
+Wire actual transmission of the Factur-X file (1.2-3) through the Plateforme Agréée chosen in 1.2-1, replacing (or standing alongside, during the transition window before the 2027-09-01 emission deadline binds this app's users) today's SMTP/manual-download distribution for invoices that must go through the reform's mandated channel.
+
+## Data Model
+
+- Per-company PA credentials (API key/subscriber ID, whatever the chosen PA's auth model requires) — encrypted at rest, same pattern as `Company.smtpPasswordEncrypted` (Phase 12), all nullable since PA transmission is opt-in until the 2027-09-01 deadline actually binds a given company.
+- `Invoice.eInvoiceTransmissionStatus` (enum, e.g. `NOT_SENT | PENDING | ACCEPTED | REJECTED`), `Invoice.eInvoiceTransmittedAt`, `Invoice.paReference` (the PA's own tracking id) — exact shape depends on the chosen PA's actual response model from 1.2-1, kept provisional until then.
+
+## Features
+
+- [ ] Company settings: connect a PA account (credentials entry, same UX family as Phase 12's SMTP settings screen)
+- [ ] A "transmit via PA" action on an invoice, alongside (not replacing) today's download/email/share actions
+- [ ] Transmission status surfaced on the invoice (matches Phase 16's existing "lifecycle board" pattern of visible status rather than a fire-and-forget action)
+- [ ] Rejection handling: a PA-side validation failure is shown to the artisan with an actionable reason, never silently dropped — same honesty principle Phase 10/12/17 already established for this app's own uncertain operations
+
+## Non-goals
+
+- FactureLe does not become a PA — see track-level non-goals.
+- No automatic enforcement/blocking of non-PA sending before the 2027-09-01 deadline actually requires it for a given company — see 1.2-6 for the gating/rollout logic.
+
+## Notes
+
+- Depends on 1.2-1 (API contract) and 1.2-3 (file to send).
+- Exact data-model shape above is provisional pending 1.2-1's outcome — don't treat the enum/field names as final before that phase closes.
+
+---
+
+# Phase 1.2-5 — Reception Basique: Supplier E-Invoice Inbox
+
+## Objective
+
+Confirmed in scope with the user (see track overview): FactureLe gains a minimal way for an artisan to receive and view supplier e-invoices arriving through the reform's mandated channel, satisfying the 2026-09-01 reception obligation. This is a genuinely new "receiving" concept for an app that has, until now, only modeled the artisan's own outgoing invoices — scoped deliberately narrow (store + display, not accounting) rather than growing into a purchase-ledger feature.
+
+## Data Model
+
+- New entity, e.g. `ReceivedInvoice` — one per incoming e-invoice, storing the raw Factur-X/UBL/CII payload plus the key fields parsed out of it for display (issuer name/SIRET, invoice number, date, amount, VAT), scoped to `companyId` like every other tenant-owned entity since Phase 13.
+- No link to Phase 17's `Product`/`Service`/`activityCategory` model or the Quarterly Report — see track-level non-goals; this is intentionally an island, not wired into turnover/expense reporting.
+
+## Features
+
+- [ ] Inbox list view ("Factures reçues" or similar) under an appropriate nav entry, showing incoming supplier invoices as they arrive via the PA
+- [ ] Detail view per received invoice: parsed key fields plus a download of the original file
+- [ ] Ingestion path from the PA chosen in 1.2-1 (webhook or polling, per that PA's own API shape)
+
+## Non-goals
+
+- No OCR or free-form PDF upload/parsing — only invoices arriving through the PA's structured channel are ingested in this phase; parsing an arbitrary supplier PDF that never went through a PA is a materially different, harder problem.
+- No expense/charge tracking, no feed into Phase 17's Quarterly Report or Activity Analytics — see track-level non-goals.
+- No reply/dispute/payment-initiation actions on a received invoice — display and storage only.
+
+## Notes
+
+- Depends on 1.2-1. Can proceed in parallel with 1.2-3/1.2-4 (a distinct pipeline — receiving rather than generating a Factur-X file) but will likely reuse whatever PA API client 1.2-4 builds, since the same PA plausibly serves both directions.
+
+---
+
+# Phase 1.2-6 — Compliance Readiness: Deadlines, Settings & Rollout UX
+
+## Objective
+
+Ties the track together for the artisan-facing rollout ahead of the 2026-09-01 (reception) and 2027-09-01 (emission) deadlines: a company settings section that reflects actual readiness state, deadline-aware messaging, and an opt-in-before-mandatory path so artisans can adopt e-invoicing ahead of the date that will eventually bind them, rather than the app either staying silent until the deadline or hard-gating everyone at once.
+
+## Features
+
+- [ ] "Facturation électronique" section in company settings surfacing: PA connection status (1.2-4), whether Factur-X emission is the artisan's default or opt-in, reception inbox status (1.2-5)
+- [ ] Deadline-awareness messaging — since this app's user base is overwhelmingly TPE/auto-entrepreneurs, the relevant date to surface is 2027-09-01 for emission and 2026-09-01 for reception; no need to model the earlier large-entreprise/ETI dates this app's users aren't subject to
+- [ ] Optional guided-tour addition introducing the feature — per [[feedback_guided_tour_conventions]], verify live in a browser rather than unit tests alone, and flag this specific tour step as optional/later-OK rather than blocking the rest of the track
+- [ ] Cross-tab link from wherever an artisan would naturally look for this (company settings, invoice actions) per the same guided-tour convention's "surface cross-tab links" note
+
+## Non-goals
+
+- No automatic hard-blocking of non-compliant sending before a company's actual deadline — an opt-in/informational posture until the mandatory date, not an enforcement mechanism this app polices ahead of the law itself.
+
+## Notes
+
+- Depends on 1.2-4 at minimum (nothing to reflect readiness of otherwise); benefits from 1.2-5 existing too for the reception half of the messaging.
+- Natural point to revisit whether "FactureLe: reform-ready" becomes actual marketing copy on the public landing page (Phase 13.3) — noted here, not scoped into this phase.
