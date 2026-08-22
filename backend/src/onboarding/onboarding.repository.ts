@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { OnboardingState } from './entities/onboarding-state.entity';
+import { LegalStatusConfirmation } from './entities/legal-status-confirmation.entity';
+import { ConfirmLegalStatusDto } from './dto/confirm-legal-status.dto';
 import { TourId } from './onboarding.constants';
 
 function toState(row: { tourEnabled: boolean; completedTours: string[] }): OnboardingState {
@@ -53,5 +55,29 @@ export class OnboardingRepository {
       select: { tourEnabled: true, completedTours: true },
     });
     return toState(row);
+  }
+
+  // First-invoice-pipeline reversal: the one-time "are you VAT-registered?"
+  // confirmation. vatRateBasisPoints is only overwritten when the artisan
+  // actually picked a rate (COMPANY path) — MICRO_ENTREPRENEUR's franchise
+  // en base has no rate to set, so the company's existing default is left
+  // untouched rather than forced to 0.
+  async confirmLegalStatus(
+    companyId: string,
+    dto: ConfirmLegalStatusDto,
+  ): Promise<LegalStatusConfirmation> {
+    const row = await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        legalStatus: dto.legalStatus,
+        ...(dto.vatRateBasisPoints !== undefined
+          ? { vatRateBasisPoints: dto.vatRateBasisPoints }
+          : {}),
+        legalStatusConfirmedAt: new Date(),
+      },
+      select: { legalStatus: true, vatRateBasisPoints: true, legalStatusConfirmedAt: true },
+    });
+    // Just set above in the same write — never null here.
+    return row as LegalStatusConfirmation;
   }
 }

@@ -19,6 +19,7 @@ import {
   RouterOutlet,
 } from '@angular/router';
 import { filter, Subscription, TimeoutError } from 'rxjs';
+import { LegalStatus } from '../../core/models/company.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { KeyboardVisibilityService } from '../../core/services/keyboard-visibility.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
@@ -29,6 +30,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { InvoiceTotalsSummaryComponent } from './components/invoice-totals-summary.component';
 import { InvoiceDraftStore } from './invoice-draft.store';
+import { FIXED_VAT_RATE_OPTIONS } from './vat-rate-options';
 
 // Phase 6 shell: wraps the three routed creation steps (client, lignes,
 // apercu) with what must stay visible and reachable from any of them — the
@@ -74,6 +76,14 @@ export class InvoiceCreateShellPage {
 
   protected readonly loadingPdfPreview = signal(false);
   protected readonly pdfPreviewUrl = signal<string | null>(null);
+
+  // First-invoice-pipeline reversal: the one-time VAT-regime prompt shown in
+  // place of nothing extra (see the .html — it sits alongside the totals
+  // card, never replacing it, so the tour's `invoice-total`/`invoice-preview`
+  // anchors stay mounted whether or not this has been answered yet).
+  protected readonly vatRateOptions = FIXED_VAT_RATE_OPTIONS;
+  protected readonly showVatRatePicker = signal(false);
+  protected readonly confirmingLegalStatus = signal(false);
   // Lets closePdfPreview() cancel an in-flight generation if the artisan
   // closes the modal before it resolves — otherwise a late response could
   // reopen the modal (or set a URL) after they've already moved on.
@@ -174,8 +184,25 @@ export class InvoiceCreateShellPage {
   // opens it in-place, from whichever step the artisan is currently on —
   // replaces the old behavior of navigating into the apercu step just to
   // see it.
+  //
+  // First-invoice-pipeline reversal: deliberately NOT gated by
+  // CompanyEssentialsGateService (name/SIRET/address) — this is a pure,
+  // local, pre-creation preview (InvoiceService.previewPdf, nothing
+  // persisted, nothing sent to anyone), the same "artisan looking at their
+  // own draft" moment the on-screen /apercu mirror already goes ungated for.
+  // Blocking the one thing an artisan most wants to do right after adding a
+  // line — see what it looks like — with an admin-form modal would undo the
+  // whole point of this pipeline reversal. Gating stays reserved for
+  // share()/the real download link, once a document actually exists to
+  // hand to a client. vatRegimeConfirmed() below is a different, narrower
+  // concern: showing an unconfirmed default VAT total would be actively
+  // wrong, not just informationally incomplete, so that one stays required.
   protected openPdfPreview(): void {
-    if (!this.draftStore.canPreview() || this.loadingPdfPreview()) {
+    if (
+      !this.draftStore.canPreview() ||
+      !this.draftStore.vatRegimeConfirmed() ||
+      this.loadingPdfPreview()
+    ) {
       return;
     }
     this.loadingPdfPreview.set(true);
@@ -219,6 +246,35 @@ export class InvoiceCreateShellPage {
     if (url) {
       URL.revokeObjectURL(url);
     }
+  }
+
+  // Auto-entrepreneur/micro-entreprise: franchise en base, no rate to pick —
+  // confirms immediately. "Société": reveals the rate picker below instead
+  // of guessing, since the right rate genuinely varies per activité.
+  protected confirmMicroEntrepreneur(): void {
+    this.confirmLegalStatus('MICRO_ENTREPRENEUR');
+  }
+
+  protected revealVatRatePicker(): void {
+    this.showVatRatePicker.set(true);
+  }
+
+  protected confirmCompany(vatRateBasisPoints: number): void {
+    this.confirmLegalStatus('COMPANY', vatRateBasisPoints);
+  }
+
+  private confirmLegalStatus(legalStatus: LegalStatus, vatRateBasisPoints?: number): void {
+    if (this.confirmingLegalStatus()) {
+      return;
+    }
+    this.confirmingLegalStatus.set(true);
+    this.draftStore.confirmLegalStatus(legalStatus, vatRateBasisPoints).subscribe({
+      next: () => this.confirmingLegalStatus.set(false),
+      error: () => {
+        this.confirmingLegalStatus.set(false);
+        this.toastService.error('Impossible de confirmer votre régime de TVA pour le moment.');
+      },
+    });
   }
 
   // Lets the artisan bail out of a stuck/unwanted draft instead of being

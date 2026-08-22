@@ -10,6 +10,7 @@ import {
 import { CompanyProfile } from '../../../core/models/company.model';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { TotalsPreview } from '../calculation-preview';
+import { FIXED_VAT_RATE_OPTIONS, formatRateLabel } from '../vat-rate-options';
 
 const PULSE_DURATION_MS = 400;
 
@@ -29,22 +30,6 @@ const EDITABLE_FIELD_CLASSES =
   'w-40 rounded bg-secondary-subtle/40 px-1 text-right font-mono outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle focus:border-primary';
 
 const VAT_NON_APPLICABLE_VALUE = 'NON_APPLICABLE';
-
-// The real French VAT rates relevant to a construction artisan's invoicing —
-// no 15% (doesn't exist), 5.5%/10% are the two reduced rates that apply to
-// travaux depending on the nature of the job (energy-efficiency renovation
-// vs. everything else on housing over 2 years old), 20% is the standard
-// rate. 2.1% (press/medicines) is deliberately excluded, it's never
-// relevant to this app's audience.
-const FIXED_VAT_RATE_OPTIONS: readonly { basisPoints: number; label: string }[] = [
-  { basisPoints: 550, label: formatRateLabel(550) },
-  { basisPoints: 1000, label: formatRateLabel(1000) },
-  { basisPoints: 2000, label: formatRateLabel(2000) },
-];
-
-function formatRateLabel(basisPoints: number): string {
-  return `${(basisPoints / 100).toString().replace('.', ',')} %`;
-}
 
 @Component({
   selector: 'app-invoice-totals-summary',

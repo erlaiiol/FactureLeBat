@@ -40,7 +40,25 @@
       <p class="font-medium text-danger">{{ message }}</p>
     }
 
-    <a [href]="pdfUrl(invoice.id)" target="_blank" class="w-full max-w-sm">
+    @if (missingEssentials().length > 0) {
+      <p
+        class="flex flex-wrap items-center justify-center gap-2 rounded-lg bg-warning-subtle px-4 py-2 text-center text-sm text-warning-subtle-fg"
+      >
+        <span
+          >Informations obligatoires manquantes sur vos factures — à compléter avant l'envoi.</span
+        >
+        <a routerLink="/entreprise" class="font-semibold underline hover:text-warning-subtle-fg/70">
+          Compléter mon profil
+        </a>
+      </p>
+    }
+
+    <a
+      [href]="pdfUrl(invoice.id)"
+      target="_blank"
+      class="w-full max-w-sm"
+      (click)="guardDownloadClick($event)"
+    >
       <app-big-button>Télécharger le PDF</app-big-button>
     </a>
     @if (invoice.customerEmail; as email) {

@@ -63,7 +63,9 @@
         <button
           type="button"
           class="font-medium text-primary hover:underline"
-          [disabled]="!draftStore.canPreview() || loadingPdfPreview()"
+          [disabled]="
+            !draftStore.canPreview() || !draftStore.vatRegimeConfirmed() || loadingPdfPreview()
+          "
           (click)="openPdfPreview()"
         >
           {{ loadingPdfPreview() ? 'Génération…' : 'Aperçu' }}
@@ -71,26 +73,78 @@
       }
     </div>
   } @else {
-    <div class="mx-auto flex max-w-2xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <app-invoice-totals-summary
-        appTourAnchor="invoice-total"
-        [totals]="draftStore.totalsPreview()"
-        [vatApplicable]="draftStore.vatApplicable()"
-        [discountAmountCents]="draftStore.discountAmountCents()"
-      />
-      @if (!isOnPreviewStep()) {
-        <div class="w-full sm:w-64">
-          <app-big-button
-            variant="secondary"
-            tone="subtle"
-            appTourAnchor="invoice-preview"
-            [disabled]="!draftStore.canPreview() || loadingPdfPreview()"
-            (click)="openPdfPreview()"
-          >
-            {{ loadingPdfPreview() ? 'Génération…' : 'Aperçu de la facture' }}
-          </app-big-button>
+    <div class="mx-auto flex max-w-2xl flex-col gap-3">
+      @if (!draftStore.vatRegimeConfirmed()) {
+        <!-- First-invoice-pipeline reversal: a one-time, unmissable question
+             before any total is trusted (Company.legalStatus/vatRateBasisPoints
+             are snapshotted onto the invoice and drive the real computed
+             total, not just the PDF's legal mentions). Sits ALONGSIDE
+             app-invoice-totals-summary below, never replacing it — that
+             component's host element carries the invoice-creation tour's
+             `invoice-total` anchor, which must stay mounted whether or not
+             this has been answered yet. -->
+        <div class="rounded-xl border border-primary-subtle-border bg-primary-subtle p-4 text-sm">
+          <p class="mb-2 font-medium text-primary-subtle-fg">
+            Avant de voir un total : êtes-vous soumis à la TVA ?
+          </p>
+          @if (!showVatRatePicker()) {
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-full bg-surface px-3 py-2 font-medium text-ink hover:brightness-95 disabled:opacity-50"
+                [disabled]="confirmingLegalStatus()"
+                (click)="confirmMicroEntrepreneur()"
+              >
+                Auto-entrepreneur / Micro-entreprise
+              </button>
+              <button
+                type="button"
+                class="rounded-full bg-surface px-3 py-2 font-medium text-ink hover:brightness-95 disabled:opacity-50"
+                [disabled]="confirmingLegalStatus()"
+                (click)="revealVatRatePicker()"
+              >
+                Société assujettie à la TVA
+              </button>
+            </div>
+          } @else {
+            <div class="flex flex-wrap gap-2">
+              @for (option of vatRateOptions; track option.basisPoints) {
+                <button
+                  type="button"
+                  class="rounded-full bg-surface px-3 py-2 font-medium text-ink hover:brightness-95 disabled:opacity-50"
+                  [disabled]="confirmingLegalStatus()"
+                  (click)="confirmCompany(option.basisPoints)"
+                >
+                  TVA {{ option.label }}
+                </button>
+              }
+            </div>
+          }
         </div>
       }
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <app-invoice-totals-summary
+          appTourAnchor="invoice-total"
+          [totals]="draftStore.totalsPreview()"
+          [vatApplicable]="draftStore.vatApplicable()"
+          [discountAmountCents]="draftStore.discountAmountCents()"
+        />
+        @if (!isOnPreviewStep()) {
+          <div class="w-full sm:w-64">
+            <app-big-button
+              variant="secondary"
+              tone="subtle"
+              appTourAnchor="invoice-preview"
+              [disabled]="
+                !draftStore.canPreview() || !draftStore.vatRegimeConfirmed() || loadingPdfPreview()
+              "
+              (click)="openPdfPreview()"
+            >
+              {{ loadingPdfPreview() ? 'Génération…' : 'Aperçu de la facture' }}
+            </app-big-button>
+          </div>
+        }
+      </div>
     </div>
   }
 </div>

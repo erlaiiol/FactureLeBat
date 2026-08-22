@@ -1,7 +1,7 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, catchError, forkJoin, map, of } from 'rxjs';
-import { CompanyProfile } from '../../core/models/company.model';
+import { CompanyProfile, LegalStatus } from '../../core/models/company.model';
 import { DiscountType } from '../../core/models/discount.model';
 import {
   CreateInvoiceDiscountLineRequest,
@@ -21,6 +21,7 @@ import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { DiscountService } from '../../core/services/discount.service';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { OnboardingService } from '../../core/services/onboarding.service';
 import { ProductService } from '../../core/services/product.service';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
 import {
@@ -258,6 +259,7 @@ interface PersistedDraft {
 @Injectable({ providedIn: 'root' })
 export class InvoiceDraftStore {
   private readonly companyService = inject(CompanyService);
+  private readonly onboardingService = inject(OnboardingService);
   private readonly customerService = inject(CustomerService);
   private readonly invoiceService = inject(InvoiceService);
   private readonly productService = inject(ProductService);
@@ -330,6 +332,13 @@ export class InvoiceDraftStore {
   readonly vatApplicable = computed(
     () => !this.reverseChargeApplicable() && this.company()?.legalStatus === 'COMPANY',
   );
+
+  // First-invoice-pipeline reversal: whether the artisan has ever answered
+  // the one-time "are you VAT-registered?" question — see
+  // invoice-create-shell.page.html, which shows a small confirm prompt in
+  // place of the totals card until this is true, since vatApplicable above
+  // would otherwise silently trust an unconfirmed default.
+  readonly vatRegimeConfirmed = computed(() => this.company()?.legalStatusConfirmedAt != null);
 
   private readonly lineInputs = computed(() =>
     this.lines().map((line) => ({
@@ -567,6 +576,22 @@ export class InvoiceDraftStore {
           this.applyCompanyDefaultDeposit(profile);
         },
       });
+  }
+
+  // First-invoice-pipeline reversal: answers the one-time VAT-regime
+  // question (invoice-create-shell.page.html). `company` is this store's
+  // own one-shot local signal (see the bug-fix comment above) — nothing
+  // ambient refreshes it, so the response is merged in explicitly here
+  // rather than relying on a re-fetch.
+  confirmLegalStatus(legalStatus: LegalStatus, vatRateBasisPoints?: number): Observable<void> {
+    return this.onboardingService.confirmLegalStatus(legalStatus, vatRateBasisPoints).pipe(
+      map((confirmation) => {
+        const current = this.company();
+        if (current) {
+          this.company.set({ ...current, ...confirmation });
+        }
+      }),
+    );
   }
 
   setDepositRequested(requested: boolean): void {

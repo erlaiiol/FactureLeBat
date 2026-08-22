@@ -11,8 +11,11 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { Subscription, switchMap, TimeoutError } from 'rxjs';
+import { CompanyProfile } from '../../../core/models/company.model';
+import { getMissingCompanyEssentials } from '../../../core/models/company-essentials.util';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { BillingService } from '../../../core/services/billing.service';
+import { CompanyEssentialsGateService } from '../../../core/services/company-essentials-gate.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
@@ -66,6 +69,7 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
 export class InvoiceCreatePreviewStepPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly invoiceShareService = inject(InvoiceShareService);
+  private readonly companyEssentialsGate = inject(CompanyEssentialsGateService);
   protected readonly companyService = inject(CompanyService);
   protected readonly billingService = inject(BillingService);
   private readonly toastService = inject(ToastService);
@@ -83,18 +87,20 @@ export class InvoiceCreatePreviewStepPage {
 
   // Best-effort, non-blocking: a company profile fetch failure must never
   // stop the artisan from previewing/sending their document — it only ever
-  // suppresses this warning. A French SIRET is mandatory on any invoice/devis
-  // (legal requirement); the default profile created at signup starts with
-  // an empty one (see backend's DEFAULT_COMPANY_PROFILE), so nothing else in
-  // the app forces it to be filled in before this screen is reached.
-  private readonly companySiret = signal<string | null>(null);
-  protected readonly missingSiret = computed(() => {
-    const siret = this.companySiret();
-    return siret !== null && !/^\d{14}$/.test(siret);
+  // suppresses this warning. First-invoice-pipeline reversal: name/SIRET/
+  // address are no longer forced before this screen is reached (see
+  // CompanyEssentialsGateService, which gates the actual send/download
+  // actions below instead) — this stays as the passive, on-screen "here's
+  // what's still missing" companion to that hard gate, same
+  // isCompanyEssentialsComplete util both use.
+  private readonly companyProfile = signal<CompanyProfile | null>(null);
+  protected readonly missingEssentials = computed(() => {
+    const profile = this.companyProfile();
+    return profile ? getMissingCompanyEssentials(profile) : [];
   });
-  // Same document-mirror-only concern as companySiret above — the top-right
-  // logo (see PdfService.buildHeader) shown here purely so this HTML mirror
-  // stays a faithful preview of the real PDF.
+  // Same document-mirror-only concern as companyProfile above — the
+  // top-right logo (see PdfService.buildHeader) shown here purely so this
+  // HTML mirror stays a faithful preview of the real PDF.
   protected readonly hasLogo = signal(false);
 
   protected readonly previewLines = computed(() => this.previewData()?.lines ?? []);
@@ -152,10 +158,10 @@ export class InvoiceCreatePreviewStepPage {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (profile) => {
-          this.companySiret.set(profile.siret);
+          this.companyProfile.set(profile);
           this.hasLogo.set(profile.hasLogo);
         },
-        // Silent: see companySiret's comment above.
+        // Silent: see companyProfile's comment above.
         error: () => undefined,
       });
   }
@@ -225,6 +231,11 @@ export class InvoiceCreatePreviewStepPage {
     void this.router.navigate(['/factures/nouvelle/rapide/lignes']);
   }
 
+  // First-invoice-pipeline reversal: deliberately NOT gated by
+  // CompanyEssentialsGateService — same reasoning as
+  // InvoiceCreateShellPage.openPdfPreview(), this is a pre-creation, nothing-
+  // sent-to-anyone preview. Gating the artisan's own "let me see it" moment
+  // would undercut the whole point of no longer blocking on admin fields.
   protected downloadPdfPreview(): void {
     if (this.downloadingPdf()) {
       return;
@@ -276,12 +287,37 @@ export class InvoiceCreatePreviewStepPage {
     return this.invoiceService.pdfUrl(invoiceId);
   }
 
+  // Guards the plain <a [href]="pdfUrl(...)" target="_blank"> download
+  // links (unlike share()/downloadPdfPreview() above, there's no method
+  // call to intercept — just a real navigation) — reads the href straight
+  // off the anchor itself rather than needing to know which invoice this
+  // is, so one handler covers both the devis and the converted-facture link.
+  protected guardDownloadClick(event: MouseEvent): void {
+    const href = (event.currentTarget as HTMLAnchorElement).href;
+    if (
+      !this.companyEssentialsGate.ensureComplete(this.companyProfile(), (profile) => {
+        this.companyProfile.set(profile);
+        window.open(href, '_blank');
+      })
+    ) {
+      event.preventDefault();
+    }
+  }
+
   protected openEmailModal(invoice: InvoiceWithTotals): void {
     this.emailModalInvoice.set(invoice);
   }
 
   protected async share(invoice: InvoiceWithTotals): Promise<void> {
     if (this.sharingInvoiceId()) {
+      return;
+    }
+    if (
+      !this.companyEssentialsGate.ensureComplete(this.companyProfile(), (profile) => {
+        this.companyProfile.set(profile);
+        void this.share(invoice);
+      })
+    ) {
       return;
     }
     this.sharingInvoiceId.set(invoice.id);

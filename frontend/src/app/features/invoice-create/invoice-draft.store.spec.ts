@@ -18,6 +18,7 @@ const companyFixture: CompanyProfile = {
   invoiceMailCustomMessage: null,
   legalStatus: 'COMPANY',
   vatRateBasisPoints: 2000,
+  legalStatusConfirmedAt: '2026-01-01T00:00:00.000Z',
   invoiceNumberPrefix: 'F',
   nextInvoiceNumber: 2,
   declarationFrequency: 'TRIMESTRIELLE',

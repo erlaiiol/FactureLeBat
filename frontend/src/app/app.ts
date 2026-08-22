@@ -27,6 +27,7 @@ import { PlatformService } from './core/services/platform.service';
 import { PushRegistrationService } from './core/services/push-registration.service';
 import { ThemeService } from './core/services/theme.service';
 import { ToastService } from './core/services/toast.service';
+import { CompanyEssentialsModalComponent } from './shared/components/company-essentials-modal.component';
 import { FooterComponent } from './shared/components/footer.component';
 import { PaywallModalComponent } from './shared/components/paywall-modal.component';
 import { ToastContainerComponent } from './shared/components/toast-container.component';
@@ -90,6 +91,7 @@ const ENTER_TO_DISMISS_INPUT_TYPES = new Set([
     RouterLinkActive,
     TourOverlayComponent,
     PaywallModalComponent,
+    CompanyEssentialsModalComponent,
     TrialOfferModalComponent,
     ToastContainerComponent,
     TourAnchorDirective,

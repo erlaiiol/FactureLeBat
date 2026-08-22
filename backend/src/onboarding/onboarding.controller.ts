@@ -3,7 +3,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { OnboardingService } from './onboarding.service';
 import { UpdateOnboardingDto } from './dto/update-onboarding.dto';
+import { ConfirmLegalStatusDto } from './dto/confirm-legal-status.dto';
 import { OnboardingState } from './entities/onboarding-state.entity';
+import { LegalStatusConfirmation } from './entities/legal-status-confirmation.entity';
 import { TOUR_IDS } from './onboarding.constants';
 import type { TourId } from './onboarding.constants';
 
@@ -41,5 +43,19 @@ export class OnboardingController {
   @Post('reset')
   resetTours(@CurrentUser() user: AuthenticatedUser): Promise<OnboardingState> {
     return this.onboardingService.resetTours(user.companyId);
+  }
+
+  // First-invoice-pipeline reversal: the one-time VAT-regime question shown
+  // in invoice-creation's shell footer before any total is ever displayed
+  // (see InvoiceDraftStore.vatRegimeConfirmed) — a small dedicated PATCH,
+  // same reasoning as the rest of this module, rather than requiring the
+  // frontend to resend the full CompanyController PATCH /company payload
+  // for a single fact.
+  @Post('confirm-legal-status')
+  confirmLegalStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ConfirmLegalStatusDto,
+  ): Promise<LegalStatusConfirmation> {
+    return this.onboardingService.confirmLegalStatus(user.companyId, dto);
   }
 }

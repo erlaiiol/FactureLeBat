@@ -437,6 +437,12 @@ async function seedArtisanBatiment(): Promise<void> {
       phone: '04 78 12 34 56',
       legalStatus: LegalStatus.COMPANY,
       vatRateBasisPoints: 2000,
+      // First-invoice-pipeline reversal: an established demo persona has
+      // already answered the one-time VAT-regime question in real life —
+      // leaving this null would show the confirmation prompt on this demo
+      // account's very first invoice, which reads as broken in front of a
+      // prospect rather than as the intended brand-new-signup moment.
+      legalStatusConfirmedAt: new Date(),
       premiumGrantedUntil: DEMO_PREMIUM_GRANTED_UNTIL,
       grantedPlanTier: PlanTier.PREMIUM,
       // Phase 1.1-3: habitual acompte rate — pre-fills the toggle on every
@@ -1291,6 +1297,9 @@ async function seedInstitutBeaute(): Promise<void> {
       phone: '06 12 34 56 78',
       legalStatus: LegalStatus.MICRO_ENTREPRENEUR,
       vatRateBasisPoints: 0,
+      // See Bâti Rénov's own comment above on why an established demo
+      // persona is seeded as already-confirmed.
+      legalStatusConfirmedAt: new Date(),
       declarationFrequency: DeclarationFrequency.MENSUELLE,
       premiumGrantedUntil: DEMO_PREMIUM_GRANTED_UNTIL,
       grantedPlanTier: PlanTier.PREMIUM,

@@ -2,7 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { OnboardingState, TourId } from '../models/onboarding.model';
+import { LegalStatus } from '../models/company.model';
+import { LegalStatusConfirmation, OnboardingState, TourId } from '../models/onboarding.model';
 
 @Injectable({ providedIn: 'root' })
 export class OnboardingService {
@@ -23,5 +24,15 @@ export class OnboardingService {
 
   resetTours(): Observable<OnboardingState> {
     return this.http.post<OnboardingState>(`${this.baseUrl}/reset`, {});
+  }
+
+  confirmLegalStatus(
+    legalStatus: LegalStatus,
+    vatRateBasisPoints?: number,
+  ): Observable<LegalStatusConfirmation> {
+    return this.http.post<LegalStatusConfirmation>(`${this.baseUrl}/confirm-legal-status`, {
+      legalStatus,
+      vatRateBasisPoints,
+    });
   }
 }

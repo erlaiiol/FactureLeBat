@@ -6,24 +6,13 @@
 <section class="bg-atelier-bg text-atelier-ink font-atelier-sans rounded-2xl p-6">
   <div class="mb-6">
     <h1 class="font-atelier-heading text-3xl font-semibold">Mon activité</h1>
-    @if (onboarding) {
-      <p class="mt-2 text-atelier-ink-soft">
-        Avant de créer votre première facture, quelques informations sur votre activité — votre
-        SIRET notamment — pour qu'elle soit valide dès le départ.
-      </p>
-    }
   </div>
 
-  @if (onboardingBlocked()) {
+  @if (missingEssentials().length > 0) {
     <div
-      role="alert"
       class="mb-6 flex flex-col gap-1 rounded-lg bg-warning-subtle px-4 py-3 text-sm text-warning-subtle-fg"
     >
-      <p class="font-semibold">Complétez ces informations avant de continuer</p>
-      <p>
-        Elles apparaissent directement sur vos factures — il manque :
-        {{ missingEssentialFields().join(', ') }}.
-      </p>
+      <p>Informations manquantes pour vos factures : {{ missingEssentials().join(', ') }}.</p>
     </div>
   }
 

@@ -231,6 +231,14 @@ model Company {
   legalStatus        LegalStatus
   vatRateBasisPoints Int         @default(2000)
 
+  // First-invoice-pipeline reversal: null until the artisan has explicitly
+  // confirmed their VAT regime (via POST /onboarding/confirm-legal-status),
+  // distinct from legalStatus/vatRateBasisPoints just holding their default
+  // values unconfirmed. Backfilled to the migration's run time for every
+  // pre-existing company (they already went through the old full-form
+  // gate), so only genuinely new signups are ever asked.
+  legalStatusConfirmedAt DateTime?
+
   // Phase 27: only the prefix is stored here now — the actual next number is
   // computed on demand as (the highest number ever used by this company for
   // this document type) + 1, never from a separately-tracked counter (see

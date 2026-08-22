@@ -2,11 +2,15 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { BillingService } from '../../core/services/billing.service';
 import { CompanyService } from '../../core/services/company.service';
 import { LegalStatus } from '../../core/models/company.model';
+import {
+  ESSENTIAL_COMPANY_FIELD_LABELS,
+  EssentialCompanyField,
+} from '../../core/models/company-essentials.util';
 import { DeclarationFrequency } from '../../core/models/report.model';
 import { MailSettingsService } from '../../core/services/mail-settings.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -28,51 +32,28 @@ export class CompanySettingsPage {
   private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   protected readonly tourService = inject(TourService);
   protected readonly billingService = inject(BillingService);
 
-  // Set by guestGuard's '?onboarding=1' when it routed a freshly
-  // registered/logged-in artisan here because their company profile was
-  // still the blank one DEFAULT_COMPANY_PROFILE creates at signup — the
-  // signal for "continue on to the invoice they were headed for in the
-  // first place" once this form is actually saved, rather than leaving them
-  // stranded on the settings page with just an inline "Enregistré !".
-  protected readonly onboarding = this.route.snapshot.queryParamMap.get('onboarding') === '1';
-
-  // companyOnboardingGuard (app.routes.ts) calls canDeactivate() below on
-  // every attempted navigation away from this page — these two signals
-  // drive the warning banner that appears the moment that first blocks
-  // someone, so "you can't leave yet" comes with a visible reason rather
-  // than a silently-cancelled nav.
-  private static readonly essentialFieldLabels = {
-    name: "Nom de l'entreprise",
-    siret: 'SIRET',
-    addressLine1: 'Adresse',
-    postalCode: 'Code postal',
-    city: 'Ville',
-    legalStatus: 'Statut',
-  } as const;
+  // First-invoice-pipeline reversal: this page is no longer a forced
+  // first-run gate (see guest.guard.ts, InvoiceDraftStore.vatRegimeConfirmed,
+  // CompanyEssentialsGateService) — this stays as a purely informational,
+  // never-blocking indicator of what's still missing for a legally valid
+  // invoice, computed straight off the form's own validators.
   private readonly essentialControlNames = Object.keys(
-    CompanySettingsPage.essentialFieldLabels,
-  ) as (keyof typeof CompanySettingsPage.essentialFieldLabels)[];
+    ESSENTIAL_COMPANY_FIELD_LABELS,
+  ) as EssentialCompanyField[];
+  protected readonly missingEssentials = signal<string[]>([]);
 
-  // BTP mandatory mention (art. L243-2 du Code des assurances): only
-  // "essential" — required, gates onboarding the same way as the fields
-  // above — while decennialInsuranceApplicable is checked. An artisan who
-  // never ticks the box (most of this app's users) never sees these treated
-  // as missing.
-  private static readonly decennialFieldLabels = {
-    decennialInsurerName: 'Assureur (garantie décennale)',
-    decennialInsurancePolicyNumber: 'N° de police (garantie décennale)',
-    decennialInsuranceCoverageArea: 'Zone couverte (garantie décennale)',
-  } as const;
-  private readonly decennialControlNames = Object.keys(
-    CompanySettingsPage.decennialFieldLabels,
-  ) as (keyof typeof CompanySettingsPage.decennialFieldLabels)[];
-  protected readonly onboardingBlocked = signal(false);
-  protected readonly missingEssentialFields = signal<string[]>([]);
+  // BTP mandatory mention (art. L243-2 du Code des assurances): the three
+  // detail fields below only become Validators.required while
+  // decennialInsuranceApplicable is checked — see setDecennialValidators.
+  private readonly decennialControlNames = [
+    'decennialInsurerName',
+    'decennialInsurancePolicyNumber',
+    'decennialInsuranceCoverageArea',
+  ] as const;
 
   // Phase 13 RGPD self-service deletion — a two-step reveal (button ->
   // inline confirm form) rather than a native confirm() dialog, matching
@@ -235,6 +216,7 @@ export class CompanySettingsPage {
             earlyPaymentDiscountMention: profile.earlyPaymentDiscountMention ?? '',
             vatOnDebitsOption: profile.vatOnDebitsOption,
           });
+          this.missingEssentials.set(this.computeMissingEssentials());
         },
         error: () => {
           this.loading.set(false);
@@ -242,19 +224,12 @@ export class CompanySettingsPage {
         },
       });
 
-    // Only worth the extra work once a blocked attempt has actually shown
-    // the banner — keeps it in sync live as the artisan fixes fields,
-    // instead of requiring another failed nav attempt to clear it.
-    this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-      if (!this.onboardingBlocked()) {
-        return;
-      }
-      const missing = this.computeMissingEssentialFields();
-      this.missingEssentialFields.set(missing);
-      if (missing.length === 0) {
-        this.onboardingBlocked.set(false);
-      }
-    });
+    // Purely informational — kept live as the artisan types, no blocking
+    // behavior attached (see CompanyEssentialsGateService for the actual
+    // gate, at PDF-send/download time rather than on this page).
+    this.form.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.missingEssentials.set(this.computeMissingEssentials()));
 
     // Same "only required while the box is checked" pattern as
     // microEntrepreneurCeilingEuros being optional — an artisan outside the
@@ -347,11 +322,7 @@ export class CompanySettingsPage {
         next: () => {
           this.saving.set(false);
           this.saved.set(true);
-          if (this.onboarding) {
-            // Same "confirm, then move on" delay as ResetPasswordPage — long
-            // enough to register the "Enregistré !" before the navigation.
-            setTimeout(() => void this.router.navigateByUrl('/factures/nouvelle'), 1200);
-          }
+          this.missingEssentials.set(this.computeMissingEssentials());
         },
         error: () => {
           this.saving.set(false);
@@ -401,33 +372,6 @@ export class CompanySettingsPage {
           );
         },
       });
-  }
-
-  // companyOnboardingGuard's CanDeactivate hook. Only ever refuses
-  // navigation during the first-login redirect (`onboarding=1`) and only
-  // for the fields that actually print on an invoice — the VAT/déclaration
-  // section below has sane defaults already, so it's never what's blocking
-  // someone here.
-  // Public, not protected: companyOnboardingGuard (a CanDeactivateFn outside
-  // this class) needs to call it directly.
-  canDeactivate(): boolean {
-    if (!this.onboarding) {
-      return true;
-    }
-    const missing = this.computeMissingEssentialFields();
-    if (missing.length === 0) {
-      return true;
-    }
-    this.essentialControlNames.forEach((name) => this.form.controls[name].markAsTouched());
-    if (this.form.controls.decennialInsuranceApplicable.value) {
-      this.decennialControlNames.forEach((name) => this.form.controls[name].markAsTouched());
-    }
-    this.missingEssentialFields.set(missing);
-    this.onboardingBlocked.set(true);
-    this.toastService.error(
-      "Complétez d'abord ces informations avant de continuer — elles apparaissent sur vos factures.",
-    );
-    return false;
   }
 
   // Same PNG/JPEG-only, 2 MB bound as CompanyController.uploadLogo — checked
@@ -492,18 +436,10 @@ export class CompanySettingsPage {
     return this.companyService.logoUrl(this.logoCacheBust());
   }
 
-  private computeMissingEssentialFields(): string[] {
-    const missing: string[] = this.essentialControlNames
+  private computeMissingEssentials(): string[] {
+    return this.essentialControlNames
       .filter((name) => this.form.controls[name].invalid)
-      .map((name) => CompanySettingsPage.essentialFieldLabels[name]);
-    if (this.form.controls.decennialInsuranceApplicable.value) {
-      missing.push(
-        ...this.decennialControlNames
-          .filter((name) => this.form.controls[name].invalid)
-          .map((name) => CompanySettingsPage.decennialFieldLabels[name]),
-      );
-    }
-    return missing;
+      .map((name) => ESSENTIAL_COMPANY_FIELD_LABELS[name]);
   }
 
   // Toggles Validators.required on the three decennial detail fields —

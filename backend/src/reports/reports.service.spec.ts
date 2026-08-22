@@ -19,6 +19,7 @@ function companyFixture(overrides: Partial<CompanyProfile> = {}): CompanyProfile
     phone: null,
     legalStatus: 'COMPANY',
     vatRateBasisPoints: 2000,
+    legalStatusConfirmedAt: new Date('2026-01-01'),
     invoiceNumberPrefix: 'F',
     devisNumberPrefix: 'DEV',
     tourEnabled: true,

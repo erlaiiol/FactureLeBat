@@ -2,6 +2,7 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   ElementRef,
   inject,
@@ -9,11 +10,13 @@ import {
   ViewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subscription, TimeoutError } from 'rxjs';
+import { getMissingCompanyEssentials } from '../../../core/models/company-essentials.util';
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { BillingService } from '../../../core/services/billing.service';
+import { CompanyEssentialsGateService } from '../../../core/services/company-essentials-gate.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { KeyboardVisibilityService } from '../../../core/services/keyboard-visibility.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -50,6 +53,7 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
   selector: 'app-invoice-create-manual-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    RouterLink,
     BigButtonComponent,
     FieldHintComponent,
     IconCloseComponent,
@@ -68,6 +72,7 @@ export class InvoiceCreateManualPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly invoiceService = inject(InvoiceService);
+  private readonly companyEssentialsGate = inject(CompanyEssentialsGateService);
   private readonly toastService = inject(ToastService);
   private readonly billingService = inject(BillingService);
   private readonly trialOfferService = inject(TrialOfferService);
@@ -244,6 +249,11 @@ export class InvoiceCreateManualPage {
   // message as an explanation. Checking store.previewBlockers() first skips
   // the API call and the modal entirely for exactly this case, replacing it
   // with an itemized "here's what's missing" callout (see the template).
+  // First-invoice-pipeline reversal: deliberately NOT gated by
+  // CompanyEssentialsGateService — same reasoning as
+  // InvoiceCreateShellPage.openPdfPreview(), this is a pre-creation, nothing-
+  // sent-to-anyone preview. Gating the artisan's own "let me see it" moment
+  // would undercut the whole point of no longer blocking on admin fields.
   protected preview(): void {
     if (this.previewing()) {
       return;
@@ -288,6 +298,27 @@ export class InvoiceCreateManualPage {
     this.previewing.set(false);
     this.revokeCurrentPreviewUrl();
     this.previewPdfUrl.set(null);
+  }
+
+  // Passive companion to the hard gate above — same shared util as
+  // InvoiceCreatePreviewStepPage's own missingEssentials.
+  protected readonly missingEssentials = computed(() => {
+    const profile = this.store.company();
+    return profile ? getMissingCompanyEssentials(profile) : [];
+  });
+
+  // Same generic href-reading guard as InvoiceCreatePreviewStepPage's own
+  // guardDownloadClick — see its comment for why.
+  protected guardDownloadClick(event: MouseEvent): void {
+    const href = (event.currentTarget as HTMLAnchorElement).href;
+    if (
+      !this.companyEssentialsGate.ensureComplete(this.store.company(), (profile) => {
+        this.store.company.set(profile);
+        window.open(href, '_blank');
+      })
+    ) {
+      event.preventDefault();
+    }
   }
 
   protected pdfUrl(invoiceId: string): string {

@@ -18,6 +18,12 @@ export interface CompanyProfile {
   invoiceMailCustomMessage: string | null;
   legalStatus: LegalStatus;
   vatRateBasisPoints: number;
+  // First-invoice-pipeline reversal: null until the artisan has explicitly
+  // confirmed their VAT regime (OnboardingService.confirmLegalStatus) —
+  // legalStatus/vatRateBasisPoints alone can't tell "real answer" apart
+  // from "still holding their unconfirmed default". See
+  // InvoiceDraftStore.vatRegimeConfirmed.
+  legalStatusConfirmedAt: string | null;
   invoiceNumberPrefix: string;
   nextInvoiceNumber: number;
   // Phase 17: which period the quarterly report screen preselects, and the
