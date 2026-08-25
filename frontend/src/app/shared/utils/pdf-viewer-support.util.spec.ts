@@ -16,8 +16,13 @@ describe('needsCanvasPdfViewer', () => {
     expect(needsCanvasPdfViewer(CHROME_DESKTOP_UA, false)).toBe(false);
   });
 
-  it('is false for Chrome on Android running in a regular browser tab', () => {
-    expect(needsCanvasPdfViewer(CHROME_ANDROID_UA, false)).toBe(false);
+  // Regression: confirmed on a real Android phone — Chrome's own inline PDF
+  // viewer failed to load a `blob:` iframe src (broken-file icon, plus a
+  // `frame-src` CSP violation against an empty framed URL), a longstanding,
+  // still-unreliable limitation of mobile Chrome's PDF plugin with blob:
+  // sources (unlike desktop Chrome, which handles it fine).
+  it('is true for Chrome on Android running in a regular browser tab', () => {
+    expect(needsCanvasPdfViewer(CHROME_ANDROID_UA, false)).toBe(true);
   });
 
   it('is true for desktop Safari (long-standing blob-in-iframe bug)', () => {
