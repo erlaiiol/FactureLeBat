@@ -64,79 +64,9 @@
     }
   </td>
 
-  <td class="px-4 py-3 align-top whitespace-nowrap text-ink-soft">
-    {{ invoice().date | date: 'dd/MM/yyyy' }}
-    @if (!isDevis() && invoice().dueDate) {
-      <span class="block text-xs" [class.text-danger]="overdue()">
-        Échéance {{ invoice().dueDate | date: 'dd/MM/yyyy' }}
-      </span>
-    }
-    @if (!isDevis() && invoice().lastReminderAt) {
-      <span class="block text-xs text-ink-soft/80">
-        Relancée {{ invoice().lastReminderAt | date: 'dd/MM/yyyy' }}
-      </span>
-    }
-  </td>
-
-  <td class="px-4 py-3 align-top">
-    <div class="flex flex-col">
-      <span class="font-medium text-ink">
-        {{ isDevis() ? 'Devis' : 'Facture' }} {{ invoice().number }}
-      </span>
-      @if (isDevis() && attachedFactureNumber(); as factureNumber) {
-        <button
-          type="button"
-          (click)="$event.stopPropagation(); toggleHighlight.emit()"
-          class="-mt-0.5 flex items-center gap-1 text-left text-xs text-info hover:underline"
-          [class.font-semibold]="highlighted()"
-        >
-          → Facture {{ factureNumber }}
-        </button>
-      }
-      @if (!isDevis() && attachedDevisNumber(); as devisNumber) {
-        <button
-          type="button"
-          (click)="$event.stopPropagation(); toggleHighlight.emit()"
-          class="-mt-0.5 flex items-center gap-1 text-left text-xs text-info hover:underline"
-          [class.font-semibold]="highlighted()"
-        >
-          → Devis {{ devisNumber }}
-        </button>
-      }
-    </div>
-  </td>
-
-  <td class="px-4 py-3 align-top text-ink">{{ invoice().customerName }}</td>
-
-  <td class="px-4 py-3 text-right align-top font-mono text-ink">
-    {{ invoice().totalInclVatCents | centsToEuros }}
-  </td>
-
+  <!-- Between Statut and Date, not trailing — see invoice-board.page.html's
+       matching <th> comment for why. -->
   <td class="px-4 py-3 align-top text-center" (click)="$event.stopPropagation()">
-    <button
-      type="button"
-      [disabled]="invoice().hasSignatureProof"
-      (click)="toggleManuallySigned.emit()"
-      [attr.aria-label]="signed() ? 'Document signé' : 'Marquer comme signé'"
-      [title]="
-        invoice().hasSignatureProof
-          ? 'Une signature est attachée — retirez-la pour modifier cette case.'
-          : 'Marquer manuellement comme signé'
-      "
-      class="inline-flex size-6 items-center justify-center rounded-md border border-line"
-      [class.bg-success]="signed()"
-      [class.border-success]="signed()"
-      [class.text-white]="signed()"
-      [class.cursor-not-allowed]="invoice().hasSignatureProof"
-      [class.cursor-pointer]="!invoice().hasSignatureProof"
-    >
-      @if (signed()) {
-        <app-icon-check [size]="14" />
-      }
-    </button>
-  </td>
-
-  <td class="px-4 py-3 align-top text-right" (click)="$event.stopPropagation()">
     <div class="inline-block">
       <button
         #actionsTrigger
@@ -291,5 +221,77 @@
         </div>
       }
     </div>
+  </td>
+
+  <td class="px-4 py-3 align-top whitespace-nowrap text-ink-soft">
+    {{ invoice().date | date: 'dd/MM/yyyy' }}
+    @if (!isDevis() && invoice().dueDate) {
+      <span class="block text-xs" [class.text-danger]="overdue()">
+        Échéance {{ invoice().dueDate | date: 'dd/MM/yyyy' }}
+      </span>
+    }
+    @if (!isDevis() && invoice().lastReminderAt) {
+      <span class="block text-xs text-ink-soft/80">
+        Relancée {{ invoice().lastReminderAt | date: 'dd/MM/yyyy' }}
+      </span>
+    }
+  </td>
+
+  <td class="px-4 py-3 align-top">
+    <div class="flex flex-col">
+      <span class="font-medium text-ink">
+        {{ isDevis() ? 'Devis' : 'Facture' }} {{ invoice().number }}
+      </span>
+      @if (isDevis() && attachedFactureNumber(); as factureNumber) {
+        <button
+          type="button"
+          (click)="$event.stopPropagation(); toggleHighlight.emit()"
+          class="-mt-0.5 flex items-center gap-1 text-left text-xs text-info hover:underline"
+          [class.font-semibold]="highlighted()"
+        >
+          → Facture {{ factureNumber }}
+        </button>
+      }
+      @if (!isDevis() && attachedDevisNumber(); as devisNumber) {
+        <button
+          type="button"
+          (click)="$event.stopPropagation(); toggleHighlight.emit()"
+          class="-mt-0.5 flex items-center gap-1 text-left text-xs text-info hover:underline"
+          [class.font-semibold]="highlighted()"
+        >
+          → Devis {{ devisNumber }}
+        </button>
+      }
+    </div>
+  </td>
+
+  <td class="px-4 py-3 align-top text-ink">{{ invoice().customerName }}</td>
+
+  <td class="px-4 py-3 text-right align-top font-mono text-ink">
+    {{ invoice().totalInclVatCents | centsToEuros }}
+  </td>
+
+  <td class="px-4 py-3 align-top text-center" (click)="$event.stopPropagation()">
+    <button
+      type="button"
+      [disabled]="invoice().hasSignatureProof"
+      (click)="toggleManuallySigned.emit()"
+      [attr.aria-label]="signed() ? 'Document signé' : 'Marquer comme signé'"
+      [title]="
+        invoice().hasSignatureProof
+          ? 'Une signature est attachée — retirez-la pour modifier cette case.'
+          : 'Marquer manuellement comme signé'
+      "
+      class="inline-flex size-6 items-center justify-center rounded-md border border-line"
+      [class.bg-success]="signed()"
+      [class.border-success]="signed()"
+      [class.text-white]="signed()"
+      [class.cursor-not-allowed]="invoice().hasSignatureProof"
+      [class.cursor-pointer]="!invoice().hasSignatureProof"
+    >
+      @if (signed()) {
+        <app-icon-check [size]="14" />
+      }
+    </button>
   </td>
 </tr>

@@ -1,0 +1,36 @@
+<div class="flex min-h-[70vh] flex-col gap-4">
+  <div class="flex items-center gap-2">
+    <img src="/android-chrome-192x192.png" alt="" width="28" height="28" class="rounded-lg" />
+    <span class="font-heading text-sm font-bold tracking-wide text-ink-soft uppercase"
+      >FactureLe</span
+    >
+  </div>
+
+  @if (loading()) {
+    <div
+      class="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-line bg-surface text-ink-soft"
+    >
+      <div
+        class="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-primary"
+        role="status"
+        aria-label="Chargement du document"
+      ></div>
+      <p class="text-sm">Chargement du document…</p>
+    </div>
+  } @else if (notFound()) {
+    <div
+      class="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface p-8 text-center text-ink-soft"
+    >
+      <p class="font-medium text-ink">Ce lien n'est plus valide.</p>
+      <p class="text-sm">
+        Il a peut-être été révoqué, ou l'adresse est incomplète — demandez-en un nouveau à
+        l'expéditeur.
+      </p>
+    </div>
+  } @else if (pdfBlobUrl(); as url) {
+    <app-pdf-canvas-viewer
+      [blobUrl]="url"
+      class="flex min-h-[70vh] flex-1 flex-col rounded-2xl border border-line"
+    />
+  }
+</div>

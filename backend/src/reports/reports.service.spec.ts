@@ -106,6 +106,7 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
     convertedFromDevisId: null,
     convertedToFacture: null,
     createdFromFactureId: null,
+    shareToken: null,
     retroactiveDevis: null,
     signature: null,
     manuallySigned: false,

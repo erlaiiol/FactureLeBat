@@ -954,6 +954,17 @@ model Invoice {
   scheduledTransmitAt DateTime?
   transmitCancelledAt DateTime?
 
+  // Phase 1.3-7: "Partager" — a random, unguessable, opaque token (never the
+  // invoice's own id) that lets whoever holds the link view/download this
+  // one document without a session, via a @Public() route keyed on the
+  // token instead of companyId. Null until first requested (lazily
+  // generated — see InvoiceRepository.getOrCreateShareToken), and there is
+  // deliberately no expiry column: the artisan revokes by clearing it
+  // (InvoiceRepository.revokeShareToken), not by waiting one out — see the
+  // roadmap's own note on why (a facture a client needs for their own
+  // accounting years later shouldn't silently stop working).
+  shareToken String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -26,7 +26,13 @@ const PUBLIC_ROUTES = [
 ];
 
 function isOnPublicRoute(url: string): boolean {
-  return PUBLIC_ROUTES.includes(url.split('?')[0]);
+  const path = url.split('?')[0];
+  // /partage/:token (InvoiceShareViewPage) isn't a fixed path like the rest
+  // of this list — a recipient with no account whatsoever lands here, and
+  // TourService's own unconditional onboarding fetch (see its own comment)
+  // still runs on this route and still 401s for them exactly like it does
+  // on every other public route.
+  return PUBLIC_ROUTES.includes(path) || path.startsWith('/partage/');
 }
 
 // On a 401 from any authenticated API call, attempt one silent

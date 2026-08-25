@@ -119,6 +119,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     convertedFromDevisId: null,
     convertedToFacture: null,
     createdFromFactureId: null,
+    shareToken: null,
     retroactiveDevis: null,
     signature: null,
     manuallySigned: false,

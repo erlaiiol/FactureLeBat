@@ -604,6 +604,35 @@ export class InvoiceService {
     return this.mapper.toPdfData(invoice, logo, signature);
   }
 
+  // Phase 1.3-7 ("Partager"): findRawById first, same "existence/scope
+  // check before the repository write" convention as cancelAutoTransmit
+  // above — not the catch-NoRowsAffectedError pattern other modules use.
+  async getOrCreateShareLink(companyId: string, id: string): Promise<string> {
+    await this.findRawById(companyId, id);
+    return this.invoiceRepository.getOrCreateShareToken(companyId, id);
+  }
+
+  async revokeShareLink(companyId: string, id: string): Promise<void> {
+    await this.findRawById(companyId, id);
+    await this.invoiceRepository.revokeShareToken(companyId, id);
+  }
+
+  // No companyId to scope by here — the token itself is what authorizes
+  // this call, reached from InvoiceController's @Public() route. A missing/
+  // revoked token reads as a plain 404, same "never leak more than that"
+  // posture as findRawById's own cross-tenant comment.
+  async getPdfDataByShareToken(token: string): Promise<InvoicePdfData> {
+    const invoice = await this.invoiceRepository.findByShareToken(token);
+    if (!invoice) {
+      throw new NotFoundException('Lien de partage introuvable.');
+    }
+    const [logo, signature] = await Promise.all([
+      this.companyService.getLogo(invoice.companyId),
+      this.invoiceRepository.findSignatureImage(invoice.companyId, invoice.id),
+    ]);
+    return this.mapper.toPdfData(invoice, logo, signature);
+  }
+
   // Phase 1.1-1: "Signer" — attaches a drawn or photographed signature,
   // replacing any existing one for this document. See
   // InvoiceController.uploadSignature for the upload/validation boundary.

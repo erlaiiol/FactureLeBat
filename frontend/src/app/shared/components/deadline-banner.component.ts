@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import {
   daysUntil,
   E_INVOICING_EMISSION_DEADLINE,
@@ -16,6 +17,7 @@ const DISMISS_KEY_PREFIX = 'facturele.dismissedDeadline.';
 @Component({
   selector: 'app-deadline-banner',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink],
   templateUrl: './deadline-banner.component.html',
 })
 export class DeadlineBannerComponent {

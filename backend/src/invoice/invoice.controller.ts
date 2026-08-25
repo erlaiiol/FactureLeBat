@@ -16,10 +16,13 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import {
   ALLOWED_RASTER_IMAGE_MIME_TYPES,
@@ -50,13 +53,20 @@ const MAX_SIGNATURE_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
 
 @Controller('invoices')
 export class InvoiceController {
+  // Same FRONTEND_URL convention as AuthService's own verification/reset
+  // links — see createShareLink below.
+  private readonly frontendUrl: string;
+
   constructor(
     private readonly invoiceService: InvoiceService,
     private readonly pdfService: PdfService,
     private readonly invoiceMailService: InvoiceMailService,
     private readonly facturXService: FacturXService,
     private readonly eInvoiceTransmissionService: EInvoiceTransmissionService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.frontendUrl = config.get<string>('FRONTEND_URL', 'http://localhost:4200');
+  }
 
   @Post()
   create(
@@ -130,6 +140,49 @@ export class InvoiceController {
     @Param('id') id: string,
   ): Promise<StreamableFile> {
     const data = await this.invoiceService.getPdfData(user.companyId, id);
+    const buffer = await this.pdfService.generateInvoicePdf(data);
+    const filePrefix = data.documentType === 'DEVIS' ? 'devis' : 'facture';
+    return new StreamableFile(buffer, {
+      disposition: `attachment; filename="${filePrefix}-${data.number}.pdf"`,
+    });
+  }
+
+  // Phase 1.3-7: "Partager" — lazily issues (or returns the existing) share
+  // token, then builds the full public URL from FRONTEND_URL, same
+  // convention as AuthService's own email-verification/reset links. The
+  // frontend embeds this in the native share sheet's text and the mail
+  // template (see InvoiceMailService), never in a query param on the app's
+  // own JWT-gated routes.
+  @Post(':id/share-link')
+  async createShareLink(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<{ url: string }> {
+    const token = await this.invoiceService.getOrCreateShareLink(user.companyId, id);
+    return { url: `${this.frontendUrl}/partage/${token}` };
+  }
+
+  // Invalidates the current link immediately — the only way one ever stops
+  // working, see schema.prisma's comment on Invoice.shareToken.
+  @Delete(':id/share-link')
+  async revokeShareLink(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.invoiceService.revokeShareLink(user.companyId, id);
+  }
+
+  // The @Public() counterpart of downloadPdf above, reachable by anyone
+  // holding the link — no @CurrentUser(), keyed on the token instead of a
+  // session. Throttled tighter than this app's 100/60s default: the token
+  // is the only thing standing between a stranger and this document, so
+  // brute-forcing attempts should be slowed hard, not just logged.
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Get('share/:token/pdf')
+  @Header('Content-Type', 'application/pdf')
+  async downloadSharedPdf(@Param('token') token: string): Promise<StreamableFile> {
+    const data = await this.invoiceService.getPdfDataByShareToken(token);
     const buffer = await this.pdfService.generateInvoicePdf(data);
     const filePrefix = data.documentType === 'DEVIS' ? 'devis' : 'facture';
     return new StreamableFile(buffer, {

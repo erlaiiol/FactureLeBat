@@ -1,4 +1,5 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
 import { MailerService, SendMailParams } from '../../mailer/mailer.service';
@@ -37,10 +38,12 @@ function buildService(options: {
   const findById = jest.fn().mockResolvedValue(options.found === false ? null : raw);
   const markSent = jest.fn().mockResolvedValue(raw);
   const findSignatureImage = jest.fn().mockResolvedValue(null);
+  const getOrCreateShareToken = jest.fn().mockResolvedValue('share-token-1');
   const invoiceRepository = {
     findById,
     markSent,
     findSignatureImage,
+    getOrCreateShareToken,
   } as unknown as InvoiceRepository;
 
   const toInvoiceWithTotals = jest.fn().mockReturnValue({
@@ -75,6 +78,10 @@ function buildService(options: {
     : jest.fn().mockResolvedValue(Buffer.from('factur-x-pdf'));
   const facturXService = { generateHybridPdf } as unknown as FacturXService;
 
+  const config = {
+    get: jest.fn().mockReturnValue('http://localhost:4200'),
+  } as unknown as ConfigService;
+
   const service = new InvoiceMailService(
     invoiceRepository,
     mapper,
@@ -83,6 +90,7 @@ function buildService(options: {
     mailSettingsService,
     mailerService,
     facturXService,
+    config,
   );
   return {
     service,
