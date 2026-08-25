@@ -120,6 +120,11 @@
                 }
               </button>
             </th>
+            <!-- Between Statut and Date, not trailing — a table this wide
+                 (min-w-[44rem]) always horizontally scrolls on mobile, and a
+                 last-column Actions button was unreachable there without
+                 first scrolling right past every other column. -->
+            <th class="px-4 py-3 text-center font-medium">Actions</th>
             <th class="font-medium">
               <button
                 type="button"
@@ -158,7 +163,6 @@
             </th>
             <th class="px-4 py-3 text-right font-medium">Total</th>
             <th class="px-4 py-3 text-center font-medium">Signé</th>
-            <th class="px-4 py-3 text-right font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>

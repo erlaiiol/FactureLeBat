@@ -18,12 +18,16 @@
         class="bg-danger-subtle text-danger-subtle-fg flex flex-1 items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm"
       >
         <span>
-          <span class="font-medium">Réception obligatoire dès le 1ᵉʳ septembre 2026</span>
+          <span class="font-medium">Recevoir vos factures fournisseurs par voie électronique</span>
+          devient obligatoire le 1ᵉʳ septembre 2026
           @if (reception.daysLeft >= 0) {
             — plus que {{ reception.daysLeft }} jour{{ reception.daysLeft > 1 ? 's' : '' }}.
           } @else {
             — échéance dépassée.
           }
+          <a routerLink="/entreprise" class="font-medium underline hover:opacity-80"
+            >Configurer →</a
+          >
         </span>
         <button
           type="button"
@@ -40,12 +44,16 @@
         class="bg-danger-subtle text-danger-subtle-fg flex flex-1 items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm"
       >
         <span>
-          <span class="font-medium">Émission obligatoire dès le 1ᵉʳ septembre 2027</span>
+          <span class="font-medium">Envoyer vos factures par voie électronique</span>
+          devient obligatoire le 1ᵉʳ septembre 2027
           @if (emission.daysLeft >= 0) {
             — plus que {{ emission.daysLeft }} jour{{ emission.daysLeft > 1 ? 's' : '' }}.
           } @else {
             — échéance dépassée.
           }
+          <a routerLink="/entreprise" class="font-medium underline hover:opacity-80"
+            >Configurer →</a
+          >
         </span>
         <button
           type="button"

@@ -20,6 +20,15 @@
     </button>
   </div>
 
+  @if (documentType() === 'FACTURE') {
+    <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
+      <strong>Le saviez-vous ?</strong> Si un devis a déjà été accepté, inutile de tout ressaisir
+      ici : ouvrez-le depuis
+      <a routerLink="/factures" class="font-semibold underline hover:no-underline">Mes documents</a>
+      et transformez-le en facture d'un clic, via son bouton « Actions ».
+    </p>
+  }
+
   <div class="grid gap-4 sm:grid-cols-2" appTourAnchor="invoice-mode-choice">
     <a
       routerLink="rapide"

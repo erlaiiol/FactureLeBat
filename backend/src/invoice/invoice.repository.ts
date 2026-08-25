@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
+import { generateOpaqueToken } from '../auth/token.util';
 import {
   InvoiceModel as Invoice,
   InvoiceLineModel as InvoiceLine,
@@ -416,6 +417,61 @@ export class InvoiceRepository {
   // schema, but reads never actually filtered on it.
   findById(companyId: string, id: string): Promise<InvoiceWithLines | null> {
     return this.prisma.invoice.findFirst({ where: { id, companyId }, include: INVOICE_INCLUDE });
+  }
+
+  // Phase 1.3-7 ("Partager"): the token itself is the credential — unlike
+  // findById above, this is reached from a @Public() route with no
+  // companyId at all, so it must never filter on one.
+  findByShareToken(token: string): Promise<InvoiceWithLines | null> {
+    return this.prisma.invoice.findFirst({
+      where: { shareToken: token },
+      include: INVOICE_INCLUDE,
+    });
+  }
+
+  // Lazily issues the token on first request rather than at creation time —
+  // most invoices are never shared this way. Reuses auth/token.util's own
+  // generator (256 bits, hex) for the same reason every other bearer token
+  // in this app does: plenty of entropy to make guessing infeasible.
+  // Deliberately NOT hashed before storage (unlike RefreshToken/AuthToken,
+  // which protect single-use, short-lived, account-takeover-sensitive
+  // secrets) — this token is meant to be looked up directly and to keep
+  // working indefinitely, same threat model as an "anyone with the link"
+  // Drive/Dropbox share, not a login credential.
+  async getOrCreateShareToken(companyId: string, id: string): Promise<string> {
+    const existing = await this.prisma.invoice.findFirst({
+      where: { id, companyId },
+      select: { shareToken: true },
+    });
+    if (!existing) {
+      throw new NoRowsAffectedError();
+    }
+    if (existing.shareToken) {
+      return existing.shareToken;
+    }
+    const token = generateOpaqueToken();
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id, companyId },
+      data: { shareToken: token },
+    });
+    if (count === 0) {
+      throw new NoRowsAffectedError();
+    }
+    return token;
+  }
+
+  // The artisan's own "révoquer" action — the only way this token ever
+  // stops working, since it has no expiry (see schema.prisma's comment on
+  // Invoice.shareToken). A previously-shared link 404s from that point on;
+  // a fresh call to getOrCreateShareToken issues a brand new one.
+  async revokeShareToken(companyId: string, id: string): Promise<void> {
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id, companyId },
+      data: { shareToken: null },
+    });
+    if (count === 0) {
+      throw new NoRowsAffectedError();
+    }
   }
 
   // Phase 27: feeds computeNextDocumentNumber for the "next number" suggestion

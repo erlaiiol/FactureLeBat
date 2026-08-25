@@ -109,6 +109,30 @@ export class InvoiceService {
     return this.http.get<InvoiceMailTemplate>(`${this.baseUrl}/${id}/mail-template`);
   }
 
+  // Phase 1.3-7 ("Partager"): lazily issues (or returns the existing)
+  // public, token-based link — see InvoiceController.createShareLink on the
+  // backend. Its own mail-template text already embeds this automatically
+  // (InvoiceMailService.buildShareUrl), so most callers never need this
+  // directly; exposed for a standalone "copier le lien" affordance.
+  getShareLink(id: string): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.baseUrl}/${id}/share-link`, {});
+  }
+
+  // Invalidates the current link immediately (no expiry otherwise — see
+  // schema.prisma's comment on Invoice.shareToken).
+  revokeShareLink(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${id}/share-link`);
+  }
+
+  // Public counterpart of getPdfBlob, for InvoiceShareViewPage — no cookie
+  // sent that would matter (the token itself is the credential), reachable
+  // by anyone holding the link.
+  getSharedPdfBlob(token: string): Observable<Blob> {
+    return this.http
+      .get(`${this.baseUrl}/share/${token}/pdf`, { responseType: 'blob' })
+      .pipe(timeout(PDF_FETCH_TIMEOUT_MS));
+  }
+
   // Phase 14.3: turns a devis into a real, independently-numbered facture —
   // see InvoiceService.convertToFacture on the backend.
   convertToFacture(devisId: string): Observable<InvoiceWithTotals> {

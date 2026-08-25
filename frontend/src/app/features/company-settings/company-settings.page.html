@@ -135,6 +135,7 @@
       <input
         formControlName="phone"
         type="tel"
+        autocomplete="off"
         class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint text="Facultatif — affiché sur vos factures pour vous contacter." />
@@ -700,7 +701,8 @@
       [class.bg-secondary-subtle]="reception.daysLeft > 30"
       [class.text-ink-soft]="reception.daysLeft > 30"
     >
-      <span class="font-medium">Réception obligatoire dès le 1ᵉʳ septembre 2026</span>
+      <span class="font-medium">Recevoir vos factures fournisseurs par voie électronique</span>
+      devient obligatoire le 1ᵉʳ septembre 2026
       @if (reception.daysLeft >= 0) {
         — plus que {{ reception.daysLeft }} jour{{ reception.daysLeft > 1 ? 's' : '' }}.
       } @else {
@@ -714,7 +716,8 @@
       [class.bg-secondary-subtle]="emission.daysLeft > 30"
       [class.text-ink-soft]="emission.daysLeft > 30"
     >
-      <span class="font-medium">Émission obligatoire dès le 1ᵉʳ septembre 2027</span>
+      <span class="font-medium">Envoyer vos factures par voie électronique</span>
+      devient obligatoire le 1ᵉʳ septembre 2027
       @if (emission.daysLeft >= 0) {
         — plus que {{ emission.daysLeft }} jour{{ emission.daysLeft > 1 ? 's' : '' }}.
       } @else {

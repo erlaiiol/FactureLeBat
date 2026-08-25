@@ -283,5 +283,14 @@ export const routes: Routes = [
         (m) => m.MentionsLegalesPage,
       ),
   },
+  // Phase 1.3-7 ("Partager"): the @Public() share-link landing page — no
+  // session required or expected (see InvoiceController.createShareLink on
+  // the backend), same "flat, ungated" placement as the auth/legal routes
+  // above.
+  {
+    path: 'partage/:token',
+    loadComponent: () =>
+      import('./features/share/invoice-share-view.page').then((m) => m.InvoiceShareViewPage),
+  },
   { path: '', canActivate: [authGuard], children: protectedRoutes },
 ];

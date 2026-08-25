@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DocumentType, InvoiceStatus } from '../../../generated/prisma/enums';
 import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
@@ -26,6 +27,9 @@ import { buildDefaultInvoiceMailTemplate, InvoiceMailTemplate } from './invoice-
 @Injectable()
 export class InvoiceMailService {
   private readonly logger = new Logger(InvoiceMailService.name);
+  // Same FRONTEND_URL convention as AuthService/InvoiceController — see
+  // buildShareUrl below.
+  private readonly frontendUrl: string;
 
   constructor(
     private readonly invoiceRepository: InvoiceRepository,
@@ -35,13 +39,17 @@ export class InvoiceMailService {
     private readonly mailSettingsService: MailSettingsService,
     private readonly mailerService: MailerService,
     private readonly facturXService: FacturXService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.frontendUrl = config.get<string>('FRONTEND_URL', 'http://localhost:4200');
+  }
 
   // Lets the frontend show (and let the artisan edit) the exact copy that
   // would be used if they send without touching subject/message — no
   // separate copy of the template logic duplicated client-side.
   async getDefaultTemplate(companyId: string, invoiceId: string): Promise<InvoiceMailTemplate> {
     const { raw, invoice } = await this.loadInvoice(companyId, invoiceId);
+    const shareUrl = await this.buildShareUrl(companyId, invoiceId);
     return buildDefaultInvoiceMailTemplate({
       companyName: raw.company.name,
       customerName: invoice.customerName,
@@ -49,7 +57,20 @@ export class InvoiceMailService {
       totalInclVatCents: invoice.totalInclVatCents,
       documentType: invoice.documentType,
       customMessage: raw.company.invoiceMailCustomMessage,
+      shareUrl,
     });
+  }
+
+  // Phase 1.3-7 ("Partager"): every consumer of the default template — the
+  // native Web Share text, the compose-email modal's initial draft, and the
+  // mailto fallback's body all fetch this same GET :id/mail-template
+  // (InvoiceService's own controller comment) — inserting the link here
+  // once means it reaches all three automatically, no per-tier frontend
+  // duplication. Idempotent (InvoiceRepository.getOrCreateShareToken),
+  // so opening the compose modal repeatedly never rotates the link.
+  private async buildShareUrl(companyId: string, invoiceId: string): Promise<string> {
+    const token = await this.invoiceRepository.getOrCreateShareToken(companyId, invoiceId);
+    return `${this.frontendUrl}/partage/${token}`;
   }
 
   async send(
@@ -73,6 +94,15 @@ export class InvoiceMailService {
       );
     }
 
+    // Only actually used below as a fallback when dto.subject/dto.message
+    // weren't supplied — computed unconditionally anyway since
+    // getOrCreateShareToken is cheap and idempotent, and dto-vs-fallback
+    // isn't known until the fields are read a few lines down.
+    const [logo, signature, shareUrl] = await Promise.all([
+      this.companyService.getLogo(companyId),
+      this.invoiceRepository.findSignatureImage(companyId, invoiceId),
+      this.buildShareUrl(companyId, invoiceId),
+    ]);
     const defaultTemplate = buildDefaultInvoiceMailTemplate({
       companyName: raw.company.name,
       customerName: invoice.customerName,
@@ -80,12 +110,8 @@ export class InvoiceMailService {
       totalInclVatCents: invoice.totalInclVatCents,
       documentType: invoice.documentType,
       customMessage: raw.company.invoiceMailCustomMessage,
+      shareUrl,
     });
-
-    const [logo, signature] = await Promise.all([
-      this.companyService.getLogo(companyId),
-      this.invoiceRepository.findSignatureImage(companyId, invoiceId),
-    ]);
     const pdfData = this.mapper.toPdfData(raw, logo, signature);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(pdfData);
     const filePrefix = invoice.documentType === 'DEVIS' ? 'devis' : 'facture';
