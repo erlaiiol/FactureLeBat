@@ -21,6 +21,7 @@ import { ProductService } from '../product/product.service';
 import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
+import { CompanySuperPdpService } from './e-invoicing/company-super-pdp.service';
 import { InvoiceWithTotals } from './entities/invoice.entity';
 import { InvoiceMapper } from './invoice.mapper';
 import {
@@ -48,7 +49,34 @@ export class InvoiceService {
     private readonly productService: ProductService,
     private readonly mapper: InvoiceMapper,
     private readonly premiumGate: PlanGateService,
+    private readonly companySuperPdp: CompanySuperPdpService,
   ) {}
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): 20 minutes —
+  // long enough for an artisan to notice and cancel a mistake right after
+  // creating a FACTURE, short enough that "automatic" still feels automatic.
+  // Not yet a per-company setting (see docs/1.3/1.3-3's own non-goals) —
+  // one fixed value for everyone who opts in.
+  private static readonly AUTO_TRANSMIT_GRACE_PERIOD_MS = 20 * 60 * 1000;
+
+  // Only a FACTURE, only when the company opted in, and only once SUPER PDP
+  // is actually connected — checked fresh here rather than trusted from a
+  // stale `company` read, since auto-transmit scheduling a FACTURE nobody
+  // can actually send yet would be silently pointless.
+  private async computeScheduledTransmitAt(
+    companyId: string,
+    documentType: DocumentType,
+    autoTransmitViaPa: boolean,
+  ): Promise<Date | undefined> {
+    if (documentType !== DocumentType.FACTURE || !autoTransmitViaPa) {
+      return undefined;
+    }
+    const connected = await this.companySuperPdp.isConnected(companyId);
+    if (!connected) {
+      return undefined;
+    }
+    return new Date(Date.now() + InvoiceService.AUTO_TRANSMIT_GRACE_PERIOD_MS);
+  }
 
   async create(companyId: string, dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
     // Phase 14: the free trial covers exactly one invoice per company —
@@ -119,6 +147,13 @@ export class InvoiceService {
       }
     }
 
+    const documentType = dto.documentType ?? DocumentType.FACTURE;
+    const scheduledTransmitAt = await this.computeScheduledTransmitAt(
+      companyId,
+      documentType,
+      company.autoTransmitViaPa,
+    );
+
     const invoice = await this.createInvoiceRow({
       companyId: company.id,
       customerName: dto.customerName,
@@ -147,7 +182,8 @@ export class InvoiceService {
       vatOverrideCents: dto.vatOverrideCents,
       totalOverrideCents: dto.totalOverrideCents,
       entryMode,
-      documentType: dto.documentType ?? DocumentType.FACTURE,
+      documentType,
+      scheduledTransmitAt,
       convertedFromDevisId: dto.convertedFromDevisId,
       // Phase 27: absent means "use the auto-suggested next number" — see
       // createInvoiceRow/computeNextDocumentNumber.
@@ -245,8 +281,19 @@ export class InvoiceService {
       throw new BadRequestException(`Invoice ${devisId} is not a devis`);
     }
 
+    // Phase 1.3-3: a devis converting into a facture is just as much a "new
+    // FACTURE" as one created from scratch via create() above — same
+    // eligibility check, same grace period.
+    const company = await this.companyService.getProfile(companyId);
+    const scheduledTransmitAt = await this.computeScheduledTransmitAt(
+      companyId,
+      DocumentType.FACTURE,
+      company.autoTransmitViaPa,
+    );
+
     const invoice = await this.createInvoiceRow({
       companyId,
+      scheduledTransmitAt,
       customerName: devis.customerName,
       customerAddress: devis.customerAddress ?? undefined,
       customerEmail: devis.customerEmail ?? undefined,
@@ -522,6 +569,19 @@ export class InvoiceService {
       depositPaidAt,
     });
 
+    return this.mapper.toInvoiceWithTotals(updated);
+  }
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): the
+  // artisan's own "Annuler" on a still-pending auto-transmission. See
+  // InvoiceRepository.cancelScheduledTransmit's own comment for why this
+  // never throws for an "already sent"/"already cancelled" invoice — only a
+  // genuinely missing/foreign id is a real error here, checked up front via
+  // findRawById same as updateStatus above (not the catch-NoRowsAffectedError
+  // pattern other modules use — this file's own established convention).
+  async cancelAutoTransmit(companyId: string, id: string): Promise<InvoiceWithTotals> {
+    await this.findRawById(companyId, id);
+    const updated = await this.invoiceRepository.cancelScheduledTransmit(companyId, id);
     return this.mapper.toInvoiceWithTotals(updated);
   }
 

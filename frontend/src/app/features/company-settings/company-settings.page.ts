@@ -1,8 +1,15 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { BillingService } from '../../core/services/billing.service';
 import { CompanyService } from '../../core/services/company.service';
@@ -13,11 +20,17 @@ import {
 } from '../../core/models/company-essentials.util';
 import { DeclarationFrequency } from '../../core/models/report.model';
 import { MailSettingsService } from '../../core/services/mail-settings.service';
+import { ReceivedInvoiceService } from '../../core/services/received-invoice.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../shared/components/field-hint.component';
 import { TourService } from '../../shared/tour/tour.service';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
+import {
+  daysUntil,
+  E_INVOICING_EMISSION_DEADLINE,
+  E_INVOICING_RECEPTION_DEADLINE,
+} from '../../core/utils/e-invoicing-deadlines.util';
 
 @Component({
   selector: 'app-company-settings-page',
@@ -28,11 +41,13 @@ import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 export class CompanySettingsPage {
   private readonly companyService = inject(CompanyService);
   private readonly mailSettingsService = inject(MailSettingsService);
+  private readonly receivedInvoiceService = inject(ReceivedInvoiceService);
   private readonly authService = inject(AuthService);
   private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   protected readonly tourService = inject(TourService);
   protected readonly billingService = inject(BillingService);
 
@@ -93,9 +108,43 @@ export class CompanySettingsPage {
   // cacheable for a few minutes — see CompanyController.serveLogo).
   protected readonly logoCacheBust = signal(Date.now());
 
+  // Phase 1.2-4 (2026 e-invoicing reform): SUPER PDP connection status —
+  // `configured` is app-wide (SUPERPDP_CLIENT_ID/SECRET set on this
+  // deployment at all), `connected` is per-company (this artisan completed
+  // the OAuth2 consent). Same "boots fine without it, gate the button
+  // instead" posture as billing's own stripeConfigured.
+  protected readonly superPdpConfigured = signal(false);
+  protected readonly superPdpConnected = signal(false);
+  protected readonly superPdpStatusLoading = signal(true);
+  protected readonly superPdpBusy = signal(false);
+
+  // Phase 1.2-6 (2026 e-invoicing reform): deadline-awareness copy — computed
+  // once from the real clock, not re-derived per render (a settings page
+  // visit doesn't need to tick live). Reception count is null until the
+  // artisan is actually connected (there's nothing to have received
+  // otherwise), matching the "connect first" posture the reception inbox
+  // itself (1.2-5) already uses.
+  protected readonly reception = {
+    deadline: E_INVOICING_RECEPTION_DEADLINE,
+    daysLeft: daysUntil(E_INVOICING_RECEPTION_DEADLINE),
+  };
+  protected readonly emission = {
+    deadline: E_INVOICING_EMISSION_DEADLINE,
+    daysLeft: daysUntil(E_INVOICING_EMISSION_DEADLINE),
+  };
+  protected readonly receivedInvoiceCount = signal<number | null>(null);
+  // Phase 1.3-7 (2026 e-invoicing reform, workflow automation): a plain
+  // UI-only reveal for the "En savoir plus sur vos obligations" disclosure
+  // — closed by default, no persistence across visits (not a preference
+  // worth remembering, unlike e.g. the SMTP section's own expanded state).
+  protected readonly obligationsExpanded = signal(false);
+
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     siret: ['', [Validators.required, Validators.pattern(/^\d{14}$/)]],
+    // Phase 1.2-2 (2026 e-invoicing reform): optional, blank for a
+    // franchise-en-base artisan who has no VAT number at all.
+    vatNumber: ['', Validators.pattern(/^FR[0-9A-Z]{2}\d{9}$/)],
     addressLine1: ['', Validators.required],
     addressLine2: [''],
     postalCode: ['', Validators.required],
@@ -158,6 +207,17 @@ export class CompanySettingsPage {
     // taxe d'après les débits" — same plain boolean toggle as
     // customFooterOnFacture above.
     vatOnDebitsOption: [false],
+    // Phase 1.3-1 (2026 e-invoicing reform, workflow automation): three
+    // independent toggles for how hands-off the pipeline should be — see
+    // schema.prisma's comment on Company.autoAttachFacturX and friends.
+    // autoTransmitViaPa/autoSyncReceivedInvoices are rendered disabled in
+    // the template until superPdpConnected() (see the "Facturation
+    // électronique" section below), but still live in this same form group
+    // so a save always sends all three regardless of which are editable
+    // right now.
+    autoAttachFacturX: [false],
+    autoTransmitViaPa: [false],
+    autoSyncReceivedInvoices: [false],
   });
 
   // Phase 12: the artisan's own SMTP account, used to send invoices for
@@ -186,6 +246,7 @@ export class CompanySettingsPage {
           this.form.patchValue({
             name: profile.name,
             siret: profile.siret,
+            vatNumber: profile.vatNumber ?? '',
             addressLine1: profile.addressLine1,
             addressLine2: profile.addressLine2 ?? '',
             postalCode: profile.postalCode,
@@ -215,6 +276,9 @@ export class CompanySettingsPage {
             customFooterOnDevis: profile.customFooterOnDevis,
             earlyPaymentDiscountMention: profile.earlyPaymentDiscountMention ?? '',
             vatOnDebitsOption: profile.vatOnDebitsOption,
+            autoAttachFacturX: profile.autoAttachFacturX,
+            autoTransmitViaPa: profile.autoTransmitViaPa,
+            autoSyncReceivedInvoices: profile.autoSyncReceivedInvoices,
           });
           this.missingEssentials.set(this.computeMissingEssentials());
         },
@@ -259,6 +323,100 @@ export class CompanySettingsPage {
           this.mailErrorMessage.set("Impossible de charger la configuration d'envoi d'email.");
         },
       });
+
+    this.companyService
+      .getSuperPdpStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (status) => {
+          this.superPdpStatusLoading.set(false);
+          this.superPdpConfigured.set(status.configured);
+          this.superPdpConnected.set(status.connected);
+          if (status.connected) {
+            this.loadReceivedInvoiceCount();
+          }
+        },
+        error: () => {
+          this.superPdpStatusLoading.set(false);
+        },
+      });
+
+    // The backend redirects back here with ?super_pdp=connected|error after
+    // the artisan completes (or fails/cancels) the OAuth2 consent —
+    // stripped from the URL immediately so a page refresh doesn't re-show
+    // the toast.
+    const superPdpParam = this.route.snapshot.queryParamMap.get('super_pdp');
+    if (superPdpParam === 'connected') {
+      this.superPdpConnected.set(true);
+      this.loadReceivedInvoiceCount();
+      this.toastService.success('SUPER PDP connecté avec succès.');
+      this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    } else if (superPdpParam === 'error') {
+      this.toastService.error('La connexion à SUPER PDP a échoué. Réessayez.');
+      this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    }
+
+    // Phase 1.3-1: autoTransmitViaPa/autoSyncReceivedInvoices only make
+    // sense once SUPER PDP is connected — kept disabled via the reactive
+    // form's own control.disable()/enable() (never the template `disabled`
+    // attribute directly on a formControlName element, which reactive forms
+    // explicitly warns against) so the two stay in lockstep with
+    // superPdpConnected() regardless of which of the three places sets it
+    // (initial status fetch, the OAuth callback redirect, disconnecting).
+    effect(() => {
+      const gatedControls = [
+        this.form.controls.autoTransmitViaPa,
+        this.form.controls.autoSyncReceivedInvoices,
+      ];
+      for (const control of gatedControls) {
+        if (this.superPdpConnected()) {
+          control.enable({ emitEvent: false });
+        } else {
+          control.disable({ emitEvent: false });
+        }
+      }
+    });
+  }
+
+  // A real browser navigation (not an HttpClient call) — GET /company/
+  // super-pdp/connect 302s straight to SUPER PDP's own consent screen.
+  protected connectSuperPdp(): void {
+    window.location.href = this.companyService.superPdpConnectUrl();
+  }
+
+  protected disconnectSuperPdp(): void {
+    if (this.superPdpBusy()) {
+      return;
+    }
+    this.superPdpBusy.set(true);
+    this.companyService
+      .disconnectSuperPdp()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.superPdpBusy.set(false);
+          this.superPdpConnected.set(false);
+          this.receivedInvoiceCount.set(null);
+          this.toastService.success('SUPER PDP déconnecté.');
+        },
+        error: () => {
+          this.superPdpBusy.set(false);
+          this.toastService.error('Impossible de déconnecter SUPER PDP pour le moment.');
+        },
+      });
+  }
+
+  // Read-only count for the readiness summary — reuses the reception
+  // inbox's own list() (locally-stored invoices, no live SUPER PDP call),
+  // never triggers a sync from here.
+  private loadReceivedInvoiceCount(): void {
+    this.receivedInvoiceService
+      .list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (invoices) => this.receivedInvoiceCount.set(invoices.length),
+        error: () => this.receivedInvoiceCount.set(null),
+      });
   }
 
   protected submit(): void {
@@ -279,6 +437,7 @@ export class CompanySettingsPage {
       .updateProfile({
         name: value.name,
         siret: value.siret,
+        vatNumber: value.vatNumber || undefined,
         addressLine1: value.addressLine1,
         addressLine2: value.addressLine2 || undefined,
         postalCode: value.postalCode,
@@ -316,6 +475,9 @@ export class CompanySettingsPage {
         customFooterOnDevis: value.customFooterOnDevis,
         earlyPaymentDiscountMention: value.earlyPaymentDiscountMention || undefined,
         vatOnDebitsOption: value.vatOnDebitsOption,
+        autoAttachFacturX: value.autoAttachFacturX,
+        autoTransmitViaPa: value.autoTransmitViaPa,
+        autoSyncReceivedInvoices: value.autoSyncReceivedInvoices,
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({

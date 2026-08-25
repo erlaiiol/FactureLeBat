@@ -100,6 +100,21 @@ enum NatureOperation {
   BIENS_ET_SERVICES
 }
 
+// Phase 1.2-4 (2026 e-invoicing reform): FactureLe's own transmission
+// lifecycle for a FACTURE sent through a PA — deliberately not the PA's own
+// vocabulary (SUPER PDP's own `status_code` is an unordered, ever-growing
+// event log, explicitly documented as "not a state machine" — see
+// e-invoicing/super-pdp-status.util.ts). A future PA swap only ever touches
+// that one translation table, never this enum or anything reading it.
+enum EInvoiceTransmissionStatus {
+  NOT_SENT
+  SENT // api:uploaded — passed the PA's own syntax check
+  VALIDATED // api:validated — passed Schematron/semantic checks
+  DELIVERED // api:sent / api:received — reached the counterpart access point
+  ACCEPTED // api:accepted — counterpart returned no errors
+  REJECTED // api:invalid / api:rejected — failed at any stage
+}
+
 // Phase 16: an artisan-controlled payment lifecycle for a FACTURE — never
 // set/read for a DEVIS (see InvoiceService.updateStatus's documentType
 // guard). "En retard" is deliberately not a 4th value here: it's NON_PAYEE +
@@ -228,6 +243,13 @@ model Company {
   email        String?
   phone        String?
 
+  // Phase 1.2-2 (2026 e-invoicing reform): the seller VAT-ID node Factur-X/
+  // EN16931-family XML expects when the company is VAT-registered. Nullable
+  // because a franchise-en-base artisan (see vatOnDebitsOption/legalStatus
+  // below) has no VAT number at all — same optional-legal-field pattern as
+  // microEntrepreneurCeiling, never forced where none exists.
+  vatNumber String?
+
   legalStatus        LegalStatus
   vatRateBasisPoints Int         @default(2000)
 
@@ -267,7 +289,7 @@ model Company {
   // Phase 12 invoice mailing: the artisan's own SMTP account, used to send
   // invoices literally from their address (no third-party "From" relay) —
   // see mail-settings/. smtpPasswordEncrypted is ciphertext only (AES-256-GCM,
-  // see smtp-password-crypto.util.ts), never the plaintext app password.
+  // see common/secret-crypto.util.ts), never the plaintext app password.
   // All nullable: mailing is opt-in, an artisan who never configures this
   // keeps downloading/emailing PDFs manually with zero behavior change.
   smtpHost              String?
@@ -275,6 +297,34 @@ model Company {
   smtpSecure            Boolean @default(true)
   smtpUser              String?
   smtpPasswordEncrypted String?
+
+  // Phase 1.2-4 (2026 e-invoicing reform): the artisan's own OAuth2 consent
+  // to let FactureLe transmit their invoices through SUPER PDP (the chosen
+  // PA, see docs/roadmap.md Phase 1.2-1) — one consent per company, not a
+  // single FactureLe-wide credential, since SUPER PDP's multi-tenant model
+  // requires each end company to individually authorize the software
+  // editor via OAuth2's Authorization Code flow. Token fields are ciphertext
+  // only (AES-256-GCM, common/secret-crypto.util.ts), same pattern as
+  // smtpPasswordEncrypted above. All nullable: connecting a PA is opt-in,
+  // same "zero behavior change until configured" precedent as SMTP.
+  superPdpAccessTokenEncrypted  String?
+  superPdpRefreshTokenEncrypted String?
+  superPdpTokenExpiresAt        DateTime?
+  superPdpConnectedAt           DateTime?
+
+  // Phase 1.3-1 (2026 e-invoicing reform, workflow automation): how hands-off
+  // this artisan wants the e-invoicing pipeline to be — three independent
+  // toggles rather than one mode enum, since real preferences don't collapse
+  // onto a single manual/automatic axis (e.g. always attaching Factur-X to
+  // emails while still personally deciding when something goes to the PA).
+  // All default false: Phase 1.2's fully-manual pipeline is unchanged until
+  // an artisan explicitly opts into one of these. autoTransmitViaPa/
+  // autoSyncReceivedInvoices are only meaningful once SUPER PDP is connected
+  // (superPdpConnectedAt above) — enforced server-side in CompanyService,
+  // not just hidden in the UI.
+  autoAttachFacturX        Boolean @default(false)
+  autoTransmitViaPa        Boolean @default(false)
+  autoSyncReceivedInvoices Boolean @default(false)
 
   // A short personal note the artisan writes once, appended to the default
   // invoice/devis message on every send — the native "Partager" share sheet,
@@ -472,8 +522,52 @@ model Company {
   // with its User (UserRepository.createWithCompany) and never orphaned.
   user User?
 
+  // Phase 1.2-5 (2026 e-invoicing reform): supplier e-invoices received
+  // through the connected PA — see ReceivedInvoice below.
+  receivedInvoices ReceivedInvoice[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Phase 1.2-5 (2026 e-invoicing reform): a minimal, read-only record of one
+// supplier invoice received through the connected PA (SUPER PDP) —
+// satisfies the reform's 2026-09-01 reception obligation. Deliberately an
+// island: no relation to Product/Service/activityCategory or Phase 17's
+// Quarterly Report/Activity Analytics (see docs/roadmap.md Phase 1.2-5's
+// own non-goals — this is store-and-display, not expense/accounting
+// tracking). The original file is never stored here — always re-fetched
+// live from SUPER PDP on download (GET /v1.beta/invoices/:id?format=
+// factur-x), same "derive, don't persist a large blob you can re-fetch"
+// reasoning as Company.logo's own separate table, just taken one step
+// further since even the blob's *source of truth* stays external.
+model ReceivedInvoice {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // SUPER PDP's own id for this incoming invoice — opaque to the rest of
+  // the app, used only to re-fetch the original document on demand and as
+  // the dedup key when syncing (see ReceivedInvoiceService.sync).
+  superPdpInvoiceId String
+
+  // Parsed from SUPER PDP's own EN16931 JSON representation
+  // (`en16931` format, the default) — nullable throughout since a supplier
+  // invoice reaching this app could in principle be missing any one of
+  // these depending on the sender's own compliance, and this app has no way
+  // to demand a resend.
+  issuerName        String?
+  issuerSiret       String?
+  number            String?
+  issueDate         DateTime?
+  totalInclVatCents Int?
+  vatAmountCents    Int?
+  currencyCode      String?
+
+  receivedAt DateTime @default(now())
+
+  @@unique([companyId, superPdpInvoiceId])
+  @@index([companyId])
 }
 
 // The artisan's own logo, shown top-right on every invoice/devis PDF —
@@ -661,7 +755,7 @@ model Invoice {
   // rapide only; mode manuel has no customer picker and already covers this
   // via its own freehand InvoiceCustomerField mechanism instead). PdfService
   // prints the SIREN (its first 9 digits) when present.
-  customerSiret String?
+  customerSiret   String?
   // Autofilled from Customer.address at pick time, same spirit as
   // customerSiret above — but unlike it, also has a dedicated freehand input
   // in mode manuel (see docs/roadmap.md Phase 1.1-8's notes), since its
@@ -833,6 +927,33 @@ model Invoice {
   // that would be wrong for every GUIDED row.
   manualNatureOfOperation NatureOperation?
 
+  // Phase 1.2-4 (2026 e-invoicing reform): transmission through the
+  // connected PA (SUPER PDP) — FACTURE-only in practice (InvoiceController
+  // gates the transmit endpoint the same way it already gates
+  // downloadFacturX), but left ungated at the schema level like every other
+  // FACTURE-only column here (compare status/dueDate). eInvoiceRejection
+  // Reason is the PA's own human-readable explanation, surfaced to the
+  // artisan verbatim rather than a generic "failed" message (Phase 10/12/17's
+  // established honesty principle) — see e-invoicing/electronic-invoicing-
+  // provider.interface.ts.
+  eInvoiceTransmissionStatus EInvoiceTransmissionStatus @default(NOT_SENT)
+  eInvoiceTransmittedAt      DateTime?
+  eInvoiceRejectionReason    String?
+  // The PA's own tracking id for this invoice — opaque to the rest of the
+  // app, only ever passed back to the same provider to poll status.
+  superPdpInvoiceId          String?
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set at
+  // creation only when Company.autoTransmitViaPa was on and SUPER PDP was
+  // connected at that moment — null means "not queued" (manual mode, a
+  // DEVIS, or already past its grace period). transmitCancelledAt is set if
+  // the artisan cancels a still-pending auto-transmission from the invoice
+  // board; AutoTransmitCronService's sweep skips any row where it's set.
+  // Both are DB-persisted (not an in-memory timer) specifically so a
+  // pending auto-transmission survives a backend restart mid-grace-period.
+  scheduledTransmitAt DateTime?
+  transmitCancelledAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -843,6 +964,9 @@ model Invoice {
   // other index on this table, this one isn't scoped to a single company:
   // the daily job scans NON_PAYEE invoices by dueDate across all artisans.
   @@index([status, dueDate])
+  // Cross-tenant sweep for AutoTransmitCronService (Phase 1.3-3), same
+  // "not scoped to one company" reasoning as the index above.
+  @@index([scheduledTransmitAt])
 }
 
 // A freehand extra client field on a manual-mode invoice (e.g. "SIRET" ->

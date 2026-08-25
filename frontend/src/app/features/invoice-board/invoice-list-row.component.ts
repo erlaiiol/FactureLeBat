@@ -8,6 +8,7 @@ import {
   output,
   signal,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
@@ -44,6 +45,7 @@ import { isOverdue } from './invoice-status.util';
   host: { style: 'display: contents' },
   imports: [
     DatePipe,
+    RouterLink,
     CentsToEurosPipe,
     BadgeComponent,
     IconCheckComponent,
@@ -71,11 +73,36 @@ export class InvoiceListRowComponent {
   readonly highlighted = input(false);
   readonly converting = input(false);
   readonly sharing = input(false);
+  // Phase 1.2-4 (2026 e-invoicing reform): whether this company can
+  // transmit via SUPER PDP at all (gates showing the action) and whether
+  // this specific row is mid-transmission (busy state) — same pattern as
+  // converting/sharing above.
+  readonly superPdpConnected = input(false);
+  // Phase 1.2-6: distinct from superPdpConnected — shows a "connect it"
+  // hint in place of the action only when the feature actually exists on
+  // this deployment (never when SUPER PDP isn't configured at all).
+  readonly superPdpConfigured = input(false);
+  readonly transmitting = input(false);
+  // Bug fix (2026-08-25 pipeline review): the row previously always showed
+  // "Envoyer via PA" regardless of invoice().eInvoiceTransmissionStatus,
+  // which let an artisan resubmit an already-transmitted FACTURE to SUPER
+  // PDP — a real duplicate-transmission risk, not just a UI nicety. Once
+  // sent, the action is replaced by a status readout + a refresh action
+  // (refreshingTransmission/refreshTransmissionStatus below) instead.
+  readonly refreshingTransmission = input(false);
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): a shared
+  // clock tick from InvoiceBoardPage (one interval for the whole board, not
+  // one per row) — drives pendingAutoTransmit/countdownLabel below without
+  // this component needing its own setInterval.
+  readonly nowMs = input(Date.now());
   // Facture-only: whether the status-change menu is open for this row.
   readonly statusMenuOpen = input(false);
   // Whether the actions ("...") dropdown is open for this row.
   readonly actionsMenuOpen = input(false);
 
+  readonly transmit = output<void>();
+  readonly refreshTransmissionStatus = output<void>();
+  readonly cancelAutoTransmit = output<void>();
   readonly convertToFacture = output<void>();
   readonly createFromDevis = output<void>();
   readonly createDevisFromFacture = output<void>();
@@ -142,8 +169,69 @@ export class InvoiceListRowComponent {
     }
   });
 
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): true while
+  // this FACTURE is queued for automatic PA transmission and the grace
+  // period hasn't elapsed yet — orthogonal to eInvoiceTransmissionStatus
+  // (still NOT_SENT the whole time), so this check has to come first in the
+  // template's @if/@else-if chain, ahead of canTransmit below, or a pending
+  // auto-transmission would render as a plain manual "Envoyer via PA".
+  protected readonly pendingAutoTransmit = computed(() => {
+    const at = this.invoice().scheduledTransmitAt;
+    if (!at) {
+      return false;
+    }
+    return new Date(at).getTime() > this.nowMs();
+  });
+  protected readonly autoTransmitCountdownLabel = computed(() => {
+    const at = this.invoice().scheduledTransmitAt;
+    if (!at) {
+      return '';
+    }
+    const remainingMinutes = Math.max(
+      1,
+      Math.round((new Date(at).getTime() - this.nowMs()) / 60_000),
+    );
+    return `Envoi automatique dans ${remainingMinutes}min`;
+  });
+
+  // Phase 1.2-4/1.2-6 (2026 e-invoicing reform): REJECTED can still be
+  // resent (the artisan fixes something and retries) — every other non-
+  // NOT_SENT status means SUPER PDP already has a live copy of this
+  // invoice, so re-transmitting would create a duplicate over there rather
+  // than update anything.
+  protected readonly canTransmit = computed(
+    () =>
+      this.invoice().eInvoiceTransmissionStatus === 'NOT_SENT' ||
+      this.invoice().eInvoiceTransmissionStatus === 'REJECTED',
+  );
+  protected readonly alreadyTransmitted = computed(
+    () => this.invoice().eInvoiceTransmissionStatus !== 'NOT_SENT',
+  );
+  protected readonly transmissionStatusLabel = computed(() => {
+    switch (this.invoice().eInvoiceTransmissionStatus) {
+      case 'SENT':
+        return 'Envoyée à la PA';
+      case 'VALIDATED':
+        return 'Validée par la PA';
+      case 'DELIVERED':
+        return 'Délivrée au destinataire';
+      case 'ACCEPTED':
+        return 'Acceptée';
+      case 'REJECTED':
+        return 'Rejetée par la PA';
+      default:
+        return null;
+    }
+  });
+
   protected pdfUrl(): string {
     return this.invoiceService.pdfUrl(this.invoice().id);
+  }
+
+  // Phase 1.2-3 (2026 e-invoicing reform) — FACTURE-only, gated by isDevis()
+  // in the template the same way every other FACTURE-only action here is.
+  protected facturXUrl(): string {
+    return this.invoiceService.facturXUrl(this.invoice().id);
   }
 
   // Phase 24: the status menu is `position: fixed` (viewport-relative,
@@ -166,13 +254,30 @@ export class InvoiceListRowComponent {
   // overflow past the viewport).
   private static readonly ACTIONS_MENU_WIDTH = 176;
   protected readonly actionsMenuPosition = signal<{ top: number; left: number } | null>(null);
+  // CSS-overlap fix (2026-08-25 pipeline review): 1.2-3/1.2-4/1.2-6 each
+  // added another conditional entry to this dropdown ("Facture électronique",
+  // "Envoyer via PA"/status, the SUPER PDP "connect it" hint), and the menu
+  // had no upper bound on its own height — just `top: rect.bottom + 4` with
+  // no flip or clamp. A FACTURE row near the bottom of a long list (or on a
+  // short mobile viewport) could render a menu that runs off the bottom of
+  // the screen with no way to reach its last item. Now clamped to whichever
+  // side (above/below the trigger) has more room, with a scrollable
+  // max-height as a last resort if that space is still tight.
+  protected readonly actionsMenuMaxHeight = signal<number | null>(null);
+  private static readonly MENU_MARGIN = 8;
+  private static readonly MENU_GAP = 4;
 
   protected onActionsMenuClick(trigger: HTMLElement): void {
     const rect = trigger.getBoundingClientRect();
+    const { MENU_MARGIN: margin, MENU_GAP: gap } = InvoiceListRowComponent;
+    const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+    const spaceAbove = rect.top - gap - margin;
+    const openAbove = spaceBelow < 200 && spaceAbove > spaceBelow;
     this.actionsMenuPosition.set({
-      top: rect.bottom + 4,
+      top: openAbove ? margin : rect.bottom + gap,
       left: rect.right - InvoiceListRowComponent.ACTIONS_MENU_WIDTH,
     });
+    this.actionsMenuMaxHeight.set(Math.max(120, openAbove ? spaceAbove : spaceBelow));
     this.toggleActionsMenu.emit();
   }
 }

@@ -7,7 +7,14 @@ import { PushUnavailableError } from './push-unavailable.error';
 // Builds the French digest copy for one artisan — e.g. "3 factures en
 // retard, 2 non payées" — a single bundled push per artisan, not one push
 // per invoice, since this is a daily summary, not a real-time alert.
-export function buildDigestBody(lateCount: number, unpaidCount: number): string {
+// Phase 1.3-5 (2026 e-invoicing reform, workflow automation): a third,
+// independent clause — an invoice can be simultaneously late/unpaid AND
+// un-transmitted, so this never suppresses in favor of the other two.
+export function buildDigestBody(
+  lateCount: number,
+  unpaidCount: number,
+  unsentEInvoiceCount: number,
+): string {
   const parts: string[] = [];
   if (lateCount > 0) {
     parts.push(`${lateCount} facture${lateCount > 1 ? 's' : ''} en retard`);
@@ -15,6 +22,11 @@ export function buildDigestBody(lateCount: number, unpaidCount: number): string 
   if (unpaidCount > 0) {
     parts.push(
       `${unpaidCount} facture${unpaidCount > 1 ? 's' : ''} non payée${unpaidCount > 1 ? 's' : ''}`,
+    );
+  }
+  if (unsentEInvoiceCount > 0) {
+    parts.push(
+      `${unsentEInvoiceCount} facture${unsentEInvoiceCount > 1 ? 's' : ''} non transmise${unsentEInvoiceCount > 1 ? 's' : ''}`,
     );
   }
   return parts.join(', ');
@@ -53,7 +65,7 @@ export class ReminderCronService {
     );
 
     const remindedCompanyIds: string[] = [];
-    for (const { companyId, lateCount, unpaidCount } of counts) {
+    for (const { companyId, lateCount, unpaidCount, unsentEInvoiceCount } of counts) {
       const tokens = tokensByCompany.get(companyId);
       if (!tokens || tokens.length === 0) {
         continue;
@@ -61,7 +73,7 @@ export class ReminderCronService {
       try {
         await this.sender.send(tokens, {
           title: 'FactureLe',
-          body: buildDigestBody(lateCount, unpaidCount),
+          body: buildDigestBody(lateCount, unpaidCount, unsentEInvoiceCount),
         });
         remindedCompanyIds.push(companyId);
       } catch (error) {

@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   effect,
   ElementRef,
@@ -22,6 +23,7 @@ import {
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { BillingService } from './core/services/billing.service';
+import { CompanyService } from './core/services/company.service';
 import { DeepLinkService } from './core/services/deep-link.service';
 import { PlatformService } from './core/services/platform.service';
 import { PushRegistrationService } from './core/services/push-registration.service';
@@ -63,7 +65,13 @@ const BILLING_DOT_CLASSES: Record<BillingButtonState, string> = {
 // while browsing it too, same standing as the three routes already here.
 // Note: '/remises' is a pre-existing gap in this array (predates this
 // phase, not introduced by it) — left alone, out of this phase's scope.
-const DATA_SECTION_ROUTES = ['/clients', '/produits', '/prestations', '/dossiers'];
+const DATA_SECTION_ROUTES = [
+  '/clients',
+  '/produits',
+  '/prestations',
+  '/dossiers',
+  '/factures-recues',
+];
 
 // Single-line text-entry <input> types — the ones a virtual keyboard's
 // return key can mean "I'm done with this field" for. Deliberately excludes
@@ -105,6 +113,7 @@ export class App {
   protected readonly tourService = inject(TourService);
   protected readonly authService = inject(AuthService);
   protected readonly billingService = inject(BillingService);
+  private readonly companyService = inject(CompanyService);
   protected readonly platformService = inject(PlatformService);
   private readonly pushRegistrationService = inject(PushRegistrationService);
   private readonly deepLinkService = inject(DeepLinkService);
@@ -148,6 +157,18 @@ export class App {
   @ViewChild('mainContent') private readonly mainContentRef?: ElementRef<HTMLElement>;
 
   protected readonly resendingVerification = signal(false);
+
+  // 2026-08-25: "Factures reçues" (below) only means anything once SUPER
+  // PDP is connected — received-invoice-list.page.ts itself already shows a
+  // graceful "connect first" message when it isn't, but a nav entry that
+  // always leads to that dead end is worse than not showing it at all.
+  // Reads CompanyService's own shared signal (null = not fetched yet this
+  // session, treated the same as "not connected") rather than a local copy,
+  // so a connect/disconnect from company-settings.page.ts — which calls the
+  // same service methods — is reflected here too, not just on that page.
+  protected readonly superPdpConnected = computed(
+    () => this.companyService.superPdpConnected() ?? false,
+  );
 
   protected readonly dataSectionActive = toSignal(
     this.router.events.pipe(
@@ -203,6 +224,23 @@ export class App {
         untracked(() => this.billingService.refreshStatus().subscribe());
       } else {
         this.billingService.status.set(null);
+      }
+    });
+
+    // Same "once per login" fetch as billingService.status above — updates
+    // CompanyService's own shared signal (getSuperPdpStatus's tap), which
+    // superPdpConnected above reads. Cleared on logout for the same
+    // stale-state reason as billingService.status.
+    effect(() => {
+      if (this.authService.isAuthenticated()) {
+        untracked(() => {
+          this.companyService
+            .getSuperPdpStatus()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({ error: () => this.companyService.superPdpConnected.set(false) });
+        });
+      } else {
+        this.companyService.superPdpConnected.set(null);
       }
     });
 

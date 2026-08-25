@@ -3,6 +3,8 @@
     Mes documents
   </h1>
 
+  <app-deadline-banner />
+
   <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
     <input
       [value]="search()"
@@ -168,8 +170,16 @@
               [highlighted]="isHighlighted(item)"
               [converting]="convertingDevisId() === item.id"
               [sharing]="sharingInvoiceId() === item.id"
+              [superPdpConnected]="superPdpConnected()"
+              [superPdpConfigured]="superPdpConfigured()"
+              [transmitting]="transmittingInvoiceId() === item.id"
+              [refreshingTransmission]="refreshingTransmissionId() === item.id"
+              [nowMs]="nowMs()"
               [statusMenuOpen]="isStatusMenuOpen(item.id)"
               [actionsMenuOpen]="isActionsMenuOpen(item.id)"
+              (transmit)="onTransmit(item)"
+              (refreshTransmissionStatus)="onRefreshTransmissionStatus(item)"
+              (cancelAutoTransmit)="onCancelAutoTransmit(item)"
               (convertToFacture)="convertDevis(item)"
               (createFromDevis)="createFromDevis(item)"
               (createDevisFromFacture)="openCreateDevisModal(item)"

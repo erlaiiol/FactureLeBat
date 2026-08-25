@@ -122,6 +122,12 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly sharingInvoiceId = signal<string | null>(null);
+  // 2026-08-25 review: mirrors sharingInvoiceId, kept as its own signal
+  // rather than widening that one with a format field — a plain-PDF share
+  // and a Factur-X share are independent in-flight operations (an artisan
+  // could plausibly tap one right after the other) and each button only
+  // ever needs to know about its own.
+  protected readonly sharingFacturXInvoiceId = signal<string | null>(null);
   // Phase 1.1-1
   protected readonly signatureModalInvoice = signal<InvoiceWithTotals | null>(null);
 
@@ -287,6 +293,13 @@ export class InvoiceCreatePreviewStepPage {
     return this.invoiceService.pdfUrl(invoiceId);
   }
 
+  // Phase 1.2/1.3 review (2026-08-25): FACTURE-only — callers must gate
+  // this on documentType themselves, same convention InvoiceService.
+  // facturXUrl's own doc comment already establishes.
+  protected facturXUrl(invoiceId: string): string {
+    return this.invoiceService.facturXUrl(invoiceId);
+  }
+
   // Guards the plain <a [href]="pdfUrl(...)" target="_blank"> download
   // links (unlike share()/downloadPdfPreview() above, there's no method
   // call to intercept — just a real navigation) — reads the href straight
@@ -330,6 +343,34 @@ export class InvoiceCreatePreviewStepPage {
       this.toastService.error('Impossible de partager ce document pour le moment.');
     } finally {
       this.sharingInvoiceId.set(null);
+    }
+  }
+
+  // 2026-08-25 review: same three-tier fallback as share() above, just
+  // pointed at the Factur-X hybrid — FACTURE-only, callers gate on
+  // documentType (see the template's own @if before this button).
+  protected async shareFacturX(invoice: InvoiceWithTotals): Promise<void> {
+    if (this.sharingFacturXInvoiceId()) {
+      return;
+    }
+    if (
+      !this.companyEssentialsGate.ensureComplete(this.companyProfile(), (profile) => {
+        this.companyProfile.set(profile);
+        void this.shareFacturX(invoice);
+      })
+    ) {
+      return;
+    }
+    this.sharingFacturXInvoiceId.set(invoice.id);
+    try {
+      const outcome = await this.invoiceShareService.share(invoice, 'facturx');
+      if (outcome === 'compose-email') {
+        this.openEmailModal(invoice);
+      }
+    } catch {
+      this.toastService.error('Impossible de partager la facture électronique pour le moment.');
+    } finally {
+      this.sharingFacturXInvoiceId.set(null);
     }
   }
 

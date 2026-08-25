@@ -12,6 +12,7 @@ function samplePdfData(): InvoicePdfData {
     issuerPostalCode: '69001',
     issuerCity: 'Lyon',
     issuerSiret: '12345678900012',
+    issuerVatNumber: null,
     issuerEmail: null,
     issuerPhone: null,
     companyVatExempt: true,
@@ -35,6 +36,7 @@ function samplePdfData(): InvoicePdfData {
       {
         description: 'Parquet',
         unit: 'm2',
+        unitCode: 'MTK',
         quantity: '10',
         unitPriceCents: 4500,
         totalCents: 45000,

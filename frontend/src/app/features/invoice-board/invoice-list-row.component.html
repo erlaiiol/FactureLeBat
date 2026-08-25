@@ -150,9 +150,10 @@
       @if (actionsMenuOpen()) {
         <div class="fixed inset-0 z-40" (click)="toggleActionsMenu.emit()"></div>
         <div
-          class="anim-line-in fixed z-50 flex w-44 flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-xl"
+          class="anim-line-in fixed z-50 flex w-44 flex-col overflow-y-auto overflow-x-hidden rounded-lg border border-line bg-surface shadow-xl"
           [style.top.px]="actionsMenuPosition()?.top"
           [style.left.px]="actionsMenuPosition()?.left"
+          [style.max-height.px]="actionsMenuMaxHeight()"
         >
           @if (isDevis() && !invoice().convertedToFacture) {
             <button
@@ -190,6 +191,70 @@
           >
             Télécharger
           </a>
+          @if (!isDevis()) {
+            <a
+              [href]="facturXUrl()"
+              target="_blank"
+              (click)="toggleActionsMenu.emit()"
+              title="Facture au format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+            >
+              <span class="block">Facture électronique</span>
+              <span class="block text-xs font-normal text-ink-soft">Format Factur-X</span>
+            </a>
+          }
+          @if (!isDevis() && pendingAutoTransmit()) {
+            <button
+              type="button"
+              (click)="cancelAutoTransmit.emit(); toggleActionsMenu.emit()"
+              title="Annuler l'envoi automatique et revenir à un envoi manuel"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+            >
+              <span class="block">{{ autoTransmitCountdownLabel() }}</span>
+              <span class="block text-xs font-normal text-danger">Annuler</span>
+            </button>
+          } @else if (!isDevis() && superPdpConnected() && canTransmit()) {
+            <button
+              type="button"
+              [disabled]="transmitting()"
+              (click)="transmit.emit(); toggleActionsMenu.emit()"
+              [title]="
+                invoice().eInvoiceRejectionReason ??
+                'Transmettre cette facture à votre Plateforme Agréée (SUPER PDP)'
+              "
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+            >
+              <span class="block">{{ transmitting() ? 'Envoi…' : 'Envoyer via PA' }}</span>
+              @if (invoice().eInvoiceRejectionReason; as reason) {
+                <span class="block text-xs font-normal text-danger">Rejetée : {{ reason }}</span>
+              }
+            </button>
+          } @else if (!isDevis() && superPdpConnected() && alreadyTransmitted()) {
+            <button
+              type="button"
+              [disabled]="refreshingTransmission()"
+              (click)="refreshTransmissionStatus.emit(); toggleActionsMenu.emit()"
+              title="Cette facture a déjà été transmise — actualiser son statut auprès de la PA"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+            >
+              <span class="block">{{
+                refreshingTransmission() ? 'Actualisation…' : 'Actualiser le statut'
+              }}</span>
+              <span class="block text-xs font-normal text-ink-soft">{{
+                transmissionStatusLabel()
+              }}</span>
+            </button>
+          } @else if (!isDevis() && superPdpConfigured()) {
+            <a
+              routerLink="/entreprise"
+              (click)="toggleActionsMenu.emit()"
+              title="Connectez SUPER PDP depuis Mon entreprise pour transmettre vos factures électroniquement"
+              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
+            >
+              <span class="block">Envoyer via PA</span>
+              <span class="block text-xs font-normal text-ink-soft">Connecter SUPER PDP</span>
+            </a>
+          }
           <button
             type="button"
             [disabled]="sharing()"

@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ActivityAnalytics, QuarterlyReport } from '../models/report.model';
+import { ActivityAnalytics, EInvoicingSnapshot, QuarterlyReport } from '../models/report.model';
 
 @Injectable({ providedIn: 'root' })
 export class ReportsService {
@@ -26,5 +26,12 @@ export class ReportsService {
 
   getActivityAnalytics(): Observable<ActivityAnalytics> {
     return this.http.get<ActivityAnalytics>(`${this.baseUrl}/analytics`);
+  }
+
+  // Phase 1.3-6 (2026 e-invoicing reform, workflow automation): deliberately
+  // NOT behind the same premium gate as getActivityAnalytics — see
+  // StatsReportsPage's own comment.
+  getEInvoicingSnapshot(): Observable<EInvoicingSnapshot> {
+    return this.http.get<EInvoicingSnapshot>(`${this.baseUrl}/e-invoicing-snapshot`);
   }
 }

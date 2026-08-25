@@ -140,6 +140,15 @@ const protectedRoutes: Routes = [
       ),
   },
   {
+    // Phase 1.2-5 (2026 e-invoicing reform): the supplier e-invoice
+    // reception inbox.
+    path: 'factures-recues',
+    loadComponent: () =>
+      import('./features/received-invoice-list/received-invoice-list.page').then(
+        (m) => m.ReceivedInvoiceListPage,
+      ),
+  },
+  {
     path: 'dossiers/nouveau',
     loadComponent: () =>
       import('./features/catalog-folder-form/catalog-folder-form.page').then(

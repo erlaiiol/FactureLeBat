@@ -349,6 +349,10 @@ export class PdfService {
       data.issuerAddressLine2 ?? '',
       `${data.issuerPostalCode} ${data.issuerCity}`,
       `SIRET : ${data.issuerSiret}`,
+      // Phase 1.2-2: printed only when set, same "print only when set"
+      // convention as deliveryAddress's conditional line (Phase 1.1-8) —
+      // never rendered for a franchise-en-base company with no VAT number.
+      data.issuerVatNumber ? `N° TVA : ${data.issuerVatNumber}` : '',
       data.issuerEmail ?? '',
       data.issuerPhone ?? '',
     ].filter(Boolean);

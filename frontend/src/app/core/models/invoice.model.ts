@@ -30,6 +30,11 @@ export type InvoiceStatus = 'NON_PAYEE' | 'ACOMPTE_VERSE' | 'PAYEE' | 'ANNULEE';
 // InvoiceWithTotals.signatureMethod.
 export type SignatureMethod = 'DRAWN' | 'PHOTO';
 
+// Phase 1.2-4 (2026 e-invoicing reform) — mirrors backend's
+// EInvoiceTransmissionStatus exactly.
+export type EInvoiceTransmissionStatus =
+  'NOT_SENT' | 'SENT' | 'VALIDATED' | 'DELIVERED' | 'ACCEPTED' | 'REJECTED';
+
 // A manual invoice's column role. LINE_TOTAL is the artisan's own freehand
 // row price — never derived from QUANTITY x UNIT_PRICE, which stay purely
 // informational free text on the canvas (manual mode's whole principle:
@@ -361,6 +366,17 @@ export interface InvoiceWithTotals {
   hasSignatureProof: boolean;
   signatureMethod: SignatureMethod | null;
   manuallySigned: boolean;
+  // Phase 1.2-4 (2026 e-invoicing reform): the connected PA's transmission
+  // lifecycle for this document — FactureLe's own vocabulary, not the PA's
+  // raw status values (see backend's EInvoiceTransmissionStatus).
+  eInvoiceTransmissionStatus: EInvoiceTransmissionStatus;
+  eInvoiceTransmittedAt: string | null;
+  eInvoiceRejectionReason: string | null;
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set while
+  // this FACTURE is queued for automatic PA transmission
+  // (Company.autoTransmitViaPa) — non-null and in the future means still
+  // cancellable, see InvoiceListRowComponent.pendingAutoTransmit.
+  scheduledTransmitAt: string | null;
   // Phase 1.1-3: the requested deposit — both null when none was requested,
   // both set together. depositPaidAt mirrors paidAt's "records the fact, not
   // a log" convention, set when status enters ACOMPTE_VERSE.

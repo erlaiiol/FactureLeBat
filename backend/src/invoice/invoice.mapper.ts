@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import {
   DocumentType,
+  EInvoiceTransmissionStatus,
   InvoiceEntryMode,
   InvoiceStatus,
   ManualColumnRole,
@@ -14,7 +15,7 @@ import { getEffectivePlanTier } from '../billing/plan-gate.service';
 import { PLAN_DEFINITIONS } from '../billing/plan-config';
 import { CompanyLogoData } from '../company/company.repository';
 import { isVatApplicable } from '../company/legal-status.util';
-import { UNIT_LABELS } from '../common/unit.util';
+import { UNIT_CODES, UNIT_LABELS } from '../common/unit.util';
 import { InvoiceCalculationService } from './calculation/invoice-calculation.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import {
@@ -275,6 +276,10 @@ export class InvoiceMapper {
       hasSignatureProof: invoice.signature !== null,
       signatureMethod: invoice.signature?.method ?? null,
       manuallySigned: invoice.manuallySigned,
+      eInvoiceTransmissionStatus: invoice.eInvoiceTransmissionStatus,
+      eInvoiceTransmittedAt: invoice.eInvoiceTransmittedAt,
+      eInvoiceRejectionReason: invoice.eInvoiceRejectionReason,
+      scheduledTransmitAt: invoice.scheduledTransmitAt,
       depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
       depositAmountCents: invoice.depositAmountCents,
       depositPaidAt: invoice.depositPaidAt,
@@ -371,6 +376,10 @@ export class InvoiceMapper {
       hasSignatureProof: invoice.signature !== null,
       signatureMethod: invoice.signature?.method ?? null,
       manuallySigned: invoice.manuallySigned,
+      eInvoiceTransmissionStatus: invoice.eInvoiceTransmissionStatus,
+      eInvoiceTransmittedAt: invoice.eInvoiceTransmittedAt,
+      eInvoiceRejectionReason: invoice.eInvoiceRejectionReason,
+      scheduledTransmitAt: invoice.scheduledTransmitAt,
       depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
       depositAmountCents: invoice.depositAmountCents,
       depositPaidAt: invoice.depositPaidAt,
@@ -414,6 +423,7 @@ export class InvoiceMapper {
         // preview screen — computeLineTotal never sees it, only PdfService's
         // output does.
         unit: line.showUnitDetail ? UNIT_LABELS[line.unit] : '',
+        unitCode: UNIT_CODES[line.unit],
         quantity: line.quantity,
         // Only set when packaging rounding actually changed the priced
         // quantity — PdfService renders it as a clarifying note rather than
@@ -723,6 +733,12 @@ export class InvoiceMapper {
       hasSignatureProof: false,
       signatureMethod: null,
       manuallySigned: false,
+      // Nothing to transmit yet for a not-yet-persisted preview — same "no
+      // real state yet" reasoning as manuallySigned above.
+      eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.NOT_SENT,
+      eInvoiceTransmittedAt: null,
+      eInvoiceRejectionReason: null,
+      scheduledTransmitAt: null,
       // Phase 1.1-3: mirrors the artisan's not-yet-submitted deposit toggle
       // straight from the DTO — the preview/aperçu screen is what renders
       // this, same "no business-logic duplication" reasoning as every other
@@ -841,6 +857,12 @@ export class InvoiceMapper {
       hasSignatureProof: false,
       signatureMethod: null,
       manuallySigned: false,
+      // Nothing to transmit yet for a not-yet-persisted preview — same "no
+      // real state yet" reasoning as manuallySigned above.
+      eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.NOT_SENT,
+      eInvoiceTransmittedAt: null,
+      eInvoiceRejectionReason: null,
+      scheduledTransmitAt: null,
       // Phase 1.1-3: same "mirror the not-yet-submitted DTO" reasoning as
       // toPreviewInvoiceWithTotals above.
       depositPercentageBasisPoints: dto.depositPercentageBasisPoints ?? null,
@@ -939,6 +961,7 @@ export class InvoiceMapper {
       lines: withTotals.lines.map((line) => ({
         description: line.description,
         unit: line.showUnitDetail ? UNIT_LABELS[line.unit] : '',
+        unitCode: UNIT_CODES[line.unit],
         quantity: line.quantity,
         billedQuantity:
           line.showBillingDetail && line.billedQuantity !== line.quantity
@@ -1013,6 +1036,7 @@ export class InvoiceMapper {
       issuerPostalCode: company.postalCode,
       issuerCity: company.city,
       issuerSiret: company.siret,
+      issuerVatNumber: company.vatNumber,
       issuerEmail: company.email,
       issuerPhone: company.phone,
       // Whether the *company itself* benefits from the franchise en base de

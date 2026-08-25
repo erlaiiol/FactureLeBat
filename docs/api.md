@@ -64,6 +64,7 @@ Full replace of the editable fields (not a partial patch despite the verb — ev
 | ---------------------- | --------------------------------- | ---------------------------------- |
 | `name`                | string, 1-200 chars               |                                   |
 | `siret`               | string                            | exactly 14 digits                |
+| `vatNumber`           | string, optional                  | Phase 1.2-2 — `FR` + 2-char key + 9-digit SIREN; blank for a franchise-en-base company with no VAT number |
 | `addressLine1`        | string, 1-200 chars               |                                   |
 | `addressLine2`        | string, ≤200 chars, optional      |                                   |
 | `postalCode`          | string, 1-10 chars                |                                   |
@@ -90,10 +91,29 @@ Full replace of the editable fields (not a partial patch despite the verb — ev
 | `customFooterOnDevis` | boolean | Phase 1.1-6 — show `customFooterMessage` on devis |
 | `earlyPaymentDiscountMention` | string, ≤500 chars, optional | Phase 1.1-7 (Art. L441-9) — escompte-policy mention, DB-defaulted to "Pas d'escompte pour paiement anticipé." on every company so this is never silently missing |
 | `vatOnDebitsOption` | boolean | Phase 1.1-8 (2026 e-invoicing reform) — "option pour le paiement de la taxe d'après les débits" |
+| `autoAttachFacturX` | boolean | Phase 1.3-1 (2026 e-invoicing reform, workflow automation) — attach the Factur-X hybrid instead of the plain PDF when emailing a FACTURE |
+| `autoTransmitViaPa` | boolean | Phase 1.3-1 — automatically transmit new FACTUREs via the connected PA. Silently coerced back to `false` server-side if SUPER PDP isn't connected for this company, regardless of what's sent |
+| `autoSyncReceivedInvoices` | boolean | Phase 1.3-1 — automatically sync the reception inbox in the background. Same server-side coercion as `autoTransmitViaPa` if not connected |
 
-Every optional field above follows the same full-replace convention as the whole endpoint: an omitted optional field is cleared to `null`, not left unchanged. Fields marked `boolean` with no "optional" note are required on every request (the four toggles above and `decennialInsuranceApplicable`) — omitting one is rejected with a validation error, not defaulted.
+Every optional field above follows the same full-replace convention as the whole endpoint: an omitted optional field is cleared to `null`, not left unchanged. Fields marked `boolean` with no "optional" note are required on every request (the seven toggles above and `decennialInsuranceApplicable`) — omitting one is rejected with a validation error, not defaulted.
 
 Returns the updated profile, same shape as `GET /company`.
+
+### `GET /company/super-pdp/status`
+
+Phase 1.2-4 (2026 e-invoicing reform). Returns `{ configured: boolean, connected: boolean }` — `configured` is app-wide (SUPER PDP OAuth2 credentials set on this deployment), `connected` is per-company (this artisan completed the OAuth2 consent).
+
+### `GET /company/super-pdp/connect`
+
+Redirects (302) the browser to SUPER PDP's own OAuth2 consent screen. `503` if not configured on this deployment.
+
+### `GET /company/super-pdp/callback`
+
+SUPER PDP redirects back here after consent. Not called directly by the frontend — redirects again to `{FRONTEND_URL}/entreprise?super_pdp=connected` or `?super_pdp=error`.
+
+### `POST /company/super-pdp/disconnect`
+
+Clears the stored OAuth2 tokens for this company. Returns `{ connected: false }`.
 
 ## Customers
 
@@ -510,6 +530,64 @@ an additional amount to add anywhere. `distribution` is only present for
 ### `GET /invoices/:id/pdf`
 
 Streams the invoice as a PDF. `Content-Type: application/pdf`, `Content-Disposition: attachment; filename="facture-{number}.pdf"`. `404` if the invoice doesn't exist.
+
+### `GET /invoices/:id/facturx`
+
+Phase 1.2-3 (2026 e-invoicing reform). Same as `GET /invoices/:id/pdf`, but as a Factur-X (BASIC profile) PDF/A-3 hybrid with the CII XML embedded — `Content-Disposition: attachment; filename="facture-{number}-factur-x.pdf"`. **FACTURE-only**: `400` for a DEVIS (a quote isn't a fiscal invoice, the reform doesn't apply to it). `422` if the generated document fails Factur-X schema validation (should not happen for a well-formed invoice — see `invoice/facturx/facturx.service.ts`).
+
+### `POST /invoices/:id/transmit`
+
+Phase 1.2-4 (2026 e-invoicing reform). Generates the Factur-X hybrid (same pipeline as the endpoint above) and submits it through the connected PA (SUPER PDP). FACTURE-only, same 400 as above. Returns the updated `InvoiceWithTotals` (`eInvoiceTransmissionStatus` becomes `"SENT"`). `503` if SUPER PDP isn't configured on this deployment (`SUPERPDP_CLIENT_ID`/`SUPERPDP_CLIENT_SECRET` unset) or this company hasn't completed the OAuth2 connection yet (see `GET /company/super-pdp/status`). `409` (Phase 1.3-3) if `eInvoiceTransmissionStatus` isn't `"NOT_SENT"` or `"REJECTED"` — this invoice already has a live copy at the PA, re-transmitting would create a duplicate rather than update it.
+
+### `POST /invoices/:id/transmission-status`
+
+Phase 1.2-4. Re-fetches this invoice's latest status from the connected PA and persists it — an on-demand refresh, not a background poll. Returns the updated `InvoiceWithTotals`. `503` (SUPER PDP unavailable, same as above) if this invoice was never transmitted.
+
+### `POST /invoices/:id/cancel-auto-transmit`
+
+Phase 1.3-3 (2026 e-invoicing reform, workflow automation). Cancels a still-pending automatic PA transmission (see `Company.autoTransmitViaPa` — `PATCH /company`) — sets `scheduledTransmitAt` back to `null` on the invoice and records `transmitCancelledAt`. Returns the updated `InvoiceWithTotals`. Never errors for an invoice that's already been sent or whose auto-transmission was already cancelled (a slow double-click is harmless); `404` only for an invoice that doesn't exist for this company. A FACTURE gets `scheduledTransmitAt` set automatically at creation when `autoTransmitViaPa` is on and SUPER PDP is connected — a 20-minute grace period before `AutoTransmitCronService`'s sweep actually calls `POST /invoices/:id/transmit` on it.
+
+> `docs/api.md`'s usual request/response field-table treatment wasn't done for these e-invoicing routes or for `GET /company/super-pdp/*` below — deferred the same way Phase 1.1-12 deferred and later caught up a batch of drift, rather than done piecemeal per phase. A future documentation pass should also add the `EInvoiceTransmissionStatus`/`eInvoiceRejectionReason`/`scheduledTransmitAt` fields to `InvoiceWithTotals`'s own response shape.
+
+## Received Invoices
+
+Phase 1.2-5 (2026 e-invoicing reform). A read-only inbox for supplier invoices received through the connected PA (SUPER PDP) — no reply/dispute/payment-initiation actions, no expense/reporting integration (see `docs/roadmap.md` Phase 1.2-5's own non-goals).
+
+### `GET /received-invoices`
+
+Lists this company's stored received invoices, most recent `issueDate` first. Each item: `id`, `issuerName`, `issuerSiret`, `number`, `issueDate`, `totalInclVatCents`, `vatAmountCents`, `currencyCode`, `receivedAt` — all nullable except `id`/`receivedAt` (a supplier's own invoice could be missing any EN16931 field depending on their compliance).
+
+### `POST /received-invoices/sync`
+
+Fetches whatever's new from SUPER PDP (`direction=in`) and stores it — an on-demand action, not a background poll or webhook (SUPER PDP's public API documents no webhook mechanism). Returns the full updated list, same shape as `GET /received-invoices`. `503` if SUPER PDP isn't configured/connected, same as the transmission endpoints above.
+
+### `GET /received-invoices/:id/download`
+
+Proxies the original document live from SUPER PDP (`format=factur-x`, a human-readable PDF regardless of the supplier's original format) — never cached locally. `404` if the id doesn't belong to this company. `503` (SUPER PDP unavailable) as above.
+
+## Company (continued) — SUPER PDP reception
+
+No new routes: reception reuses `GET /company/super-pdp/status`/`connect`/`disconnect` from Phase 1.2-4 — one PA connection serves both directions.
+
+## Reports
+
+> `GET /reports/quarterly`/`quarterly/pdf`/`quarterly/csv`/`analytics` predate this doc's per-endpoint treatment and aren't documented here yet — only the one new route below is. `GET /reports/analytics` is gated behind a Pro+/Premium plan (`PlanFeatureLocked` 402, Phase 30); `GET /reports/quarterly*` is free on every tier (a legal necessity, not a business-insight nice-to-have).
+
+### `GET /reports/e-invoicing-snapshot`
+
+Phase 1.3-6 (2026 e-invoicing reform, workflow automation). A compliance snapshot for "Mon activité" — **deliberately ungated**, unlike `GET /reports/analytics` right above it: same "legal necessity" reasoning that already keeps the quarterly report free on every tier. `configured`/`connected` mirror `GET /company/super-pdp/status`. `transmissionRatePercent` is `null` (never `0`) when `facturesInWindow` is `0` — nothing to divide by, which reads very differently from "0% compliant." `facturesInWindow`/`transmittedFacturesInWindow`/`receivedInvoiceCount` are scoped to the same rolling 12-month window as `GET /reports/analytics`; `unsentFactureCount` is the one exception, scoped to the whole book (same reasoning as `analytics.unsignedFactureCount`).
+
+```json
+{
+  "configured": true,
+  "connected": true,
+  "facturesInWindow": 12,
+  "transmittedFacturesInWindow": 9,
+  "transmissionRatePercent": 75,
+  "unsentFactureCount": 3,
+  "receivedInvoiceCount": 4
+}
+```
 
 ## Errors
 

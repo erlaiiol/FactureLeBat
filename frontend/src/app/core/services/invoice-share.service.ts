@@ -48,17 +48,30 @@ export class InvoiceShareService {
   private readonly ratingPromptService = inject(RatingPromptService);
   private readonly toastService = inject(ToastService);
 
-  async share(invoice: InvoiceWithTotals): Promise<ShareOutcome> {
-    const fileName = this.fileName(invoice);
+  // Phase 1.2/1.3 review (2026-08-25): `format` lets a caller share the
+  // Factur-X hybrid instead of the plain PDF — same three-tier fallback
+  // chain, same everything else. Still a valid PDF file either way (Factur-X
+  // is PDF/A-3 with the CII XML embedded inside it, not a different file
+  // type), so `application/pdf` and the wording below stay accurate for
+  // both. Callers must gate `format: 'facturx'` to FACTURE documents
+  // themselves — same convention as InvoiceService.facturXUrl's own doc
+  // comment already establishes.
+  async share(
+    invoice: InvoiceWithTotals,
+    format: 'pdf' | 'facturx' = 'pdf',
+  ): Promise<ShareOutcome> {
+    const fileName = this.fileName(invoice, format);
+    const sourceUrl =
+      format === 'facturx'
+        ? this.invoiceService.facturXUrl(invoice.id)
+        : this.invoiceService.pdfUrl(invoice.id);
     // Fetched up front (parallel with the PDF, which is normally the
     // slower of the two) so the artisan's custom message —
     // Company.invoiceMailCustomMessage, baked into this template by the
     // backend — is available for the native tier's `text` below, not just
     // the mailto fallback further down.
     const [pdfBlob, template] = await Promise.all([
-      firstValueFrom(
-        this.http.get(this.invoiceService.pdfUrl(invoice.id), { responseType: 'blob' }),
-      ),
+      firstValueFrom(this.http.get(sourceUrl, { responseType: 'blob' })),
       firstValueFrom(this.invoiceService.getMailTemplate(invoice.id)),
     ]);
     const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
@@ -112,8 +125,13 @@ export class InvoiceShareService {
     URL.revokeObjectURL(url);
   }
 
-  private fileName(invoice: InvoiceWithTotals): string {
+  private fileName(invoice: InvoiceWithTotals, format: 'pdf' | 'facturx'): string {
     const prefix = invoice.documentType === 'DEVIS' ? 'devis' : 'facture';
-    return `${prefix}-${invoice.number}.pdf`;
+    // Matches InvoiceController's own `Content-Disposition` filename for the
+    // plain download link (invoice.controller.ts) so a shared/downloaded
+    // copy of the same document always has the same name either way.
+    return format === 'facturx'
+      ? `facture-${invoice.number}-factur-x.pdf`
+      : `${prefix}-${invoice.number}.pdf`;
   }
 }

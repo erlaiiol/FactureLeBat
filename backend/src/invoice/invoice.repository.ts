@@ -24,6 +24,7 @@ import {
   InvoiceStatus,
   SignatureMethod,
   NatureOperation,
+  EInvoiceTransmissionStatus,
 } from '../../generated/prisma/enums';
 import { computeNextDocumentNumber } from './next-number.util';
 
@@ -192,6 +193,12 @@ export interface CreateInvoiceData {
   // ManualModeFieldsConsistency) — see schema.prisma's comment on
   // Invoice.manualNatureOfOperation.
   manualNatureOfOperation?: NatureOperation;
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set by
+  // InvoiceService when Company.autoTransmitViaPa was on and SUPER PDP was
+  // connected at creation time — undefined for every other case (manual
+  // mode, a DEVIS, or auto-transmit off/not connected), leaving the column
+  // NULL, never a meaningless default.
+  scheduledTransmitAt?: Date;
 }
 
 const INVOICE_INCLUDE = {
@@ -288,6 +295,7 @@ export class InvoiceRepository {
           depositAmountCents: data.depositAmountCents,
           reverseChargeApplicable: data.reverseChargeApplicable,
           manualNatureOfOperation: data.manualNatureOfOperation,
+          scheduledTransmitAt: data.scheduledTransmitAt,
           lines: {
             create: data.lines.map((line, index) => ({
               position: index,
@@ -504,6 +512,97 @@ export class InvoiceRepository {
     });
   }
 
+  // Phase 1.2-4 (2026 e-invoicing reform): written once right after
+  // submitting to the PA (status SENT, superPdpInvoiceId set,
+  // eInvoiceTransmittedAt now) and again every time the artisan refreshes
+  // status from the PA (status/rejectionReason only, see
+  // EInvoiceTransmissionService) — same updateMany-then-refetch shape as
+  // updateStatus above.
+  async updateEInvoiceTransmission(
+    companyId: string,
+    id: string,
+    data: {
+      status: EInvoiceTransmissionStatus;
+      transmittedAt?: Date;
+      superPdpInvoiceId?: string;
+      rejectionReason: string | null;
+    },
+  ): Promise<InvoiceWithLines> {
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id, companyId },
+      data: {
+        eInvoiceTransmissionStatus: data.status,
+        eInvoiceRejectionReason: data.rejectionReason,
+        ...(data.transmittedAt !== undefined ? { eInvoiceTransmittedAt: data.transmittedAt } : {}),
+        ...(data.superPdpInvoiceId !== undefined
+          ? { superPdpInvoiceId: data.superPdpInvoiceId }
+          : {}),
+      },
+    });
+    if (count === 0) {
+      throw new NoRowsAffectedError();
+    }
+    return this.prisma.invoice.findFirstOrThrow({
+      where: { id, companyId },
+      include: INVOICE_INCLUDE,
+    });
+  }
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation):
+  // AutoTransmitCronService's own sweep source — cross-tenant, same
+  // reasoning as ReminderCronService's own findReminderCounts. Only id/
+  // companyId: the cron re-loads the full invoice through the normal
+  // EInvoiceTransmissionService.transmit path per row, never builds a PDF
+  // from this narrow projection itself.
+  findDueForAutoTransmit(now: Date): Promise<{ id: string; companyId: string }[]> {
+    return this.prisma.invoice.findMany({
+      where: {
+        scheduledTransmitAt: { lte: now },
+        transmitCancelledAt: null,
+        eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.NOT_SENT,
+      },
+      select: { id: true, companyId: true },
+    });
+  }
+
+  // Atomically claims one due row for transmission — nulls
+  // scheduledTransmitAt gated on it still being set (and not cancelled),
+  // so two overlapping cron ticks (a slow run bumping into the next
+  // scheduled one) can never both proceed on the same invoice. Returns
+  // false when another caller already claimed it; the sweep must skip
+  // calling transmit() in that case. This is the load-bearing half of this
+  // phase's double-transmission defense — the other half is
+  // EInvoiceTransmissionService.transmit's own NOT_SENT/REJECTED status
+  // guard, which additionally covers a manual click racing this claim.
+  async claimAutoTransmit(companyId: string, id: string): Promise<boolean> {
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id, companyId, scheduledTransmitAt: { not: null }, transmitCancelledAt: null },
+      data: { scheduledTransmitAt: null },
+    });
+    return count === 1;
+  }
+
+  // The artisan's own "Annuler" action on a still-pending auto-transmission
+  // — deliberately not gated on any precondition (already sent/already
+  // cancelled): both are harmless to write again, so this never throws for
+  // a "too late" click, only for a genuinely missing/foreign invoice id.
+  // Clears scheduledTransmitAt in the same write so the frontend's
+  // pendingAutoTransmit (scheduledTransmitAt non-null and in the future)
+  // flips back to the manual "Envoyer via PA" state immediately.
+  async cancelScheduledTransmit(companyId: string, id: string): Promise<InvoiceWithLines> {
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id, companyId },
+      data: { transmitCancelledAt: new Date(), scheduledTransmitAt: null },
+    });
+    if (count === 0) {
+      throw new NoRowsAffectedError();
+    }
+    return this.prisma.invoice.findFirstOrThrow({
+      where: { id, companyId },
+      include: INVOICE_INCLUDE,
+    });
+  }
+
   // Phase 17: the quarterly report's own data source — a devis is never
   // "paid" (see InvoiceService.updateStatus's documentType guard, which
   // means a devis can never actually reach status PAYEE), but documentType
@@ -632,6 +731,42 @@ export class InvoiceRepository {
         status: { not: InvoiceStatus.ANNULEE },
         manuallySigned: false,
         signature: null,
+      },
+    });
+  }
+
+  // Phase 1.3-6 (2026 e-invoicing reform, workflow automation): the
+  // compliance snapshot's own transmission-rate source — how many FACTUREs
+  // exist in the analytics window (denominator) and how many of those are
+  // no longer NOT_SENT (numerator). Two plain counts, not a groupBy: the
+  // snapshot only ever needs one company's two numbers, not a cross-tenant
+  // breakdown.
+  countFacturesInRange(companyId: string, from: Date, to: Date): Promise<number> {
+    return this.prisma.invoice.count({
+      where: { companyId, documentType: DocumentType.FACTURE, createdAt: { gte: from, lte: to } },
+    });
+  }
+
+  countTransmittedFacturesInRange(companyId: string, from: Date, to: Date): Promise<number> {
+    return this.prisma.invoice.count({
+      where: {
+        companyId,
+        documentType: DocumentType.FACTURE,
+        createdAt: { gte: from, lte: to },
+        eInvoiceTransmissionStatus: { not: EInvoiceTransmissionStatus.NOT_SENT },
+      },
+    });
+  }
+
+  // Deliberately NOT scoped to the analytics window — same "legal-risk
+  // count surfaces the whole book" reasoning as countUnsigned above, see
+  // EInvoicingSnapshot.unsentFactureCount's own comment.
+  countUnsentFactures(companyId: string): Promise<number> {
+    return this.prisma.invoice.count({
+      where: {
+        companyId,
+        documentType: DocumentType.FACTURE,
+        eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.NOT_SENT,
       },
     });
   }

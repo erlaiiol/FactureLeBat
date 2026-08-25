@@ -45,6 +45,33 @@
             Partage le PDF via une app de votre téléphone (email, messagerie…)
           </p>
         </div>
+        <!-- 2026-08-25 review: previously only reachable from Mes documents
+             — added here too, next to the plain-PDF actions above, so the
+             e-invoice never requires a detour through a different screen. -->
+        <div class="w-full max-w-sm border-t border-line pt-4">
+          <a [href]="facturXUrl(facture.id)" target="_blank" (click)="guardDownloadClick($event)">
+            <app-big-button variant="secondary" tone="subtle">
+              Télécharger la facture électronique
+            </app-big-button>
+          </a>
+        </div>
+        <div class="w-full max-w-sm">
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            [disabled]="sharingFacturXInvoiceId() === facture.id"
+            (click)="shareFacturX(facture)"
+          >
+            {{
+              sharingFacturXInvoiceId() === facture.id
+                ? 'Partage…'
+                : 'Partager (facture électronique)'
+            }}
+          </app-big-button>
+          <p class="mt-1 text-center text-xs text-ink-soft">
+            Format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique
+          </p>
+        </div>
         <div class="w-full max-w-sm">
           <app-big-button
             appTourAnchor="invoice-sign-action"
@@ -138,6 +165,38 @@
           Partage le PDF via une app de votre téléphone (email, messagerie…)
         </p>
       </div>
+      <!-- 2026-08-25 review: previously only reachable from Mes documents
+           — added here too, next to the plain-PDF actions above, so the
+           e-invoice never requires a detour through a different screen. -->
+      @if (invoice.documentType === 'FACTURE') {
+        <a
+          [href]="facturXUrl(invoice.id)"
+          target="_blank"
+          class="w-full max-w-sm border-t border-line pt-4"
+          (click)="guardDownloadClick($event)"
+        >
+          <app-big-button variant="secondary" tone="subtle">
+            Télécharger la facture électronique
+          </app-big-button>
+        </a>
+        <div class="w-full max-w-sm">
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            [disabled]="sharingFacturXInvoiceId() === invoice.id"
+            (click)="shareFacturX(invoice)"
+          >
+            {{
+              sharingFacturXInvoiceId() === invoice.id
+                ? 'Partage…'
+                : 'Partager (facture électronique)'
+            }}
+          </app-big-button>
+          <p class="mt-1 text-center text-xs text-ink-soft">
+            Format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique
+          </p>
+        </div>
+      }
       <div class="w-full max-w-sm">
         <app-big-button
           appTourAnchor="invoice-sign-action"

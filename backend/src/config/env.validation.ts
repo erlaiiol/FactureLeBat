@@ -245,6 +245,28 @@ class EnvironmentVariables {
   @IsString()
   ADMIN_SEED_EMAIL?: string;
 
+  // Phase 1.2-4 (2026 e-invoicing reform): SUPER PDP OAuth2 client
+  // credentials, registered once with SUPER PDP as FactureLe's own
+  // software-editor partner account (not per-company — each artisan then
+  // grants their own consent via the Authorization Code flow on top of
+  // this). Optional as a group, same "boots fine without it" posture as
+  // GROQ_API_KEY/STRIPE_*: SuperPdpClientService.isConfigured() gates
+  // POST /invoices/:id/transmit and the /company/super-pdp/* connect routes
+  // (503 until set) — Factur-X download (Phase 1.2-3) and everything else
+  // works normally without it. See docs/roadmap.md Phase 1.2-4 for the
+  // step-by-step account setup.
+  @IsOptional()
+  @IsString()
+  SUPERPDP_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  SUPERPDP_CLIENT_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  SUPERPDP_REDIRECT_URI = 'http://localhost:3000/api/company/super-pdp/callback';
+
   // `make demo` (see Makefile, infra/demo-seed.sh) — gates the one-click
   // demo-login endpoints (auth/guards/demo-mode-enabled.guard.ts) so a real
   // deployment, where this is never set, can never log in as one of the

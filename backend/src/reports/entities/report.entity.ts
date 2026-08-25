@@ -123,3 +123,32 @@ export interface ActivityAnalytics {
   // "one more exception" reasoning as outstandingTotalCents.
   unsignedFactureCount: number;
 }
+
+// Phase 1.3-6 (2026 e-invoicing reform, workflow automation): a compliance
+// snapshot, deliberately NOT part of ActivityAnalytics above — see
+// ReportsService.getEInvoicingSnapshot's own comment for why this is a
+// separate, ungated method/endpoint rather than a few more fields folded
+// into the (Phase 30-gated) analytics payload.
+export interface EInvoicingSnapshot {
+  // App-wide (SUPERPDP_CLIENT_ID/SECRET set on this deployment at all) and
+  // per-company (this artisan completed the OAuth2 connection) — same two-
+  // level distinction the rest of the e-invoicing UI already uses (see
+  // CompanySuperPdpController's own status endpoint).
+  configured: boolean;
+  connected: boolean;
+  // Same rolling window as the rest of Activity Analytics
+  // (ANALYTICS_WINDOW_MONTHS) — how many FACTUREs were created in that
+  // window, and how many of those are no longer NOT_SENT. Null rate means
+  // "nothing to divide by," not "0% compliant."
+  facturesInWindow: number;
+  transmittedFacturesInWindow: number;
+  transmissionRatePercent: number | null;
+  // Deliberately NOT windowed, same "legal-risk count surfaces the whole
+  // book" reasoning as ActivityAnalytics.unsignedFactureCount above — an
+  // un-transmitted FACTURE from 13 months ago is still un-transmitted.
+  unsentFactureCount: number;
+  // Windowed (unlike unsentFactureCount) — this is an activity count, not
+  // a risk count. Count only, per Phase 1.2-5's own "never expose the
+  // documents themselves outside the reception inbox" reasoning.
+  receivedInvoiceCount: number;
+}

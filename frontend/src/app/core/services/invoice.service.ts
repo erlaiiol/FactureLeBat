@@ -42,6 +42,15 @@ export class InvoiceService {
     return `${this.baseUrl}/${id}/pdf`;
   }
 
+  // Phase 1.2-3 (2026 e-invoicing reform): the same rendered document as a
+  // Factur-X (BASIC profile) PDF/A-3 hybrid — FACTURE-only server-side (see
+  // InvoiceController.downloadFacturX), so callers must gate this on
+  // `documentType === 'FACTURE'` themselves, same as InvoiceListRowComponent
+  // already gates its own FACTURE-only actions on `!isDevis()`.
+  facturXUrl(id: string): string {
+    return `${this.baseUrl}/${id}/facturx`;
+  }
+
   // Blob counterpart of pdfUrl, for embedding a saved invoice/devis in an
   // <iframe> (see InvoicePreviewModalComponent) — the CSP's
   // `frame-src 'self' blob:` won't allow framing the API's own origin
@@ -74,6 +83,26 @@ export class InvoiceService {
   // updated on success.
   sendEmail(id: string, request: SendInvoiceEmailRequest): Observable<InvoiceWithTotals> {
     return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${id}/send-email`, request);
+  }
+
+  // Phase 1.2-4 (2026 e-invoicing reform): submits the invoice's Factur-X
+  // through the connected PA (SUPER PDP) — FACTURE-only, same backend gate
+  // as facturXUrl. 503 if PA transmission isn't configured/connected (see
+  // CompanyService.getSuperPdpStatus, which the invoice board checks before
+  // showing this action at all).
+  transmit(id: string): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${id}/transmit`, {});
+  }
+
+  refreshTransmissionStatus(id: string): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${id}/transmission-status`, {});
+  }
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): cancels a
+  // still-pending automatic transmission — never errors for a "too late"
+  // click, see the backend's own InvoiceService.cancelAutoTransmit comment.
+  cancelAutoTransmit(id: string): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${id}/cancel-auto-transmit`, {});
   }
 
   getMailTemplate(id: string): Observable<InvoiceMailTemplate> {

@@ -18,6 +18,7 @@ import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { BillingService } from '../../../core/services/billing.service';
 import { CompanyEssentialsGateService } from '../../../core/services/company-essentials-gate.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
+import { InvoiceShareService } from '../../../core/services/invoice-share.service';
 import { KeyboardVisibilityService } from '../../../core/services/keyboard-visibility.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TrialOfferService } from '../../../core/services/trial-offer.service';
@@ -26,6 +27,7 @@ import { FieldHintComponent } from '../../../shared/components/field-hint.compon
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
 import { IconTrashComponent } from '../../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
+import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
 import { SignatureModalComponent } from '../../../shared/components/signature-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
@@ -59,6 +61,7 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
     IconCloseComponent,
     IconTrashComponent,
     PdfPreviewModalComponent,
+    SendInvoiceEmailModalComponent,
     SignatureModalComponent,
     TourAnchorDirective,
     InvoiceTotalsSummaryComponent,
@@ -72,6 +75,7 @@ export class InvoiceCreateManualPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly invoiceService = inject(InvoiceService);
+  private readonly invoiceShareService = inject(InvoiceShareService);
   private readonly companyEssentialsGate = inject(CompanyEssentialsGateService);
   private readonly toastService = inject(ToastService);
   private readonly billingService = inject(BillingService);
@@ -97,6 +101,12 @@ export class InvoiceCreateManualPage {
   protected readonly creating = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
+  // 2026-08-25 review: mode manuel had no "Partager" affordance at all (see
+  // copyCustomerEmail's own comment below) — added to match mode rapide's
+  // preview-step success card, same two independent in-flight signals.
+  protected readonly sharingInvoiceId = signal<string | null>(null);
+  protected readonly sharingFacturXInvoiceId = signal<string | null>(null);
+  protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   // Phase 1.1-1
   protected readonly signatureModalInvoice = signal<InvoiceWithTotals | null>(null);
 
@@ -325,9 +335,80 @@ export class InvoiceCreateManualPage {
     return this.invoiceService.pdfUrl(invoiceId);
   }
 
+  // 2026-08-25 review: FACTURE-only, callers gate on documentType — same
+  // convention InvoiceService.facturXUrl's own doc comment establishes.
+  protected facturXUrl(invoiceId: string): string {
+    return this.invoiceService.facturXUrl(invoiceId);
+  }
+
+  // 2026-08-25 review: same three-tier "Partager" as mode rapide's
+  // preview-step success card (InvoiceShareService), brought here to close
+  // the gap copyCustomerEmail's old comment used to call out explicitly.
+  protected async share(invoice: InvoiceWithTotals): Promise<void> {
+    if (this.sharingInvoiceId()) {
+      return;
+    }
+    if (
+      !this.companyEssentialsGate.ensureComplete(this.store.company(), (profile) => {
+        this.store.company.set(profile);
+        void this.share(invoice);
+      })
+    ) {
+      return;
+    }
+    this.sharingInvoiceId.set(invoice.id);
+    try {
+      const outcome = await this.invoiceShareService.share(invoice);
+      if (outcome === 'compose-email') {
+        this.emailModalInvoice.set(invoice);
+      }
+    } catch {
+      this.toastService.error('Impossible de partager ce document pour le moment.');
+    } finally {
+      this.sharingInvoiceId.set(null);
+    }
+  }
+
+  // Same as share() above, pointed at the Factur-X hybrid — FACTURE-only,
+  // gated by the template's own @if before this button.
+  protected async shareFacturX(invoice: InvoiceWithTotals): Promise<void> {
+    if (this.sharingFacturXInvoiceId()) {
+      return;
+    }
+    if (
+      !this.companyEssentialsGate.ensureComplete(this.store.company(), (profile) => {
+        this.store.company.set(profile);
+        void this.shareFacturX(invoice);
+      })
+    ) {
+      return;
+    }
+    this.sharingFacturXInvoiceId.set(invoice.id);
+    try {
+      const outcome = await this.invoiceShareService.share(invoice, 'facturx');
+      if (outcome === 'compose-email') {
+        this.emailModalInvoice.set(invoice);
+      }
+    } catch {
+      this.toastService.error('Impossible de partager la facture électronique pour le moment.');
+    } finally {
+      this.sharingFacturXInvoiceId.set(null);
+    }
+  }
+
+  protected closeEmailModal(): void {
+    this.emailModalInvoice.set(null);
+  }
+
+  protected onEmailSent(updated: InvoiceWithTotals): void {
+    this.createdInvoice.set(updated);
+    this.emailModalInvoice.set(null);
+    this.toastService.success('Email envoyé au client.');
+  }
+
   // Phase 1.1-11 follow-up: same convenience as mode rapide's preview-step
-  // success card — mode manuel has no "Partager" affordance at all, but the
-  // client's email is just as worth a one-click copy here.
+  // success card — the client's email is just as worth a one-click copy
+  // here.
   protected async copyCustomerEmail(email: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(email);

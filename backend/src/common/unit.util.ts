@@ -21,6 +21,24 @@ export const UNIT_LABELS: Record<Unit, string> = {
   CUBIC_METER: 'm³',
 };
 
+// UN/ECE Recommendation 20 unit codes — Phase 1.2-3 (2026 e-invoicing
+// reform): the Factur-X CII XML's BilledQuantity/unitCode needs the real
+// unit regardless of whether the PDF happens to be showing it (see
+// InvoiceMapper's own `showUnitDetail`-gated `unit` field, a display-only
+// toggle — this map is keyed by the actual `Unit` enum, not by that
+// already-blanked label, precisely so the two never get conflated again).
+export const UNIT_CODES: Record<Unit, string> = {
+  SQUARE_METER: 'MTK', // square metre
+  LINEAR_METER: 'MTR', // metre
+  UNIT: 'C62', // "one" — the generic UN/ECE piece/unit code
+  LUMP_SUM: 'C62', // no dedicated lump-sum code; C62 is the conventional fallback
+  HOUR: 'HUR',
+  DAY: 'DAY',
+  KILOGRAM: 'KGM',
+  LITER: 'LTR',
+  CUBIC_METER: 'MTQ',
+};
+
 // Only a square-meter line has area semantics (offcut/waste surcharge,
 // billed-quantity multiplier) — every other unit bills as a plain
 // quantity x unit price. This is the single source of truth the

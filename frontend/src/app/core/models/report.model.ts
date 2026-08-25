@@ -102,3 +102,20 @@ export interface ActivityAnalytics {
   // window, same "whole book" treatment as outstandingTotalCents.
   unsignedFactureCount: number;
 }
+
+// Phase 1.3-6 (2026 e-invoicing reform, workflow automation): a compliance
+// snapshot, deliberately separate from ActivityAnalytics above — see
+// StatsReportsPage's own comment for why it renders outside the
+// analyticsLocked() gate.
+export interface EInvoicingSnapshot {
+  configured: boolean;
+  connected: boolean;
+  facturesInWindow: number;
+  transmittedFacturesInWindow: number;
+  // Null, not 0, when there's nothing in the window to divide by.
+  transmissionRatePercent: number | null;
+  // Deliberately NOT windowed — same "whole book" treatment as
+  // unsignedFactureCount above.
+  unsentFactureCount: number;
+  receivedInvoiceCount: number;
+}

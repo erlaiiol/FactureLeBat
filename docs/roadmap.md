@@ -695,6 +695,82 @@ Core promise (see positioning.md for the full reasoning): *le système de factur
 
 ---
 
+# Phase 13.6 — Reform-Ready Trust Signal (Landing Page)
+
+## Objective
+
+The landing page (Phase 13.3) had zero mention of the 2026/2027 French
+e-invoicing reform, confirmed empirically on 2026-08-25 — a real gap
+given Phase 1.2 shipped genuine, provable reform-readiness (Factur-X
+generation, an integrated PA connection) months before this phase, and
+1.2-6's own notes had already flagged this as worth revisiting without
+ever scoping it in. Requested by the user directly, with an explicit
+placement decision: both a light trust signal near the hero and a full
+pillar in the existing messaging grid, not one or the other.
+
+## Content basis
+
+Extends [positioning.md](positioning.md) rather than redeciding
+messaging inline — same relationship every other landing-page phase has
+to that document. New pillar copy and hero-adjacent badge text recorded
+there as this phase's own addition to the messaging pillars list.
+
+## Features
+
+- [x] A 6th card in the existing messaging-pillars grid
+      (`landing.page.html`), same visual pattern as the five already
+      there (inline SVG icon, `h2` title, one-line `p` body) — see
+      positioning.md for the exact copy. Grid changed `lg:grid-cols-5` →
+      `lg:grid-cols-3` in the same edit: five columns would have left the
+      6th card orphaned alone on its own row, three gives two clean,
+      balanced rows of three.
+- [x] A small, discreet trust badge near the hero's CTA (alongside the
+      existing "Sans carte bancaire..." trial-policy line) — a pill with
+      a checkmark icon (`IconCheckComponent`, already used elsewhere in
+      the app), not a new block competing with the hero's one CTA for
+      attention.
+- [x] Both claims stay provable by the product as it exists today (per
+      positioning.md's own "not a place to over-promise" rule) — Factur-X
+      generation and the SUPER PDP connection are real, shipped Phase
+      1.2-3/1.2-4 features, not aspirational.
+
+Verified live (2026-08-25) via the Docker demo stack + Playwright: the
+badge renders correctly below the trial-policy line, and the pillar grid
+shows two balanced rows of three with the new "Prêt pour la réforme" card
+matching the other five's visual weight exactly. `tsc --noEmit` clean,
+155 frontend tests green (no new component spec needed — this page had
+none before either, matching Phase 13.3's own precedent).
+
+## Non-goals
+
+- No live countdown/deadline-specific phrasing on the public landing
+  page (unlike the company-settings deadline banner, 1.2-6, or 1.3-7's
+  compliance explainer) — a marketing page showing "plus que 8 jours"
+  reads as alarming/operational, not reassuring, to a first-time visitor
+  who isn't even a customer yet. Dates are stated as plain facts, not a
+  live-ticking figure.
+- No pricing/plan-specific claims about which tier includes e-invoicing
+  — Phase 1.2's SUPER PDP connection has no premium gate today (same as
+  every other 1.2/1.3 e-invoicing feature this app has shipped), so this
+  isn't a claim this phase needs to hedge, but it's also not this page's
+  job to describe tier-by-tier feature availability (positioning.md's own
+  "not a pricing page" rule).
+- Not a full explainer (URSSAF/e-reporting nuance, etc.) — that's
+  1.3-7's job, inside the actual product where an already-signed-up
+  artisan is trying to act on it. This page only needs a provable trust
+  signal for a stranger deciding whether to sign up at all.
+
+## Notes
+
+- Depends on Phase 1.2 (the actual shipped capability this phase is
+  allowed to claim) — sequenced here, long after 1.2, specifically
+  because the claim needed to already be true before the marketing copy
+  could say it.
+- Small, single-page scope — documented directly in this file rather
+  than its own `docs/` folder, unlike the much larger docs/1.3/ track.
+
+---
+
 # Phase 13.5 — Quick Invoice Redesign: Card-Based Client Picker & One-Click Line Activation
 
 ## Objective
@@ -1565,6 +1641,8 @@ Replace the single flat 15€/month "Premium" plan (Phase 14) with three tiers �
 - **Pro is priced at 12€/month.** A 3€ gap to Premium (15€) vs. a 5€ gap from Essentiel (7€) to Pro — the narrow top gap is deliberate: it's what makes Premium look like a "why not" upgrade once someone is already comparing Pro's price.
 - **No limit of any kind on devis/factures created — at any tier.** This was an explicit line the user drew: gating document creation would hit the app's actual reason to exist ("le système de facturation le plus simple, le plus rapide," see positioning.md) and was rejected outright as a differentiation axis, even though it's the most common SaaS lever. Phase 14's free-trial gate (1 free invoice, then *any* paid tier removes the gate entirely) is unchanged.
 - **Differentiation instead comes from catalog size, one feature (AI Assistant Fournisseurs, Phase 10), and business analytics (Phase 17's "Statistiques" tab) — never the quarterly declaration itself.** The user asked for something "relativement inoffensif sur l'utilité principale" (harmless to the core job-to-be-done): a cap on how many `Customer` rows and catalog items (`Product`+`Service` combined) a company can store scales with tier, instead of a cap on usage. Reports were explicitly named as fair game to gate ("on peut légiférer sur les statistiques") — but `ReportsController`'s existing comment is honored to the letter: **`GET /reports/quarterly` (and its PDF/CSV exports) — the URSSAF turnover declaration — stays free on every tier, including a company with zero active plan.** Only `GET /reports/analytics` (`ActivityAnalytics`: revenue-by-month chart, top clients/products/services, outstanding total — pure business insight, nothing tax-relevant) is gated. This is a narrower reading of "statistiques" than "everything under Phase 17," chosen specifically so this phase never contradicts Phase 17's own explicit prior decision to never paywall an artisan's ability to produce their own legal declaration.
+
+**Update (Phase 1.3-6, 2026-08-25)**: a third case, not just the original two. `GET /reports/e-invoicing-snapshot` (the e-invoicing compliance card on the same "Vue d'ensemble" tab as the now-gated `analytics`) is also free on every tier — an artisan's own reform-compliance status is the same kind of legal necessity as the quarterly declaration, not the pure business-insight `analytics` is. Don't assume every route on `ReportsController` is either "quarterly = free" or "analytics = gated" — see that controller's own class comment and `docs/1.3/1.3-6-activity-analytics-metrics.md`.
 - **Catalog caps and feature gates, by tier:**
 
   | | Essentiel — 7€ | Pro — 12€ | Premium — 15€ |
@@ -2226,7 +2304,7 @@ This is a materially bigger and higher-precision undertaking than any single-dig
 
 ## Non-goals — for the track as a whole
 
-- **FactureLe will not become a Plateforme Agréée itself.** Registration/certification as a PA is a state-regulated undertaking (immatriculation, annuaire integration, ongoing compliance obligations) out of proportion to a solo-built product — confirmed direction from the 2026-08-22 compliance assessment. Every phase below integrates with a third-party PA rather than replacing one.
+- **FactureLe will not become a Plateforme Agréée itself.** Registration/certification as a PA is a state-regulated undertaking (immatriculation, annuaire integration, ongoing compliance obligations) out of proportion to a solo-built product — confirmed direction from the 2026-08-22 compliance assessment. Every phase below integrates with a third-party PA rather than replacing one. **Reconfirmed with real sourced numbers on 2026-08-25** — see [docs/1.2-7-pa-self-hosting-feasibility.md](./1.2-7-pa-self-hosting-feasibility.md): ISO 27001 certification + a 3-year immatriculation cycle with recurring independent audits, real-world cost estimated at several hundred thousand to several million euros, against SUPER PDP's own per-invoice fee that stays in the low thousands of euros a year even at 10x this app's plausible near-term scale. No volume this app could realistically reach breaks even on self-certifying.
 - **No accounting/expense-deduction features off the back of reception.** Phase 1.2-5's inbox stores and displays received supplier invoices; it does not feed Phase 17's Quarterly Report or Activity Analytics, which explicitly declined expense/charge tracking. Reversing that non-goal, if ever justified, is its own future phase — same precedent as how Phase 17's "Estimated Charges" addendum only reversed its own original non-goal once the data fully supported it.
 - **No client-side (customer) VAT-intracommunautaire capture in this track.** Phase 1.1-8 already flagged "Client professionnel étranger / UE" (VAT number capture/validation, intra-EU reverse-charge, cross-border delivery-vs-service treatment) as its own future phase, not a bullet to bolt on elsewhere — that decision stands here too. Domestic Factur-X validity does not require a buyer VAT number, so 1.2-3 isn't blocked by this.
 
@@ -2240,10 +2318,19 @@ No Plateforme Agréée has been chosen yet. This phase is a research/decision sp
 
 ## Features
 
-- [ ] Survey of currently immatriculated PAs (the official list is published and updated by the administration) with API/developer-facing offerings, filtered to ones realistically reachable by a solo-built SaaS (self-serve signup/sandbox, not enterprise-sales-only)
-- [ ] Comparison written up against: API shape (REST/JSON vs. EDI/SFTP), sandbox/test environment availability, pricing model at low volume, whether it handles both e-invoicing (structured B2B) and e-reporting (B2C/export summary data), and whether it covers both emission and reception
-- [ ] A chosen PA, recorded in this phase's Notes once decided, with a link/reference to its API docs
-- [ ] A short compatibility check: confirm the chosen PA accepts Factur-X specifically (not only raw UBL/CII), since 1.2-3 is scoped to produce Factur-X
+- [x] Survey of currently immatriculated PAs (the official list is published and updated by the administration) with API/developer-facing offerings, filtered to ones realistically reachable by a solo-built SaaS (self-serve signup/sandbox, not enterprise-sales-only)
+- [x] Comparison written up against: API shape (REST/JSON vs. EDI/SFTP), sandbox/test environment availability, pricing model at low volume, whether it handles both e-invoicing (structured B2B) and e-reporting (B2C/export summary data), and whether it covers both emission and reception
+- [x] A chosen PA, recorded in this phase's Notes once decided, with a link/reference to its API docs
+- [x] A short compatibility check: confirm the chosen PA accepts Factur-X specifically (not only raw UBL/CII), since 1.2-3 is scoped to produce Factur-X
+
+## Research findings (2026-08-22, verified against the primary source)
+
+Earlier web research (comparator sites) surfaced **SUPER PDP** (superpdp.tech) and **API First by Dougs** (apifirst.fr) as the two strongest API-first candidates. Comparator-site claims of DGFiP status are not authoritative on their own, so this pass went to the primary source directly: **impots.gouv.fr's own two live downloadable PDF lists** (`liste_pa_attente_rapport_audit.pdf` and `liste_pa_attente_test_interop.pdf`, fetched and grepped for each candidate's actual hyperlink annotations — a reliable check since these are literal URI links in the PDF, not glyph-rendered text subject to extraction error).
+
+- **Confirmed as of 2026-08-22: neither SUPER PDP nor Dougs is yet a fully unconditional "immatriculée" PA.** Both appear by name (superpdp.tech / dougs.fr, with matching contact emails) in the **"en attente de rapport d'audit de conformité"** list — meaning both have already registered and passed the interoperability test stage, but are still waiting on their final compliance audit report, the last step before full immatriculation. Neither appears in the earlier-stage "en attente de test d'interopérabilité" list.
+- **This isn't specific to these two — the whole realistic API-first candidate pool is in the same bucket.** Iopole, B2Brouter, and Seqino (the three PAs Facturino itself lists as compatible connectors) were checked the same way and are *also* on the audit-report-pending list, not the confirmed one. As of ~10 days before the 2026-09-01 reception deadline, the entire editor-facing segment of this market appears to be clustered at "passed interop, awaiting final audit" — a normal state for a fast-moving regulatory rollout, not a red flag specific to SUPER PDP.
+- **SUPER PDP remains the stronger fit on paper** once that caveat is accounted for: API-first positioning explicitly for software editors (not an end-user invoicing app itself), white-label support, REST + OpenAPI, Factur-X/UBL/CII/Peppol BIS, low published per-invoice pricing (€0.01/invoice up to 10k/month, degressive beyond). **API First by Dougs** stays the credible backup — Dougs is an established accounting firm (~49,000 clients) predating the reform, a stronger legitimacy signal than a platform spun up solely for it.
+- **Facturino (facturino.com) is *not* a PA candidate** — it's a Factur-X/EN16931/Schematron generation + API layer that itself connects to a PA (including the three named above), a potential build-vs-buy alternative for Phase 1.2-3, not a 1.2-1 candidate.
 
 ## Non-goals
 
@@ -2254,6 +2341,8 @@ No Plateforme Agréée has been chosen yet. This phase is a research/decision sp
 
 - Blocks 1.2-4 and 1.2-5 (both need a concrete API to integrate against); does not block 1.2-2 or 1.2-3.
 - PA landscape and pricing are exactly the kind of externally-changing fact this app's own conventions already distrust baking in as a constant (compare `Company.microEntrepreneurCeiling`/cotisation rates in Phase 17, deliberately editable rather than hardcoded) — record the choice with a date, and revisit before 1.2-4 actually starts if enough time has passed for the landscape to have shifted.
+- **Decision (confirmed with the user 2026-08-22): SUPER PDP is FactureLe's chosen PA.** API docs/sandbox at superpdp.tech; contact `contact@superpdp.tech`. Accepted knowingly with its DGFiP status still "en attente de rapport d'audit de conformité" as of this date (see Research findings above) rather than waiting for final immatriculation — re-verify this status against the same two live impots.gouv.fr PDF lists right before 1.2-4's integration work actually starts, since that's a 30-second check and the gap between "chosen" and "integrated" is exactly where a status change would matter.
+- API First by Dougs remains the fallback if SUPER PDP's integration proves impractical or its audit outcome is unfavorable.
 
 ---
 
@@ -2265,14 +2354,14 @@ The 2026-08-22 compliance assessment found one legally-relevant field genuinely 
 
 ## Data Model
 
-- `Company.vatNumber` (`String?`, nullable) — nullable because a franchise-en-base artisan (Phase 9's existing `franchiseEnBase`-style handling) has no VAT number at all; this mirrors the existing optional-legal-field pattern (`microEntrepreneurCeiling`, `Company.vatOnDebitsOption`) rather than forcing a value where none exists.
-- Format validated as `FR` + 2-character key + the company's own 9-digit SIREN (`@Matches`, same validated-not-freehand precedent Phase 1.1-8 used for `customerSiret`), since a malformed VAT ID would make the Factur-X file 1.2-3 generates fail PA-side validation, not just look wrong on screen.
+- `Company.vatNumber` (`String?`, nullable) — nullable because a franchise-en-base artisan has no VAT number at all (this app derives franchise-en-base status from `legalStatus`/`companyVatExempt` at render time, per `InvoiceMapper.issuerFields`; there is no separate `franchiseEnBase` column to key off), mirroring the existing optional-legal-field pattern (`microEntrepreneurCeiling`, `Company.vatOnDebitsOption`) rather than forcing a value where none exists.
+- Format validated as `FR` + 2-character key + a 9-digit SIREN (`@Matches(/^FR[0-9A-Z]{2}\d{9}$/)`, same validated-not-freehand precedent Phase 1.1-8 used for `customerSiret`), since a malformed VAT ID would make the Factur-X file 1.2-3 generates fail PA-side validation, not just look wrong on screen.
 
 ## Features
 
-- [ ] `vatNumber` field in "Mon entreprise" settings, optional, with inline format validation
-- [ ] Printed on the invoice PDF alongside the existing SIRET line, when present — same "print only when set" convention as `deliveryAddress`'s conditional line in Phase 1.1-8
-- [ ] Left blank for companies under franchise en base, with a short tooltip explaining why (consistent with [[feedback_manual_mode_full_editability]]'s established "tooltip over block" convention for legally-sensitive fields)
+- [x] `vatNumber` field in "Mon entreprise" settings, optional, with inline format validation
+- [x] Printed on the invoice PDF alongside the existing SIRET line, when present — same "print only when set" convention as `deliveryAddress`'s conditional line in Phase 1.1-8
+- [x] Left blank for companies under franchise en base, with a field-hint explaining why (this settings page's existing `app-field-hint` affordance on every other field — the same "guidance text next to an editable field" spirit as [[feedback_manual_mode_full_editability]]'s tooltip convention, though that memory is specifically scoped to manual-mode invoice canvas fields, not company settings)
 
 ## Non-goals
 
@@ -2282,6 +2371,14 @@ The 2026-08-22 compliance assessment found one legally-relevant field genuinely 
 
 - No dependency on 1.2-1.
 - Blocks 1.2-3 (the seller VAT-ID XML node needs this field to exist, even though it stays optional there too — an unregistered/franchise company's Factur-X simply omits the node, matching real-world practice for such businesses).
+
+## Decided during implementation (2026-08-22)
+
+- Backend: `Company.vatNumber` (migration `20260822132637_add_company_vat_number`), `UpdateCompanyDto.vatNumber`, `CompanyRepository.update` (explicit `data.vatNumber ?? null`, matching this repository's existing full-replace convention), `InvoicePdfData.issuerVatNumber`, `InvoiceMapper.issuerFields`, `PdfService.buildParties` (prints `N° TVA : …` only when set).
+- Frontend: `CompanyProfile.vatNumber`/`UpdateCompanyRequest.vatNumber`, a new field in `company-settings.page.ts`/`.html` right after SIRET, format-validated client-side with the same regex as the backend.
+- `docs/api.md`'s `PATCH /company` field table updated in the same pass, per Phase 1.1-12's own documentation-currency precedent.
+- Tests: `invoice.mapper.spec.ts` (issuer passthrough, both set and null), `pdf.service.spec.ts`/`reports.service.spec.ts`/`invoice-draft.store.spec.ts`/`manual-invoice-draft.store.spec.ts` fixtures updated for the new required field. Full backend suite (401 tests) and frontend suite (151 tests) green; `tsc --noEmit` clean on both sides (two pre-existing, unrelated `auth.service.spec.ts` type errors confirmed present on `main` before this phase — not introduced here).
+- Not done in this phase: no dedicated `vatNumber` input in the first-invoice "company essentials" onboarding modal (`company-essentials-modal.component`) — that gate only covers fields required to issue any invoice at all, and `vatNumber` is optional by design (a franchise-en-base artisan legitimately has none), so it stays "Mon entreprise" settings-only, matching this phase's stated Features scope.
 
 ---
 
@@ -2296,13 +2393,15 @@ The core structural gap: today's PDF has no embedded structured data at all. Fac
 - The CII XML is generated from the **same `InvoicePdfData` interface** already driving the pdfmake layout (`invoice/pdf/invoice-pdf-data.interface.ts`) — one source of truth, matching this app's existing "derived, never persisted" convention (Phase 5's redistribution, Phase 1.1-8's GUIDED nature-of-operation derivation). No new persisted "Factur-X snapshot" model; the XML is regenerated at render/transmission time exactly like the PDF itself already is.
 - pdfmake produces PDF/A-1 style output, not PDF/A-3, and has no attachment-embedding support — a post-processing step is needed after pdfmake to (a) embed the CII XML as a PDF attachment and (b) set the PDF/A-3 + Factur-X-required XMP metadata. This is new surface area, not an extension of `pdf.service.ts` itself.
 - Profile choice: target the **BASIC** Factur-X profile (not EN16931/EXTENDED) — matches this app's existing per-invoice data granularity (one VAT rate per invoice today, not per-line VAT category codes) without inventing new per-line fields this app's "extremely fast, minimal typing" mandate has consistently avoided elsewhere (compare Phase 1.1-8's declined sector-specific mentions).
+- **Library, not hand-rolled**: `@stafyniaksacha/facturx` (npm, MIT, based on the established `akretion/factur-x` Python library's model) — chosen over hand-writing the CII serializer/PDF-A3 packaging/XSD-Schematron validation from scratch, and over the other candidates surveyed (`node-zugferd`, stale ~1 year with no reform-era updates; `@stackforge-eu/factur-x`, viable but no built-in Schematron BR-rule validation; `@deiz/facturx`, too new/unproven — single 0.1.0 release, mismatched Go/JS signals found when checking its repo). Provides `invoiceToXml`/`generate` (PDF/A-3 embedding)/`check` (XSD + `schematron: true` for EN 16931 BR-* rules) in one package — directly satisfies this phase's own validation requirement below rather than needing a second library for that.
 
 ## Features
 
-- [ ] CII XML serializer covering the fields this app already has: invoice number, dates, seller (`Company` name/address/SIRET/`vatNumber` from 1.2-2), buyer (customer name/address/`customerSiret`), line items (products + service lines, including Phase 5 redistribution's already-computed final amounts), VAT rate/amount, totals, payment terms (Phase 1.1-7's L441-9 data), delivery address and nature-of-operation (Phase 1.1-8)
-- [ ] PDF/A-3 packaging step: embed the generated XML as a named attachment (`factur-x.xml`) with the required relationship/XMP metadata Factur-X's spec mandates
-- [ ] New download path exposing the hybrid file (e.g. `GET /invoices/:id/facturx`) alongside the existing plain-PDF endpoint — the plain PDF stays available since not every recipient needs the structured payload (a private individual, for instance)
-- [ ] Validation step before the file is considered "final": run the generated XML against the officially published Factur-X/CII schema (XSD) — a malformed file failing silently at the PA (1.2-4) would be a materially worse failure mode than catching it here first
+- [x] CII XML serializer covering the fields this app already has: invoice number, dates, seller (`Company` name/address/SIRET/`vatNumber` from 1.2-2), buyer (customer name/address/`customerSiret`), line items (products + service lines, including Phase 5 redistribution's already-computed final amounts), VAT rate/amount, totals, payment terms (Phase 1.1-7's L441-9 data), delivery address and nature-of-operation (Phase 1.1-8)
+- [x] PDF/A-3 packaging step: embed the generated XML as a named attachment (`factur-x.xml`) with the required relationship/XMP metadata Factur-X's spec mandates
+- [x] New download path exposing the hybrid file (`GET /invoices/:id/facturx`) alongside the existing plain-PDF endpoint — the plain PDF stays available since not every recipient needs the structured payload (a private individual, for instance)
+- [x] Validation step before the file is considered "final": run the generated XML against the officially published Factur-X/CII schema (XSD) — a malformed file failing silently at the PA (1.2-4) would be a materially worse failure mode than catching it here first
+- [x] **"Facture électronique" button in the invoice's own action bar**, alongside the existing "Télécharger" action — confirmed explicitly with the user (2026-08-22): e-invoicing actions must be reachable as first-class document actions, not buried in settings only. **FACTURE-only, unlike Phase 1.1-8's fields** — corrected during implementation: a DEVIS is a quote, not a fiscal invoice, and the reform's obligation (and Factur-X's own CII document-type semantics, UNTDID 1001 code 380) doesn't apply to it at all; showing the button there would generate a technically-shaped but legally-meaningless "electronic invoice" for a document that isn't one. See also 1.2-4's "envoyer via PA" action, the same action bar's future sibling once transmission exists — also FACTURE-only for the same reason.
 
 ## Non-goals
 
@@ -2314,6 +2413,27 @@ The core structural gap: today's PDF has no embedded structured data at all. Fac
 - Depends on 1.2-2 (seller `vatNumber` node). Independent of 1.2-1 — the file format itself doesn't require a chosen PA, only its eventual transmission (1.2-4) does.
 - Blocks 1.2-4 (nothing to transmit without this).
 
+## Decided/discovered during implementation (2026-08-22)
+
+- **Files**: `invoice/facturx/facturx-code-lists.util.ts` (the closed set of standardized codes this needs — unit codes, VAT category codes, the guideline URN), `invoice/facturx/facturx-invoice.mapper.ts` (`InvoicePdfData` → `CrossIndustryInvoiceType`), `invoice/facturx/facturx.service.ts` (orchestrates build → validate → embed), wired into `InvoiceController.downloadFacturX` (`GET /invoices/:id/facturx`, 400 for a DEVIS) and `InvoiceModule`.
+- **`@stafyniaksacha/facturx` is ESM-only** (`"type": "module"`) while this backend compiles CommonJS — consumed via a single centralized `await import(...)` in `facturx.service.ts` (`loadFacturx`), not scattered call sites. Jest can't run a real dynamic `import()` without Node's `--experimental-vm-modules` flag; `test`/`test:watch`/`test:cov` in `package.json` now all run under it via `cross-env`, the same pattern this project's own `test:e2e` script already used for the identical reason — not a new convention, just extended to unit tests.
+- **A real, reproducible library bug found and worked around**: passing the `XmlDocument` instance `invoiceToXml()` returns straight into `check()`/`generate()` corrupts internal validation state and produces a spurious "root element not expected" XSD failure on an otherwise fully valid document. Serializing to a plain string first (`xmlDoc.toString()`) and passing *that* into both calls sidesteps it entirely — confirmed by validating the library's own bundled example fixtures (which pass either way) against a hand-built document (which only passes as a string). `facturx.service.ts` only ever passes strings now.
+- **`generate()` refuses a PDF that already has a trailer `/ID`** ("Not implemented yet: Document ID already set") — pdfmake's own output always sets one. Worked around by loading the pdfmake buffer with `pdf-lib` (added as a direct dependency; was already transitive) and clearing `pdfDoc.context.trailerInfo.ID` before handing the `PDFDocument` object to `generate()`.
+- **The library's own `check()`/`schematronValid` flag conflates severity** — any Schematron assertion, including one explicitly flagged `"warning"` in its own output, makes the top-level `valid`/`schematronValid` fields read `false`. `FacturXService` filters `schematronErrors` for `flag !== 'warning'` itself and only blocks generation on those, rather than trusting the library's blanket flag. The one warning this app's own documents always trigger harmlessly: `PEPPOL-EN16931-R008` ("must not contain empty elements") on `ApplicableHeaderTradeDelivery`, which `SupplyChainTradeTransactionType` requires as a non-optional element even when there's no delivery address to put in it.
+- **Franchise en base maps to VAT category "O" (Not subject to VAT), not "E" (Exempt)** — found empirically against the library's own bundled BASIC-profile XSD/Schematron: category "E" triggers BR-E-02, which requires a Seller VAT/tax-registration identifier a genuinely unregistered franchise-en-base artisan doesn't have; the BASIC profile's own `SpecifiedTaxRegistration` code list (`cl id="15"` in `FACTUR-X_BASIC_codedb.xml`) additionally only allows scheme `"VA"` — no fallback scheme (e.g. the initially-tried `"FC"`) is valid to substitute. Category "O" carries no seller-identifier requirement at all; its own rule (BR-O-05) instead forbids a rate percentage on the line, which `resolveVatCategory`/`buildProductLine` already omit (not zero — actually absent) for this category.
+- **A genuine, undecided limitation found via the same process, not worked around**: `BR-S-02` (Standard rate) and `BR-AE-02` (Reverse charge) *do* still require the seller to carry a real `"VA"`-scheme VAT identifier, with no "O"-style escape — so a franchise-en-base company (no VAT number, `Company.vatNumber` null) **cannot** currently generate a schema-valid Factur-X for a standard-rate or reverse-charge line. This only matters in practice once such a company crosses into VAT liability or issues an intra-EU reverse-charge invoice — flagged here rather than silently accepted, revisit if it turns out to block a real user.
+- **Verified live against the real demo stack, not just the test suite**: rebuilt `facturele-demo-backend-1` (`docker compose ... up --build -d -V backend`, needed only because the container's own `node_modules` anonymous volume predated the new npm dependencies — the backend/frontend source itself is bind-mounted and was already live), logged in as `demo.artisan@facturele.app` via the one-click demo endpoint, PATCHed the demo company's `vatNumber` (previously null, pre-dating Phase 1.2-2), downloaded a real invoice's `/facturx` response, and round-tripped it: extracted the embedded XML back out with the library's own `extract()` and re-validated with `schematron: true` — 0 XSD errors, 0 fatal Schematron errors. Also drove the actual browser UI (Playwright, demo login) to confirm the "Facture électronique" button renders only on a FACTURE row (not DEVIS) and that clicking it downloads the same valid file.
+
+## Bug-check pass (2026-08-23, requested explicitly by the user before starting 1.2-4)
+
+Ran `/code-review high` plus targeted empirical Schematron checks against the library, the same technique used throughout this phase — two real bugs found and fixed, one plausible-sounding hypothesis investigated and refuted rather than "fixed" on spec-reading alone:
+
+- **Fixed: `resolveVatCategory`'s zero-VAT fallback ignored *why* `vatApplicable` was false, citing art. 293 B unconditionally.** `vatApplicable` reads `false` for two different reasons this app tracks separately — `companyVatExempt` (real franchise en base) vs. a MANUAL invoice's own `vatApplicableOverride` on an otherwise fully VAT-liable company (`CreateInvoiceDto.vatApplicableOverride`) — exactly the distinction `PdfService.buildFooter`'s own three-way branch already made correctly. The old code cited "Article 293 B du CGI" either way: a false statutory claim for the override case, embedded in the legally-binding structured XML even though the human-readable PDF right next to it got this right. **Re-investigated further and found the fix needed to go deeper than companyVatExempt**: BASIC profile's own Schematron additionally requires branching on whether the seller has a real VAT number at all — category "E" (Exempt) requires the Seller VAT identifier to be *present* (BR-E-02) and an explicit 0% rate (BR-E-05/BR-48); category "O" (Not subject to VAT) requires the *opposite* on both — no VAT identifier anywhere in the document (BR-O-02) and no rate element present at all (BR-O-05). `companyVatExempt` alone isn't a reliable proxy for "has no VAT number" either — a micro-entrepreneur can cross the franchise threshold mid-year and end up with a real `vatNumber` despite `legalStatus` still reading `MICRO_ENTREPRENEUR`. Fixed to key the E-vs-O choice off `issuerVatNumber`'s actual presence, with the exemption-reason text (293 B citation or not) still following `companyVatExempt` within the "O" branch. Two new regression tests in `facturx.service.spec.ts` extract the real embedded XML and assert on it directly (no 293 B citation for a VAT-liable company's override; correct unit code independent of display state — see next finding), not just "the file starts with %PDF-".
+- **Fixed: the Factur-X unit code was silently corrupted whenever the artisan's `showUnitDetail` display toggle was off for a line.** `InvoicePdfLine.unit` is blanked to `''` by `InvoiceMapper` whenever that Phase 15 rendering-only toggle is off (real `Unit` enum unaffected, purely cosmetic on the PDF) — but the Factur-X mapper was deriving its UN/ECE `unitCode` from that same already-blanked string, silently falling back to the generic `C62` ("one") instead of e.g. `MTK` (square metre) for a real m² line. Fixed by adding `InvoicePdfLine.unitCode`, populated by `InvoiceMapper` from the real `Unit` enum via a new `common/unit.util.ts` `UNIT_CODES` map — independent of `showUnitDetail`, never blanked. `facturx-code-lists.util.ts`'s old label-keyed `unitCodeForLabel` lookup (itself a fragile intermediate step — guessing a code back out of a rendered French string) is gone entirely.
+- **Investigated and refuted: a hypothesis that a null `dueDate` (persisted invoices capture it lazily) would fail Schematron's presumed BR-CO-25 (payment terms required whenever an amount is due).** Empirically tested both with and without `specifiedTradePaymentTerms` against the real library — 0 XSD errors, 0 fatal Schematron errors either way. Not enforced by this library's BASIC-profile ruleset in practice; no fix made, no test added for a non-issue.
+- Full backend suite (**407 tests**, up from 405) and frontend suite (151 tests) green after the fixes; `tsc --noEmit` clean on both sides. `infra/audit-config.sh`/`make audit` checked and needs no changes — this phase introduced no new environment variables or secrets (confirmed: no `.env.example` diff, no `process.env` reference anywhere in `invoice/facturx/` or the `Company.vatNumber` code added in 1.2-2). The live demo-stack verification from 2026-08-22 was not re-run this pass (the demo containers were stopped between sessions) — the fixes are covered by the automated suite's own real Schematron/XSD validation instead, which is the same validator the live check used.
+- Tests: `invoice/facturx/facturx.service.spec.ts` — standard GUIDED, franchise-en-base (no VAT number), reverse-charge (with a buyer SIRET, satisfying `BR-AE-02`'s buyer-side requirement), and MANUAL-mode (degenerate line-per-row mapping) all generate and validate successfully. Backend suite: 405 tests green (`cross-env NODE_OPTIONS=--experimental-vm-modules jest`); `tsc --noEmit` clean (same two pre-existing unrelated `auth.service.spec.ts` errors as every prior 1.2-x phase).
+
 ---
 
 # Phase 1.2-4 — PA Integration: Emission Transmission
@@ -2322,17 +2442,24 @@ The core structural gap: today's PDF has no embedded structured data at all. Fac
 
 Wire actual transmission of the Factur-X file (1.2-3) through the Plateforme Agréée chosen in 1.2-1, replacing (or standing alongside, during the transition window before the 2027-09-01 emission deadline binds this app's users) today's SMTP/manual-download distribution for invoices that must go through the reform's mandated channel.
 
+## Architecture — PA kept behind an interchangeable provider interface
+
+**The PA must never sit at the center of FactureLe's own data model.** Decided explicitly (2026-08-22, discussing PA candidates): given the PA market is still young and volatile (146–166 registered platforms reported within days of each other as of August 2026), a chosen PA changing its API, its pricing, or disappearing outright must not force a rewrite of FactureLe's own invoice engine.
+
+- `ElectronicInvoicingProvider` — a small internal interface (`transmit`, `getStatus`) that any PA integration implements. `SuperPdpProvider` is the only implementation, a thin adapter over `SuperPdpClientService` (the raw HTTP/OAuth2 boundary, same "isolate the risky external boundary" split as `GroqClientService`/`StripeClientService`) — same "own the abstraction, treat the vendor as swappable" spirit as this app's existing `PdfService`/mailer boundaries.
+- `Invoice` gets its **own** lifecycle vocabulary, independent of whatever status names the chosen PA's API happens to use — see Data Model below for the final shape (adjusted during implementation from this phase's original draft).
+
 ## Data Model
 
-- Per-company PA credentials (API key/subscriber ID, whatever the chosen PA's auth model requires) — encrypted at rest, same pattern as `Company.smtpPasswordEncrypted` (Phase 12), all nullable since PA transmission is opt-in until the 2027-09-01 deadline actually binds a given company.
-- `Invoice.eInvoiceTransmissionStatus` (enum, e.g. `NOT_SENT | PENDING | ACCEPTED | REJECTED`), `Invoice.eInvoiceTransmittedAt`, `Invoice.paReference` (the PA's own tracking id) — exact shape depends on the chosen PA's actual response model from 1.2-1, kept provisional until then.
+- `Company`: `superPdpAccessTokenEncrypted`/`superPdpRefreshTokenEncrypted`/`superPdpTokenExpiresAt`/`superPdpConnectedAt`, all nullable — a **per-company OAuth2 consent**, not a single app-wide credential (SUPER PDP's own multi-tenant requirement, confirmed against their real API — see Decided section). Encrypted at rest with the same AES-256-GCM primitive as `Company.smtpPasswordEncrypted` (Phase 12), now generalized into `common/secret-crypto.util.ts`.
+- `EInvoiceTransmissionStatus` enum: `NOT_SENT | SENT | VALIDATED | DELIVERED | ACCEPTED | REJECTED`. `Invoice.eInvoiceTransmissionStatus` (default `NOT_SENT`), `Invoice.eInvoiceTransmittedAt`, `Invoice.eInvoiceRejectionReason`, `Invoice.superPdpInvoiceId` (the PA's own tracking id, opaque to the rest of the app).
 
 ## Features
 
-- [ ] Company settings: connect a PA account (credentials entry, same UX family as Phase 12's SMTP settings screen)
-- [ ] A "transmit via PA" action on an invoice, alongside (not replacing) today's download/email/share actions
-- [ ] Transmission status surfaced on the invoice (matches Phase 16's existing "lifecycle board" pattern of visible status rather than a fire-and-forget action)
-- [ ] Rejection handling: a PA-side validation failure is shown to the artisan with an actionable reason, never silently dropped — same honesty principle Phase 10/12/17 already established for this app's own uncertain operations
+- [x] Company settings: connect a PA account — the "Mon entreprise" half of the two button locations confirmed with the user (2026-08-22), alongside the invoice action bar below
+- [x] A "transmit via PA" action on a FACTURE's own action bar (never a DEVIS — see 1.2-3's own correction on this), alongside (not replacing) today's download/email/share actions and 1.2-3's "Facture électronique" button — the document-actions half of that same confirmation
+- [x] Transmission status surfaced on the invoice (`eInvoiceTransmissionStatus`, refreshed on demand via `POST /invoices/:id/transmission-status` — see Decided section for why on-demand, not polled)
+- [x] Rejection handling: a PA-side validation failure is shown to the artisan with an actionable reason (`eInvoiceRejectionReason`, the PA's own `status_text` verbatim), never silently dropped — same honesty principle Phase 10/12/17 already established for this app's own uncertain operations
 
 ## Non-goals
 
@@ -2342,7 +2469,16 @@ Wire actual transmission of the Factur-X file (1.2-3) through the Plateforme Agr
 ## Notes
 
 - Depends on 1.2-1 (API contract) and 1.2-3 (file to send).
-- Exact data-model shape above is provisional pending 1.2-1's outcome — don't treat the enum/field names as final before that phase closes.
+
+## Decided/discovered during implementation (2026-08-23)
+
+- **Built without real SUPER PDP credentials, deliberately** — confirmed with the user: the account (OAuth2 client id/secret, a real partner registration with SUPER PDP) is something only the user can create, so this phase shipped the complete integration against SUPER PDP's real, live, public OpenAPI spec (`https://api.superpdp.tech/openapi/superpdp.json`, v1.30.0.beta, fetched and read directly — not guessed at) with the app running normally with the feature simply disabled (`SUPERPDP_CLIENT_ID`/`SUPERPDP_CLIENT_SECRET` unset), same "boots fine without it" posture as Stripe/Groq. **Never exercised against a live SUPER PDP call** — everything network-shaped in `SuperPdpClientService` (token exchange/refresh, invoice submit, status fetch) is unit-tested only for its pure logic (state signing, config gating), matching this codebase's own existing precedent of not unit-testing `GroqClientService`'s raw HTTP calls either. `infra/audit-config.sh`/`.env.example` (both `backend/` and `infra/`) updated with the new optional `SUPERPDP_CLIENT_ID`/`SUPERPDP_CLIENT_SECRET`/`SUPERPDP_REDIRECT_URI` group and a short account-setup TODO, so the user doesn't forget the manual step.
+- **SUPER PDP's real auth model is OAuth2.1 (Authorization Code + Client Credentials), not a simple API key** — their own docs are explicit that a multi-tenant software editor like FactureLe must use the Authorization Code flow, meaning **each artisan individually grants consent** (not one shared FactureLe-wide credential). `CompanySuperPdpController` implements the full round trip: `GET /connect` (redirects to SUPER PDP's consent screen, pre-filled with the artisan's email/SIRET), `GET /callback` (exchanges the code, encrypts and stores the token pair), `POST /disconnect`. The OAuth `state` param is a stateless HMAC-signed token (reusing `JWT_ACCESS_SECRET`, no new secret or DB table needed) rather than a server-stored nonce.
+- **`POST /v1.beta/invoices` accepts the Factur-X PDF directly** (`Content-Type: application/pdf`) — no separate XML extraction/resend needed; `EInvoiceTransmissionService.transmit` hands SUPER PDP the exact same hybrid buffer `FacturXService.generateHybridPdf` (Phase 1.2-3) already produces.
+- **Status vocabulary simplified from this phase's own original draft**: dropped `VALIDATED` coming *before* `SENT` and the separate `READY_TO_SEND` step — SUPER PDP's real API is a single-shot `POST`, not a multi-step "validate, then approve, then send" workflow, so there's no real intermediate state to represent. `DRAFT` was also dropped — a FactureLe invoice already has its own draft/persisted distinction elsewhere, redundant here. Final: `NOT_SENT → SENT → VALIDATED → DELIVERED → ACCEPTED` (or `REJECTED` at any point) — `super-pdp-status.util.ts`'s own comment has the full status_code → status mapping table, derived from SUPER PDP's real (and explicitly documented as "not a state machine, an append-only event log") `status_code` enum.
+- **Status is refreshed on demand, not polled or webhook-driven** — SUPER PDP's processing is asynchronous, so a background poller or webhook receiver would be the more "complete" answer, but neither exists yet; `POST /invoices/:id/transmission-status` is a deliberately simple v1, revisit if artisans find manually refreshing annoying.
+- Tests: `super-pdp-status.util.spec.ts` (the status/rejection-reason mapping, pure logic), `super-pdp-client.service.spec.ts` (state sign/verify round-trip, tamper/expiry/wrong-secret rejection, `isConfigured`, `buildAuthorizationUrl`'s query params — no live network calls, per this file's own note above), `company-super-pdp.service.spec.ts` (token refresh-vs-cached branching, encryption-before-persist), `e-invoice-transmission.service.spec.ts` (the FACTURE-only gate, status persistence). Backend suite: 439 tests green; frontend suite: 151 (unchanged — the new UI wiring itself has no dedicated test, same depth of coverage 1.2-3's own Factur-X button got).
+- Not done in this phase (left for later, not silently forgotten): a background poller/webhook for status updates; the frontend doesn't yet show `eInvoiceRejectionReason` anywhere in the UI beyond a generic toast on a failed action (the field is persisted and returned by the API, just not surfaced in a dedicated banner yet).
 
 ---
 
@@ -2354,14 +2490,14 @@ Confirmed in scope with the user (see track overview): FactureLe gains a minimal
 
 ## Data Model
 
-- New entity, e.g. `ReceivedInvoice` — one per incoming e-invoice, storing the raw Factur-X/UBL/CII payload plus the key fields parsed out of it for display (issuer name/SIRET, invoice number, date, amount, VAT), scoped to `companyId` like every other tenant-owned entity since Phase 13.
+- `ReceivedInvoice` — one per incoming e-invoice, storing the **parsed key fields only** (issuer name/SIRET, invoice number, date, amount, VAT, currency), scoped to `companyId` like every other tenant-owned entity since Phase 13. **The raw payload is never stored** — corrected during implementation, see Decided section below for why.
 - No link to Phase 17's `Product`/`Service`/`activityCategory` model or the Quarterly Report — see track-level non-goals; this is intentionally an island, not wired into turnover/expense reporting.
 
 ## Features
 
-- [ ] Inbox list view ("Factures reçues" or similar) under an appropriate nav entry, showing incoming supplier invoices as they arrive via the PA
-- [ ] Detail view per received invoice: parsed key fields plus a download of the original file
-- [ ] Ingestion path from the PA chosen in 1.2-1 (webhook or polling, per that PA's own API shape)
+- [x] Inbox list view ("Factures reçues") under the "Mon répertoire" nav dropdown, showing incoming supplier invoices
+- [x] Download of the original file per received invoice (no separate detail view — see Decided section)
+- [x] Ingestion path from SUPER PDP: on-demand sync (`POST /received-invoices/sync`), not a webhook — SUPER PDP's public API documents no webhook mechanism at all
 
 ## Non-goals
 
@@ -2373,6 +2509,15 @@ Confirmed in scope with the user (see track overview): FactureLe gains a minimal
 
 - Depends on 1.2-1. Can proceed in parallel with 1.2-3/1.2-4 (a distinct pipeline — receiving rather than generating a Factur-X file) but will likely reuse whatever PA API client 1.2-4 builds, since the same PA plausibly serves both directions.
 
+## Decided/discovered during implementation (2026-08-24)
+
+- **`GET /v1.beta/invoices?direction=in&expand[]=en_invoice&expand[]=en_invoice.seller`** (confirmed against SUPER PDP's real OpenAPI spec, same one used for Phase 1.2-4) lists incoming invoices with the parsed EN16931 JSON already expanded in the same call — no separate per-invoice follow-up request needed. Paginated (`starting_after_id`/`has_after`), sorted ascending by id — `ReceivedInvoiceService.sync` pages from the highest `superPdpInvoiceId` already stored, so a repeated sync never re-reads what it already has.
+- **No raw payload is stored, by design, not by oversight** — this phase's own original Data Model draft said to store "the raw Factur-X/UBL/CII payload." Corrected during implementation: SUPER PDP's `GET /v1.beta/invoices/{id}?format=factur-x` serves a human-readable rendering live, on demand, regardless of what format the supplier originally sent (their API does the CII/UBL→Factur-X conversion) — storing a redundant copy locally would just be a second source of truth to keep in sync for no benefit. Same "derive, don't persist what you can re-fetch" reasoning as `Company.logo`'s own separate table, taken one step further since even the blob's *source of truth* stays external here.
+- **No separate detail view** — this phase's original Features draft called for one; in practice the list row already shows every field this app parses (issuer, number, date, amount) plus a download link, so a second screen would show nothing new. Cut during implementation rather than built and left empty.
+- **Reused Phase 1.2-4's OAuth connection entirely** — `ReceivedInvoiceModule` imports `InvoiceModule` for its exported `CompanySuperPdpService`/`SuperPdpClientService`, no separate consent flow for reception. One connected PA, two directions.
+- **Nav placement**: added under the existing "Mon répertoire" dropdown (both its desktop and mobile variants) rather than a new top-level entry — lower-risk (one dropdown list, not three responsive nav layouts to keep in sync) and matches Phase 1.1-2's own precedent of a new catalog-like concept starting in a submenu before an eventual promotion, if usage ever justifies one.
+- Tests: `received-invoice-mapper.util.spec.ts` (decimal-string-to-cents parsing, including truncation/negative/missing-field edge cases; the EN16931→`ReceivedInvoice` field mapping, including graceful degradation when nested fields are absent), `received-invoice.service.spec.ts` (pagination cursor advances correctly across pages, stops on `hasAfter: false`, 404 on a received invoice belonging to another company). Verified live end-to-end against the demo stack (real DB, real nav click-through, Playwright) with SUPER PDP left unconfigured — the inbox shows its "connect SUPER PDP first" message and hides the sync button, exactly the same graceful-degradation posture Phase 1.2-4 established. Backend suite: 455 tests green; frontend: 151.
+
 ---
 
 # Phase 1.2-6 — Compliance Readiness: Deadlines, Settings & Rollout UX
@@ -2383,10 +2528,10 @@ Ties the track together for the artisan-facing rollout ahead of the 2026-09-01 (
 
 ## Features
 
-- [ ] "Facturation électronique" section in company settings surfacing: PA connection status (1.2-4), whether Factur-X emission is the artisan's default or opt-in, reception inbox status (1.2-5)
-- [ ] Deadline-awareness messaging — since this app's user base is overwhelmingly TPE/auto-entrepreneurs, the relevant date to surface is 2027-09-01 for emission and 2026-09-01 for reception; no need to model the earlier large-entreprise/ETI dates this app's users aren't subject to
-- [ ] Optional guided-tour addition introducing the feature — per [[feedback_guided_tour_conventions]], verify live in a browser rather than unit tests alone, and flag this specific tour step as optional/later-OK rather than blocking the rest of the track
-- [ ] Cross-tab link from wherever an artisan would naturally look for this (company settings, invoice actions) per the same guided-tour convention's "surface cross-tab links" note
+- [x] "Facturation électronique" section in company settings surfacing: PA connection status (1.2-4), reception inbox status (1.2-5)
+- [x] Deadline-awareness messaging — since this app's user base is overwhelmingly TPE/auto-entrepreneurs, the relevant date to surface is 2027-09-01 for emission and 2026-09-01 for reception; no need to model the earlier large-entreprise/ETI dates this app's users aren't subject to
+- [ ] Optional guided-tour addition introducing the feature — deferred, see note below
+- [x] Cross-tab link from wherever an artisan would naturally look for this (company settings, invoice actions) per the guided-tour convention's "surface cross-tab links" note
 
 ## Non-goals
 
@@ -2396,3 +2541,66 @@ Ties the track together for the artisan-facing rollout ahead of the 2026-09-01 (
 
 - Depends on 1.2-4 at minimum (nothing to reflect readiness of otherwise); benefits from 1.2-5 existing too for the reception half of the messaging.
 - Natural point to revisit whether "FactureLe: reform-ready" becomes actual marketing copy on the public landing page (Phase 13.3) — noted here, not scoped into this phase.
+
+### Decided/discovered during implementation (2026-08-24)
+
+- **"Whether Factur-X emission is the artisan's default or opt-in" dropped from scope.** There is no such setting to reflect: emission is always an explicit per-document action (the "Facture électronique" button and, once connected, "Envoyer via PA"), never an automatic default the artisan toggles. Inventing a default-vs-opt-in switch with no behavioral difference behind it would have been UI for its own sake — the readiness section instead just states the two real states that exist (PA connected/not, reception inbox status).
+- **Deadline copy is genuinely time-sensitive right now**: as of this implementation date (2026-08-24), the reception deadline is 8 days away — the settings section renders it with the same danger-subtle tone as an overdue-invoice badge once a deadline is ≤30 days out, neutral otherwise. Computed once from the real clock via a small pure `daysUntil()` util (`frontend/src/app/core/utils/e-invoicing-deadlines.util.ts`), not re-derived reactively — a settings page visit doesn't need to tick live.
+- **Cross-tab link implemented on both ends without adding a nag banner**: company settings links to `/factures-recues` (with a live received-count when connected); the invoice board's per-row actions dropdown, which previously just hid "Envoyer via PA" entirely when SUPER PDP wasn't connected, now shows a "Connecter SUPER PDP" hint that routes to `/entreprise` — but only when SUPER PDP is *configured on this deployment* (`superPdpConfigured`, new to `InvoiceBoardPage`/`InvoiceListRowComponent`) and just not yet *connected* by this artisan. When the deployment has no SUPER PDP credentials at all, the action stays fully absent, same as before — no dead-end link to a feature that doesn't exist here. Verified live via Playwright against the demo stack with SUPER PDP unconfigured: the hint correctly does not appear.
+- **Guided-tour step deferred, not built.** The roadmap itself flagged this as optional/later-OK. Concretely: Phase 8's tour engine (`frontend/src/app/shared/tour/`) is built around multi-step interactive workflows (`TourId` mirrored in both frontend `onboarding.model.ts` and `backend/src/onboarding/onboarding.constants.ts`, anchor wiring, route-keyed auto-start) — machinery sized for walking someone through *creating* something across several screens. A single static settings section has nothing to walk through step-by-step; a whole new `TourId` plus a backend enum mirror for one info banner would be more scaffolding than the feature it introduces. Left for a later pass if/when the rollout needs an actual interactive nudge (e.g. once real SUPER PDP transmission is live for this deployment).
+- Verified: 155 frontend tests green (151 + 4 new for `daysUntil`), `tsc --noEmit` clean, live-checked via the Docker demo stack + Playwright (deadline banner renders correctly — "plus que 8 jours" / "plus que 373 jours" on 2026-08-24 — and the invoice-board row hint correctly stays absent with SUPER PDP unconfigured). No backend changes were needed for this phase — everything reuses 1.2-4/1.2-5's existing endpoints.
+
+This closes out the Phase 1.2 e-invoicing-reform track (1.2-1 through 1.2-6).
+
+## Full-pipeline bug-check pass (2026-08-25, requested explicitly by the user across all of 1.2-1 through 1.2-6)
+
+Reviewed the whole track end-to-end for security, race conditions, and CSS overlap — not a re-read of each phase's own notes above, an independent pass across the actual current code. Three real issues found and fixed:
+
+- **Race condition (security-relevant): concurrent SUPER PDP token refresh could resurrect a connection the artisan just disconnected.** `CompanySuperPdpService.getValidAccessToken` had no protection against two requests (e.g. transmitting two invoices at once, or a transmit racing a status refresh) both seeing an about-to-expire token and each independently calling SUPER PDP's OAuth refresh endpoint with the same refresh token — wasteful at best, and likely to fail outright against an OAuth2.1 server that rotates refresh tokens. Worse: `CompanyRepository.refreshSuperPdpTokens` was a plain unconditional `update`, so if an artisan hit "Déconnecter" (which nulls the token columns) while a refresh triggered just before it was still in flight, the refresh's write would land *after* the disconnect and silently repopulate valid tokens — reviving a connection the artisan had just explicitly severed, with no trace of it in the UI (`isConnected()` only checks `superPdpConnectedAt`, untouched by a refresh). Fixed with two changes: (1) an in-process `Map<companyId, Promise<string>>` in `CompanySuperPdpService` dedupes concurrent refreshes for the same company into one actual SUPER PDP call (single backend instance in this app's real deployment, so no distributed lock needed — see the new code comment); (2) `refreshSuperPdpTokens` now takes the refresh token it was computed from and writes via `updateMany` gated on that value still being current (`WHERE ... AND superPdpRefreshTokenEncrypted = <previous>`) — a disconnect that happened in the meantime makes the write match zero rows instead of resurrecting the connection. New test: concurrent `getValidAccessToken` calls for the same company now call SUPER PDP's refresh endpoint exactly once.
+- **Missing status/duplicate-transmission gate — a real functional bug, not just UI polish.** `InvoiceListRowComponent`'s "Envoyer via PA" action showed unconditionally on every FACTURE row regardless of `invoice.eInvoiceTransmissionStatus`, and `EInvoiceTransmissionService.transmit` itself never checked prior status either — an artisan could click "Envoyer via PA" on an already-SENT/ACCEPTED invoice and it would silently submit a brand-new duplicate transmission to SUPER PDP every time. Compounding it, `POST /invoices/:id/transmission-status` (`EInvoiceTransmissionService.refreshStatus`, built in 1.2-4) had no UI entry point at all — dead code from the artisan's perspective, so a transmitted invoice's real status (validated/delivered/accepted/rejected) was never visible anywhere in the app. Fixed on the frontend only (the backend's own status vocabulary and "REJECTED means resubmit as a new PA-side invoice" semantics, per `super-pdp-status.util.ts`'s own comments, were already correct and didn't need changing): the row now shows "Envoyer via PA" only while `eInvoiceTransmissionStatus` is `NOT_SENT` or `REJECTED` (a rejected invoice is meant to be corrected and resent as a new submission — confirmed against the backend's own design intent), and a distinct "Actualiser le statut" action (wired to the previously-orphaned endpoint) once it's anything else, showing the current status label and, for a rejected one, its rejection reason.
+- **CSS overlap risk in the invoice-board row's actions dropdown.** 1.2-3, 1.2-4, and 1.2-6 each added another conditional entry to this `position: fixed` dropdown ("Facture électronique", "Envoyer via PA"/status, the SUPER PDP "connect it" hint) on top of what Phase 26 originally shipped, and its position was always just `top: rect.bottom + 4` with no upper bound on height and no awareness of the viewport — a FACTURE row near the bottom of a long list (or on a short/mobile viewport) could render a menu that ran off the bottom of the screen with its last item unreachable. Fixed generically rather than patching around today's specific item count: the menu now opens on whichever side (above/below the trigger) has more room, with a `max-height` + vertical scroll as a last-resort clamp so it can never overflow the viewport no matter how many conditional items end up in it later. Verified live: forced a 600×500 viewport and opened the last row's menu — it correctly flipped upward and rendered fully on-screen.
+
+Also reviewed and found no issue: OAuth `state` HMAC signing/verification (timing-safe compare, expiry, session-vs-state companyId cross-check all correct), the reception inbox's per-company scoping on `downloadDocument`/`findById` (no IDOR), `secret-crypto.util.ts`'s AES-256-GCM usage (random IV per call, auth tag verified, fails closed), `parseDecimalToCents`'s string-based money parsing, and CSRF coverage (the global `CsrfGuard` already covers every new POST route here — `disconnect`, `sync`, `transmit`, `transmission-status` — nothing needed doing per-route).
+
+Verified: full backend suite (456 tests, including one new test covering the refresh-dedup fix and one existing test updated for `refreshSuperPdpTokens`'s new parameter) and frontend suite (155 tests) green, `tsc --noEmit` clean on both sides, live-checked via the Docker demo stack + Playwright.
+
+---
+
+# Phase 1.3 — E-Invoicing Workflow Automation & Customization
+
+Full detail moved to [docs/1.3/](./1.3/README.md) on 2026-08-25 — seven
+phases with granular per-phase checklists, kept out of this file so working
+on the rest of the app doesn't require re-reading this track's full detail
+every time. **Status: all seven phases shipped (2026-08-24/25)** —
+settings toggles, auto-attach Factur-X, delayed auto-transmit + cancel
+window, auto reception sync, non-transmitted reminders + deadline banner,
+compliance snapshot in Activity Analytics, and a compliance-obligations
+explainer in company settings. This closes out the Phase 1.3
+e-invoicing-workflow-automation track (1.3-1 through 1.3-7).
+
+**Objective, one paragraph**: Phase 1.2 built a fully-manual e-invoicing
+pipeline (Factur-X generation, PA transmission, reception sync all require
+an explicit click per invoice). A 2026-08-25 workflow review found that
+falls short of "effortless" for an artisan who just wants to be compliant
+and look professional — connecting a PA is real unguided admin, nothing
+happens automatically, and the reform's deadlines are only visible on a
+settings page nobody visits unprompted. Phase 1.3 lets each artisan choose
+how hands-off they want to be, entirely opt-in (everything defaults OFF,
+Phase 1.2's manual pipeline stays fully available regardless of what's
+turned on), via three independent settings toggles rather than a single
+mode switch.
+
+**Phases**: 1.3-1 (settings model/toggles) → 1.3-2 (auto-attach Factur-X to
+emails) → 1.3-3 (delayed auto-transmit via PA, with a cancellation window —
+confirmed with the user, not instant) → 1.3-4 (auto-sync reception) → 1.3-5
+(non-transmitted reminders, extends the existing push digest, + a dashboard
+deadline banner) → 1.3-6 (compliance snapshot in Activity Analytics,
+deliberately **not** behind Phase 30's analytics paywall — same "legal
+necessity stays free" reasoning as the quarterly report) → 1.3-7
+(compliance explainer in company settings: obligations, why a third-party
+PA is actually mandatory not optional, how URSSAF declarations are a
+separate pre-existing requirement, and an honest disclosure that
+e-reporting for B2C/export sales isn't implemented).
+
+See [docs/1.3/README.md](./1.3/README.md) for the full track overview,
+scope decisions, and per-phase checklists.

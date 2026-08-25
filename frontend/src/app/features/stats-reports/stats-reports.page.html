@@ -36,6 +36,61 @@
 
 @if (tab() === 'apercu') {
   <!-- Vue d'ensemble : ancienne page /statistiques -->
+
+  <!-- Phase 1.3-6 (2026 e-invoicing reform): a compliance snapshot,
+       rendered here outside the analyticsLoading/analyticsLocked/
+       analyticsError/analytics chain below — GET /reports/e-invoicing-
+       snapshot is deliberately ungated (same "legal necessity, not
+       business insight" reasoning as the quarterly report), so it must
+       never end up inside the same locked/unlocked branch as the rest of
+       this tab. -->
+  @if (eInvoicingSnapshotShowSkeleton()) {
+    <div class="anim-skeleton mb-6 h-24 rounded-xl"></div>
+  } @else if (eInvoicingSnapshot(); as snapshot) {
+    <div class="mb-6 rounded-xl border border-line bg-surface p-4">
+      <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-soft">
+        Facturation électronique
+      </h2>
+      @if (!snapshot.configured) {
+        <p class="text-sm text-ink-soft">
+          Cette fonctionnalité n'est pas encore configurée sur ce déploiement.
+        </p>
+      } @else if (!snapshot.connected) {
+        <p class="text-sm text-ink-soft">
+          Connectez SUPER PDP depuis
+          <a routerLink="/entreprise" class="font-medium text-primary hover:underline"
+            >Mon entreprise</a
+          >
+          pour suivre votre conformité ici.
+        </p>
+      } @else {
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div class="text-center">
+            <p class="text-2xl font-semibold">
+              {{
+                snapshot.transmissionRatePercent !== null
+                  ? snapshot.transmissionRatePercent + ' %'
+                  : '—'
+              }}
+            </p>
+            <p class="text-xs text-ink-soft">Taux de transmission (12 mois)</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-semibold">{{ snapshot.unsentFactureCount }}</p>
+            <p class="text-xs text-ink-soft">Factures en attente de transmission</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-semibold">{{ snapshot.receivedInvoiceCount }}</p>
+            <p class="text-xs text-ink-soft">Factures reçues (12 mois)</p>
+          </div>
+        </div>
+        <p class="mt-3 text-xs text-ink-soft">
+          Ces factures n'alimentent pas vos rapports d'activité.
+        </p>
+      }
+    </div>
+  }
+
   @if (analyticsLoading()) {
     @if (analyticsShowSkeleton()) {
       <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">

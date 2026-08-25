@@ -28,6 +28,17 @@ export class UpdateCompanyDto {
   @Matches(/^\d{14}$/, { message: 'siret must be exactly 14 digits' })
   siret: string;
 
+  // Phase 1.2-2 (2026 e-invoicing reform): FR + 2-character key + 9-digit
+  // SIREN. Validated, not freehand, same reasoning as customerSiret
+  // (Phase 1.1-8) — a malformed VAT ID would make the Factur-X file this
+  // reform requires fail PA-side validation, not just look wrong on screen.
+  // Optional: a franchise-en-base artisan has no VAT number at all.
+  @IsOptional()
+  @Matches(/^FR[0-9A-Z]{2}\d{9}$/, {
+    message: 'vatNumber must be FR followed by a 2-character key and the 9-digit SIREN',
+  })
+  vatNumber?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(200)
@@ -190,4 +201,19 @@ export class UpdateCompanyDto {
   // as customFooterOnFacture above.
   @IsBoolean()
   vatOnDebitsOption: boolean;
+
+  // Phase 1.3-1 (2026 e-invoicing reform, workflow automation): see
+  // schema.prisma's comment on Company.autoAttachFacturX and friends.
+  // Required like vatOnDebitsOption above (the frontend form always sends a
+  // value), not optional — autoTransmitViaPa/autoSyncReceivedInvoices are
+  // additionally enforced server-side in CompanyService (can't be turned on
+  // without SUPER PDP connected), not just validated for shape here.
+  @IsBoolean()
+  autoAttachFacturX: boolean;
+
+  @IsBoolean()
+  autoTransmitViaPa: boolean;
+
+  @IsBoolean()
+  autoSyncReceivedInvoices: boolean;
 }

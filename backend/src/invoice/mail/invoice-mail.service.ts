@@ -1,16 +1,19 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { InvoiceStatus } from '../../../generated/prisma/enums';
+import { DocumentType, InvoiceStatus } from '../../../generated/prisma/enums';
 import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
-import { MailerService } from '../../mailer/mailer.service';
+import { MailerService, SendMailAttachment } from '../../mailer/mailer.service';
 import { InvoiceWithTotals } from '../entities/invoice.entity';
+import { FacturXService } from '../facturx/facturx.service';
 import { InvoiceMapper } from '../invoice.mapper';
 import { InvoiceRepository, InvoiceWithLines } from '../invoice.repository';
+import { InvoicePdfData } from '../pdf/invoice-pdf-data.interface';
 import { PdfService } from '../pdf/pdf.service';
 import { SendInvoiceEmailDto } from './dto/send-invoice-email.dto';
 import { buildDefaultInvoiceMailTemplate, InvoiceMailTemplate } from './invoice-mail-template.util';
@@ -22,6 +25,8 @@ import { buildDefaultInvoiceMailTemplate, InvoiceMailTemplate } from './invoice-
 // no SMTP transport code, no template copy live directly here.
 @Injectable()
 export class InvoiceMailService {
+  private readonly logger = new Logger(InvoiceMailService.name);
+
   constructor(
     private readonly invoiceRepository: InvoiceRepository,
     private readonly mapper: InvoiceMapper,
@@ -29,6 +34,7 @@ export class InvoiceMailService {
     private readonly companyService: CompanyService,
     private readonly mailSettingsService: MailSettingsService,
     private readonly mailerService: MailerService,
+    private readonly facturXService: FacturXService,
   ) {}
 
   // Lets the frontend show (and let the artisan edit) the exact copy that
@@ -84,13 +90,22 @@ export class InvoiceMailService {
     const pdfBuffer = await this.pdfService.generateInvoicePdf(pdfData);
     const filePrefix = invoice.documentType === 'DEVIS' ? 'devis' : 'facture';
 
+    const attachment = await this.buildAttachment(
+      raw.company.autoAttachFacturX,
+      invoice.documentType,
+      pdfBuffer,
+      pdfData,
+      filePrefix,
+      invoice.number,
+    );
+
     await this.mailerService.send({
       smtp,
       from: { name: raw.company.name, address: smtp.user },
       to,
       subject: dto.subject ?? defaultTemplate.subject,
       text: dto.message ?? defaultTemplate.text,
-      attachments: [{ filename: `${filePrefix}-${invoice.number}.pdf`, content: pdfBuffer }],
+      attachments: [attachment],
     });
 
     // Phase 16: a send while the invoice is still unpaid counts as a
@@ -100,6 +115,36 @@ export class InvoiceMailService {
       bumpReminder: raw.status === InvoiceStatus.NON_PAYEE,
     });
     return this.mapper.toInvoiceWithTotals(updated);
+  }
+
+  // Phase 1.3-2 (2026 e-invoicing reform, workflow automation): attaches the
+  // Factur-X hybrid instead of the plain PDF when the company opted in
+  // (Company.autoAttachFacturX) and this is a FACTURE — same rule as every
+  // other e-invoicing action, a DEVIS never gets a Factur-X attachment
+  // regardless of the toggle. A genuine Factur-X generation failure (a real
+  // Schematron/XSD error — this never talks to SUPER PDP, so a PA outage
+  // can't be the cause) falls back to the plain PDF and logs a warning
+  // rather than blocking the send: getting *something* to the client on
+  // time matters more here than always sending the structured version.
+  private async buildAttachment(
+    autoAttachFacturX: boolean,
+    documentType: DocumentType,
+    pdfBuffer: Buffer,
+    pdfData: InvoicePdfData,
+    filePrefix: string,
+    invoiceNumber: string,
+  ): Promise<SendMailAttachment> {
+    if (autoAttachFacturX && documentType === 'FACTURE') {
+      try {
+        const hybridBuffer = await this.facturXService.generateHybridPdf(pdfBuffer, pdfData);
+        return { filename: `${filePrefix}-${invoiceNumber}-factur-x.pdf`, content: hybridBuffer };
+      } catch (error) {
+        this.logger.warn(
+          `Factur-X auto-attach failed for invoice ${invoiceNumber}, falling back to plain PDF: ${String(error)}`,
+        );
+      }
+    }
+    return { filename: `${filePrefix}-${invoiceNumber}.pdf`, content: pdfBuffer };
   }
 
   private async loadInvoice(

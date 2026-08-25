@@ -47,6 +47,9 @@ function toUpdateCompanyRequest(profile: CompanyProfile): UpdateCompanyRequest {
     customFooterOnDevis: profile.customFooterOnDevis,
     earlyPaymentDiscountMention: profile.earlyPaymentDiscountMention ?? undefined,
     vatOnDebitsOption: profile.vatOnDebitsOption,
+    autoAttachFacturX: profile.autoAttachFacturX,
+    autoTransmitViaPa: profile.autoTransmitViaPa,
+    autoSyncReceivedInvoices: profile.autoSyncReceivedInvoices,
   };
 }
 

@@ -6,7 +6,7 @@ import { PdfService } from '../invoice/pdf/pdf.service';
 import { CATEGORY_LABELS } from './activity-category.util';
 import { buildQuarterlyReportCsv } from './csv.util';
 import { ReportPeriodQueryDto } from './dto/report-period-query.dto';
-import { ActivityAnalytics, QuarterlyReport } from './entities/report.entity';
+import { ActivityAnalytics, EInvoicingSnapshot, QuarterlyReport } from './entities/report.entity';
 import { ReportsService } from './reports.service';
 
 // Phase 17: the quarterly declaration (getQuarterly/getQuarterlyPdf/
@@ -18,6 +18,11 @@ import { ReportsService } from './reports.service';
 // — see ReportsService.getActivityAnalytics and docs/roadmap.md Phase 30;
 // this narrower reading was a deliberate choice specifically so Phase 30
 // never contradicts this comment's original promise.
+// Phase 1.3-6 adds a third case, not just the two above: getEInvoicingSnapshot
+// is also ungated, same "legal-necessity, not business-insight" reasoning
+// as the quarterly declaration — see that method's own comment and
+// docs/1.3/1.3-6-activity-analytics-metrics.md. Don't assume every route on
+// this controller is either "quarterly = free" or "analytics = gated."
 @Controller('reports')
 export class ReportsController {
   constructor(
@@ -102,5 +107,10 @@ export class ReportsController {
   @Get('analytics')
   getAnalytics(@CurrentUser() user: AuthenticatedUser): Promise<ActivityAnalytics> {
     return this.reportsService.getActivityAnalytics(user.companyId);
+  }
+
+  @Get('e-invoicing-snapshot')
+  getEInvoicingSnapshot(@CurrentUser() user: AuthenticatedUser): Promise<EInvoicingSnapshot> {
+    return this.reportsService.getEInvoicingSnapshot(user.companyId);
   }
 }
