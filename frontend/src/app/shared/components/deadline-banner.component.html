@@ -1,0 +1,61 @@
+@if (showReception() || showEmission()) {
+  <!-- Bug fix (2026-08-25 review): grid-cols-2 kept its two fixed-width
+       tracks even with only one child present (the common case — reception
+       and emission are 373 days apart, so it's rare for both to be inside
+       the 30-day window at once), leaving that single banner stuck at half
+       width with a dead empty gap beside it. flex + flex-1 instead: each
+       banner shares the row evenly when both are present, and the one
+       banner naturally fills the whole row when it's alone — flexbox
+       redistributes remaining space per however many children actually
+       exist, unlike grid's fixed track count. -->
+  <div class="mb-6 flex flex-col gap-2 sm:flex-row">
+    @if (showReception()) {
+      <!-- Always danger-toned here, unlike company-settings' own version of
+           this banner: showReception() is only ever true once daysLeft is
+           already <= 30, so there's no "still far away, neutral tone" state
+           for this component to represent at all. -->
+      <p
+        class="bg-danger-subtle text-danger-subtle-fg flex flex-1 items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm"
+      >
+        <span>
+          <span class="font-medium">Réception obligatoire dès le 1ᵉʳ septembre 2026</span>
+          @if (reception.daysLeft >= 0) {
+            — plus que {{ reception.daysLeft }} jour{{ reception.daysLeft > 1 ? 's' : '' }}.
+          } @else {
+            — échéance dépassée.
+          }
+        </span>
+        <button
+          type="button"
+          (click)="dismissReception()"
+          class="shrink-0 text-xs font-medium underline opacity-80 hover:opacity-100"
+          aria-label="Masquer ce rappel"
+        >
+          Masquer
+        </button>
+      </p>
+    }
+    @if (showEmission()) {
+      <p
+        class="bg-danger-subtle text-danger-subtle-fg flex flex-1 items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm"
+      >
+        <span>
+          <span class="font-medium">Émission obligatoire dès le 1ᵉʳ septembre 2027</span>
+          @if (emission.daysLeft >= 0) {
+            — plus que {{ emission.daysLeft }} jour{{ emission.daysLeft > 1 ? 's' : '' }}.
+          } @else {
+            — échéance dépassée.
+          }
+        </span>
+        <button
+          type="button"
+          (click)="dismissEmission()"
+          class="shrink-0 text-xs font-medium underline opacity-80 hover:opacity-100"
+          aria-label="Masquer ce rappel"
+        >
+          Masquer
+        </button>
+      </p>
+    }
+  </div>
+}

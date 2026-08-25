@@ -21,6 +21,7 @@ import { MailSettingsModule } from './mail-settings/mail-settings.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ProductModule } from './product/product.module';
 import { PushNotificationModule } from './push-notification/push-notification.module';
+import { ReceivedInvoiceModule } from './received-invoice/received-invoice.module';
 import { ReferralModule } from './referral/referral.module';
 import { ReportsModule } from './reports/reports.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
@@ -55,6 +56,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     AdminModule,
     ReportsModule,
     ReferralModule,
+    ReceivedInvoiceModule,
   ],
   controllers: [HealthController],
   providers: [

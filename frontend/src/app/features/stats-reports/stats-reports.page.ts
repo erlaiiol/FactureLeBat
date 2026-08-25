@@ -9,10 +9,11 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   ActivityAnalytics,
   CATEGORY_LABELS,
+  EInvoicingSnapshot,
   QuarterlyReport,
 } from '../../core/models/report.model';
 import { CompanyService } from '../../core/services/company.service';
@@ -51,6 +52,7 @@ type StatsReportsTab = 'apercu' | 'rapport';
     RevenueBarChartComponent,
     TourAnchorDirective,
     BigButtonComponent,
+    RouterLink,
   ],
   templateUrl: './stats-reports.page.html',
 })
@@ -89,6 +91,18 @@ export class StatsReportsPage {
   // — distinct from analyticsError so the tab shows an upsell CTA instead of
   // a generic "couldn't load" message when that's actually what happened.
   protected readonly analyticsLocked = signal(false);
+
+  // Phase 1.3-6 (2026 e-invoicing reform, workflow automation): a
+  // compliance snapshot, loaded and rendered independently of
+  // analytics/analyticsLocked above — GET /reports/e-invoicing-snapshot is
+  // deliberately ungated (see ReportsService.getEInvoicingSnapshot's own
+  // comment), so this must never end up inside the same locked/unlocked
+  // branch as the rest of "Vue d'ensemble".
+  protected readonly eInvoicingSnapshot = signal<EInvoicingSnapshot | null>(null);
+  protected readonly eInvoicingSnapshotLoading = signal(true);
+  protected readonly eInvoicingSnapshotShowSkeleton = delayedSkeleton(
+    this.eInvoicingSnapshotLoading,
+  );
 
   // --- Rapport & déclaration (former ReportsPage) ---
 
@@ -156,6 +170,22 @@ export class StatsReportsPage {
             this.analyticsError.set(true);
           }
         },
+      });
+
+    this.reportsService
+      .getEInvoicingSnapshot()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (snapshot) => {
+          this.eInvoicingSnapshotLoading.set(false);
+          this.eInvoicingSnapshot.set(snapshot);
+        },
+        // No PlanFeatureLocked branch to handle here — this endpoint never
+        // sends one (deliberately ungated). A real failure just leaves the
+        // card in its loading/skeleton state rather than showing wrong
+        // data; not worth a dedicated error signal for a small secondary
+        // card the artisan can just reload the page to retry.
+        error: () => this.eInvoicingSnapshotLoading.set(false),
       });
 
     // Preselects the artisan's own declared cadence — the report itself

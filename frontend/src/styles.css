@@ -518,55 +518,99 @@ button:not(:disabled) {
   animation: tour-completion-glow 900ms var(--ease-out-sharp);
 }
 
+/* Landing page's "prêt pour la réforme" trust badge (Phase 13.6): a real
+   feature announcement, not filler copy, so it needs a border visible
+   enough to read as clickable/important and hover feedback that confirms
+   it. The glow keyframe only runs on :hover — a real, user-triggered state
+   change — never idle at rest, same "no ambient motion" rule the tour-
+   completion glow above and heroLitany below both already respect. */
+@keyframes badge-border-glow {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-atelier-walnut) 40%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-atelier-walnut) 0%, transparent);
+  }
+}
+.anim-badge-reform-ready {
+  transition:
+    border-color var(--duration-entrance) var(--ease-out-sharp),
+    box-shadow var(--duration-entrance) var(--ease-out-sharp);
+}
+.anim-badge-reform-ready:hover {
+  animation: badge-border-glow var(--duration-emphasis) var(--ease-out-sharp);
+}
+
 /* design-system.md's `heroLitany`: the landing page hero (Phase 13.3,
    "Atelier sobre"'s fourth spot). A one-shot sequential text reveal that
    plays once on page load and settles permanently on "FactureLe en 1 clic"
    — never loops, never restarts, so it doesn't break the "no idle/ambient
    motion" rule (the state change is "the hero has mounted," same
-   justification as `scrollReveal` firing once per element). Each line gets
-   its own animation-delay (set inline in the template, spaced by
+   justification as `scrollReveal` firing once per element). Each question
+   gets its own animation-delay (set inline in the template, spaced by
    --duration-litany-slot) rather than one long keyframe timeline, so the
    sequence length stays a single number to tune in one place.
 
-   Each line's question and its "FactureLe." answer are two separate flex
-   items (the question is one anonymous text-run item, `<strong>` is the
-   other) so the container can stack them — column on narrow phones, where
-   the question already wraps onto its own line and squeezing "FactureLe."
-   onto that same line either overflowed or crushed both, row again from
-   `sm` up where there's width for both on one line. */
+   2026-08-25 revision: the question and the "FactureLe." answer used to
+   share one row-flex slide, which forced everything onto a single line on
+   desktop — the longer questions then wrapped mid-row inside that line,
+   an ugly, unintentional-looking 2-line break. Split into a genuine
+   2-line layout instead (column at every breakpoint, in the template):
+   only the question line re-animates per slot (`hero-litany-question`,
+   directional — outgoing slides down and out, incoming slides down in
+   from above, i.e. asymmetric endpoints, not a symmetric bounce); "FactureLe."
+   itself never changes across slots, so it's rendered once and just held
+   visible for the whole sequence (`hero-litany-answer`) rather than
+   re-triggering on every question. --duration-litany-total must equal
+   --duration-litany-slot × the number of question slots in the template
+   (7 × 1100ms) — kept as an explicit token rather than a calc() off a slot
+   count the CSS has no visibility into, same manual-sync tradeoff the
+   template's own hardcoded per-slot delays already accept. */
 :root {
   --duration-litany-slot: 1100ms;
+  --duration-litany-total: 7700ms;
 }
-@keyframes hero-litany-line {
-  0%,
-  100% {
+@keyframes hero-litany-question {
+  0% {
     opacity: 0;
-    transform: translateY(10px) scale(0.96);
+    transform: translateY(-55%);
   }
   14%,
   76% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(55%);
   }
 }
-.anim-hero-litany-line {
+.anim-hero-litany-question {
   position: absolute;
   inset: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.1em;
-  animation-name: hero-litany-line;
+  animation-name: hero-litany-question;
   animation-duration: var(--duration-litany-slot);
   animation-timing-function: var(--ease-out-sharp);
   animation-fill-mode: both;
 }
-@media (min-width: 640px) {
-  .anim-hero-litany-line {
-    flex-direction: row;
-    gap: 0.35em;
+@keyframes hero-litany-answer {
+  0% {
+    opacity: 0;
   }
+  6%,
+  96% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.anim-hero-litany-answer {
+  opacity: 0;
+  animation: hero-litany-answer var(--duration-litany-total) var(--ease-out-sharp) forwards;
 }
 @keyframes hero-litany-final {
   from {
@@ -593,7 +637,8 @@ button:not(:disabled) {
    seconds before the delay elapses. Skip the sequence outright and show the
    resting state immediately instead. */
 @media (prefers-reduced-motion: reduce) {
-  .anim-hero-litany-line {
+  .anim-hero-litany-question,
+  .anim-hero-litany-answer {
     display: none;
   }
   .anim-hero-litany-final {

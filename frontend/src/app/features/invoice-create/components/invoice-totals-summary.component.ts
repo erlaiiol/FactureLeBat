@@ -44,18 +44,18 @@ const VAT_NON_APPLICABLE_VALUE = 'NON_APPLICABLE';
            .subtotalExclVatCents, so "before remise" is reconstructed by
            adding it back for display, never a second source of truth. -->
       @if (!editable() && discountAmountCents() > 0) {
-        <div class="flex w-64 justify-between text-ink-soft">
+        <div class="flex w-80 justify-between text-ink-soft">
           <span>Sous-total avant remise</span>
           <span class="font-mono">
             {{ totals().subtotalExclVatCents + discountAmountCents() | centsToEuros }}
           </span>
         </div>
-        <div class="flex w-64 justify-between text-danger">
+        <div class="flex w-80 justify-between text-danger">
           <span>Remises</span>
           <span class="font-mono">− {{ discountAmountCents() | centsToEuros }}</span>
         </div>
       }
-      <div class="flex w-64 justify-between text-ink">
+      <div class="flex w-80 justify-between text-ink">
         <span>Sous-total HT</span>
         @if (editable()) {
           <input
@@ -70,7 +70,19 @@ const VAT_NON_APPLICABLE_VALUE = 'NON_APPLICABLE';
         }
       </div>
       @if (editable()) {
-        <div class="flex w-64 items-center justify-between text-ink">
+        <!-- 2026-08-25 fix: at w-64, this row's own content (the VAT-regime
+             select + info icon on the left, the w-40 editable amount on the
+             right) measured 306px against a 256px box — a select/input's
+             intrinsic min-content width doesn't shrink to fit a flex
+             container the way plain text would, so the extra ~50px silently
+             escaped the row's declared width instead of ever being clipped
+             or wrapped (confirmed via getBoundingClientRect, not just eyeballed).
+             Widened this row — and, for a uniform card silhouette, every
+             other row in this same items-end column — from w-64 to w-80,
+             comfortably covering the measured content width with margin to
+             spare, rather than fighting the select/input's own min-width
+             floor. -->
+        <div class="flex w-80 items-center justify-between text-ink">
           <span class="flex items-center gap-1">
             <select
               class="rounded border-none bg-secondary-subtle/40 px-1 py-0.5 text-xs text-ink outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle disabled:opacity-50"
@@ -112,14 +124,14 @@ const VAT_NON_APPLICABLE_VALUE = 'NON_APPLICABLE';
           }
         </div>
       } @else if (vatApplicable()) {
-        <div class="flex w-64 justify-between text-ink">
+        <div class="flex w-80 justify-between text-ink">
           <span>TVA</span>
           <span class="font-mono">{{ totals().vatAmountCents | centsToEuros }}</span>
         </div>
       } @else {
-        <div class="w-64 text-right text-xs text-ink-soft">TVA non applicable</div>
+        <div class="w-80 text-right text-xs text-ink-soft">TVA non applicable</div>
       }
-      <div class="flex w-64 items-center justify-between text-lg font-bold text-ink">
+      <div class="flex w-80 items-center justify-between text-lg font-bold text-ink">
         <span>Total TTC</span>
         @if (editable()) {
           <input

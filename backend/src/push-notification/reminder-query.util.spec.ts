@@ -1,4 +1,8 @@
-import { buildLateInvoiceWhere, buildUnpaidNotLateInvoiceWhere } from './reminder-query.util';
+import {
+  buildLateInvoiceWhere,
+  buildUnpaidNotLateInvoiceWhere,
+  buildUnsentEInvoiceWhere,
+} from './reminder-query.util';
 
 describe('reminder-query.util', () => {
   const now = new Date('2026-07-26T09:00:00.000Z');
@@ -29,6 +33,17 @@ describe('reminder-query.util', () => {
 
       expect(lateDueDate < now).toBe(true);
       expect(notLateDueDate >= now).toBe(true);
+    });
+  });
+
+  describe('buildUnsentEInvoiceWhere', () => {
+    it('matches NOT_SENT FACTUREs older than 48h for a company with SUPER PDP connected', () => {
+      expect(buildUnsentEInvoiceWhere(now)).toEqual({
+        documentType: 'FACTURE',
+        eInvoiceTransmissionStatus: 'NOT_SENT',
+        createdAt: { lt: new Date(now.getTime() - 48 * 60 * 60 * 1000) },
+        company: { superPdpConnectedAt: { not: null } },
+      });
     });
   });
 });

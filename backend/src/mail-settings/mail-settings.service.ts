@@ -4,7 +4,7 @@ import { createTransport } from 'nodemailer';
 import { MailSettings, SmtpCredentials } from './entities/mail-settings.entity';
 import { UpdateMailSettingsDto } from './dto/update-mail-settings.dto';
 import { MailSettingsRepository, SmtpRow } from './mail-settings.repository';
-import { decryptSmtpPassword, encryptSmtpPassword } from './smtp-password-crypto.util';
+import { decryptSecret, encryptSecret } from '../common/secret-crypto.util';
 
 function toMailSettings(row: SmtpRow): MailSettings {
   return {
@@ -57,7 +57,7 @@ export class MailSettingsService {
       );
     }
 
-    const passwordEncrypted = encryptSmtpPassword(dto.password, this.encryptionKey);
+    const passwordEncrypted = encryptSecret(dto.password, this.encryptionKey);
     const row = await this.repository.save(companyId, {
       host: dto.host,
       port: dto.port,
@@ -84,7 +84,7 @@ export class MailSettingsService {
       port: row.smtpPort,
       secure: row.smtpSecure,
       user: row.smtpUser,
-      password: decryptSmtpPassword(row.smtpPasswordEncrypted, this.encryptionKey),
+      password: decryptSecret(row.smtpPasswordEncrypted, this.encryptionKey),
     };
   }
 }

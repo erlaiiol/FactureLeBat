@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
+import { IconCheckComponent } from '../../shared/components/icon-check.component';
 
 // Phase 13.3: the public, logged-out front door — see docs/positioning.md
 // for the messaging this page implements (pitch, pillars, CTA wording) and
@@ -9,7 +10,7 @@ import { RouterLink } from '@angular/router';
 @Component({
   selector: 'app-landing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [RouterLink, IconCheckComponent],
   templateUrl: './landing.page.html',
 })
 export class LandingPage {

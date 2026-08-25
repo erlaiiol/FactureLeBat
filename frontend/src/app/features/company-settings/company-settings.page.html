@@ -59,6 +59,20 @@
     </label>
 
     <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-atelier-ink-soft">N° de TVA intracommunautaire</span>
+      <input
+        formControlName="vatNumber"
+        type="text"
+        maxlength="13"
+        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        [class.border-danger]="form.controls.vatNumber.invalid && form.controls.vatNumber.touched"
+      />
+      <app-field-hint
+        text="Requis par la réforme de facturation électronique si vous êtes assujetti à la TVA (format FR + 2 caractères + votre SIREN). Laissez vide si vous relevez de la franchise en base de TVA."
+      />
+    </label>
+
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-atelier-ink-soft">Adresse</span>
       <input
         formControlName="addressLine1"
@@ -661,6 +675,259 @@
       }
     </form>
   }
+</section>
+
+<section class="mt-8 flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+  <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
+    Facturation électronique
+  </h2>
+
+  <p class="text-sm text-ink-soft">
+    Transmettez vos factures via une Plateforme Agréée (PA), conformément à la réforme de
+    facturation électronique.
+  </p>
+
+  <!-- Phase 1.2-6: deadline-awareness — reception binds every entreprise
+       assujettie à la TVA first, emission follows a year later for les
+       TPE/PME/auto-entrepreneurs comme les nôtres. Reception gets the
+       urgent tone once it's inside a month; emission stays neutral until
+       it's similarly close. -->
+  <div class="grid gap-2 sm:grid-cols-2">
+    <p
+      class="rounded-lg px-3 py-2 text-sm"
+      [class.bg-danger-subtle]="reception.daysLeft <= 30"
+      [class.text-danger-subtle-fg]="reception.daysLeft <= 30"
+      [class.bg-secondary-subtle]="reception.daysLeft > 30"
+      [class.text-ink-soft]="reception.daysLeft > 30"
+    >
+      <span class="font-medium">Réception obligatoire dès le 1ᵉʳ septembre 2026</span>
+      @if (reception.daysLeft >= 0) {
+        — plus que {{ reception.daysLeft }} jour{{ reception.daysLeft > 1 ? 's' : '' }}.
+      } @else {
+        — échéance dépassée.
+      }
+    </p>
+    <p
+      class="rounded-lg px-3 py-2 text-sm"
+      [class.bg-danger-subtle]="emission.daysLeft <= 30"
+      [class.text-danger-subtle-fg]="emission.daysLeft <= 30"
+      [class.bg-secondary-subtle]="emission.daysLeft > 30"
+      [class.text-ink-soft]="emission.daysLeft > 30"
+    >
+      <span class="font-medium">Émission obligatoire dès le 1ᵉʳ septembre 2027</span>
+      @if (emission.daysLeft >= 0) {
+        — plus que {{ emission.daysLeft }} jour{{ emission.daysLeft > 1 ? 's' : '' }}.
+      } @else {
+        — échéance dépassée.
+      }
+    </p>
+  </div>
+
+  <!-- Phase 1.3-7 (2026 e-invoicing reform): a closed-by-default disclosure
+       answering "what exactly do I have to do, and is a third party really
+       required" — the deadline banners above say *when*, this section says
+       *what*. Reception/emission tense (à partir du / depuis le) reuses the
+       exact same daysLeft already computed above, no second date check. -->
+  <button
+    type="button"
+    (click)="obligationsExpanded.set(!obligationsExpanded())"
+    [attr.aria-expanded]="obligationsExpanded()"
+    class="self-start text-sm font-medium text-primary hover:underline"
+  >
+    {{ obligationsExpanded() ? 'Masquer ▾' : 'En savoir plus sur vos obligations ▸' }}
+  </button>
+
+  @if (obligationsExpanded()) {
+    <div
+      class="anim-preview-in flex flex-col gap-3 rounded-lg bg-secondary-subtle p-4 text-sm text-ink-soft"
+    >
+      <p>
+        <span class="font-medium text-ink">Réception</span> — obligatoire
+        {{ reception.daysLeft > 0 ? 'à partir du' : 'depuis le' }} 1ᵉʳ septembre 2026 pour toute
+        entreprise assujettie à la TVA. À faire ici : connectez SUPER PDP ci-dessus, puis consultez
+        vos factures reçues dans
+        <a routerLink="/factures-recues" class="font-medium text-primary hover:underline"
+          >Factures reçues</a
+        >.
+      </p>
+      <p>
+        <span class="font-medium text-ink">Émission</span> — obligatoire
+        {{ emission.daysLeft > 0 ? 'à partir du' : 'depuis le' }} 1ᵉʳ septembre 2027 pour les
+        TPE/PME et auto-entrepreneurs. Un PDF simple envoyé par email ne suffira plus : la facture
+        doit être transmise sous un format structuré (Factur-X). À faire : le bouton "Facture
+        électronique" sur vos factures produit ce fichier, et l'envoi via SUPER PDP ci-dessus le
+        transmet — ou activez l'automatisation ci-dessous pour ne plus y penser.
+      </p>
+      <p>
+        <span class="font-medium text-ink"
+          >Faut-il vraiment passer par une plateforme tierce ?</span
+        >
+        Oui — ce n'est pas un choix de FactureLe. La réforme impose de transmettre via une
+        Plateforme Agréée (PA) ; le portail public de l'administration (PPF) n'est plus, depuis
+        2024, qu'un annuaire — il ne sert plus à transmettre les factures. SUPER PDP est la PA
+        intégrée à FactureLe : une seule connexion suffit, pas de compte à créer ailleurs.
+      </p>
+      <p>
+        <span class="font-medium text-ink">Et mes déclarations URSSAF ?</span>
+        C'est une obligation distincte, déjà couverte — la réforme ne change rien à ce que vous
+        devez déclarer (votre chiffre d'affaires encaissé, les mêmes montants qu'aujourd'hui).
+        Retrouvez votre déclaration dans
+        <a
+          routerLink="/statistiques"
+          [queryParams]="{ vue: 'rapport' }"
+          class="font-medium text-primary hover:underline"
+          >Statistiques → Rapport & déclaration</a
+        >.
+      </p>
+      <p>
+        <span class="font-medium text-ink">Ce que FactureLe ne couvre pas encore</span> —
+        l'e-reporting (données agrégées transmises à l'administration pour vos ventes à des
+        particuliers ou à l'étranger, distinct de la facture électronique elle-même) n'est pas
+        implémenté à ce jour. Si une partie de votre activité concerne des particuliers, vérifiez si
+        cette obligation s'applique à vous.
+      </p>
+    </div>
+  }
+
+  @if (superPdpStatusLoading()) {
+    <div class="anim-skeleton h-10 w-48 rounded-lg"></div>
+  } @else if (!superPdpConfigured()) {
+    <p class="rounded-lg bg-secondary-subtle px-3 py-2 text-sm text-ink-soft">
+      Cette fonctionnalité n'est pas encore configurée sur ce déploiement.
+    </p>
+  } @else if (superPdpConnected()) {
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center gap-3">
+        <span
+          class="rounded-full bg-success-subtle px-3 py-1 text-sm font-medium text-success-subtle-fg"
+        >
+          SUPER PDP connecté
+        </span>
+        <button
+          type="button"
+          [disabled]="superPdpBusy()"
+          (click)="disconnectSuperPdp()"
+          class="rounded-lg px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger-subtle disabled:opacity-60"
+        >
+          {{ superPdpBusy() ? 'Déconnexion…' : 'Déconnecter' }}
+        </button>
+      </div>
+      <p class="text-sm text-ink-soft">
+        Envoyez vos factures via le bouton « Envoyer via PA » sur chacune de vos factures, et
+        retrouvez vos factures reçues
+        @if (receivedInvoiceCount(); as count) {
+          ({{ count }})
+        }
+        dans
+        <a routerLink="/factures-recues" class="font-medium text-primary hover:underline">
+          Factures reçues </a
+        >.
+      </p>
+    </div>
+  } @else {
+    <div class="flex flex-col gap-2">
+      <button
+        type="button"
+        (click)="connectSuperPdp()"
+        class="self-start rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+      >
+        Connecter SUPER PDP
+      </button>
+      <p class="text-sm text-ink-soft">
+        Sans connexion, vous pouvez continuer à facturer normalement — cette connexion ne fait que
+        débloquer l'envoi et la réception via la Plateforme Agréée.
+      </p>
+    </div>
+  }
+
+  <!-- Phase 1.3-1 (2026 e-invoicing reform, workflow automation): a
+       standalone <form> bound to the same `form` FormGroup as the profile
+       form above — same "several <form> elements, one shared FormGroup and
+       submit()" pattern already used by "Estimation de mes charges" below,
+       so this subsection can be saved on its own without scrolling back up. -->
+  <form
+    [formGroup]="form"
+    (ngSubmit)="submit()"
+    class="mt-2 flex flex-col gap-3 border-t border-line pt-4"
+  >
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-soft">Automatisation</h3>
+
+    <label class="flex items-center gap-2">
+      <input type="checkbox" class="h-5 w-5" formControlName="autoAttachFacturX" />
+      <span class="text-sm font-medium text-atelier-ink">
+        Joindre automatiquement la version Factur-X à mes emails de facture
+      </span>
+    </label>
+    <app-field-hint
+      text="Une facture envoyée par email est jointe au format Factur-X (conforme à la réforme) au lieu du simple PDF — sans rien changer d'autre à l'envoi."
+    />
+
+    <!-- 2026-08-25 fix: previously only the 20px checkbox itself dimmed on
+         disabled (disabled:opacity-50), while the bold label text right
+         next to it stayed fully readable — barely visible feedback, and
+         title-only on top of that, which touch devices can't even trigger.
+         Now the whole row dims + shows "not-allowed", and the reason is
+         always-visible text, not just a hover tooltip. -->
+    <label
+      class="flex items-center gap-2"
+      [class.opacity-50]="!superPdpConnected()"
+      [class.cursor-not-allowed]="!superPdpConnected()"
+    >
+      <input
+        type="checkbox"
+        class="h-5 w-5 disabled:cursor-not-allowed"
+        formControlName="autoTransmitViaPa"
+      />
+      <span class="text-sm font-medium text-atelier-ink">
+        Transmettre automatiquement mes factures via SUPER PDP
+      </span>
+    </label>
+    @if (!superPdpConnected()) {
+      <p class="-mt-2 text-xs font-medium text-atelier-ink-soft">
+        Connectez SUPER PDP ci-dessus pour activer cette option
+      </p>
+    }
+    <app-field-hint
+      text="Chaque nouvelle facture est envoyée à la Plateforme Agréée peu après sa création, avec un délai pendant lequel vous pouvez encore annuler l'envoi depuis Mes documents."
+    />
+
+    <label
+      class="flex items-center gap-2"
+      [class.opacity-50]="!superPdpConnected()"
+      [class.cursor-not-allowed]="!superPdpConnected()"
+    >
+      <input
+        type="checkbox"
+        class="h-5 w-5 disabled:cursor-not-allowed"
+        formControlName="autoSyncReceivedInvoices"
+      />
+      <span class="text-sm font-medium text-atelier-ink">
+        Synchroniser automatiquement mes factures reçues
+      </span>
+    </label>
+    @if (!superPdpConnected()) {
+      <p class="-mt-2 text-xs font-medium text-atelier-ink-soft">
+        Connectez SUPER PDP ci-dessus pour activer cette option
+      </p>
+    }
+    <app-field-hint
+      text="Votre boîte de réception de factures fournisseurs se met à jour toute seule, sans avoir à cliquer sur Actualiser."
+    />
+
+    <button
+      type="submit"
+      [disabled]="saving()"
+      class="self-start rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+    </button>
+    @if (saved()) {
+      <p class="font-medium text-success">Enregistré !</p>
+    }
+    @if (errorMessage(); as message) {
+      <p class="font-medium text-danger">{{ message }}</p>
+    }
+  </form>
 </section>
 
 <section class="mt-10 flex flex-col gap-4 rounded-xl border border-danger-subtle-border p-4">

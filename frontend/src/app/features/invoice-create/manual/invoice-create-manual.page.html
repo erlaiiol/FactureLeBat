@@ -78,6 +78,52 @@
         </button>
       </div>
     }
+    <!-- 2026-08-25 review: mode manuel previously had no "Partager"
+         affordance at all — added here to match mode rapide's own
+         preview-step success card exactly, including its Factur-X
+         counterpart below. -->
+    <div class="w-full max-w-sm">
+      <app-big-button
+        variant="secondary"
+        tone="subtle"
+        [disabled]="sharingInvoiceId() === invoice.id"
+        (click)="share(invoice)"
+      >
+        {{ sharingInvoiceId() === invoice.id ? 'Partage…' : 'Partager' }}
+      </app-big-button>
+      <p class="mt-1 text-center text-xs text-ink-soft">
+        Partage le PDF via une app de votre téléphone (email, messagerie…)
+      </p>
+    </div>
+    @if (invoice.documentType === 'FACTURE') {
+      <a
+        [href]="facturXUrl(invoice.id)"
+        target="_blank"
+        class="w-full max-w-sm border-t border-line pt-4"
+        (click)="guardDownloadClick($event)"
+      >
+        <app-big-button variant="secondary" tone="subtle">
+          Télécharger la facture électronique
+        </app-big-button>
+      </a>
+      <div class="w-full max-w-sm">
+        <app-big-button
+          variant="secondary"
+          tone="subtle"
+          [disabled]="sharingFacturXInvoiceId() === invoice.id"
+          (click)="shareFacturX(invoice)"
+        >
+          {{
+            sharingFacturXInvoiceId() === invoice.id
+              ? 'Partage…'
+              : 'Partager (facture électronique)'
+          }}
+        </app-big-button>
+        <p class="mt-1 text-center text-xs text-ink-soft">
+          Format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique
+        </p>
+      </div>
+    }
     <div class="w-full max-w-sm">
       <app-big-button variant="secondary" tone="subtle" (click)="openSignatureModal(invoice)">
         Signer
@@ -93,6 +139,11 @@
     [invoice]="signatureModalInvoice()"
     (closed)="closeSignatureModal()"
     (signed)="onSignatureSaved($event)"
+  />
+  <app-send-invoice-email-modal
+    [invoice]="emailModalInvoice()"
+    (closed)="closeEmailModal()"
+    (sent)="onEmailSent($event)"
   />
 } @else if (loadingSourceDevis()) {
   <p class="mx-auto max-w-5xl text-sm text-ink-soft">Chargement du devis…</p>
@@ -248,24 +299,6 @@
       </button>
     </section>
 
-    <label class="flex flex-col gap-1">
-      <span class="text-xs font-semibold uppercase tracking-wide text-ink-soft">
-        Nature de l'opération
-      </span>
-      <select
-        class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
-        [value]="store.manualNatureOfOperation()"
-        (change)="store.setNatureOfOperation($any($event.target).value)"
-      >
-        <option value="PRESTATION_SERVICES">Prestation de services</option>
-        <option value="LIVRAISON_BIENS">Livraison de biens</option>
-        <option value="BIENS_ET_SERVICES">Livraison de biens et prestation de services</option>
-      </select>
-      <app-field-hint
-        text="Mention obligatoire de la réforme de facturation électronique 2026 — le mode rapide la déduit automatiquement de vos lignes, mais le mode manuel n'a pas cette structure, d'où ce choix explicite."
-      />
-    </label>
-
     @if (store.documentType() === 'FACTURE') {
       <app-invoice-deposit-field
         [requested]="store.deposit().requested"
@@ -277,19 +310,6 @@
         (amountEurosChange)="onDepositAmountChange($event)"
         (resetAutoCalc)="store.resetDepositAutoCalc()"
       />
-
-      <label
-        class="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
-        title="Sous-traitance BTP : la TVA n'est pas facturée par vous, mais autoliquidée par votre client (art. 242 nonies A, 13° de l'annexe II au CGI)."
-      >
-        <input
-          type="checkbox"
-          [checked]="store.reverseChargeApplicable()"
-          (change)="store.setReverseChargeApplicable($any($event.target).checked)"
-          class="h-4 w-4 rounded border-line"
-        />
-        <span class="font-medium text-ink">Autoliquidation (sous-traitance BTP)</span>
-      </label>
     }
 
     <section appTourAnchor="manual-table" class="flex flex-col gap-3">
@@ -437,6 +457,56 @@
           </app-big-button>
         </div>
       </div>
+    </section>
+
+    <!-- 2026-08-25 fix: these two used to sit right after the customer
+         fields, above the line-items table — but both only ever affect the
+         PDF's own small-print mentions block at the very bottom of the page
+         (see PdfService's `mentions` stack: "Nature de l'opération : …" and
+         the autoliquidation citation are both rendered there, never near
+         the header). Manual mode's whole reason to exist is that what an
+         artisan sees corresponds to what actually gets computed/rendered —
+         that's true for the grid above (its columns/cells mirror the PDF's
+         own line-items table 1:1) but wasn't true for these two controls,
+         which had zero positional relationship to where their effect
+         actually shows up. Moved here, after the table and right before
+         submission, and styled to read as "small print," so the form's own
+         top-to-bottom order roughly matches the document's: customer info →
+         line items → legal mentions. -->
+    <section class="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+      <p class="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+        Mentions légales — apparaissent en petit texte au bas de la facture
+      </p>
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Nature de l'opération</span>
+        <select
+          class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
+          [value]="store.manualNatureOfOperation()"
+          (change)="store.setNatureOfOperation($any($event.target).value)"
+        >
+          <option value="PRESTATION_SERVICES">Prestation de services</option>
+          <option value="LIVRAISON_BIENS">Livraison de biens</option>
+          <option value="BIENS_ET_SERVICES">Livraison de biens et prestation de services</option>
+        </select>
+        <app-field-hint
+          text="Mention obligatoire de la réforme de facturation électronique 2026 — le mode rapide la déduit automatiquement de vos lignes, mais le mode manuel n'a pas cette structure, d'où ce choix explicite."
+        />
+      </label>
+
+      @if (store.documentType() === 'FACTURE') {
+        <label
+          class="flex items-center gap-3 text-sm"
+          title="Sous-traitance BTP : la TVA n'est pas facturée par vous, mais autoliquidée par votre client (art. 242 nonies A, 13° de l'annexe II au CGI)."
+        >
+          <input
+            type="checkbox"
+            [checked]="store.reverseChargeApplicable()"
+            (change)="store.setReverseChargeApplicable($any($event.target).checked)"
+            class="h-4 w-4 rounded border-line"
+          />
+          <span class="font-medium text-ink">Autoliquidation (sous-traitance BTP)</span>
+        </label>
+      }
     </section>
 
     @if (errorMessage(); as message) {

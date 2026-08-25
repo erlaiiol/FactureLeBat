@@ -32,6 +32,9 @@ import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
 import { UpdateManuallySignedDto } from './dto/update-manually-signed.dto';
 import { UploadInvoiceSignatureDto } from './dto/upload-invoice-signature.dto';
 import { InvoiceWithTotals } from './entities/invoice.entity';
+import { EInvoiceTransmissionService } from './e-invoicing/e-invoice-transmission.service';
+import { mapSuperPdpError } from './e-invoicing/map-super-pdp-error.util';
+import { FacturXService } from './facturx/facturx.service';
 import { InvoiceService } from './invoice.service';
 import { SendInvoiceEmailDto } from './mail/dto/send-invoice-email.dto';
 import { InvoiceMailTemplate } from './mail/invoice-mail-template.util';
@@ -51,6 +54,8 @@ export class InvoiceController {
     private readonly invoiceService: InvoiceService,
     private readonly pdfService: PdfService,
     private readonly invoiceMailService: InvoiceMailService,
+    private readonly facturXService: FacturXService,
+    private readonly eInvoiceTransmissionService: EInvoiceTransmissionService,
   ) {}
 
   @Post()
@@ -130,6 +135,75 @@ export class InvoiceController {
     return new StreamableFile(buffer, {
       disposition: `attachment; filename="${filePrefix}-${data.number}.pdf"`,
     });
+  }
+
+  // Phase 1.2-3 (2026 e-invoicing reform): the same rendered PDF, but as a
+  // Factur-X (BASIC profile) PDF/A-3 hybrid with the CII XML embedded.
+  // FACTURE-only — a DEVIS is a quote, not a fiscal invoice, and neither the
+  // reform nor Factur-X's own document-type semantics apply to one (see
+  // facturx-invoice.mapper.ts's header comment).
+  @Get(':id/facturx')
+  @Header('Content-Type', 'application/pdf')
+  async downloadFacturX(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<StreamableFile> {
+    const data = await this.invoiceService.getPdfData(user.companyId, id);
+    if (data.documentType !== 'FACTURE') {
+      throw new BadRequestException(
+        "La facture électronique n'est disponible que pour une FACTURE, pas un DEVIS.",
+      );
+    }
+    const pdfBuffer = await this.pdfService.generateInvoicePdf(data);
+    const hybridBuffer = await this.facturXService.generateHybridPdf(pdfBuffer, data);
+    return new StreamableFile(hybridBuffer, {
+      disposition: `attachment; filename="facture-${data.number}-factur-x.pdf"`,
+    });
+  }
+
+  // Phase 1.2-4 (2026 e-invoicing reform): generates the Factur-X hybrid
+  // (same pipeline as downloadFacturX above) and submits it through the
+  // connected PA — FACTURE-only, same gate (enforced inside
+  // EInvoiceTransmissionService.transmit). 503 if SUPER PDP isn't
+  // configured on this deployment or this company hasn't connected it yet.
+  @Post(':id/transmit')
+  async transmit(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<InvoiceWithTotals> {
+    try {
+      return await this.eInvoiceTransmissionService.transmit(user.companyId, id);
+    } catch (error) {
+      throw mapSuperPdpError(error);
+    }
+  }
+
+  // Re-fetches this invoice's latest status from the connected PA — an
+  // on-demand refresh action, not a background poll (see
+  // EInvoiceTransmissionService.refreshStatus's own comment).
+  @Post(':id/transmission-status')
+  async refreshTransmissionStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<InvoiceWithTotals> {
+    try {
+      return await this.eInvoiceTransmissionService.refreshStatus(user.companyId, id);
+    } catch (error) {
+      throw mapSuperPdpError(error);
+    }
+  }
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): cancels a
+  // still-pending automatic transmission (Company.autoTransmitViaPa) from
+  // the invoice board — never errors for a "too late"/already-cancelled
+  // invoice, only for one that doesn't exist for this company (see
+  // InvoiceService.cancelAutoTransmit's own comment).
+  @Post(':id/cancel-auto-transmit')
+  cancelAutoTransmit(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<InvoiceWithTotals> {
+    return this.invoiceService.cancelAutoTransmit(user.companyId, id);
   }
 
   // Phase 6: renders a PDF from a not-yet-saved draft so the artisan can

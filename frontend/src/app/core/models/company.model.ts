@@ -6,6 +6,10 @@ export interface CompanyProfile {
   id: string;
   name: string;
   siret: string;
+  // Phase 1.2-2 (2026 e-invoicing reform): the seller VAT-ID node Factur-X/
+  // EN16931-family XML expects — null for a franchise-en-base company that
+  // has no VAT number at all.
+  vatNumber: string | null;
   addressLine1: string;
   addressLine2: string | null;
   postalCode: string;
@@ -70,6 +74,16 @@ export interface CompanyProfile {
   // taxe d'après les débits" — same toggle-prints-a-fixed-mention pattern
   // as customFooterOnFacture, printed only on a FACTURE.
   vatOnDebitsOption: boolean;
+  // Phase 1.3-1 (2026 e-invoicing reform, workflow automation): how
+  // hands-off this artisan wants the e-invoicing pipeline to be — three
+  // independent toggles, not one mode, since real preferences don't
+  // collapse onto a single manual/automatic axis. autoTransmitViaPa/
+  // autoSyncReceivedInvoices are only meaningful once SUPER PDP is
+  // connected (see CompanySettingsPage's own disabled-until-connected
+  // rendering of these two).
+  autoAttachFacturX: boolean;
+  autoTransmitViaPa: boolean;
+  autoSyncReceivedInvoices: boolean;
   // Whether a logo has been uploaded (CompanyService.uploadLogo) — never the
   // image bytes themselves, see CompanyService.logoUrl for how the frontend
   // actually displays it.
@@ -79,6 +93,7 @@ export interface CompanyProfile {
 export interface UpdateCompanyRequest {
   name: string;
   siret: string;
+  vatNumber?: string;
   addressLine1: string;
   addressLine2?: string;
   postalCode: string;
@@ -105,4 +120,7 @@ export interface UpdateCompanyRequest {
   customFooterOnDevis: boolean;
   earlyPaymentDiscountMention?: string;
   vatOnDebitsOption: boolean;
+  autoAttachFacturX: boolean;
+  autoTransmitViaPa: boolean;
+  autoSyncReceivedInvoices: boolean;
 }

@@ -5,17 +5,20 @@ import {
   ElementRef,
   ViewChild,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, TimeoutError } from 'rxjs';
+import { firstValueFrom, Subscription, TimeoutError } from 'rxjs';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
+import { CompanyService } from '../../core/services/company.service';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { InvoiceShareService } from '../../core/services/invoice-share.service';
 import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
+import { DeadlineBannerComponent } from '../../shared/components/deadline-banner.component';
 import { IconCalendarComponent } from '../../shared/components/icon-calendar.component';
 import { IconChevronDownComponent } from '../../shared/components/icon-chevron-down.component';
 import { IconCloseComponent } from '../../shared/components/icon-close.component';
@@ -124,12 +127,14 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
     IconCloseComponent,
     IconCalendarComponent,
     BadgeComponent,
+    DeadlineBannerComponent,
   ],
   templateUrl: './invoice-board.page.html',
 })
 export class InvoiceBoardPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly invoiceShareService = inject(InvoiceShareService);
+  private readonly companyService = inject(CompanyService);
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -157,6 +162,40 @@ export class InvoiceBoardPage {
 
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly sharingInvoiceId = signal<string | null>(null);
+
+  // Phase 1.2-4 (2026 e-invoicing reform): fetched once — whether this
+  // company can transmit via SUPER PDP at all, gating the "Envoyer via PA"
+  // action the same way company-settings.page.ts gates its own connect
+  // button. transmittingInvoiceId mirrors sharingInvoiceId's per-row busy
+  // convention above.
+  protected readonly superPdpConnected = signal(false);
+  // Phase 1.2-6: distinct from superPdpConnected — lets the row show a
+  // "connect it in Mon entreprise" hint only when the feature actually
+  // exists on this deployment, never when SUPER PDP isn't configured at all.
+  protected readonly superPdpConfigured = signal(false);
+  protected readonly transmittingInvoiceId = signal<string | null>(null);
+  // Bug fix (2026-08-25 pipeline review): backs the row's "Actualiser le
+  // statut" action — EInvoiceTransmissionService.refreshStatus/
+  // InvoiceService.refreshTransmissionStatus already existed but had no UI
+  // entry point until now.
+  protected readonly refreshingTransmissionId = signal<string | null>(null);
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): a shared
+  // "now" tick for every row's countdown label — one interval for the whole
+  // board rather than one per row (InvoiceListRowComponent reads this via
+  // its `nowMs` input). Only ticks while at least one invoice actually has
+  // a pending auto-transmission, same "don't update a signal nobody's
+  // looking at" reasoning as TrialOfferModalComponent's own countdown.
+  protected readonly nowMs = signal(Date.now());
+  private tickIntervalId: ReturnType<typeof setInterval> | null = null;
+  private readonly hasPendingAutoTransmit = computed(() =>
+    this.invoices().some((invoice) => {
+      if (!invoice.scheduledTransmitAt) {
+        return false;
+      }
+      return new Date(invoice.scheduledTransmitAt).getTime() > this.nowMs();
+    }),
+  );
 
   // Phase 1.1-1
   protected readonly signatureModalInvoice = signal<InvoiceWithTotals | null>(null);
@@ -386,6 +425,15 @@ export class InvoiceBoardPage {
   }
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.stopAutoTransmitTicking());
+    effect(() => {
+      if (this.hasPendingAutoTransmit()) {
+        this.startAutoTransmitTicking();
+      } else {
+        this.stopAutoTransmitTicking();
+      }
+    });
+
     const queryParams = this.route.snapshot.queryParamMap;
     const repertoryParams: { kind: 'client' | 'product' | 'service' | 'discount' }[] = [
       { kind: 'client' },
@@ -417,6 +465,79 @@ export class InvoiceBoardPage {
           this.errorMessage.set('Impossible de charger vos factures. Veuillez réessayer.');
         },
       });
+
+    this.companyService
+      .getSuperPdpStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (status) => {
+          this.superPdpConfigured.set(status.configured);
+          this.superPdpConnected.set(status.configured && status.connected);
+        },
+        error: () => this.superPdpConnected.set(false),
+      });
+  }
+
+  protected async onTransmit(invoice: InvoiceWithTotals): Promise<void> {
+    if (this.transmittingInvoiceId()) {
+      return;
+    }
+    this.transmittingInvoiceId.set(invoice.id);
+    try {
+      const updated = await firstValueFrom(this.invoiceService.transmit(invoice.id));
+      this.mergeInvoice(updated);
+      this.toastService.success('Facture transmise à la plateforme agréée.');
+    } catch {
+      this.toastService.error('Impossible de transmettre cette facture pour le moment.');
+    } finally {
+      this.transmittingInvoiceId.set(null);
+    }
+  }
+
+  protected async onRefreshTransmissionStatus(invoice: InvoiceWithTotals): Promise<void> {
+    if (this.refreshingTransmissionId()) {
+      return;
+    }
+    this.refreshingTransmissionId.set(invoice.id);
+    try {
+      const updated = await firstValueFrom(
+        this.invoiceService.refreshTransmissionStatus(invoice.id),
+      );
+      this.mergeInvoice(updated);
+    } catch {
+      this.toastService.error('Impossible de récupérer le statut pour le moment.');
+    } finally {
+      this.refreshingTransmissionId.set(null);
+    }
+  }
+
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): "Annuler"
+  // on a still-pending auto-transmission — falls back to the row's normal
+  // manual "Envoyer via PA" state (scheduledTransmitAt comes back null on
+  // the updated invoice, which is exactly what pendingAutoTransmit reads).
+  protected async onCancelAutoTransmit(invoice: InvoiceWithTotals): Promise<void> {
+    try {
+      const updated = await firstValueFrom(this.invoiceService.cancelAutoTransmit(invoice.id));
+      this.mergeInvoice(updated);
+      this.toastService.success('Envoi automatique annulé.');
+    } catch {
+      this.toastService.error("Impossible d'annuler l'envoi automatique pour le moment.");
+    }
+  }
+
+  private startAutoTransmitTicking(): void {
+    if (this.tickIntervalId !== null) {
+      return;
+    }
+    this.nowMs.set(Date.now());
+    this.tickIntervalId = setInterval(() => this.nowMs.set(Date.now()), 30_000);
+  }
+
+  private stopAutoTransmitTicking(): void {
+    if (this.tickIntervalId !== null) {
+      clearInterval(this.tickIntervalId);
+      this.tickIntervalId = null;
+    }
   }
 
   protected onSearchInput(value: string): void {

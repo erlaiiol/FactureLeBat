@@ -41,6 +41,20 @@ A fourth claim underlies all three, and it's the one the app has to keep proving
 - **Confiance immédiate** — le prix s'affiche devant le client, tout de suite, pas de rendez-vous supplémentaire.
 - **Contrôle du détail** — vous choisissez ce qui apparaît sur la facture, selon vos propres critères (cross-references Phase 15's per-field show/hide).
 - **Rien ne se perd** — chaque devis et chaque facture reste suivi jusqu'au paiement, relances comprises (Phase 16) — pas de client oublié, pas d'impayé qui traîne.
+- **Prêt pour la réforme** (Phase 13.6) — facturation électronique (Factur-X) et transmission via plateforme agréée déjà intégrées, prêtes pour les échéances 2026-2027. The one pillar that isn't about speed/simplicity — a trust signal, not a feature pitch, so it earns its place in the grid without diluting the page's single core promise (see "The hero: a philosophy, not a feature list" above). Kept to what's actually shipped and provable (Phase 1.2-3/1.2-4): no mention of URSSAF or e-reporting nuance here — that's 1.3-7's job inside the product, not a stranger's first five seconds on the landing page.
+
+## Hero-adjacent trust badge (Phase 13.6)
+
+A small pill next to the existing trial-policy line under the hero's CTA,
+not a new competing block: **"Prêt pour la réforme de facturation
+électronique 2026-2027"**, with a checkmark icon. Deliberately "prêt pour"
+(ready for), not "conforme à" (compliant with) — the reform isn't legally
+binding yet for this app's users (reception 2026-09-01, emission
+2027-09-01), and "conforme" would imply a certification/legal claim the
+product doesn't hold. No live day-count here (unlike the in-app deadline
+banners) — a marketing page ticking down days reads as alarming to a
+stranger who isn't a customer yet, not reassuring; the dates are stated as
+plain facts.
 
 ## Primary CTA
 

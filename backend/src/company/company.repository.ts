@@ -33,6 +33,7 @@ export class CompanyRepository {
       data: {
         name: data.name,
         siret: data.siret,
+        vatNumber: data.vatNumber ?? null,
         addressLine1: data.addressLine1,
         addressLine2: data.addressLine2 ?? null,
         postalCode: data.postalCode,
@@ -63,6 +64,9 @@ export class CompanyRepository {
         customFooterOnDevis: data.customFooterOnDevis,
         earlyPaymentDiscountMention: data.earlyPaymentDiscountMention ?? null,
         vatOnDebitsOption: data.vatOnDebitsOption,
+        autoAttachFacturX: data.autoAttachFacturX,
+        autoTransmitViaPa: data.autoTransmitViaPa,
+        autoSyncReceivedInvoices: data.autoSyncReceivedInvoices,
       },
     });
   }
@@ -111,5 +115,97 @@ export class CompanyRepository {
   // that isn't there" is a safe, idempotent action from the artisan's side.
   async deleteLogo(companyId: string): Promise<void> {
     await this.prisma.companyLogo.deleteMany({ where: { companyId } });
+  }
+
+  // Phase 1.2-4: a narrow `select`, unlike findById above — the encrypted
+  // token pair is never needed alongside the rest of the Company profile
+  // (GET /company doesn't return it, see CompanyProfile), only from the
+  // e-invoicing transmission path itself.
+  findSuperPdpTokens(companyId: string): Promise<{
+    superPdpAccessTokenEncrypted: string | null;
+    superPdpRefreshTokenEncrypted: string | null;
+    superPdpTokenExpiresAt: Date | null;
+  }> {
+    return this.prisma.company.findUniqueOrThrow({
+      where: { id: companyId },
+      select: {
+        superPdpAccessTokenEncrypted: true,
+        superPdpRefreshTokenEncrypted: true,
+        superPdpTokenExpiresAt: true,
+      },
+    });
+  }
+
+  isSuperPdpConnected(companyId: string): Promise<boolean> {
+    return this.prisma.company
+      .findUniqueOrThrow({ where: { id: companyId }, select: { superPdpConnectedAt: true } })
+      .then((row) => row.superPdpConnectedAt !== null);
+  }
+
+  // Phase 1.3-4 (2026 e-invoicing reform, workflow automation):
+  // ReceivedInvoiceSyncCronService's own sweep source — cross-tenant, same
+  // "not scoped to one company" reasoning as ReminderCronService's own
+  // findReminderCounts. `superPdpConnectedAt: { not: null }` rather than a
+  // second call to isSuperPdpConnected per row — one query for every
+  // eligible company instead of N+1.
+  findCompaniesForAutoSync(): Promise<{ id: string }[]> {
+    return this.prisma.company.findMany({
+      where: { autoSyncReceivedInvoices: true, superPdpConnectedAt: { not: null } },
+      select: { id: true },
+    });
+  }
+
+  // Initial connect only — stamps superPdpConnectedAt with "now". A token
+  // refresh must never touch this (the artisan's original consent date),
+  // so it goes through refreshSuperPdpTokens below instead, a deliberately
+  // separate method rather than one with an easy-to-forget flag.
+  async saveSuperPdpTokens(
+    companyId: string,
+    tokens: { accessTokenEncrypted: string; refreshTokenEncrypted: string; expiresAt: Date },
+  ): Promise<void> {
+    await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        superPdpAccessTokenEncrypted: tokens.accessTokenEncrypted,
+        superPdpRefreshTokenEncrypted: tokens.refreshTokenEncrypted,
+        superPdpTokenExpiresAt: tokens.expiresAt,
+        superPdpConnectedAt: new Date(),
+      },
+    });
+  }
+
+  // `previousRefreshTokenEncrypted` gates the write to the row this refresh
+  // was actually computed from (optimistic concurrency): if the artisan hit
+  // "Déconnecter" (clearSuperPdpTokens, nulling this column) while a refresh
+  // was already in flight, this update matches zero rows instead of
+  // resurrecting a connection the artisan just explicitly severed. The
+  // already-refreshed access token is still handed back to this one caller
+  // (see CompanySuperPdpService.getValidAccessToken) — only persisting it is
+  // skipped, not the in-flight request that triggered the refresh.
+  async refreshSuperPdpTokens(
+    companyId: string,
+    previousRefreshTokenEncrypted: string,
+    tokens: { accessTokenEncrypted: string; refreshTokenEncrypted: string; expiresAt: Date },
+  ): Promise<void> {
+    await this.prisma.company.updateMany({
+      where: { id: companyId, superPdpRefreshTokenEncrypted: previousRefreshTokenEncrypted },
+      data: {
+        superPdpAccessTokenEncrypted: tokens.accessTokenEncrypted,
+        superPdpRefreshTokenEncrypted: tokens.refreshTokenEncrypted,
+        superPdpTokenExpiresAt: tokens.expiresAt,
+      },
+    });
+  }
+
+  async clearSuperPdpTokens(companyId: string): Promise<void> {
+    await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        superPdpAccessTokenEncrypted: null,
+        superPdpRefreshTokenEncrypted: null,
+        superPdpTokenExpiresAt: null,
+        superPdpConnectedAt: null,
+      },
+    });
   }
 }

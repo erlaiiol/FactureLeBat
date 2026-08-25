@@ -3,6 +3,12 @@ import { DocumentType, InvoiceEntryMode, NatureOperation } from '../../../genera
 export interface InvoicePdfLine {
   description: string;
   unit: string;
+  // Phase 1.2-3 (2026 e-invoicing reform): the UN/ECE Recommendation 20 unit
+  // code for the Factur-X CII XML — always populated from the real `Unit`
+  // enum via common/unit.util.ts's UNIT_CODES, independent of `unit` above
+  // (which blanks to '' when the artisan's showUnitDetail toggle is off,
+  // a purely cosmetic PDF choice this field must never inherit).
+  unitCode: string;
   quantity: string;
   // Phase 8.5: only set when packaging rounding actually changed the
   // priced quantity away from the raw site quantity above — PdfService
@@ -68,6 +74,10 @@ export interface InvoicePdfData {
   issuerPostalCode: string;
   issuerCity: string;
   issuerSiret: string;
+  // Phase 1.2-2 (2026 e-invoicing reform): the seller VAT-ID node Factur-X/
+  // EN16931-family XML expects — null for a franchise-en-base company that
+  // has no VAT number at all.
+  issuerVatNumber: string | null;
   issuerEmail: string | null;
   issuerPhone: string | null;
   // See InvoiceMapper.issuerFields — true only when the issuing company

@@ -155,6 +155,7 @@ else
 	audit_stripe_tiers "$BACKEND_ENV"
 	audit_feature_group "Bootstrap admin" "ADMIN_SEED_EMAIL" "$BACKEND_ENV"
 	audit_feature_group "Notifications push (Firebase)" "FIREBASE_SERVICE_ACCOUNT_JSON" "$BACKEND_ENV"
+	audit_feature_group "Transmission facture électronique (SUPER PDP)" "SUPERPDP_CLIENT_ID SUPERPDP_CLIENT_SECRET" "$BACKEND_ENV"
 fi
 
 # ---------------------------------------------------------------------
@@ -217,6 +218,7 @@ else
 	audit_stripe_tiers "$INFRA_ENV"
 	audit_feature_group "Bootstrap admin" "ADMIN_SEED_EMAIL" "$INFRA_ENV"
 	audit_feature_group "Notifications push (Firebase)" "FIREBASE_SERVICE_ACCOUNT_JSON" "$INFRA_ENV"
+	audit_feature_group "Transmission facture électronique (SUPER PDP)" "SUPERPDP_CLIENT_ID SUPERPDP_CLIENT_SECRET" "$INFRA_ENV"
 	audit_feature_group "Alerte expiration certificat TLS" "OPS_ALERT_EMAIL" "$INFRA_ENV"
 fi
 

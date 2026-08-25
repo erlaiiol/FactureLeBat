@@ -16,11 +16,33 @@ export class CompanyService {
   }
 
   async updateProfile(companyId: string, dto: UpdateCompanyDto): Promise<CompanyProfile> {
+    const sanitizedDto = await this.sanitizeWorkflowPreferences(companyId, dto);
     const [company, hasLogo] = await Promise.all([
-      this.companyRepository.update(companyId, dto),
+      this.companyRepository.update(companyId, sanitizedDto),
       this.companyRepository.hasLogo(companyId),
     ]);
     return { ...company, hasLogo };
+  }
+
+  // Phase 1.3-1 (2026 e-invoicing reform, workflow automation):
+  // autoTransmitViaPa/autoSyncReceivedInvoices only make sense once SUPER
+  // PDP is connected — the settings UI already disables these toggles until
+  // then (see docs/1.3/1.3-1-workflow-preferences.md), this is the
+  // server-side backstop so a stale or forged request can't turn either on
+  // regardless. Silently coerces rather than rejecting the whole request:
+  // every other field in the same PATCH is still perfectly valid to save.
+  private async sanitizeWorkflowPreferences(
+    companyId: string,
+    dto: UpdateCompanyDto,
+  ): Promise<UpdateCompanyDto> {
+    if (!dto.autoTransmitViaPa && !dto.autoSyncReceivedInvoices) {
+      return dto;
+    }
+    const connected = await this.companyRepository.isSuperPdpConnected(companyId);
+    if (connected) {
+      return dto;
+    }
+    return { ...dto, autoTransmitViaPa: false, autoSyncReceivedInvoices: false };
   }
 
   // Phase: top-right invoice logo. Only PdfService's PDF-building path and

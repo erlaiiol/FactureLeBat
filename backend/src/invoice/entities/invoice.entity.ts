@@ -1,6 +1,7 @@
 import {
   ActivityCategory,
   DocumentType,
+  EInvoiceTransmissionStatus,
   InvoiceEntryMode,
   InvoiceStatus,
   ManualColumnRole,
@@ -238,4 +239,19 @@ export interface InvoiceWithTotals {
   // frontend-computed hasSignatureProof || manuallySigned, never persisted
   // as its own field. See schema.prisma's comment on Invoice.manuallySigned.
   manuallySigned: boolean;
+  // Phase 1.2-4 (2026 e-invoicing reform): the connected PA's transmission
+  // lifecycle for this document — see schema.prisma's comment on
+  // EInvoiceTransmissionStatus/Invoice.eInvoiceTransmissionStatus for why
+  // this is FactureLe's own vocabulary, not the PA's raw status values.
+  eInvoiceTransmissionStatus: EInvoiceTransmissionStatus;
+  eInvoiceTransmittedAt: Date | null;
+  eInvoiceRejectionReason: string | null;
+  // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set while a
+  // FACTURE is queued for automatic PA transmission (Company.autoTransmitViaPa),
+  // non-null and in the future — the invoice board reads this to show the
+  // "Envoi automatique dans Xmin — Annuler" state. transmitCancelledAt is
+  // deliberately not exposed here, same "internal, opaque" precedent as
+  // superPdpInvoiceId: the frontend only ever needs to know whether a
+  // transmission is currently pending, which this one field already answers.
+  scheduledTransmitAt: Date | null;
 }

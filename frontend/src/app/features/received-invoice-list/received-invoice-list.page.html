@@ -1,0 +1,65 @@
+<div class="mb-6 flex items-center justify-between gap-4">
+  <h1 class="font-heading uppercase tracking-wide text-2xl font-bold text-ink">Factures reçues</h1>
+  @if (superPdpConnected()) {
+    <button
+      type="button"
+      [disabled]="syncing()"
+      (click)="sync()"
+      class="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+    >
+      {{ syncing() ? 'Actualisation…' : 'Actualiser' }}
+    </button>
+  }
+</div>
+
+<p class="mb-6 text-sm text-ink-soft">
+  Les factures que vos fournisseurs vous envoient par facturation électronique, via votre Plateforme
+  Agréée (SUPER PDP) — simple consultation et téléchargement, ces factures n'alimentent pas vos
+  rapports d'activité.
+</p>
+
+@if (loading()) {
+  @if (showSkeleton()) {
+    <app-skeleton-rows />
+  }
+} @else if (errorMessage(); as message) {
+  <p class="font-medium text-danger">{{ message }}</p>
+} @else if (!superPdpConnected()) {
+  <p class="rounded-lg bg-secondary-subtle px-4 py-3 text-sm text-ink-soft">
+    Connectez SUPER PDP depuis "Mon entreprise" pour recevoir vos factures fournisseurs ici.
+  </p>
+} @else if (invoices().length === 0) {
+  <p class="text-ink-soft">Aucune facture reçue pour le moment.</p>
+} @else {
+  <ul class="anim-preview-in flex flex-col gap-3">
+    @for (invoice of invoices(); track invoice.id) {
+      <li
+        class="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4"
+      >
+        <div class="flex flex-col gap-0.5">
+          <p class="font-semibold text-ink">{{ invoice.issuerName ?? 'Émetteur inconnu' }}</p>
+          <p class="text-sm text-ink-soft">
+            {{ invoice.number ?? 'Sans numéro' }}
+            @if (formattedIssueDate(invoice); as date) {
+              · {{ date }}
+            }
+          </p>
+        </div>
+        <div class="flex shrink-0 items-center gap-4">
+          @if (invoice.totalInclVatCents !== null) {
+            <span class="font-mono text-lg font-semibold text-ink">
+              {{ invoice.totalInclVatCents | centsToEuros }}
+            </span>
+          }
+          <a
+            [href]="downloadUrl(invoice)"
+            target="_blank"
+            class="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink hover:bg-primary-subtle hover:text-primary-subtle-fg"
+          >
+            Télécharger
+          </a>
+        </div>
+      </li>
+    }
+  </ul>
+}

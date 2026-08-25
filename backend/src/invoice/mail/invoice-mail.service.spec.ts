@@ -2,17 +2,20 @@ import { BadRequestException, ServiceUnavailableException } from '@nestjs/common
 import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
 import { MailerService, SendMailParams } from '../../mailer/mailer.service';
+import { FacturXService } from '../facturx/facturx.service';
 import { InvoiceMapper } from '../invoice.mapper';
 import { InvoiceRepository } from '../invoice.repository';
 import { PdfService } from '../pdf/pdf.service';
 import { InvoiceMailService } from './invoice-mail.service';
 
 const COMPANY_ID = 'company-1';
-const RAW_INVOICE = {
-  id: 'inv-1',
-  status: 'NON_PAYEE',
-  company: { name: 'Parquet Dupont' },
-} as never;
+function rawInvoice(autoAttachFacturX = false) {
+  return {
+    id: 'inv-1',
+    status: 'NON_PAYEE',
+    company: { name: 'Parquet Dupont', autoAttachFacturX },
+  } as never;
+}
 const SMTP = {
   host: 'smtp.example.com',
   port: 587,
@@ -26,9 +29,13 @@ function buildService(options: {
   customerEmail?: string | null;
   smtp?: typeof SMTP | null;
   sendError?: Error;
+  autoAttachFacturX?: boolean;
+  documentType?: 'FACTURE' | 'DEVIS';
+  generateHybridPdfError?: Error;
 }) {
-  const findById = jest.fn().mockResolvedValue(options.found === false ? null : RAW_INVOICE);
-  const markSent = jest.fn().mockResolvedValue(RAW_INVOICE);
+  const raw = rawInvoice(options.autoAttachFacturX ?? false);
+  const findById = jest.fn().mockResolvedValue(options.found === false ? null : raw);
+  const markSent = jest.fn().mockResolvedValue(raw);
   const findSignatureImage = jest.fn().mockResolvedValue(null);
   const invoiceRepository = {
     findById,
@@ -38,6 +45,7 @@ function buildService(options: {
 
   const toInvoiceWithTotals = jest.fn().mockReturnValue({
     number: 'F-000001',
+    documentType: options.documentType ?? 'FACTURE',
     customerName: 'Mme Martin',
     customerEmail:
       options.customerEmail === undefined ? 'client@exemple.fr' : options.customerEmail,
@@ -62,6 +70,11 @@ function buildService(options: {
     : jest.fn<Promise<void>, [SendMailParams]>().mockResolvedValue(undefined);
   const mailerService = { send } as unknown as MailerService;
 
+  const generateHybridPdf = options.generateHybridPdfError
+    ? jest.fn().mockRejectedValue(options.generateHybridPdfError)
+    : jest.fn().mockResolvedValue(Buffer.from('factur-x-pdf'));
+  const facturXService = { generateHybridPdf } as unknown as FacturXService;
+
   const service = new InvoiceMailService(
     invoiceRepository,
     mapper,
@@ -69,15 +82,18 @@ function buildService(options: {
     companyService,
     mailSettingsService,
     mailerService,
+    facturXService,
   );
   return {
     service,
+    raw,
     findById,
     markSent,
     send,
     getDecryptedCredentials,
     toPdfData,
     findSignatureImage,
+    generateHybridPdf,
   };
 }
 
@@ -100,13 +116,13 @@ describe('InvoiceMailService.send', () => {
   // param. A regression here would silently email an unsigned copy of a
   // document the artisan believes is signed.
   it('fetches and forwards the attached signature to the PDF render, keyed by this invoice', async () => {
-    const { service, findSignatureImage, toPdfData } = buildService({});
+    const { service, raw, findSignatureImage, toPdfData } = buildService({});
     findSignatureImage.mockResolvedValue({ image: Buffer.from('sig'), mimeType: 'image/png' });
 
     await service.send(COMPANY_ID, 'inv-1', {});
 
     expect(findSignatureImage).toHaveBeenCalledWith(COMPANY_ID, 'inv-1');
-    expect(toPdfData).toHaveBeenCalledWith(RAW_INVOICE, null, {
+    expect(toPdfData).toHaveBeenCalledWith(raw, null, {
       image: Buffer.from('sig'),
       mimeType: 'image/png',
     });
@@ -142,6 +158,62 @@ describe('InvoiceMailService.send', () => {
 
     await expect(service.send(COMPANY_ID, 'inv-1', {})).rejects.toThrow('SMTP refused');
     expect(markSent).not.toHaveBeenCalled();
+  });
+});
+
+// Phase 1.3-2 (2026 e-invoicing reform, workflow automation)
+describe('InvoiceMailService.send — autoAttachFacturX', () => {
+  it('attaches the plain PDF by default (autoAttachFacturX off)', async () => {
+    const { service, send, generateHybridPdf } = buildService({});
+
+    await service.send(COMPANY_ID, 'inv-1', {});
+
+    expect(generateHybridPdf).not.toHaveBeenCalled();
+    const attachment = send.mock.calls[0][0].attachments![0];
+    expect(attachment.filename).toBe('facture-F-000001.pdf');
+    expect(attachment.content.toString()).toBe('pdf');
+  });
+
+  it('attaches the Factur-X hybrid for a FACTURE when the company opted in', async () => {
+    const { service, send, generateHybridPdf } = buildService({
+      autoAttachFacturX: true,
+      documentType: 'FACTURE',
+    });
+
+    await service.send(COMPANY_ID, 'inv-1', {});
+
+    expect(generateHybridPdf).toHaveBeenCalledWith(Buffer.from('pdf'), {});
+    const attachment = send.mock.calls[0][0].attachments![0];
+    expect(attachment.filename).toBe('facture-F-000001-factur-x.pdf');
+    expect(attachment.content.toString()).toBe('factur-x-pdf');
+  });
+
+  it('never attaches Factur-X for a DEVIS, even when the company opted in', async () => {
+    const { service, send, generateHybridPdf } = buildService({
+      autoAttachFacturX: true,
+      documentType: 'DEVIS',
+    });
+
+    await service.send(COMPANY_ID, 'inv-1', {});
+
+    expect(generateHybridPdf).not.toHaveBeenCalled();
+    const attachment = send.mock.calls[0][0].attachments![0];
+    expect(attachment.filename).toBe('devis-F-000001.pdf');
+  });
+
+  it('falls back to the plain PDF and still sends when Factur-X generation fails', async () => {
+    const { service, send, markSent } = buildService({
+      autoAttachFacturX: true,
+      documentType: 'FACTURE',
+      generateHybridPdfError: new Error('Schematron validation failed'),
+    });
+
+    await service.send(COMPANY_ID, 'inv-1', {});
+
+    const attachment = send.mock.calls[0][0].attachments![0];
+    expect(attachment.filename).toBe('facture-F-000001.pdf');
+    expect(attachment.content.toString()).toBe('pdf');
+    expect(markSent).toHaveBeenCalled();
   });
 });
 

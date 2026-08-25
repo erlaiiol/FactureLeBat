@@ -27,6 +27,7 @@ import {
   DeclarationFrequency,
   DiscountType,
   DocumentType,
+  EInvoiceTransmissionStatus,
   InvoiceStatus,
   LegalStatus,
   PlanTier,
@@ -161,6 +162,14 @@ interface SeedDocument {
   // InvoiceSignature — mutually exclusive with manuallySigned in practice
   // (a real signature locks the checkbox, same as the app itself).
   attachSignaturePhoto?: boolean;
+  // Phase 1.2/1.3 review: overrides the schema default (NOT_SENT) to show
+  // the full range of PA transmission outcomes in the demo — a FACTURE this
+  // codebase would only ever reach through a real "Envoyer via PA" click or
+  // the 1.3-3 auto-transmit sweep, neither of which can run against a real
+  // PA here (no SUPERPDP_CLIENT_ID/SECRET in this demo — see 1.2-6's own
+  // .env.example comment), so this is pure historical-looking data, not a
+  // live transmission.
+  eInvoiceTransmissionStatus?: EInvoiceTransmissionStatus;
 }
 
 interface ProductDef {
@@ -340,6 +349,7 @@ async function createDocuments(
         depositAmountCents: doc.depositAmountCents ?? null,
         depositPaidAt: doc.depositPaidAt ? new Date(doc.depositPaidAt) : null,
         manuallySigned: doc.manuallySigned ?? false,
+        eInvoiceTransmissionStatus: doc.eInvoiceTransmissionStatus,
         lines: doc.lines
           ? {
               create: doc.lines.map((line, position) => ({
@@ -421,6 +431,43 @@ async function createDocuments(
   }
 }
 
+interface SeedReceivedInvoice {
+  superPdpInvoiceId: string;
+  issuerName: string;
+  issuerSiret: string;
+  number: string;
+  issueDate: string;
+  totalInclVatCents: number;
+  vatAmountCents: number;
+  receivedAt: string;
+}
+
+// Phase 1.2-5/1.3-4 review: the reception inbox's own data — never produced
+// by a real sync here (no SUPERPDP_CLIENT_ID/SECRET in this demo, see
+// createDocuments' eInvoiceTransmissionStatus comment above), so these are
+// inserted directly rather than through ReceivedInvoiceService.sync.
+async function createReceivedInvoices(
+  companyId: string,
+  invoices: SeedReceivedInvoice[],
+): Promise<void> {
+  for (const inv of invoices) {
+    await prisma.receivedInvoice.create({
+      data: {
+        companyId,
+        superPdpInvoiceId: inv.superPdpInvoiceId,
+        issuerName: inv.issuerName,
+        issuerSiret: inv.issuerSiret,
+        number: inv.number,
+        issueDate: new Date(inv.issueDate),
+        totalInclVatCents: inv.totalInclVatCents,
+        vatAmountCents: inv.vatAmountCents,
+        currencyCode: 'EUR',
+        receivedAt: new Date(inv.receivedAt),
+      },
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Vertical 1: artisan du bâtiment (multi-corps d'état rénovation)
 // ---------------------------------------------------------------------------
@@ -437,6 +484,17 @@ async function seedArtisanBatiment(): Promise<void> {
       phone: '04 78 12 34 56',
       legalStatus: LegalStatus.COMPANY,
       vatRateBasisPoints: 2000,
+      // Phase 1.2/1.3 review (2026-08-25): required, not cosmetic. Factur-X's
+      // standard-rate VAT category ("S", BR-S-02) hard-requires a real seller
+      // VAT number to pass schema validation — without this, GET
+      // /invoices/:id/facturx 422s on every FACTURE this tenant has, since
+      // 20% VAT always maps to category "S". Previously only present as an
+      // unpersisted live psql patch on the running demo container, lost on
+      // every fresh `make demo` — verified live (nulled it, confirmed the
+      // 422, restored it) before adding it here. L'Atelier Beauté below
+      // doesn't need one: 0% VAT maps to category "O", which BR-O-02 doesn't
+      // require a VAT number for.
+      vatNumber: 'FR06892345678',
       // First-invoice-pipeline reversal: an established demo persona has
       // already answered the one-time VAT-regime question in real life —
       // leaving this null would show the confirmation prompt on this demo
@@ -458,6 +516,20 @@ async function seedArtisanBatiment(): Promise<void> {
         'Devis gratuit et sans engagement. Intervention sous 48h en cas d’urgence.',
       customFooterOnFacture: true,
       customFooterOnDevis: true,
+      // Phase 1.3-1: workflow-automation preferences, all default false.
+      // Only autoAttachFacturX is turned on here — it has zero external
+      // dependency (just swaps the plain PDF for the Factur-X hybrid on
+      // send, see invoice-mail.service.ts), unlike autoTransmitViaPa/
+      // autoSyncReceivedInvoices, which only do anything once SUPER PDP is
+      // actually connected. superPdpConnectedAt is deliberately left unset
+      // (not seeded as "connected") below — CompanyService.
+      // sanitizeWorkflowPreferences treats autoTransmitViaPa/
+      // autoSyncReceivedInvoices=true without a connection as an invalid
+      // state and silently coerces it back to false on any real update, so
+      // seeding that combination here would only mislead a reader of this
+      // file. L'Atelier Beauté stays fully untouched, same opted-in/
+      // untouched contrast as the footer toggles above.
+      autoAttachFacturX: true,
     },
     email: DEMO_ARTISAN_EMAIL,
     password: DEMO_ARTISAN_PASSWORD,
@@ -829,6 +901,9 @@ async function seedArtisanBatiment(): Promise<void> {
       vatRateBasisPoints: 2000,
       status: InvoiceStatus.PAYEE,
       paidAt: '2026-02-20',
+      // Phase 1.3 review: oldest FACTURE, already paid — the "fully settled,
+      // long since transmitted" end of the range.
+      eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.ACCEPTED,
       // Phase 1.1-1: the "real photo signature" example — a signed chantier
       // handoff, photographed and attached.
       attachSignaturePhoto: true,
@@ -867,6 +942,9 @@ async function seedArtisanBatiment(): Promise<void> {
       vatRateBasisPoints: 2000,
       status: InvoiceStatus.NON_PAYEE,
       dueDate: '2026-06-15',
+      // Phase 1.3 review: overdue and its PA transmission was rejected —
+      // the "needs the artisan's attention" case.
+      eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.REJECTED,
       lines: [
         {
           description: 'Peinture acrylique mate blanc',
@@ -1105,6 +1183,9 @@ async function seedArtisanBatiment(): Promise<void> {
       vatRateBasisPoints: 2000,
       status: InvoiceStatus.NON_PAYEE,
       dueDate: '2026-09-01',
+      // Phase 1.3 review: mid-flight at the PA — uploaded, not yet through
+      // Schematron/semantic checks.
+      eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.SENT,
       lines: [
         {
           description: 'Tomettes hexagonales terre cuite 20x20 — motif cour intérieure',
@@ -1207,6 +1288,9 @@ async function seedArtisanBatiment(): Promise<void> {
       vatRateBasisPoints: 2000,
       status: InvoiceStatus.NON_PAYEE,
       dueDate: '2026-09-15',
+      // Phase 1.3 review: passed Schematron/semantic checks, not yet
+      // reached the counterpart access point.
+      eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.VALIDATED,
       lines: [
         {
           description: 'Carrelage sol grès cérame 60x60 gris anthracite — parties communes',
@@ -1277,6 +1361,44 @@ async function seedArtisanBatiment(): Promise<void> {
       depositPercentageBasisPoints: 3000,
       depositAmountCents: 150000,
       depositPaidAt: '2026-08-12',
+    },
+  ]);
+
+  // Phase 1.3-4 review: reception inbox sample data — three supplier
+  // FACTUREs, the kind of everyday materials/hardware/plumbing purchases an
+  // artisan du bâtiment actually receives. L'Atelier Beauté is left with
+  // none, same asymmetric contrast as its untouched workflow-automation
+  // toggles above.
+  await createReceivedInvoices(company.id, [
+    {
+      superPdpInvoiceId: 'demo-recv-001',
+      issuerName: 'Négoce Matériaux Rhône-Alpes',
+      issuerSiret: '41235678900012',
+      number: 'NMR-2026-04521',
+      issueDate: '2026-07-18',
+      totalInclVatCents: 342000,
+      vatAmountCents: 57000,
+      receivedAt: '2026-07-19',
+    },
+    {
+      superPdpInvoiceId: 'demo-recv-002',
+      issuerName: 'Quincaillerie du Bâtiment Lyonnais',
+      issuerSiret: '38945612300021',
+      number: 'QBL-88214',
+      issueDate: '2026-08-05',
+      totalInclVatCents: 51000,
+      vatAmountCents: 8500,
+      receivedAt: '2026-08-06',
+    },
+    {
+      superPdpInvoiceId: 'demo-recv-003',
+      issuerName: 'Sanitaire Chauffage Distribution 69',
+      issuerSiret: '50987654300019',
+      number: 'SCD-2026-1102',
+      issueDate: '2026-08-15',
+      totalInclVatCents: 226800,
+      vatAmountCents: 37800,
+      receivedAt: '2026-08-16',
     },
   ]);
 }

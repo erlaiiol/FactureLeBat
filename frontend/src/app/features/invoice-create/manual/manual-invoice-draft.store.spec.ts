@@ -9,6 +9,7 @@ const companyFixture: CompanyProfile = {
   id: 'company-1',
   name: 'Parquets Raillere',
   siret: '12345678900012',
+  vatNumber: null,
   addressLine1: '1 rue des Artisans',
   addressLine2: null,
   postalCode: '69001',
@@ -37,6 +38,9 @@ const companyFixture: CompanyProfile = {
   customFooterOnDevis: false,
   earlyPaymentDiscountMention: null,
   vatOnDebitsOption: false,
+  autoAttachFacturX: false,
+  autoTransmitViaPa: false,
+  autoSyncReceivedInvoices: false,
   hasLogo: false,
 };
 

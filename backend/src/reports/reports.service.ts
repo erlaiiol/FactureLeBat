@@ -3,9 +3,11 @@ import { ActivityCategory, InvoiceStatus, LegalStatus } from '../../generated/pr
 import { CompanyModel } from '../../generated/prisma/models';
 import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
+import { CompanySuperPdpService } from '../invoice/e-invoicing/company-super-pdp.service';
 import { InvoiceWithTotals } from '../invoice/entities/invoice.entity';
 import { InvoiceMapper } from '../invoice/invoice.mapper';
 import { InvoiceRepository } from '../invoice/invoice.repository';
+import { ReceivedInvoiceRepository } from '../received-invoice/received-invoice.repository';
 import {
   REPORT_CATEGORY_ORDER,
   resolveReportCategory,
@@ -14,6 +16,7 @@ import {
 import {
   ActivityAnalytics,
   CategoryTotal,
+  EInvoicingSnapshot,
   EstimatedCharges,
   EstimatedChargesCategoryRow,
   PlafondWarning,
@@ -52,6 +55,8 @@ export class ReportsService {
     private readonly invoiceMapper: InvoiceMapper,
     private readonly companyService: CompanyService,
     private readonly planGateService: PlanGateService,
+    private readonly companySuperPdp: CompanySuperPdpService,
+    private readonly receivedInvoiceRepository: ReceivedInvoiceRepository,
   ) {}
 
   async getQuarterlyReport(companyId: string, from: Date, to: Date): Promise<QuarterlyReport> {
@@ -151,6 +156,47 @@ export class ReportsService {
       activeClientCount: clientIds.size,
       activeProductCount: productKeys.size,
       unsignedFactureCount,
+    };
+  }
+
+  // Phase 1.3-6 (2026 e-invoicing reform, workflow automation): deliberately
+  // NOT gated behind assertFeatureAccess like getActivityAnalytics above —
+  // see docs/1.3/1.3-6-activity-analytics-metrics.md's own "Correction vs.
+  // the original plan" section. An e-invoicing compliance snapshot reads
+  // much closer to "legal necessity" (same category as the free quarterly
+  // report) than "business insight" — an artisan needs to know their own
+  // reform-compliance status regardless of subscription tier.
+  async getEInvoicingSnapshot(companyId: string): Promise<EInvoicingSnapshot> {
+    const now = new Date();
+    const windowStart = startOfMonthsAgo(now, ANALYTICS_WINDOW_MONTHS - 1);
+
+    const [
+      connected,
+      facturesInWindow,
+      transmittedFacturesInWindow,
+      unsentFactureCount,
+      receivedInvoiceCount,
+    ] = await Promise.all([
+      this.companySuperPdp.isConnected(companyId),
+      this.invoiceRepository.countFacturesInRange(companyId, windowStart, now),
+      this.invoiceRepository.countTransmittedFacturesInRange(companyId, windowStart, now),
+      this.invoiceRepository.countUnsentFactures(companyId),
+      this.receivedInvoiceRepository.countInRange(companyId, windowStart, now),
+    ]);
+
+    return {
+      configured: this.companySuperPdp.isConfigured(),
+      connected,
+      facturesInWindow,
+      transmittedFacturesInWindow,
+      // Null, not 0 — a company with no FACTUREs in the window has nothing
+      // to divide by, which reads very differently from "0% transmitted."
+      transmissionRatePercent:
+        facturesInWindow > 0
+          ? Math.round((transmittedFacturesInWindow / facturesInWindow) * 100)
+          : null,
+      unsentFactureCount,
+      receivedInvoiceCount,
     };
   }
 

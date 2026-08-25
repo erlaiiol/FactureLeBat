@@ -11,6 +11,11 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     id: 'company-1',
     name: 'Parquets Raillere',
     siret: '12345678900012',
+    vatNumber: 'FRAB123456789',
+    superPdpAccessTokenEncrypted: null,
+    superPdpRefreshTokenEncrypted: null,
+    superPdpTokenExpiresAt: null,
+    superPdpConnectedAt: null,
     addressLine1: '1 rue des Artisans',
     addressLine2: null,
     postalCode: '69001',
@@ -57,6 +62,9 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     customFooterOnDevis: false,
     earlyPaymentDiscountMention: null,
     vatOnDebitsOption: false,
+    autoAttachFacturX: false,
+    autoTransmitViaPa: false,
+    autoSyncReceivedInvoices: false,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),
     ...overrides,
@@ -114,6 +122,12 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     retroactiveDevis: null,
     signature: null,
     manuallySigned: false,
+    eInvoiceTransmissionStatus: 'NOT_SENT',
+    eInvoiceTransmittedAt: null,
+    eInvoiceRejectionReason: null,
+    superPdpInvoiceId: null,
+    scheduledTransmitAt: null,
+    transmitCancelledAt: null,
     depositPercentageBasisPoints: null,
     depositAmountCents: null,
     depositPaidAt: null,
@@ -449,6 +463,16 @@ describe('InvoiceMapper', () => {
       const result = mapper.toPdfData(invoiceWithLines());
       expect(result.issuerName).toBe('Parquets Raillere');
       expect(result.issuerSiret).toBe('12345678900012');
+      // Phase 1.2-2 (2026 e-invoicing reform).
+      expect(result.issuerVatNumber).toBe('FRAB123456789');
+    });
+
+    it('passes through a null issuerVatNumber for a franchise-en-base company with no VAT number', () => {
+      const invoice = invoiceWithLines({
+        company: companyFixture({ vatNumber: null }),
+      });
+      const result = mapper.toPdfData(invoice);
+      expect(result.issuerVatNumber).toBeNull();
     });
 
     it('reuses the same totals as toInvoiceWithTotals', () => {
