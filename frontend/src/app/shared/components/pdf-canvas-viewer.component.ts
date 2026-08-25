@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 // Side-effect only, must run before pdfjs-dist's own code ever executes —
 // see that file's comment for why.
-import '../utils/map-upsert-polyfill';
+import '../utils/pdfjs-baseline-polyfills';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Unlike Vite/webpack 5, Angular's esbuild-based `application` builder does
