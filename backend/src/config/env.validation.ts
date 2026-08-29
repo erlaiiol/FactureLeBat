@@ -85,6 +85,39 @@ class EnvironmentVariables {
   @IsOptional()
   SOURCING_DAILY_SEARCH_CAP = 20;
 
+  // Phase 1.4-1 voice/chat invoice drafting. Deliberately generic, not
+  // ANTHROPIC_*: InvoiceVoiceDraftService talks only to the LlmClient
+  // interface (backend/src/invoice-voice-draft/llm/), never to a specific
+  // provider — today's bound implementation (AnthropicLlmClientService,
+  // see invoice-voice-draft.module.ts) happens to read these two, but a
+  // different implementation swapped in later can reuse the same two names
+  // or define its own, without renaming anything here. Deliberately
+  // optional, same "boots fine without it" posture as GROQ_API_KEY: an
+  // artisan can run the whole app with this unset,
+  // InvoiceVoiceDraftService just reports the feature as unavailable (503)
+  // on POST /invoices/voice-draft instead of the app refusing to boot.
+  @IsOptional()
+  @IsString()
+  LLM_API_KEY?: string;
+
+  // Which model the bound LlmClient implementation calls — absent means
+  // that implementation's own hardcoded default (see e.g.
+  // AnthropicLlmClientService's DEFAULT_MODEL). A pure deployment knob,
+  // never read by anything generic to this feature.
+  @IsOptional()
+  @IsString()
+  LLM_MODEL?: string;
+
+  // Per-company daily cap on real LLM calls — this endpoint spends money
+  // on every call, resolved or rejected alike (see VoiceDraftRequest/
+  // InvoiceVoiceDraftRepository), same cost-guard role as
+  // SOURCING_DAILY_SEARCH_CAP above.
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  VOICE_DRAFT_DAILY_CAP = 30;
+
   // Phase 12 invoice mailing: base64-encoded 32-byte key (AES-256-GCM),
   // used to encrypt the artisan's SMTP app password at rest. Optional like
   // GROQ_API_KEY above — the app boots fine without it, MailSettingsService

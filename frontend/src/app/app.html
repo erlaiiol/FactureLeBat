@@ -681,8 +681,10 @@
   <app-footer />
 </div>
 
-<app-tour-overlay />
-<app-paywall-modal />
-<app-company-essentials-modal />
-<app-trial-offer-modal />
+@defer (on idle) {
+  <app-tour-overlay />
+  <app-paywall-modal />
+  <app-company-essentials-modal />
+  <app-trial-offer-modal />
+}
 <app-toast-container />

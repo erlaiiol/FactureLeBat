@@ -56,6 +56,18 @@ const protectedRoutes: Routes = [
                 (m) => m.InvoiceCreatePreviewStepPage,
               ),
           },
+          // Phase 1.4-2: where a resolved voice/typed draft lands, reusing
+          // this same shell/InvoiceDraftStore — not a nav tab (see
+          // invoice-create-shell.page.html), reached only via
+          // InvoiceCreateVoiceCapturePage's own navigation right after a
+          // draft resolves.
+          {
+            path: 'revue',
+            loadComponent: () =>
+              import('./features/invoice-create/voice/invoice-create-voice-review-step.page').then(
+                (m) => m.InvoiceCreateVoiceReviewStepPage,
+              ),
+          },
         ],
       },
       {
@@ -63,6 +75,17 @@ const protectedRoutes: Routes = [
         loadComponent: () =>
           import('./features/invoice-create/manual/invoice-create-manual.page').then(
             (m) => m.InvoiceCreateManualPage,
+          ),
+      },
+      // Phase 1.4-2: describe the devis/facture out loud or typed — flat,
+      // standalone like manuel/ above (no draft exists yet for the rapide
+      // shell's totals footer to show anything about); lands on rapide's
+      // own `revue` child once a draft resolves.
+      {
+        path: 'vocal',
+        loadComponent: () =>
+          import('./features/invoice-create/voice/invoice-create-voice-capture.page').then(
+            (m) => m.InvoiceCreateVoiceCapturePage,
           ),
       },
     ],

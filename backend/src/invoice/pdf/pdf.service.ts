@@ -2,7 +2,7 @@ import { dirname } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import pdfMake from 'pdfmake';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
-import { NatureOperation } from '../../../generated/prisma/enums';
+import { NatureOperation, SimplifiedDisplayLevel } from '../../../generated/prisma/enums';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const roboto = require('pdfmake/fonts/Roboto') as Record<string, unknown>;
 import { FACTURELE_WATERMARK_LOGO_BASE64 } from './facturele-watermark-logo';
@@ -42,6 +42,12 @@ const NATURE_OPERATION_LABELS: Record<NatureOperation, string> = {
   PRESTATION_SERVICES: 'Prestation de services',
   BIENS_ET_SERVICES: 'Livraison de biens et prestation de services',
 };
+
+// Phase 1.2-4: the generic line name GENERIC-level simplifiedDisplay prints
+// in place of every real product/service description — one place to change
+// the wording. Never reaches the Factur-X XML (FacturxInvoiceMapper builds
+// straight from data.lines/serviceLines, never this constant).
+const GENERIC_LINE_LABEL = 'Prestation';
 
 const eur = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 // Intl's fr-FR formatting uses narrow no-break/no-break spaces as group and
@@ -270,7 +276,13 @@ export class PdfService {
         // Phase 9.5: a MANUAL invoice has no lines/serviceLines at all — its
         // whole body is the free-form manualTable instead.
         data.entryMode === 'MANUAL' ? this.buildManualTable(data) : this.buildLinesTable(data),
-        ...(data.entryMode === 'GUIDED' && data.serviceLines.length > 0
+        // Phase 1.2-4: GENERIC already folds every service line into
+        // buildLinesTable's single consolidated row above — rendering this
+        // second table too would both double-count visually and contradict
+        // "just one generic line" for the whole document.
+        ...(data.entryMode === 'GUIDED' &&
+        data.simplifiedDisplay !== SimplifiedDisplayLevel.GENERIC &&
+        data.serviceLines.length > 0
           ? [{ text: '\n' }, this.buildServiceLinesTable(data)]
           : []),
         { text: '\n' },
@@ -388,13 +400,31 @@ export class PdfService {
     };
   }
 
-  // Phase 23: simplifiedDisplay collapses this down to just Description +
-  // Total — an artisan-chosen, document-level toggle (see InvoicePdfData.
-  // simplifiedDisplay), never the default. Header/widths/each row's cells
-  // must shrink together, so both column sets are built as whole arrays
-  // rather than filtering a fixed 5-column shape after the fact.
+  // Phase 23 / Phase 1.2-4: simplifiedDisplay escalates how much of this
+  // table an artisan-chosen, document-level toggle hides (see
+  // InvoicePdfData.simplifiedDisplay / SimplifiedDisplayLevel), never the
+  // default. SIMPLIFIED collapses down to just Description + Total; GENERIC
+  // collapses further still into one single "Prestation" row carrying the
+  // whole document's subtotal (buildDocDefinition also skips
+  // buildServiceLinesTable entirely in that case, so this is genuinely the
+  // only body row). Header/widths/each row's cells must shrink together
+  // within a branch, so every column set is built as a whole array rather
+  // than filtering a fixed 5-column shape after the fact.
   private buildLinesTable(data: InvoicePdfData): Content {
-    if (data.simplifiedDisplay) {
+    if (data.simplifiedDisplay === SimplifiedDisplayLevel.GENERIC) {
+      return {
+        table: {
+          headerRows: 1,
+          widths: ['*', 'auto'],
+          body: [
+            ['Description', 'Total'],
+            [GENERIC_LINE_LABEL, centsToEuros(data.subtotalExclVatCents)],
+          ],
+        },
+      };
+    }
+
+    if (data.simplifiedDisplay === SimplifiedDisplayLevel.SIMPLIFIED) {
       const header = ['Description', 'Total'];
       const rows = data.lines.map((line: InvoicePdfLine) => [
         line.description,

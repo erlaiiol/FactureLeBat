@@ -16,7 +16,12 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { DocumentType, InvoiceEntryMode, NatureOperation } from '../../../generated/prisma/enums';
+import {
+  DocumentType,
+  InvoiceEntryMode,
+  NatureOperation,
+  SimplifiedDisplayLevel,
+} from '../../../generated/prisma/enums';
 import { CreateInvoiceCustomerFieldDto } from './create-invoice-customer-field.dto';
 import { CreateInvoiceDiscountLineDto } from './create-invoice-discount-line.dto';
 import { CreateInvoiceLineDto } from './create-invoice-line.dto';
@@ -199,14 +204,14 @@ export class CreateInvoiceDto {
   @Max(10000)
   vatRateBasisPointsOverride?: number;
 
-  // Phase 23: document-level PDF rendering toggle set from the
-  // "Personnaliser l'affichage" screen — hides the whole Quantité/Prix
-  // unitaire columns, leaving only description + line total. Same
-  // rendering-only spirit as CreateInvoiceLineDto's showUnitDetail/
-  // showBillingDetail, just document-level instead of per-line.
+  // Phase 23 / Phase 1.2-4: document-level PDF rendering toggle set from the
+  // "Personnaliser l'affichage" screen — see SimplifiedDisplayLevel for what
+  // each level hides. Same rendering-only spirit as CreateInvoiceLineDto's
+  // showUnitDetail/showBillingDetail, just document-level instead of
+  // per-line.
   @IsOptional()
-  @IsBoolean()
-  simplifiedDisplay?: boolean = false;
+  @IsEnum(SimplifiedDisplayLevel)
+  simplifiedDisplay?: SimplifiedDisplayLevel = SimplifiedDisplayLevel.NONE;
 
   // Phase 1.1-3: the requested deposit — see schema.prisma's comment on
   // Invoice.depositPercentageBasisPoints/depositAmountCents.

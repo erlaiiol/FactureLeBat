@@ -26,6 +26,7 @@ import {
   SignatureMethod,
   NatureOperation,
   EInvoiceTransmissionStatus,
+  SimplifiedDisplayLevel,
 } from '../../generated/prisma/enums';
 import { computeNextDocumentNumber } from './next-number.util';
 
@@ -177,9 +178,9 @@ export interface CreateInvoiceData {
   // checked by InvoiceService.create) — when absent, the repository derives
   // one itself (see createWithSequentialNumber / computeNextDocumentNumber).
   number?: string;
-  // Phase 23: document-level PDF rendering toggle — see schema.prisma's
-  // comment on Invoice.simplifiedDisplay.
-  simplifiedDisplay: boolean;
+  // Phase 23 / Phase 1.2-4: document-level PDF rendering toggle — see
+  // schema.prisma's comment on Invoice.simplifiedDisplay.
+  simplifiedDisplay: SimplifiedDisplayLevel;
   // Phase 1.1-3: the requested deposit — both undefined when none was
   // requested (never set together with the other, enforced by
   // DepositFieldsConsistency at the DTO boundary). See schema.prisma's

@@ -45,7 +45,7 @@ function sampleFactureData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfD
     ],
     serviceLines: [{ name: 'Pose', amountCents: 20000 }],
     discountLines: [],
-    simplifiedDisplay: false,
+    simplifiedDisplay: 'NONE',
     vatApplicable: true,
     vatRateBasisPoints: 2000,
     subtotalExclVatCents: 65000,

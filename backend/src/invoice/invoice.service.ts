@@ -11,6 +11,7 @@ import {
   InvoiceStatus,
   NatureOperation,
   SignatureMethod,
+  SimplifiedDisplayLevel,
 } from '../../generated/prisma/enums';
 import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
@@ -188,7 +189,7 @@ export class InvoiceService {
       // Phase 27: absent means "use the auto-suggested next number" — see
       // createInvoiceRow/computeNextDocumentNumber.
       number: dto.number,
-      simplifiedDisplay: dto.simplifiedDisplay ?? false,
+      simplifiedDisplay: dto.simplifiedDisplay ?? SimplifiedDisplayLevel.NONE,
       // Phase 1.1-3: DepositFieldsConsistency already guarantees these are
       // both present or both absent, and only ever present for a FACTURE.
       depositPercentageBasisPoints: dto.depositPercentageBasisPoints,

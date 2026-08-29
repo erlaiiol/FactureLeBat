@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PlanGateService } from '../billing/plan-gate.service';
+import { FuzzyMatch } from '../common/fuzzy-match';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { CustomerRepository } from './customer.repository';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -117,9 +118,17 @@ export class CustomerService {
   // Phase 1.1-7: lenient counterpart of findById, for InvoiceService.previewPdf
   // — that path deliberately skips the strict existence check create() does
   // (see its own comment), so a stale/typo'd customerId in a draft preview
-  // must resolve to "not professional" rather than a 404.
+  // must resolve to "not professional" rather than a 404. Also reused by
+  // Phase 1.4-1's voice-draft endpoint to re-validate an LLM-proposed
+  // customerId the same lenient way.
   findByIdOrNull(companyId: string, id: string): Promise<CustomerProfile | null> {
     return this.customerRepository.findById(companyId, id);
+  }
+
+  // Phase 1.4-1: typo/voice-transcription-tolerant search — see
+  // CustomerRepository.searchFuzzy.
+  searchFuzzy(companyId: string, query: string): Promise<FuzzyMatch<CustomerProfile>[]> {
+    return this.customerRepository.searchFuzzy(companyId, query);
   }
 
   // Phase 30: catalog-size cap, one of the 3 tier axes — see

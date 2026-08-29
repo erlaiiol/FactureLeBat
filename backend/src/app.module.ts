@@ -17,6 +17,7 @@ import { CustomerModule } from './customer/customer.module';
 import { DatabaseModule } from './database/database.module';
 import { DiscountModule } from './discount/discount.module';
 import { InvoiceModule } from './invoice/invoice.module';
+import { InvoiceVoiceDraftModule } from './invoice-voice-draft/invoice-voice-draft.module';
 import { MailSettingsModule } from './mail-settings/mail-settings.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ProductModule } from './product/product.module';
@@ -45,6 +46,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     CustomerModule,
     DiscountModule,
     InvoiceModule,
+    InvoiceVoiceDraftModule,
     MailSettingsModule,
     OnboardingModule,
     ProductModule,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CustomerModel as Customer } from '../../generated/prisma/models';
+import { FuzzyMatch } from '../common/fuzzy-match';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -15,6 +16,17 @@ export class CustomerRepository {
   // Revisit with real pagination once an artisan's customer list is large
   // enough that "first 500 alphabetically" stops being everything.
   private static readonly MAX_LISTED_CUSTOMERS = 500;
+
+  // Phase 1.4-1: how many fuzzy candidates the voice-draft endpoint ever
+  // needs to consider for one reference — small on purpose, this feeds an
+  // LLM prompt, not a picker UI.
+  private static readonly FUZZY_SEARCH_LIMIT = 5;
+  // Below this pg_trgm similarity score a "match" is closer to noise than
+  // a real candidate — tuned generously low (French names are short, so
+  // trigram scores run low even for a genuine match) rather than tight,
+  // since a false positive here just becomes one more candidate for the
+  // LLM to weigh, while a false negative silently hides a real customer.
+  private static readonly FUZZY_SIMILARITY_THRESHOLD = 0.2;
 
   // Phase 14.5: matches name, companyName, address, and description — not
   // name alone (see docs/roadmap.md Phase 14.5). Same plain substring
@@ -72,6 +84,30 @@ export class CustomerRepository {
     }
 
     return result;
+  }
+
+  // Phase 1.4-1: typo/voice-transcription-tolerant search, additive to
+  // findAll's plain substring match above — used only by the voice-draft
+  // endpoint (see docs/1.4/1.4-1's scope decision: this app's other search
+  // surfaces stay plain-substring on purpose, this one specifically needs
+  // the tolerance voice transcription requires). Raw SQL because Prisma's
+  // query builder has no pg_trgm similarity() operator; both interpolated
+  // values are still safely parameterized by $queryRaw's tagged template,
+  // not string-concatenated.
+  async searchFuzzy(companyId: string, query: string): Promise<FuzzyMatch<Customer>[]> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const rows = await this.prisma.$queryRaw<Array<Customer & { score: number }>>`
+      SELECT *, similarity(lower(name), lower(${trimmed})) AS score
+      FROM "Customer"
+      WHERE "companyId" = ${companyId}
+        AND similarity(lower(name), lower(${trimmed})) > ${CustomerRepository.FUZZY_SIMILARITY_THRESHOLD}
+      ORDER BY score DESC
+      LIMIT ${CustomerRepository.FUZZY_SEARCH_LIMIT}
+    `;
+    return rows.map(({ score, ...row }) => ({ row: row, score: Number(score) }));
   }
 
   // findFirst (not findUnique) so the companyId filter can be part of the

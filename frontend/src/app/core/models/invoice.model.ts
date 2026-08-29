@@ -14,6 +14,14 @@ export type InvoiceEntryMode = 'GUIDED' | 'MANUAL';
 // shape everywhere below, just a different label and numbering sequence.
 export type DocumentType = 'DEVIS' | 'FACTURE';
 
+// Phase 23 / Phase 1.2-4: how much body-table detail the generated PDF
+// shows — NONE is full detail, SIMPLIFIED hides Unité/Quantité/Prix
+// unitaire (description + line total only), GENERIC collapses further
+// still into a single "Prestation" row carrying the document's subtotal.
+// GUIDED-only — see CreateInvoiceRequest.simplifiedDisplay /
+// InvoiceWithTotals.simplifiedDisplay and backend SimplifiedDisplayLevel.
+export type SimplifiedDisplayLevel = 'NONE' | 'SIMPLIFIED' | 'GENERIC';
+
 // Phase 1.1-8 (2026 e-invoicing reform): "nature de l'opération" — GUIDED
 // derives it (never sent by the frontend), MANUAL sends an explicit choice.
 // See CreateInvoiceRequest.manualNatureOfOperation and
@@ -174,12 +182,11 @@ export interface CreateInvoiceRequest {
   // mirrors the backend's ManualModeFieldsConsistency rule.
   vatApplicableOverride?: boolean;
   vatRateBasisPointsOverride?: number;
-  // Phase 23: document-level PDF rendering toggle, set from the "Personnaliser
-  // l'affichage" screen — hides the whole Quantité/Prix unitaire columns,
-  // showing only description + line total. Purely a display concern, same
-  // spirit as a line's showUnitDetail/showBillingDetail; defaults to false
-  // backend-side when omitted.
-  simplifiedDisplay?: boolean;
+  // Phase 23 / Phase 1.2-4: document-level PDF rendering toggle, set from
+  // the "Personnaliser l'affichage" screen — see SimplifiedDisplayLevel.
+  // Purely a display concern, same spirit as a line's showUnitDetail/
+  // showBillingDetail; defaults to NONE backend-side when omitted.
+  simplifiedDisplay?: SimplifiedDisplayLevel;
   // Phase 1.1-3: the requested deposit — both required together, FACTURE-only
   // (mirrors the backend's DepositFieldsConsistency rule). depositAmountCents
   // is the resolved euro amount actually tracked; depositPercentageBasisPoints
@@ -356,8 +363,8 @@ export interface InvoiceWithTotals {
   dueDate: string | null;
   paidAt: string | null;
   lastReminderAt: string | null;
-  // Phase 23: see CreateInvoiceRequest.simplifiedDisplay.
-  simplifiedDisplay: boolean;
+  // Phase 23 / Phase 1.2-4: see CreateInvoiceRequest.simplifiedDisplay.
+  simplifiedDisplay: SimplifiedDisplayLevel;
   // Phase 1.1-1: whether a real signature proof (drawn or photographed) is
   // attached — never the image bytes themselves (see
   // InvoiceService.signatureUrl for how those are fetched). The "signed"
