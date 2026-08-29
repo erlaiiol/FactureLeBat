@@ -702,9 +702,10 @@ export class ManualInvoiceDraftStore {
     });
 
     this.documentType.set('FACTURE');
-    // A devis never carries a deposit — same reasoning as
+    // A devis never carries a deposit, and unlike reset() this does NOT fall
+    // back to the company's habitual default rate either — same reasoning as
     // InvoiceDraftStore.loadFromInvoice.
-    this.applyCompanyDefaultDeposit(this.company());
+    this.deposit.set(EMPTY_DEPOSIT);
     this.sourceDevisId.set(source.id);
     // Same "a converted facture always gets its own fresh number" rule as
     // InvoiceDraftStore.loadFromInvoice.

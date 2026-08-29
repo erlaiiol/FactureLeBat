@@ -1,4 +1,9 @@
-import { DocumentType, InvoiceEntryMode, NatureOperation } from '../../../generated/prisma/enums';
+import {
+  DocumentType,
+  InvoiceEntryMode,
+  NatureOperation,
+  SimplifiedDisplayLevel,
+} from '../../../generated/prisma/enums';
 
 export interface InvoicePdfLine {
   description: string;
@@ -151,11 +156,12 @@ export interface InvoicePdfData {
   serviceLines: InvoicePdfServiceLine[];
   discountLines: InvoicePdfDiscountLine[];
   manualTable?: InvoicePdfManualTable;
-  // Phase 23: GUIDED-only — hides the whole Quantité/Prix unitaire columns
-  // in PdfService.buildLinesTable, leaving only description + total. Always
-  // false for MANUAL, whose freehand column set has no fixed Quantité/Prix
-  // unitaire columns to hide in the first place.
-  simplifiedDisplay: boolean;
+  // Phase 23 / Phase 1.2-4: GUIDED-only — escalates how much detail
+  // PdfService.buildLinesTable renders (see SimplifiedDisplayLevel). Always
+  // NONE for MANUAL, whose freehand column set has no fixed Quantité/Prix
+  // unitaire columns to hide in the first place, and no single "the"
+  // product/service to collapse GENERIC's consolidated row down to.
+  simplifiedDisplay: SimplifiedDisplayLevel;
 
   vatApplicable: boolean;
   vatRateBasisPoints: number;

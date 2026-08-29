@@ -9,6 +9,7 @@ import {
   NatureOperation,
   PlanTier,
   ServiceVisibility,
+  SimplifiedDisplayLevel,
 } from '../../generated/prisma/enums';
 import { CompanyModel as Company } from '../../generated/prisma/models';
 import { getEffectivePlanTier } from '../billing/plan-gate.service';
@@ -509,8 +510,9 @@ export class InvoiceMapper {
         rows,
       },
       // Manual mode's freehand column set has no fixed Quantité/Prix
-      // unitaire columns to hide — see InvoicePdfData.simplifiedDisplay.
-      simplifiedDisplay: false,
+      // unitaire columns to hide, and no single "the" line to collapse a
+      // GENERIC row down to — see InvoicePdfData.simplifiedDisplay.
+      simplifiedDisplay: SimplifiedDisplayLevel.NONE,
       vatApplicable: withTotals.vatApplicable,
       vatRateBasisPoints: withTotals.vatRateBasisPoints,
       reverseChargeApplicable: withTotals.reverseChargeApplicable,
@@ -726,7 +728,7 @@ export class InvoiceMapper {
       dueDate: null,
       paidAt: null,
       lastReminderAt: null,
-      simplifiedDisplay: dto.simplifiedDisplay ?? false,
+      simplifiedDisplay: dto.simplifiedDisplay ?? SimplifiedDisplayLevel.NONE,
       // Phase 1.1-1: an unsaved draft has no id yet, so it can never have a
       // signature attached — always this fixed default, same reasoning as
       // status/dueDate/paidAt above.
@@ -850,8 +852,9 @@ export class InvoiceMapper {
       paidAt: null,
       lastReminderAt: null,
       // Manual mode's freehand column set has no fixed Quantité/Prix
-      // unitaire columns to hide — see InvoicePdfData.simplifiedDisplay.
-      simplifiedDisplay: false,
+      // unitaire columns to hide, and no single "the" line to collapse a
+      // GENERIC row down to — see InvoicePdfData.simplifiedDisplay.
+      simplifiedDisplay: SimplifiedDisplayLevel.NONE,
       // Phase 1.1-1: same "unsaved draft has no signature" reasoning as the
       // GUIDED preview branch above.
       hasSignatureProof: false,
@@ -925,7 +928,7 @@ export class InvoiceMapper {
             totalCents: row.lineTotalExclVatCents,
           })),
         },
-        simplifiedDisplay: false,
+        simplifiedDisplay: SimplifiedDisplayLevel.NONE,
         vatApplicable: withTotals.vatApplicable,
         vatRateBasisPoints: withTotals.vatRateBasisPoints,
         reverseChargeApplicable: withTotals.reverseChargeApplicable,

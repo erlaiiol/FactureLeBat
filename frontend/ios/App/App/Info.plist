@@ -53,6 +53,16 @@
 	upload ("Does your app use encryption?"). -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Phase 1.4-3: required by @capgo/capacitor-speech-recognition
+	(SFSpeechRecognizer/SpeechAnalyzer + AVAudioSession) — shown once by
+	iOS the first time InvoiceCreateVoiceCapturePage's native path calls
+	requestPermissions(), before any audio is captured. Both keys are
+	mandatory: iOS refuses to show the permission prompt at all (silent
+	failure) if either is missing, rather than falling back to one. -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Utilisé pour transcrire ce que vous dictez lors de la création d’une facture ou d’un devis par commande vocale.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Le micro est utilisé pour dicter le contenu d’une facture ou d’un devis.</string>
 	<!-- Phase 22: lets a push notification wake the app in the background
 	to update local state before the user taps it — required alongside the
 	"Background Modes" capability toggle in Xcode's Signing & Capabilities

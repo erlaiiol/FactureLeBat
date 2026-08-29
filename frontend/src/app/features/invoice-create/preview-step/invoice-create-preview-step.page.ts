@@ -30,10 +30,44 @@ import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
 import { SignatureModalComponent } from '../../../shared/components/signature-modal.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { TypewriterTextComponent } from '../../../shared/components/typewriter-text.component';
 import { delayedSkeleton } from '../../../shared/utils/delayed-skeleton';
 import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
 import { InvoiceDepositFieldComponent } from '../components/invoice-deposit-field.component';
+import { SimplifiedDisplaySliderComponent } from '../components/simplified-display-slider.component';
 import { InvoiceDraftStore } from '../invoice-draft.store';
+
+// The 3 easy-to-miss toggles highlighted at the top of this page — content
+// is always shown for all 3, but the order their typewriter subtitle "types
+// itself in" (see hintState/onHintTyped) is reshuffled on every visit, to
+// nudge artisans into actually reading them over time without ever risking
+// one silently not appearing (see the acompte-carried-over-from-devis
+// incident this replaced a random-content idea for). Strictly sequential —
+// each one only starts once the previous has fully typed (onHintTyped
+// advances hintProgress), never several at once.
+const HINT_KEYS = ['simplifiedDisplay', 'deposit', 'reverseCharge'] as const;
+type HintKey = (typeof HINT_KEYS)[number];
+
+// deposit's own subtitle text lives on InvoiceDepositFieldComponent
+// (it owns that field's whole template) — these two are the only ones
+// rendered directly in this page's own template, in both their 'active'
+// (typewriter) and 'done' (static) states, hence centralized here rather
+// than inlined twice.
+const HINT_TEXT: Record<'simplifiedDisplay' | 'reverseCharge', string> = {
+  simplifiedDisplay:
+    "Choisissez le niveau de détail affiché sur le document envoyé au client : complet, simplifié (nom + prix total), ou minimal (une seule ligne). Le calcul et le total ne changent jamais, seul l'affichage change.",
+  reverseCharge:
+    "La TVA n'est pas facturée par vous, mais autoliquidée par votre client — réservé à la sous-traitance BTP (art. 242 nonies A, 13° de l'annexe II au CGI).",
+};
+
+function shuffledHintOrder(): HintKey[] {
+  const keys = [...HINT_KEYS];
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  return keys;
+}
 
 // Phase 15: the mandatory stop between "lignes" and a real, persisted
 // invoice. Renders an HTML mirror of the document (not the actual PDF —
@@ -63,6 +97,8 @@ import { InvoiceDraftStore } from '../invoice-draft.store';
     SignatureModalComponent,
     TourAnchorDirective,
     InvoiceDepositFieldComponent,
+    SimplifiedDisplaySliderComponent,
+    TypewriterTextComponent,
   ],
   templateUrl: './invoice-create-preview-step.page.html',
 })
@@ -79,6 +115,32 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly draftStore = inject(InvoiceDraftStore);
 
   protected readonly today = new Date();
+
+  // Mirrors PdfService's GENERIC_LINE_LABEL — this HTML mirror must never
+  // disagree with what the real PDF prints for the same level.
+  protected readonly genericLineLabel = 'Prestation';
+
+  // Fresh component instance per navigation to this route (see the route
+  // config), so this reshuffles on every visit — see HINT_KEYS' doc comment.
+  private readonly hintOrder = shuffledHintOrder();
+  protected readonly hintProgress = signal(0);
+
+  protected hintState(key: HintKey): 'pending' | 'active' | 'done' {
+    const index = this.hintOrder.indexOf(key);
+    const progress = this.hintProgress();
+    if (index < progress) {
+      return 'done';
+    }
+    return index === progress ? 'active' : 'pending';
+  }
+
+  protected onHintTyped(): void {
+    this.hintProgress.update((value) => value + 1);
+  }
+
+  protected hintText(key: 'simplifiedDisplay' | 'reverseCharge'): string {
+    return HINT_TEXT[key];
+  }
 
   protected readonly loading = signal(true);
   protected readonly showSkeleton = delayedSkeleton(this.loading);

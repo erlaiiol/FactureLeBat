@@ -12,10 +12,12 @@ import {
   InvoiceWithTotals,
   RedistributionStrategy,
   ServiceLineVisibility,
+  SimplifiedDisplayLevel,
   WasteSurcharge,
 } from '../../core/models/invoice.model';
 import { ActivityCategory } from '../../core/models/report.model';
 import { ServicePricingMode } from '../../core/models/service.model';
+import { VoiceInvoiceDraft } from '../../core/models/voice-draft.model';
 import { isAreaUnit, Unit } from '../../core/models/unit.model';
 import { CompanyService } from '../../core/services/company.service';
 import { CustomerService } from '../../core/services/customer.service';
@@ -242,7 +244,7 @@ interface PersistedDraft {
   serviceLines: InvoiceServiceLineDraft[];
   discountLines: InvoiceDiscountLineDraft[];
   documentType: DocumentType;
-  simplifiedDisplay: boolean;
+  simplifiedDisplay: SimplifiedDisplayLevel;
   sourceDevisId: string | null;
   number: string;
   deposit: InvoiceDepositDraft;
@@ -312,10 +314,10 @@ export class InvoiceDraftStore {
   readonly lines = signal<InvoiceLineDraft[]>([]);
   readonly serviceLines = signal<InvoiceServiceLineDraft[]>([]);
   readonly discountLines = signal<InvoiceDiscountLineDraft[]>([]);
-  // Phase 23: document-level toggle set from the "Personnaliser l'affichage"
-  // step — hides the whole Quantité/Prix unitaire columns on the rendered
-  // document, leaving only description + line total.
-  readonly simplifiedDisplay = signal(false);
+  // Phase 23 / Phase 1.2-4: document-level toggle set from the
+  // "Personnaliser l'affichage" step — see SimplifiedDisplayLevel for what
+  // each level hides.
+  readonly simplifiedDisplay = signal<SimplifiedDisplayLevel>('NONE');
   // Phase 1.1-3: the "Demander un acompte" toggle — see InvoiceDepositDraft.
   readonly deposit = signal<InvoiceDepositDraft>(EMPTY_DEPOSIT);
   // Set once hydrateFromStorage() actually restored a persisted deposit —
@@ -685,8 +687,11 @@ export class InvoiceDraftStore {
     );
   }
 
-  toggleSimplifiedDisplay(): void {
-    this.simplifiedDisplay.update((value) => !value);
+  // Phase 1.2-4: was a boolean toggle, now a 3-position slider — the
+  // preview-step template sets an explicit level rather than cycling
+  // through one.
+  setSimplifiedDisplay(level: SimplifiedDisplayLevel): void {
+    this.simplifiedDisplay.set(level);
   }
 
   reset(): void {
@@ -695,7 +700,7 @@ export class InvoiceDraftStore {
     this.serviceLines.set([]);
     this.discountLines.set([]);
     this.documentType.set('FACTURE');
-    this.simplifiedDisplay.set(false);
+    this.simplifiedDisplay.set('NONE');
     this.sourceDevisId.set(null);
     this.number.set('');
     // Phase 1.1-3: "auto-applied to every new mode rapide facture from then
@@ -824,10 +829,14 @@ export class InvoiceDraftStore {
 
     this.documentType.set('FACTURE');
     this.simplifiedDisplay.set(source.simplifiedDisplay);
-    // A devis never carries a deposit (FACTURE-only, see schema.prisma) —
-    // same "auto-applied to every new FACTURE draft" rule as reset() above,
-    // rather than leaving whatever was left over from a previous draft.
-    this.applyCurrentCompanyDefaultDeposit();
+    // A devis never carries a deposit (FACTURE-only, see schema.prisma). Unlike
+    // reset(), this does NOT fall back to the company's habitual default rate:
+    // a devis can already have its own acompte tracked/paid separately, so
+    // silently re-injecting the company default here made it look (to the
+    // artisan) like the devis's acompte had carried over, with no way to tell
+    // it was actually an unrelated default. Left unrequested; the artisan can
+    // still opt in explicitly via the deposit field.
+    this.deposit.set(EMPTY_DEPOSIT);
     this.sourceDevisId.set(source.id);
     // A converted facture always gets its own fresh number, never the
     // devis's — left blank so ensureNumberSuggestion() computes a real one
@@ -836,6 +845,92 @@ export class InvoiceDraftStore {
     this.number.set('');
     // A devis can never carry reverseChargeApplicable (FACTURE-only) — same
     // "never inherit a stale value" reasoning as the deposit reset above.
+    this.reverseChargeApplicable.set(false);
+  }
+
+  // Phase 1.4-2: seeds every signal from a resolved VoiceInvoiceDraft (see
+  // backend/src/invoice-voice-draft/) — same "overwrite wholesale, not
+  // merge" rule as loadFromInvoice above, called once by
+  // InvoiceCreateVoiceCapturePage right before navigating into the review
+  // step. `needsReview`/`notices` aren't stored here at all — they have no
+  // counterpart in this store's shape and are meaningful only to the
+  // review screen itself (see VoiceDraftReviewStore, populated separately
+  // by the same caller from the same draft).
+  loadFromVoiceDraft(draft: VoiceInvoiceDraft): void {
+    this.customer.set({
+      customerId: draft.customer.customerId ?? null,
+      customerName: draft.customer.customerName,
+      customerAddress: draft.customer.customerAddress ?? '',
+      customerEmail: draft.customer.customerEmail ?? '',
+      customerPhone: draft.customer.customerPhone ?? '',
+      customerSiret: '',
+      deliveryAddress: '',
+      saveAsNewCustomer: false,
+    });
+
+    this.lines.set(
+      draft.lines.map((line) => ({
+        clientId: crypto.randomUUID(),
+        description: line.description,
+        unit: line.unit,
+        quantity: line.quantity,
+        unitPriceEuros: line.unitPriceCents / 100,
+        wasteSurcharge: 'NONE',
+        packagingQuantity: null,
+        roundUpToPackaging: true,
+        productCode: null,
+        // A resolved productId is a real, re-validated catalog row (see
+        // InvoiceVoiceDraftService.validateDraft on the backend) — safe to
+        // carry straight through the same way a catalog pick does
+        // elsewhere in this store.
+        productId: line.productId ?? null,
+        catalogProductId: null,
+        saveAsNewProduct: false,
+        activityCategory: null,
+        showUnitDetail: true,
+        showBillingDetail: true,
+      })),
+    );
+
+    this.serviceLines.set(
+      draft.serviceLines.map((serviceLine) => ({
+        clientId: crypto.randomUUID(),
+        serviceId: serviceLine.serviceId ?? null,
+        name: serviceLine.name,
+        description: serviceLine.description ?? '',
+        amountEuros: serviceLine.amountCents / 100,
+        visibility: 'VISIBLE',
+        redistributionStrategy: 'WEIGHTED',
+        weights: [],
+        pricingMode: 'FIXED',
+        percentageBasisPoints: null,
+        catalogServiceId: null,
+        saveAsNewService: false,
+        activityCategory: null,
+      })),
+    );
+
+    this.discountLines.set([]);
+    this.documentType.set(draft.documentType);
+    this.simplifiedDisplay.set('NONE');
+
+    // Same FACTURE-only rule as buildInvoiceRequest/the backend's own
+    // DepositFieldsConsistency — a DEVIS resolved with a (flagged, see
+    // document_type_conflict) deposit still shouldn't silently apply one
+    // here; falls back to the company's habitual rate exactly like a fresh
+    // draft would, same as loadFromInvoice.
+    if (draft.documentType === 'FACTURE' && draft.depositPercentageBasisPoints != null) {
+      this.deposit.set({
+        requested: true,
+        percentageBasisPoints: draft.depositPercentageBasisPoints,
+        amountOverrideEuros: null,
+      });
+    } else {
+      this.applyCurrentCompanyDefaultDeposit();
+    }
+
+    this.sourceDevisId.set(null);
+    this.number.set('');
     this.reverseChargeApplicable.set(false);
   }
 
@@ -1144,7 +1239,15 @@ export class InvoiceDraftStore {
       if (parsed.documentType === 'DEVIS' || parsed.documentType === 'FACTURE') {
         this.documentType.set(parsed.documentType);
       }
-      if (typeof parsed.simplifiedDisplay === 'boolean') {
+      // Phase 1.2-4: a draft persisted before this became a 3-level enum
+      // would still have the old boolean shape in localStorage — excluded
+      // here so it falls back to the 'NONE' default instead of setting an
+      // invalid value.
+      if (
+        parsed.simplifiedDisplay === 'NONE' ||
+        parsed.simplifiedDisplay === 'SIMPLIFIED' ||
+        parsed.simplifiedDisplay === 'GENERIC'
+      ) {
         this.simplifiedDisplay.set(parsed.simplifiedDisplay);
       }
       if (typeof parsed.sourceDevisId === 'string') {

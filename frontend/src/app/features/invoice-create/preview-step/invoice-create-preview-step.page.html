@@ -241,19 +241,27 @@
     le document — le calcul et le total ne changent jamais, seul l'affichage change.
   </p>
 
-  <label
-    class="mb-4 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
-    title="N'affiche plus que le nom du produit et le prix total sur le document envoyé au client — pratique pour un devis/une facture au forfait, sans détailler les quantités."
+  <div
+    class="mb-4 flex flex-col gap-1 rounded-lg border border-info-subtle-border bg-info-subtle px-4 py-3 text-sm"
   >
-    <input
-      type="checkbox"
-      [checked]="draftStore.simplifiedDisplay()"
-      (change)="draftStore.toggleSimplifiedDisplay()"
-      class="h-4 w-4 rounded border-line"
+    <app-simplified-display-slider
+      [level]="draftStore.simplifiedDisplay()"
+      (levelChange)="draftStore.setSimplifiedDisplay($event)"
     />
-    <span class="font-medium text-ink">Mode simplifié</span>
-    <span class="text-ink-soft">— n'afficher que le nom du produit et le prix total</span>
-  </label>
+    <p class="text-xs text-info-subtle-fg min-h-[1em]">
+      @switch (hintState('simplifiedDisplay')) {
+        @case ('active') {
+          <app-typewriter-text
+            [text]="hintText('simplifiedDisplay')"
+            (typingComplete)="onHintTyped()"
+          />
+        }
+        @case ('done') {
+          {{ hintText('simplifiedDisplay') }}
+        }
+      }
+    </p>
+  </div>
 
   @if (draftStore.documentType() === 'FACTURE') {
     <div appTourAnchor="invoice-deposit-toggle" class="mb-4">
@@ -262,6 +270,9 @@
         [percentageBasisPoints]="draftStore.deposit().percentageBasisPoints"
         [amountCents]="draftStore.depositAmountCents()"
         [autoCalc]="draftStore.deposit().amountOverrideEuros === null"
+        [highlighted]="true"
+        [subtitleState]="hintState('deposit')"
+        (subtitleTyped)="onHintTyped()"
         (requestedChange)="draftStore.setDepositRequested($event)"
         (percentageBasisPointsChange)="draftStore.setDepositPercentage($event)"
         (amountEurosChange)="onDepositAmountChange($event)"
@@ -269,18 +280,32 @@
       />
     </div>
 
-    <label
-      class="mb-4 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
-      title="Sous-traitance BTP : la TVA n'est pas facturée par vous, mais autoliquidée par votre client (art. 242 nonies A, 13° de l'annexe II au CGI)."
+    <div
+      class="mb-4 flex flex-col gap-1 rounded-lg border border-info-subtle-border bg-info-subtle px-4 py-3 text-sm"
     >
-      <input
-        type="checkbox"
-        [checked]="draftStore.reverseChargeApplicable()"
-        (change)="draftStore.setReverseChargeApplicable($any($event.target).checked)"
-        class="h-4 w-4 rounded border-line"
-      />
-      <span class="font-medium text-ink">Autoliquidation (sous-traitance BTP)</span>
-    </label>
+      <label class="flex items-center gap-3">
+        <input
+          type="checkbox"
+          [checked]="draftStore.reverseChargeApplicable()"
+          (change)="draftStore.setReverseChargeApplicable($any($event.target).checked)"
+          class="h-4 w-4 rounded border-line"
+        />
+        <span class="font-medium text-ink">Autoliquidation (sous-traitance BTP)</span>
+      </label>
+      <p class="pl-7 text-xs text-info-subtle-fg min-h-[1em]">
+        @switch (hintState('reverseCharge')) {
+          @case ('active') {
+            <app-typewriter-text
+              [text]="hintText('reverseCharge')"
+              (typingComplete)="onHintTyped()"
+            />
+          }
+          @case ('done') {
+            {{ hintText('reverseCharge') }}
+          }
+        }
+      </p>
+    </div>
   }
 
   @if (missingEssentials().length > 0) {
@@ -380,7 +405,7 @@
           <thead>
             <tr class="border-b border-line text-left text-ink-soft">
               <th class="py-2 pr-2 font-medium">Description</th>
-              @if (!draftStore.simplifiedDisplay()) {
+              @if (draftStore.simplifiedDisplay() === 'NONE') {
                 <th class="py-2 pr-2 font-medium">Unité</th>
                 <th class="py-2 pr-2 font-medium">Quantité</th>
                 <th class="py-2 pr-2 font-medium">Prix unitaire</th>
@@ -389,69 +414,78 @@
             </tr>
           </thead>
           <tbody>
-            @for (line of previewLines(); track $index; let i = $index) {
+            @if (draftStore.simplifiedDisplay() === 'GENERIC') {
               <tr class="border-b border-line/60">
-                <td class="py-2 pr-2 text-ink">{{ line.description }}</td>
-                @if (!draftStore.simplifiedDisplay()) {
-                  <td class="py-2 pr-2">
-                    @if (draftStore.lines()[i]?.showUnitDetail ?? true) {
-                      <button
-                        type="button"
-                        (click)="toggleUnitDetail(i)"
-                        title="Cliquer pour masquer sur le PDF envoyé au client"
-                        class="-mx-1 flex items-center gap-1 rounded px-1 text-ink transition-colors hover:bg-primary-subtle hover:text-primary"
-                      >
-                        <app-icon-eye [size]="14" /> {{ line.unit | unitLabel }}
-                      </button>
-                    } @else {
-                      <button
-                        type="button"
-                        (click)="toggleUnitDetail(i)"
-                        title="Masqué sur le PDF — cliquer pour l'afficher"
-                        class="-mx-1 flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
-                      >
-                        <app-icon-eye-off [size]="14" /> masqué
-                      </button>
-                    }
-                  </td>
-                  <td class="py-2 pr-2 text-ink">
-                    {{ line.quantity }}
-                    @if (line.billedQuantity !== line.quantity) {
-                      @if (draftStore.lines()[i]?.showBillingDetail ?? true) {
+                <td class="py-2 pr-2 text-ink">{{ genericLineLabel }}</td>
+                <td class="py-2 pl-2 text-right font-mono text-ink">
+                  {{ previewData()?.subtotalExclVatCents ?? 0 | centsToEuros }}
+                </td>
+              </tr>
+            } @else {
+              @for (line of previewLines(); track $index; let i = $index) {
+                <tr class="border-b border-line/60">
+                  <td class="py-2 pr-2 text-ink">{{ line.description }}</td>
+                  @if (draftStore.simplifiedDisplay() === 'NONE') {
+                    <td class="py-2 pr-2">
+                      @if (draftStore.lines()[i]?.showUnitDetail ?? true) {
                         <button
                           type="button"
-                          (click)="toggleBillingDetail(i)"
+                          (click)="toggleUnitDetail(i)"
                           title="Cliquer pour masquer sur le PDF envoyé au client"
-                          class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft transition-colors hover:bg-primary-subtle hover:text-primary"
+                          class="-mx-1 flex items-center gap-1 rounded px-1 text-ink transition-colors hover:bg-primary-subtle hover:text-primary"
                         >
-                          <app-icon-eye [size]="12" /> (facturé : {{ line.billedQuantity }})
+                          <app-icon-eye [size]="14" /> {{ line.unit | unitLabel }}
                         </button>
                       } @else {
                         <button
                           type="button"
-                          (click)="toggleBillingDetail(i)"
+                          (click)="toggleUnitDetail(i)"
                           title="Masqué sur le PDF — cliquer pour l'afficher"
-                          class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
+                          class="-mx-1 flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
                         >
-                          <app-icon-eye-off [size]="12" /> détail masqué
+                          <app-icon-eye-off [size]="14" /> masqué
                         </button>
                       }
-                    }
+                    </td>
+                    <td class="py-2 pr-2 text-ink">
+                      {{ line.quantity }}
+                      @if (line.billedQuantity !== line.quantity) {
+                        @if (draftStore.lines()[i]?.showBillingDetail ?? true) {
+                          <button
+                            type="button"
+                            (click)="toggleBillingDetail(i)"
+                            title="Cliquer pour masquer sur le PDF envoyé au client"
+                            class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft transition-colors hover:bg-primary-subtle hover:text-primary"
+                          >
+                            <app-icon-eye [size]="12" /> (facturé : {{ line.billedQuantity }})
+                          </button>
+                        } @else {
+                          <button
+                            type="button"
+                            (click)="toggleBillingDetail(i)"
+                            title="Masqué sur le PDF — cliquer pour l'afficher"
+                            class="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-ink-soft/70 italic transition-colors hover:bg-primary-subtle hover:text-primary"
+                          >
+                            <app-icon-eye-off [size]="12" /> détail masqué
+                          </button>
+                        }
+                      }
+                    </td>
+                    <td class="py-2 pr-2 text-ink">
+                      {{ line.displayUnitPriceCents | centsToEuros }}
+                    </td>
+                  }
+                  <td class="py-2 pl-2 text-right font-mono text-ink">
+                    {{ line.lineTotalExclVatCents | centsToEuros }}
                   </td>
-                  <td class="py-2 pr-2 text-ink">
-                    {{ line.displayUnitPriceCents | centsToEuros }}
-                  </td>
-                }
-                <td class="py-2 pl-2 text-right font-mono text-ink">
-                  {{ line.lineTotalExclVatCents | centsToEuros }}
-                </td>
-              </tr>
+                </tr>
+              }
             }
           </tbody>
         </table>
       </div>
 
-      @if (visibleServiceLines().length > 0) {
+      @if (visibleServiceLines().length > 0 && draftStore.simplifiedDisplay() !== 'GENERIC') {
         <div class="mt-4 overflow-x-auto">
           <table class="w-full min-w-[24rem] text-sm">
             <thead>

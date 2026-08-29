@@ -134,7 +134,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     depositPaidAt: null,
     reverseChargeApplicable: false,
     manualNatureOfOperation: null,
-    simplifiedDisplay: false,
+    simplifiedDisplay: 'NONE',
     customer: null,
     lines: [
       {

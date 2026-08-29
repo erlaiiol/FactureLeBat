@@ -2,11 +2,13 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma } from '../../generated/prisma/client';
 import { PlanGateService } from '../billing/plan-gate.service';
 import { CatalogFolderService } from '../catalog-folder/catalog-folder.service';
+import { FuzzyMatch } from '../common/fuzzy-match';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { ServiceCatalogRepository } from './service-catalog.repository';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceProfile } from './entities/service.entity';
+import { ServiceModel } from '../../generated/prisma/models';
 
 @Injectable()
 export class ServiceCatalogService {
@@ -26,6 +28,20 @@ export class ServiceCatalogService {
       throw new NotFoundException(`Service ${id} not found`);
     }
     return service;
+  }
+
+  // Phase 1.4-1: lenient counterpart of findById, same reasoning as
+  // CustomerService.findByIdOrNull — the voice-draft endpoint re-validates
+  // an LLM-proposed serviceId and must treat a stale/forged one as "not
+  // found" rather than a thrown exception.
+  findByIdOrNull(companyId: string, id: string): Promise<ServiceProfile | null> {
+    return this.serviceCatalogRepository.findById(companyId, id);
+  }
+
+  // Phase 1.4-1: typo/voice-transcription-tolerant search — see
+  // ServiceCatalogRepository.searchFuzzy.
+  searchFuzzy(companyId: string, query: string): Promise<FuzzyMatch<ServiceModel>[]> {
+    return this.serviceCatalogRepository.searchFuzzy(companyId, query);
   }
 
   // Phase 30: catalog-size cap (products + services combined) — see

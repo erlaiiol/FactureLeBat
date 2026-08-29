@@ -2604,3 +2604,32 @@ e-reporting for B2C/export sales isn't implemented).
 
 See [docs/1.3/README.md](./1.3/README.md) for the full track overview,
 scope decisions, and per-phase checklists.
+
+---
+
+# Phase 1.4 — Voice/Chat Invoice & Devis Creation
+
+Full detail in [docs/1.4/](./1.4/README.md). **Status: 1.4-1 done,
+1.4-2 built and live-verified for the core flow, 1.4-3 built and
+compilation-verified (2026-08-29).** Lets an artisan create a devis/facture by
+describing it in natural French — voice or typed — landing on a new
+review screen (client at top like mode manuel, lines below like mode
+rapide, doubtful fields highlighted inline for a quick fix) before the
+existing mode rapide preview step, instead of using the form or canvas.
+Three phases: 1.4-1 (backend draft resolution against the tenant's own
+customers/catalog via a dedicated fuzzy search; every field resolves or
+gets flagged for review, never silently wrong) → 1.4-2 (the voice/chat
+entry point and the review screen, built from mode rapide's/mode manuel's
+existing components, wiring a resolved draft into the existing
+`InvoiceDraftStore`) → 1.4-3 (a native Capacitor speech-recognition
+plugin for the compiled iOS/Android app, where the Web Speech API 1.4-2
+uses on the web doesn't exist at all on iOS — `@capgo/capacitor-speech-recognition`
+covers this, no custom Swift/Kotlin recognition pipeline needed;
+compilation-verified on Android and iOS Simulator, not yet run on a real
+device/simulator). No new preview/PDF UI — the resolving engine resolves references
+only, it never computes money. **Runs entirely on a free regex/fuzzy-search
+engine by default (no LLM subscription required)** — an LLM-backed engine
+exists behind the same interface, fully tested, but stays unbound until
+there's a real reason (fallback, or a Premium-tier upgrade) to re-enable
+it. See [docs/1.4/README.md](./1.4/README.md) for the full scope
+decisions.

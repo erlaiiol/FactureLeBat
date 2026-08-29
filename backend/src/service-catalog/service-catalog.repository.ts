@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { ServiceModel as Service } from '../../generated/prisma/models';
+import { FuzzyMatch } from '../common/fuzzy-match';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -18,7 +20,40 @@ export class ServiceCatalogRepository {
   // everything.
   private static readonly MAX_LISTED_SERVICES = 500;
 
+  // See CustomerRepository's identical pair of constants for the reasoning
+  // — same "small candidate list, tuned generously low" trade-off, needed
+  // here for the same voice-draft use case (Phase 1.4-1).
+  private static readonly FUZZY_SEARCH_LIMIT = 5;
+  private static readonly FUZZY_SIMILARITY_THRESHOLD = 0.2;
+
   constructor(private readonly prisma: PrismaService) {}
+
+  // Phase 1.4-1: typo/voice-transcription-tolerant search for the
+  // voice-draft endpoint — see CustomerRepository.searchFuzzy's identical
+  // comment. Plain rows, not ServiceProfile: the folders relation this
+  // repository's other reads include isn't meaningful to an LLM tool
+  // result, and SELECT * over raw SQL can't fetch a relation anyway.
+  async searchFuzzy(companyId: string, query: string): Promise<FuzzyMatch<Service>[]> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const rows = await this.prisma.$queryRaw<Array<Service & { score: number }>>`
+      SELECT *, GREATEST(
+        similarity(lower(name), lower(${trimmed})),
+        similarity(lower(coalesce(code, '')), lower(${trimmed}))
+      ) AS score
+      FROM "Service"
+      WHERE "companyId" = ${companyId}
+        AND (
+          similarity(lower(name), lower(${trimmed})) > ${ServiceCatalogRepository.FUZZY_SIMILARITY_THRESHOLD}
+          OR similarity(lower(code), lower(${trimmed})) > ${ServiceCatalogRepository.FUZZY_SIMILARITY_THRESHOLD}
+        )
+      ORDER BY score DESC
+      LIMIT ${ServiceCatalogRepository.FUZZY_SEARCH_LIMIT}
+    `;
+    return rows.map(({ score, ...row }) => ({ row: row, score: Number(score) }));
+  }
 
   findAll(companyId: string, search?: string): Promise<ServiceProfile[]> {
     return this.prisma.service.findMany({

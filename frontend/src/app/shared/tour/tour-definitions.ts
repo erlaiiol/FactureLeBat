@@ -96,8 +96,8 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       },
       {
         anchorId: 'invoice-mode-choice',
-        title: 'Deux façons de facturer',
-        body: 'Le mode rapide (recommandé) vous guide pas à pas. Le mode manuel ouvre un tableau libre, à remplir comme sur la facture finale. Cliquez sur celui que vous préférez, ou laissez-vous guider en mode rapide avec "Suivant".',
+        title: 'Trois façons de facturer',
+        body: 'Le mode rapide (recommandé) vous guide pas à pas. Le mode manuel ouvre un tableau libre, à remplir comme sur la facture finale. « Décrire à voix haute » remplit le brouillon depuis ce que vous dites ou tapez, à vérifier ensuite. Cliquez sur celui que vous préférez, ou laissez-vous guider en mode rapide avec "Suivant".',
       },
       // Two alternatives for the same moment — whichever matches the real
       // state of the customer list, the other is skipped automatically (see

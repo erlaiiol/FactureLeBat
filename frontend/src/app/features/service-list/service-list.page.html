@@ -36,8 +36,8 @@
           [routerLink]="['/prestations', service.id]"
           class="flex flex-1 items-center justify-between gap-4"
         >
-          <div>
-            <p class="flex items-center gap-2 font-semibold text-ink">
+          <div class="min-w-0">
+            <p class="flex flex-wrap items-center gap-2 break-words font-semibold text-ink">
               {{ service.name }}
               @if (service.code) {
                 <app-badge variant="info" tone="subtle">{{ service.code }}</app-badge>
@@ -51,7 +51,7 @@
               }}
             </p>
           </div>
-          <span class="text-lg font-semibold text-ink font-mono">
+          <span class="shrink-0 text-lg font-semibold text-ink font-mono">
             @if (service.pricingMode === 'PERCENTAGE') {
               {{ service.percentageBasisPoints! / 100 }}%
             } @else {

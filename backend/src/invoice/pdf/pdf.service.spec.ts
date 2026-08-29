@@ -44,7 +44,7 @@ function samplePdfData(): InvoicePdfData {
     ],
     serviceLines: [],
     discountLines: [],
-    simplifiedDisplay: false,
+    simplifiedDisplay: 'NONE',
     vatApplicable: false,
     vatRateBasisPoints: 2000,
     reverseChargeApplicable: false,
@@ -109,9 +109,22 @@ describe('PdfService', () => {
     expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
   });
 
-  it('generates a non-empty PDF buffer with just Description/Total columns when simplifiedDisplay is set', async () => {
+  it('generates a non-empty PDF buffer with just Description/Total columns when simplifiedDisplay is SIMPLIFIED', async () => {
     const service = new PdfService();
-    const data = { ...samplePdfData(), simplifiedDisplay: true };
+    const data = { ...samplePdfData(), simplifiedDisplay: 'SIMPLIFIED' as const };
+    const buffer = await service.generateInvoicePdf(data);
+
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('generates a non-empty PDF buffer with a single consolidated line (and no service-lines table) when simplifiedDisplay is GENERIC', async () => {
+    const service = new PdfService();
+    const data = {
+      ...samplePdfData(),
+      simplifiedDisplay: 'GENERIC' as const,
+      serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000 }],
+    };
     const buffer = await service.generateInvoicePdf(data);
 
     expect(buffer.length).toBeGreaterThan(0);

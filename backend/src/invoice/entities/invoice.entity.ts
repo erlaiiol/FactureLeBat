@@ -8,6 +8,7 @@ import {
   NatureOperation,
   ServiceVisibility,
   SignatureMethod,
+  SimplifiedDisplayLevel,
   Unit,
   WasteSurcharge,
 } from '../../../generated/prisma/enums';
@@ -227,8 +228,9 @@ export interface InvoiceWithTotals {
   // Phase 1.1-8: MANUAL-only, null for GUIDED — see schema.prisma's comment
   // on Invoice.manualNatureOfOperation.
   manualNatureOfOperation: NatureOperation | null;
-  // Phase 23: see schema.prisma's comment on Invoice.simplifiedDisplay.
-  simplifiedDisplay: boolean;
+  // Phase 23 / Phase 1.2-4: see schema.prisma's comment on
+  // Invoice.simplifiedDisplay.
+  simplifiedDisplay: SimplifiedDisplayLevel;
   // Phase 1.1-1: whether a real InvoiceSignature is attached — never the
   // image bytes themselves (see InvoiceService.getSignatureImage/
   // InvoiceController.serveSignature for the one place those are read).

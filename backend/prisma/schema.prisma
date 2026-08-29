@@ -88,6 +88,21 @@ enum DocumentType {
   FACTURE
 }
 
+// Phase 1.2-4: 3 escalating levels of body-table detail on the generated PDF
+// (GUIDED only, see Invoice.simplifiedDisplay below) — NONE is the original
+// full detail, SIMPLIFIED is the original boolean's true (description +
+// line total only), GENERIC goes further still and collapses the whole
+// lines/serviceLines table down to a single "Prestation" row carrying the
+// document's subtotal. Purely a PdfService rendering concern in every case —
+// never affects invoice.lines/serviceLines themselves nor the Factur-X CII
+// XML, which always builds from the real per-line data (see
+// FacturxInvoiceMapper).
+enum SimplifiedDisplayLevel {
+  NONE
+  SIMPLIFIED
+  GENERIC
+}
+
 // Phase 1.1-8 (2026 e-invoicing reform baseline field): "nature de
 // l'opération" — for a GUIDED invoice this is derived at PDF-render time
 // (never persisted, see InvoiceMapper) from whether the invoice has product
@@ -499,14 +514,15 @@ model Company {
   // wording (a devis collects no tax, so the option is meaningless there).
   vatOnDebitsOption Boolean @default(false)
 
-  invoices         Invoice[]
-  sourcingSearches SourcingSearch[]
-  customers        Customer[]
-  products         Product[]
-  services         Service[]
-  discounts        Discount[]
-  catalogFolders   CatalogFolder[]
-  promoRedemptions PromoCodeRedemption[]
+  invoices           Invoice[]
+  sourcingSearches   SourcingSearch[]
+  voiceDraftRequests VoiceDraftRequest[]
+  customers          Customer[]
+  products           Product[]
+  services           Service[]
+  discounts          Discount[]
+  catalogFolders     CatalogFolder[]
+  promoRedemptions   PromoCodeRedemption[]
 
   // Company logo (top-right corner of every invoice/devis PDF), kept in its
   // own 1:1 table rather than as columns here — Invoice queries `include:
@@ -809,13 +825,14 @@ model Invoice {
   // Phase 14.3: which kind of document this row is — see DocumentType above.
   documentType DocumentType @default(FACTURE)
 
-  // Phase 23: artisan-chosen, persisted like showUnitDetail/showBillingDetail
-  // below — set from the "Personnaliser l'affichage" screen, hides the whole
-  // Quantité/Prix unitaire columns on the generated PDF, leaving only
-  // description + line total. Purely a rendering concern, document-level
-  // (unlike the two per-line toggles below). Defaults false so an artisan
-  // who never opens that screen sees no behavior change.
-  simplifiedDisplay Boolean @default(false)
+  // Phase 23 / Phase 1.2-4: artisan-chosen, persisted like
+  // showUnitDetail/showBillingDetail below — set from the "Personnaliser
+  // l'affichage" screen, escalates how much body-table detail the generated
+  // PDF shows (see SimplifiedDisplayLevel above). Purely a rendering
+  // concern, document-level (unlike the two per-line toggles below).
+  // Defaults NONE so an artisan who never opens that screen sees no
+  // behavior change.
+  simplifiedDisplay SimplifiedDisplayLevel @default(NONE)
 
   // Set on a FACTURE created by converting a DEVIS — points at the original
   // devis, which conversion leaves untouched and independently retrievable
@@ -1474,6 +1491,24 @@ model SourcingSearch {
   createdAt DateTime @default(now())
 
   @@unique([companyId, kind, queryHash])
+  @@index([companyId, createdAt])
+}
+
+// Phase 1.4-1: one row per POST /invoices/voice-draft call, resolved or
+// rejected alike — every call reaches the Anthropic API and is billed the
+// same regardless of outcome, so this is purely a daily-cap counter (see
+// InvoiceVoiceDraftUsageRepository.countToday), same "count rows created
+// today" mechanism as SourcingSearch's cap, but with no cache/result to
+// store: a voice draft is never reused across requests the way a sourcing
+// search result is.
+model VoiceDraftRequest {
+  id String @id @default(uuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
   @@index([companyId, createdAt])
 }
 

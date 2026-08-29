@@ -29,7 +29,7 @@
     </p>
   }
 
-  <div class="grid gap-4 sm:grid-cols-2" appTourAnchor="invoice-mode-choice">
+  <div class="grid gap-4 sm:grid-cols-3" appTourAnchor="invoice-mode-choice">
     <a
       routerLink="rapide"
       [queryParams]="{ type: documentType() }"
@@ -56,6 +56,20 @@
       <span class="text-sm text-ink-soft">
         Un tableau libre qui ressemble à la facture finale : cliquez et écrivez directement, ajoutez
         des lignes ou des colonnes à votre façon.
+      </span>
+    </a>
+
+    <!-- Phase 1.4-2: no [queryParams] here on purpose — the artisan's own
+         words ("devis"/"facture") decide the document type for this mode,
+         the toggle above would only ever be a stale/conflicting default. -->
+    <a
+      routerLink="vocal"
+      class="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-6 text-left shadow-sm transition hover:border-primary hover:shadow-md"
+    >
+      <span class="text-lg font-semibold text-ink">Décrire à voix haute</span>
+      <span class="text-sm text-ink-soft">
+        Dites (ou écrivez) le client, ce que vous facturez, et un éventuel acompte — le brouillon se
+        remplit pour vous, à vérifier avant de continuer.
       </span>
     </a>
   </div>

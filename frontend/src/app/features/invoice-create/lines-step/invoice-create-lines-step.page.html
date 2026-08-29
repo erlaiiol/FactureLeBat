@@ -1,6 +1,27 @@
-<h1 class="font-heading uppercase tracking-wide mb-2 text-2xl font-bold text-ink">
+<h1
+  class="font-heading uppercase tracking-wide mb-2 flex items-center gap-1.5 text-2xl font-bold text-ink"
+>
   {{ draftStore.documentType() === 'DEVIS' ? 'Nouveau devis' : 'Nouvelle facture' }} — Lignes &amp;
   prestations
+  <!-- Native details/summary: same "click to reveal" tooltip pattern as the
+       document number's info icon on the preview step (see
+       invoice-create-preview-step.page.html) — works with a tap, no hover
+       state needed. -->
+  <details class="relative">
+    <summary
+      class="cursor-pointer list-none text-sm normal-case text-ink-soft hover:text-ink"
+      aria-label="Options disponibles à l'étape suivante"
+      title="Options disponibles à l'étape suivante"
+    >
+      ⓘ
+    </summary>
+    <div
+      class="absolute top-full left-0 z-10 mt-1 w-72 rounded-lg border border-line bg-surface p-2 text-xs font-normal normal-case text-ink shadow-lg"
+    >
+      Une fois vos produits et prestations ajoutés, un dernier écran vous permet d'activer ou de
+      désactiver un acompte, le mode simplifié et l'autoliquidation.
+    </div>
+  </details>
 </h1>
 <button
   type="button"

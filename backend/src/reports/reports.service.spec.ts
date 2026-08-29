@@ -121,7 +121,7 @@ function invoiceFixture(overrides: Partial<InvoiceWithLines> = {}): InvoiceWithL
     depositPaidAt: null,
     reverseChargeApplicable: false,
     manualNatureOfOperation: null,
-    simplifiedDisplay: false,
+    simplifiedDisplay: 'NONE',
     customer: null,
     lines: [
       {

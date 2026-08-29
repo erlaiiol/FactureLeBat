@@ -1,0 +1,64 @@
+<div class="mx-auto flex max-w-2xl flex-col gap-6 pb-12">
+  <div class="text-center">
+    <h1 class="text-2xl font-semibold text-ink">Décrire ma facture ou mon devis</h1>
+    <p class="mt-1 text-ink-soft">
+      Dites (ou écrivez) le client, ce que vous facturez, et un éventuel acompte — par exemple «
+      facture pour Xavier Dupont, 25m² de parquet chêne massif, acompte de 30% ».
+    </p>
+  </div>
+
+  @if (speechSupported) {
+    <div class="flex flex-col items-center gap-2">
+      <button
+        type="button"
+        (click)="toggleListening()"
+        class="flex h-20 w-20 items-center justify-center rounded-full border-2 transition"
+        [class.border-primary]="!listening()"
+        [class.bg-surface]="!listening()"
+        [class.text-primary]="!listening()"
+        [class.border-danger]="listening()"
+        [class.bg-danger-subtle]="listening()"
+        [class.text-danger]="listening()"
+        [attr.aria-label]="listening() ? 'Arrêter l’écoute' : 'Démarrer la dictée'"
+      >
+        <app-icon-microphone [size]="32" />
+      </button>
+      <span class="text-sm text-ink-soft">
+        {{ listening() ? 'Je vous écoute… touchez pour arrêter' : 'Touchez pour dicter' }}
+      </span>
+    </div>
+  } @else {
+    <p class="rounded-xl bg-secondary-subtle/40 p-3 text-center text-sm text-ink-soft">
+      La dictée vocale n'est pas disponible sur ce navigateur — décrivez votre document par écrit
+      ci-dessous.
+    </p>
+  }
+
+  <div class="flex flex-col gap-2">
+    <label
+      for="voice-transcript"
+      class="text-xs font-semibold uppercase tracking-wide text-ink-soft"
+    >
+      {{ speechSupported ? 'Transcription (modifiable)' : 'Votre description' }}
+    </label>
+    <textarea
+      id="voice-transcript"
+      rows="4"
+      placeholder="facture pour Xavier Dupont, 25m² de parquet chêne massif, acompte de 30%"
+      class="rounded-xl border border-line bg-surface p-3 text-ink outline-none transition-colors focus:border-primary"
+      [ngModel]="transcript()"
+      (ngModelChange)="onTranscriptEdit($event)"
+    ></textarea>
+  </div>
+
+  @if (rejectedMessage(); as message) {
+    <p class="rounded-xl bg-warning-subtle p-3 text-sm text-warning-subtle-fg">{{ message }}</p>
+  }
+  @if (errorMessage(); as message) {
+    <p class="rounded-xl bg-danger-subtle p-3 text-sm text-danger-subtle-fg">{{ message }}</p>
+  }
+
+  <app-big-button [disabled]="transcript().trim().length === 0 || submitting()" (click)="submit()">
+    {{ submitting() ? 'Analyse en cours…' : 'Continuer' }}
+  </app-big-button>
+</div>
