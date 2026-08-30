@@ -3,7 +3,6 @@ import { RouterLink } from '@angular/router';
 import {
   daysUntil,
   E_INVOICING_EMISSION_DEADLINE,
-  E_INVOICING_RECEPTION_DEADLINE,
 } from '../../core/utils/e-invoicing-deadlines.util';
 
 const DISMISS_KEY_PREFIX = 'facturele.dismissedDeadline.';
@@ -14,6 +13,13 @@ const DISMISS_KEY_PREFIX = 'facturele.dismissedDeadline.';
 // a settings-page-only banner is easy to never see again once the artisan
 // has visited it once. Reuses the exact same dates/daysUntil util as that
 // banner rather than a second copy of the logic.
+//
+// Emission-only here (2026-08-30): reception is a one-time SUPER PDP
+// connection, not an ongoing task, and this app's whole identity is about
+// emitting invoices fast — surfacing reception with equal weight on the
+// core "make an invoice" screen overstated it. Reception still gets its
+// full explanation on the company-settings page, where the SUPER PDP
+// connection itself lives.
 @Component({
   selector: 'app-deadline-banner',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -21,33 +27,18 @@ const DISMISS_KEY_PREFIX = 'facturele.dismissedDeadline.';
   templateUrl: './deadline-banner.component.html',
 })
 export class DeadlineBannerComponent {
-  protected readonly reception = {
-    daysLeft: daysUntil(E_INVOICING_RECEPTION_DEADLINE),
-  };
   protected readonly emission = {
     daysLeft: daysUntil(E_INVOICING_EMISSION_DEADLINE),
   };
 
-  private readonly receptionDismissed = signal(this.isDismissed(E_INVOICING_RECEPTION_DEADLINE));
   private readonly emissionDismissed = signal(this.isDismissed(E_INVOICING_EMISSION_DEADLINE));
 
-  // Shown once a deadline is inside 30 days (or already passed — an
+  // Shown once the deadline is inside 30 days (or already passed — an
   // "échéance dépassée" invoice board is still worth seeing until
-  // dismissed, same as the settings-page banner's own tense-aware
-  // phrasing) and hasn't been individually dismissed. Keyed per-deadline
-  // (not one shared flag) so dismissing reception never also hides
-  // emission — they're different deadlines with different consequences.
-  protected readonly showReception = computed(
-    () => this.reception.daysLeft <= 30 && !this.receptionDismissed(),
-  );
+  // dismissed) and hasn't been dismissed.
   protected readonly showEmission = computed(
     () => this.emission.daysLeft <= 30 && !this.emissionDismissed(),
   );
-
-  protected dismissReception(): void {
-    this.setDismissed(E_INVOICING_RECEPTION_DEADLINE);
-    this.receptionDismissed.set(true);
-  }
 
   protected dismissEmission(): void {
     this.setDismissed(E_INVOICING_EMISSION_DEADLINE);
@@ -55,7 +46,7 @@ export class DeadlineBannerComponent {
   }
 
   // Keyed by the deadline's own ISO date, not a single shared flag — if
-  // these constants ever change (a later reform amendment), the new date
+  // this constant ever changes (a later reform amendment), the new date
   // naturally reappears as undismissed instead of inheriting an old
   // dismissal it was never actually shown for.
   private storageKey(deadlineIso: string): string {

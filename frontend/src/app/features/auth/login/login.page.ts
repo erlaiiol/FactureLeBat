@@ -11,8 +11,10 @@ import {
 } from '../../../core/services/google-native-login.service';
 import { PlatformService } from '../../../core/services/platform.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconAppleComponent } from '../../../shared/components/icon-apple.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
+import { IconGoogleComponent } from '../../../shared/components/icon-google.component';
 import { ReferralCodePromptComponent } from '../../../shared/components/referral-code-prompt.component';
 
 @Component({
@@ -25,6 +27,8 @@ import { ReferralCodePromptComponent } from '../../../shared/components/referral
     ReferralCodePromptComponent,
     IconEyeComponent,
     IconEyeOffComponent,
+    IconGoogleComponent,
+    IconAppleComponent,
   ],
   templateUrl: './login.page.html',
 })

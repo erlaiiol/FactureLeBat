@@ -139,6 +139,39 @@ describe('extractLineCandidates', () => {
   it('returns no lines when nothing matches', () => {
     expect(extractLineCandidates('facture pour Xavier Dupont')).toEqual([]);
   });
+
+  it('recognizes packaging/count words as UNIT', () => {
+    const lines = extractLineCandidates('3 plaques de placo et 2 rouleaux d’isolant');
+    expect(lines).toEqual([
+      { quantity: 3, unit: Unit.UNIT, description: 'placo' },
+      { quantity: 2, unit: Unit.UNIT, description: 'isolant' },
+    ]);
+  });
+
+  it('does not mistake a deposit percentage for a line (digit+"%" has no letter unit)', () => {
+    expect(extractLineCandidates('demande un acompte de 30%')).toEqual([]);
+  });
+
+  // Safety net added 2026-08-30: a unit word this parser genuinely doesn't
+  // know (as opposed to one simply missing from UNIT_TEXT_PATTERNS, which
+  // the packaging-word case above now covers) must still surface as a
+  // flagged line rather than vanish — same "never silently wrong" rule the
+  // rest of this engine follows. The unmatched word stays in the
+  // description since nothing strips it out the way a known unit does.
+  describe('generic safety net for an unrecognized unit word', () => {
+    it('keeps the quantity and folds the unknown word into the description', () => {
+      const lines = extractLineCandidates('5 bottes de foin');
+      expect(lines).toEqual([{ quantity: 5, unit: Unit.UNIT, description: 'bottes foin' }]);
+    });
+
+    it('mixes cleanly with a known-unit line in the same transcript', () => {
+      const lines = extractLineCandidates('5 bottes de foin et 10m2 de carrelage');
+      expect(lines).toEqual([
+        { quantity: 5, unit: Unit.UNIT, description: 'bottes foin' },
+        { quantity: 10, unit: Unit.SQUARE_METER, description: 'carrelage' },
+      ]);
+    });
+  });
 });
 
 describe('hasNoExtractableContent', () => {

@@ -2633,3 +2633,121 @@ exists behind the same interface, fully tested, but stays unbound until
 there's a real reason (fallback, or a Premium-tier upgrade) to re-enable
 it. See [docs/1.4/README.md](./1.4/README.md) for the full scope
 decisions.
+
+---
+
+# Phase 1.5 — Sign in with Apple
+
+## Objective
+
+Offer a second third-party login option, "Continuer avec Apple", next to
+the existing Google button on `/connexion`. **Status (2026-08-30): UI
+placeholder shipped, real OAuth not started.** The button renders now,
+disabled, labeled "bientôt disponible" — it exists to stop the login
+screen looking Google-only/unfinished and to make the eventual real
+integration a smaller, purely-backend follow-up, but it makes no network
+call yet. This phase doc is written up front, same precedent as Phase
+1.2/1.3/1.4, so the plan below doesn't have to be re-derived once the
+blocker is cleared.
+
+## Current state / blocker
+
+Sign in with Apple requires a paid Apple Developer Program membership
+(99 $/year) to create a Services ID and a private key (`.p8`) used to sign
+the client secret — the user does not have that account yet. Nothing
+about the real integration below can be built or even tested without it,
+so this phase currently ships only the part that has zero dependency on
+any Apple credential: the disabled button and its logo.
+
+## Relationship to Phase 22's Google-hiding decision
+
+Phase 22 chose to hide Google sign-in inside the iOS native app rather
+than build Sign in with Apple, specifically to stay outside Apple
+guideline 4.8 (an app offering third-party sign-in must also offer Sign
+in with Apple, unless it offers none at all). That reasoning still holds
+exactly as-is until this phase's real OAuth ships: a disabled, non-functional
+Apple button would not satisfy 4.8 either — the guideline requires an
+actual working integration, not a button. So the new Apple placeholder
+is rendered inside the *same* `@if (!platformService.isIosApp())` block
+as Google in `login.page.html`, meaning it stays invisible inside the
+native iOS app too, same as Google — Phase 22's compliance posture is
+unchanged by this phase. Once the real integration ships (last checklist
+item below), Phase 22's Google-hiding decision itself should be
+revisited, since offering genuine Sign in with Apple removes the reason
+it existed.
+
+## Features
+
+- [x] "Continuer avec Apple" button on `/connexion`, disabled, "(bientôt
+      disponible)" label + tooltip — same visual weight as the Google
+      button, both now carrying their real logo (`IconGoogleComponent`,
+      `IconAppleComponent`) instead of plain text. No network call, no new
+      dependency. `frontend/src/app/features/auth/login/login.page.html`.
+- [ ] Apple Developer Program membership obtained — blocking, outside this
+      track's engineering scope, precondition for everything below.
+- [ ] Services ID + Sign in with Apple private key created in Apple's
+      developer portal, return URLs configured for both the web domain and
+      the native app's redirect scheme.
+- [ ] Backend `AppleStrategy` (mirrors `backend/src/auth/strategies/google.strategy.ts`):
+      verifies the Apple identity token (JWT, Apple's public JWKS), creates
+      or links an account — a new `User.appleId` (nullable, unique),
+      same precedent as the existing `googleId` column. Handles the
+      Apple-specific case where the user's real email is masked behind a
+      `@privaterelay.appleid.com` relay address.
+- [ ] `POST /auth/apple/token-login` route mirroring `/auth/google/token-login` —
+      Sign in with Apple on the web hands back an identity token directly
+      (no separate server-side redirect exchange needed), so the existing
+      "frontend gets a token, backend verifies it" shape Google's native
+      path already uses is the right fit for Apple on web too.
+- [ ] Native (iOS/Android): `@capgo/capacitor-social-login` — already a
+      project dependency for Google (`GoogleNativeLoginService`) — ships
+      its own Apple provider out of the box
+      (`node_modules/@capgo/capacitor-social-login/dist/esm/apple-provider.d.ts`,
+      `AppleSocialLogin`). No new native dependency needed, just
+      `SocialLogin.initialize({ apple: { clientId } })` alongside the
+      existing `google` config.
+- [ ] Button re-enabled and wired to the real flow (web token exchange
+      + native path above).
+- [ ] Revisit Phase 22's Google-hidden-on-iOS decision once this ships —
+      see "Relationship to Phase 22" above.
+- [ ] Tests (once the backend/native pieces above exist):
+  - Backend: `apple.strategy.spec.ts` (token verification, new-account vs.
+    linking an existing account, the masked-relay-email case),
+    `auth.e2e-spec.ts` (new token-login route, mirroring the existing
+    Google e2e coverage).
+  - Frontend: `auth.service.spec.ts` (new `appleTokenLogin` method). No
+    dedicated spec for `login.page.ts` itself — this repo's established
+    convention is that presentational form/list pages have no unit tests
+    (`login.page.ts`/`register.page.ts` have none today either; see Phase
+    1.1-9's Notes for the same precedent spelled out for a different
+    component).
+- [ ] `infra/audit-config.sh`: once the real env var names are settled by
+      whichever library implements `AppleStrategy`, add a
+      `audit_feature_group "Connexion Apple" "..." "$BACKEND_ENV"` (and its
+      `$INFRA_ENV` twin) next to the existing "Connexion Google" one. Not
+      added yet — no code exists yet that reads any such variable, so
+      there's nothing to audit; a plain `info` note pointing here is added
+      in the meantime (see the script's "Connexion Google" line).
+
+## Non-goals — for now
+
+- No real Apple authentication in this pass — everything except the
+  disabled button above is a plan, not code, until the Developer Program
+  blocker clears.
+- No Apple button on `/inscription` in this pass — that page's existing
+  Google button doesn't even have Phase 22's native-app variant that
+  `/connexion` has (it's web-only), so extending it to Apple is deferred
+  to the same later pass that builds the real integration, not bundled in
+  here.
+- No removal of Phase 22's Google-hidden-on-iOS behavior — stays exactly
+  as shipped until Apple sign-in is genuinely functional, see above.
+
+## Notes
+
+- Key finding from this pass's research: `@capgo/capacitor-social-login`
+  (already installed, already used for Google) bundles a working Apple
+  provider — the future native ticket is config only, not a new plugin
+  integration.
+- The 99 $/year Apple Developer Program cost is the concrete, non-technical
+  blocker that motivated splitting this into "UI now, OAuth later" rather
+  than one pass.
