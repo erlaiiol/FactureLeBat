@@ -3,14 +3,17 @@ import {
   Component,
   HostListener,
   computed,
+  effect,
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { IconCloseComponent } from '../../shared/components/icon-close.component';
+import { ModalMorphComponent } from '../../shared/components/modal-morph.component';
 import { PdfCanvasViewerComponent } from '../../shared/components/pdf-canvas-viewer.component';
 import { needsCanvasPdfViewer } from '../../shared/utils/pdf-viewer-support.util';
 
@@ -31,7 +34,7 @@ import { needsCanvasPdfViewer } from '../../shared/utils/pdf-viewer-support.util
 @Component({
   selector: 'app-invoice-preview-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconCloseComponent, PdfCanvasViewerComponent],
+  imports: [IconCloseComponent, ModalMorphComponent, PdfCanvasViewerComponent],
   templateUrl: './invoice-preview-modal.component.html',
 })
 export class InvoicePreviewModalComponent {
@@ -45,11 +48,33 @@ export class InvoicePreviewModalComponent {
 
   readonly closed = output<void>();
   readonly share = output<void>();
-  readonly convertToFacture = output<void>();
-  readonly createFromDevis = output<void>();
+  // See InvoiceListRowComponent.openConvertModal for why this replaced the
+  // separate convertToFacture/createFromDevis outputs.
+  readonly openConvertModal = output<void>();
   readonly createDevisFromFacture = output<void>();
 
-  protected readonly isDevis = computed(() => this.invoice()?.documentType === 'DEVIS');
+  // modalMorph needs `open` (app-modal-morph's own input) decoupled from
+  // what's actually rendered inside: the wrapper must stay mounted through
+  // the whole close animation, but `invoice()` itself can already be null
+  // by the time that starts (InvoiceBoardPage clears it as part of closing)
+  // — `displayedInvoice` freezes the last real value so the panel's content
+  // doesn't blank out underneath the (masked, per modalMorph's own rule)
+  // shrinking box.
+  protected readonly displayedInvoice = signal<InvoiceWithTotals | null>(null);
+
+  constructor() {
+    effect(() => {
+      const current = this.invoice();
+      if (current) {
+        this.displayedInvoice.set(current);
+      }
+    });
+  }
+
+  // Derived from `displayedInvoice`, not `invoice()` directly, so the panel's
+  // own header/actions stay correct through the close animation instead of
+  // recomputing off a now-null invoice mid-shrink.
+  protected readonly isDevis = computed(() => this.displayedInvoice()?.documentType === 'DEVIS');
   // See PdfPreviewModalComponent's identical field for why.
   protected readonly useCanvasViewer = needsCanvasPdfViewer();
 
@@ -62,7 +87,7 @@ export class InvoicePreviewModalComponent {
   // the actions dropdown's own download link) — only the iframe embed needs
   // the blob workaround above.
   protected pdfUrl(): string {
-    const invoice = this.invoice();
+    const invoice = this.displayedInvoice();
     return invoice ? this.invoiceService.pdfUrl(invoice.id) : '';
   }
 

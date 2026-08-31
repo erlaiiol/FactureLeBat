@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Safety net for the resource shrinker (shrinkResources true, app/build.gradle).
+  Splash/launcher drawables are only reachable at runtime through
+  Resources.getIdentifier() calls inside Capacitor's SplashScreen/AssetUtil
+  classes (by config-driven name, not a static @drawable/@mipmap reference
+  the shrinker's static analysis can see), so pin them explicitly instead of
+  hoping "safe mode" heuristics catch every density/orientation variant.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/splash,@mipmap/ic_launcher,@mipmap/ic_launcher_round" />

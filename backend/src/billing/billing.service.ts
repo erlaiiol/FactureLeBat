@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
+import { InvoiceEntryMode, PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
 import { BillingRepository } from './billing.repository';
 import { BillingStatus, TrialOffer } from './entities/billing-status.entity';
@@ -50,9 +50,12 @@ export class BillingService {
   }
 
   async getStatus(companyId: string): Promise<BillingStatus> {
-    const [fields, invoiceCount, customerCount, catalogItemCount] = await Promise.all([
+    const [fields, guidedInvoiceCount, customerCount, catalogItemCount] = await Promise.all([
       this.repository.getBillingFields(companyId),
-      this.repository.countInvoices(companyId),
+      // 1.2/manual-mode-free-tier revision: only mode rapide's own free
+      // credit, not every invoice — MANUAL is unrestricted and never
+      // consumes it, see PlanGateService.assertCanCreateInvoice.
+      this.repository.countInvoices(companyId, InvoiceEntryMode.GUIDED),
       this.repository.countCustomers(companyId),
       this.repository.countCatalogItems(companyId),
     ]);
@@ -74,7 +77,7 @@ export class BillingService {
       cancelAtPeriodEnd: fields.cancelAtPeriodEnd,
       premiumGrantedUntil: fields.premiumGrantedUntil,
       grantedPlanTier: fields.grantedPlanTier,
-      freeInvoiceUsed: invoiceCount >= 1,
+      freeInvoiceUsed: guidedInvoiceCount >= 1,
       stripeConfigured: this.stripeClient.isConfigured(),
       customerCount,
       customerLimit: PLAN_DEFINITIONS[capsTier].customerLimit,

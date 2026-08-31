@@ -535,6 +535,78 @@ describe('InvoiceDraftStore', () => {
 
       expect(store.canPreview()).toBe(true);
     });
+
+    it('is true for a customer name and a single usable service line, with no product lines at all', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setServiceLines([
+        {
+          clientId: 'service-client-1',
+          serviceId: null,
+          name: "Main-d'œuvre",
+          description: '',
+          amountEuros: 100,
+          visibility: 'VISIBLE',
+          redistributionStrategy: 'EQUAL',
+          weights: [],
+          pricingMode: 'FIXED',
+          percentageBasisPoints: null,
+          catalogServiceId: null,
+          saveAsNewService: false,
+          activityCategory: null,
+        },
+      ]);
+
+      expect(store.canPreview()).toBe(true);
+    });
+
+    it('is false when the only service line is REDISTRIBUTED and there are no product lines to redistribute into', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setServiceLines([
+        {
+          clientId: 'service-client-1',
+          serviceId: null,
+          name: "Main-d'œuvre",
+          description: '',
+          amountEuros: 100,
+          visibility: 'REDISTRIBUTED',
+          redistributionStrategy: 'EQUAL',
+          weights: [],
+          pricingMode: 'FIXED',
+          percentageBasisPoints: null,
+          catalogServiceId: null,
+          saveAsNewService: false,
+          activityCategory: null,
+        },
+      ]);
+
+      expect(store.canPreview()).toBe(false);
+    });
+
+    it('is false when the only service line has no name and no resolved amount', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      store.setServiceLines([
+        {
+          clientId: 'service-client-1',
+          serviceId: null,
+          name: '',
+          description: '',
+          amountEuros: 0,
+          visibility: 'VISIBLE',
+          redistributionStrategy: 'EQUAL',
+          weights: [],
+          pricingMode: 'FIXED',
+          percentageBasisPoints: null,
+          catalogServiceId: null,
+          saveAsNewService: false,
+          activityCategory: null,
+        },
+      ]);
+
+      expect(store.canPreview()).toBe(false);
+    });
   });
 
   describe('Phase 1.1-7 reverse charge (autoliquidation)', () => {

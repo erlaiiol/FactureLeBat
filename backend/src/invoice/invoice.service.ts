@@ -13,13 +13,14 @@ import {
   SignatureMethod,
   SimplifiedDisplayLevel,
 } from '../../generated/prisma/enums';
-import { PlanGateService } from '../billing/plan-gate.service';
+import { InvoiceCreationChannel, PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
 import { isVatApplicable } from '../company/legal-status.util';
 import { CustomerService } from '../customer/customer.service';
 import { DiscountService } from '../discount/discount.service';
 import { ProductService } from '../product/product.service';
 import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
+import { ConvertToFactureDto } from './dto/convert-to-facture.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
 import { CompanySuperPdpService } from './e-invoicing/company-super-pdp.service';
@@ -79,12 +80,21 @@ export class InvoiceService {
     return new Date(Date.now() + InvoiceService.AUTO_TRANSMIT_GRACE_PERIOD_MS);
   }
 
+  // 1.2/manual-mode-free-tier revision: MANUAL is unrestricted, GUIDED
+  // (mode rapide, and voice once resolved into this same shell) carries the
+  // one lifetime free credit — see PlanGateService.assertCanCreateInvoice's
+  // header comment. Shared by create()/previewPdf()/previewData() below,
+  // the three entry points that take a raw CreateInvoiceDto.
+  private creationChannel(dto: CreateInvoiceDto): InvoiceCreationChannel {
+    return dto.entryMode === InvoiceEntryMode.MANUAL ? 'MANUAL' : 'GUIDED';
+  }
+
   async create(companyId: string, dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
     // Phase 14: the free trial covers exactly one invoice per company —
     // checked first, before any other work, so a company past its trial
     // never even reaches customer/service-catalog lookups for a doomed
     // request. See docs/roadmap.md Phase 14 and PlanGateService.
-    await this.premiumGate.assertCanCreateInvoice(companyId);
+    await this.premiumGate.assertCanCreateInvoice(companyId, this.creationChannel(dto));
 
     const company = await this.companyService.getProfile(companyId);
 
@@ -272,10 +282,17 @@ export class InvoiceService {
   // stays retrievable exactly as it was. Reuses the exact lines/serviceLines/
   // manualTable/customerFields the devis was confirmed with — nothing here is
   // re-typed or re-validated by the artisan, unlike create()'s DTO path.
-  async convertToFacture(companyId: string, devisId: string): Promise<InvoiceWithTotals> {
-    // Gated first, same "frustrate at the last moment, but check it first"
-    // ordering as create() — this is still "creating a facture".
-    await this.premiumGate.assertCanCreateInvoice(companyId);
+  async convertToFacture(
+    companyId: string,
+    devisId: string,
+    options: ConvertToFactureDto = {},
+  ): Promise<InvoiceWithTotals> {
+    // Gated first, same "check it first" ordering as create() — but as a
+    // QUICK_ACTION, not GUIDED: this one-click shortcut carries no free
+    // credit at all (see PlanGateService.assertCanCreateInvoice's header
+    // comment), and is locked preventively in the invoice board UI before a
+    // free company can even reach this call.
+    await this.premiumGate.assertCanCreateInvoice(companyId, 'QUICK_ACTION');
 
     const devis = await this.findRawById(companyId, devisId);
     if (devis.documentType !== DocumentType.DEVIS) {
@@ -314,7 +331,16 @@ export class InvoiceService {
       entryMode: devis.entryMode,
       documentType: DocumentType.FACTURE,
       convertedFromDevisId: devis.id,
-      simplifiedDisplay: devis.simplifiedDisplay,
+      // "Facture identique" modal (InvoiceBoardPage.convertDevis): the devis's
+      // own display mode carries through by default, but the artisan can
+      // override it right there before the clone is created.
+      simplifiedDisplay: options.simplifiedDisplay ?? devis.simplifiedDisplay,
+      // A devis never carries a deposit (DepositFieldsConsistency is
+      // FACTURE-only), so this is purely opt-in here — the artisan notes one
+      // on the identical facture from the same modal instead of having to
+      // edit it in afterward.
+      depositPercentageBasisPoints: options.depositPercentageBasisPoints,
+      depositAmountCents: options.depositAmountCents,
       // Phase 1.1-8: carried through, same "untouched one-shot clone"
       // reasoning as every other field here — a MANUAL devis's own choice
       // (if any) should survive the conversion, not silently reset to the
@@ -412,7 +438,9 @@ export class InvoiceService {
     factureId: string,
     number: string,
   ): Promise<InvoiceWithTotals> {
-    await this.premiumGate.assertCanCreateInvoice(companyId);
+    // Same QUICK_ACTION channel as convertToFacture above — no free credit,
+    // locked preventively in the invoice board UI.
+    await this.premiumGate.assertCanCreateInvoice(companyId, 'QUICK_ACTION');
 
     const facture = await this.findRawById(companyId, factureId);
     if (facture.documentType !== DocumentType.FACTURE) {
@@ -695,7 +723,7 @@ export class InvoiceService {
     // the last moment" call is that a 2nd invoice's preview is blocked too,
     // not just its final persistence, since preview is reached at the same
     // late point in the flow (see docs/roadmap.md Phase 14).
-    await this.premiumGate.assertCanCreateInvoice(companyId);
+    await this.premiumGate.assertCanCreateInvoice(companyId, this.creationChannel(dto));
 
     const [company, logo, customer] = await Promise.all([
       this.companyService.getProfile(companyId),
@@ -716,7 +744,7 @@ export class InvoiceService {
   // render per-line figures (see docs/conventions.md's "no business-logic
   // duplication").
   async previewData(companyId: string, dto: CreateInvoiceDto): Promise<InvoiceWithTotals> {
-    await this.premiumGate.assertCanCreateInvoice(companyId);
+    await this.premiumGate.assertCanCreateInvoice(companyId, this.creationChannel(dto));
 
     const company = await this.companyService.getProfile(companyId);
     return this.mapper.toPreviewInvoiceWithTotals(dto, company);

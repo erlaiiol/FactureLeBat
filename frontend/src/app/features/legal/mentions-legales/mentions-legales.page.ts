@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { SiteLegalPublicService } from '../../../core/services/site-legal.service';
 import { SiteLegalInfo } from '../../../core/models/site-legal.model';
@@ -18,11 +19,19 @@ import { IconWarningComponent } from '../../../shared/components/icon-warning.co
 export class MentionsLegalesPage {
   private readonly siteLegalService = inject(SiteLegalPublicService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly title = inject(Title);
+  private readonly meta = inject(Meta);
 
   protected readonly loading = signal(true);
   protected readonly info = signal<SiteLegalInfo | null>(null);
 
   constructor() {
+    this.title.setTitle('Mentions légales — FactureLe');
+    this.meta.updateTag({
+      name: 'description',
+      content:
+        "Mentions légales de FactureLe, l'outil de facturation en un clic pour artisans et indépendants : éditeur, hébergeur, contact.",
+    });
     this.siteLegalService
       .get()
       .pipe(takeUntilDestroyed(this.destroyRef))

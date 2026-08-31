@@ -22,6 +22,7 @@ import { InvoiceShareService } from '../../../core/services/invoice-share.servic
 import { ToastService } from '../../../core/services/toast.service';
 import { TrialOfferService } from '../../../core/services/trial-offer.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconCheckComponent } from '../../../shared/components/icon-check.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
@@ -88,6 +89,7 @@ function shuffledHintOrder(): HintKey[] {
     DatePipe,
     RouterLink,
     BigButtonComponent,
+    IconCheckComponent,
     IconEyeComponent,
     IconEyeOffComponent,
     CentsToEurosPipe,
@@ -440,6 +442,13 @@ export class InvoiceCreatePreviewStepPage {
     this.emailModalInvoice.set(null);
   }
 
+  // `actionConfirmMorph` (docs/design-system.md): the button itself confirms
+  // the copy inline (checkmark + "Copié !", self-reverting) instead of a
+  // toast — tighter feedback right where the artisan is already looking,
+  // so the toast is dropped for the success case (the error path still
+  // needs one, since there's a real message to convey there).
+  protected readonly copiedEmail = signal<string | null>(null);
+
   // Phase 1.1-11 follow-up: the native Web Share tier has no recipient
   // parameter at all (see InvoiceShareService's own doc comment) — this is
   // the artisan's fallback to get the client's email into whichever app
@@ -450,7 +459,8 @@ export class InvoiceCreatePreviewStepPage {
   protected async copyCustomerEmail(email: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(email);
-      this.toastService.success('Email copié dans le presse-papiers.');
+      this.copiedEmail.set(email);
+      setTimeout(() => this.copiedEmail.set(null), 1600);
     } catch {
       this.toastService.error(
         'Impossible de copier automatiquement — sélectionnez le texte à la main.',

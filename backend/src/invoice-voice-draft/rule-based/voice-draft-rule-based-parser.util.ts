@@ -123,7 +123,19 @@ const UNIT_TEXT_PATTERNS: Array<{ unit: Unit; source: string }> = [
   { unit: Unit.HOUR, source: 'heures?' },
   { unit: Unit.DAY, source: 'jours?|journ[ée]es?' },
   { unit: Unit.LUMP_SUM, source: 'forfaits?' },
-  { unit: Unit.UNIT, source: 'unit[ée]s?|pi[èe]ces?' },
+  // Packaging/count words — added 2026-08-30 after live testing against a
+  // real materials catalog (sacs de ciment, rouleaux d'isolant, plaques de
+  // placo, tubes PER...) showed every one of them fell through to the
+  // generic-word safety net below instead of matching a known unit. These
+  // don't get their own Unit value (none fits better than UNIT/"pièce"
+  // does), and a confident product match overwrites this with the
+  // catalog's own real unit anyway (see resolveOneLine) — this table only
+  // needs to recognize the word, not model it precisely.
+  {
+    unit: Unit.UNIT,
+    source:
+      'unit[ée]s?|pi[èe]ces?|sacs?|rouleaux?|plaques?|tubes?|barres?|bo[iî]tes?|paquets?|cartons?|palettes?|bidons?|seaux?|pots?',
+  },
 ];
 
 // One alternation built from the table above, in order — used both to find
@@ -145,40 +157,94 @@ function matchUnit(text: string): Unit | undefined {
 // "25m²") isn't recognized — no line is extracted for it at all, which
 // the resolver surfaces as "nothing to build a draft from" rather than a
 // wrong one, same "silence over a guess" rule as everywhere else.
-export function extractLineCandidates(transcript: string): LineCandidate[] {
-  const matches = [...transcript.matchAll(QUANTITY_UNIT_REGEX)];
-  const results: LineCandidate[] = [];
+function extractDescriptionAfter(
+  transcript: string,
+  afterIndex: number,
+  upperBound: number,
+): string {
+  let span = transcript.slice(afterIndex, upperBound);
+  span = span.replace(/^\s*(de\s+|d['’]\s*)/i, '');
+  // Cuts at the first clause boundary — a plain "et" is treated as a
+  // separator between dictated items (the common case in this app's own
+  // example transcripts) rather than a literal "et" inside a product
+  // name; a genuine "vis et chevilles"-style name would need a real
+  // catalog match to recover correctly, which is exactly what the
+  // resolver's own fuzzy search step still gets a chance to do even off
+  // a truncated description.
+  const boundary = span.search(/,|\bet\b|\.| avec | pour |$/i);
+  if (boundary >= 0) {
+    span = span.slice(0, boundary);
+  }
+  return span.trim();
+}
 
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i];
+interface QuantityMatch {
+  start: number;
+  end: number;
+  quantity: number;
+  unit?: Unit;
+  word: string;
+}
+
+// Any digit run followed by a word — cast far wider than
+// QUANTITY_UNIT_REGEX's known vocabulary on purpose: this is the pass that
+// catches whatever UNIT_TEXT_PATTERNS doesn't yet know (a packaging word
+// nobody's added, a typo, dictation-software phrasing). Requires a letter
+// right after the number so "acompte de 20%" ('%', not a letter) is never
+// mistaken for a line.
+const GENERIC_QUANTITY_WORD_REGEX = /(\d+(?:[.,]\d+)?)\s*([a-zàâäéèêëïîôöùûüçñ]+)/gi;
+
+export function extractLineCandidates(transcript: string): LineCandidate[] {
+  const known: QuantityMatch[] = [];
+  for (const match of transcript.matchAll(QUANTITY_UNIT_REGEX)) {
     const quantity = parseFloat(match[1].replace(',', '.'));
     const unit = matchUnit(match[2]);
     if (unit === undefined || Number.isNaN(quantity)) {
       continue;
     }
+    const start = match.index ?? 0;
+    known.push({ start, end: start + match[0].length, quantity, unit, word: match[2] });
+  }
 
-    const afterMatchIndex = (match.index ?? 0) + match[0].length;
-    const upperBound =
-      i + 1 < matches.length ? (matches[i + 1].index ?? transcript.length) : transcript.length;
-    let descriptionSpan = transcript.slice(afterMatchIndex, upperBound);
-
-    descriptionSpan = descriptionSpan.replace(/^\s*(de\s+|d['’]\s*)/i, '');
-    // Cuts at the first clause boundary — a plain "et" is treated as a
-    // separator between dictated items (the common case in this app's own
-    // example transcripts) rather than a literal "et" inside a product
-    // name; a genuine "vis et chevilles"-style name would need a real
-    // catalog match to recover correctly, which is exactly what the
-    // resolver's own fuzzy search step still gets a chance to do even off
-    // a truncated description.
-    const boundary = descriptionSpan.search(/,|\bet\b|\.| avec | pour |$/i);
-    if (boundary >= 0) {
-      descriptionSpan = descriptionSpan.slice(0, boundary);
+  // Safety net: a quantity dictated with a unit word this parser doesn't
+  // recognize must still surface as a flagged line, never vanish with zero
+  // trace — same "never silently wrong" rule the rest of this engine
+  // follows. Caught live 2026-08-30: "5 sacs de ciment" produced nothing at
+  // all before this (and before "sacs" was added to UNIT_TEXT_PATTERNS).
+  const unknown: QuantityMatch[] = [];
+  for (const match of transcript.matchAll(GENERIC_QUANTITY_WORD_REGEX)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (known.some((k) => start < k.end && end > k.start)) {
+      continue;
     }
-    descriptionSpan = descriptionSpan.trim();
-
-    if (descriptionSpan.length > 0) {
-      results.push({ quantity, unit, description: descriptionSpan });
+    const quantity = parseFloat(match[1].replace(',', '.'));
+    if (Number.isNaN(quantity)) {
+      continue;
     }
+    unknown.push({ start, end, quantity, word: match[2] });
+  }
+
+  const all = [...known, ...unknown].sort((a, b) => a.start - b.start);
+  const results: LineCandidate[] = [];
+
+  for (let i = 0; i < all.length; i++) {
+    const current = all[i];
+    const upperBound = i + 1 < all.length ? all[i + 1].start : transcript.length;
+    const rest = extractDescriptionAfter(transcript, current.end, upperBound);
+
+    if (current.unit !== undefined) {
+      if (rest.length > 0) {
+        results.push({ quantity: current.quantity, unit: current.unit, description: rest });
+      }
+      continue;
+    }
+
+    // Unknown unit word — nothing consumed it, so it belongs in the
+    // description rather than the "de "/word-after logic (which assumes
+    // the unit word itself was already stripped out).
+    const description = rest.length > 0 ? `${current.word} ${rest}` : current.word;
+    results.push({ quantity: current.quantity, unit: Unit.UNIT, description });
   }
 
   return results;

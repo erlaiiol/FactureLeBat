@@ -12,7 +12,20 @@
           "package_name": "fr.facturele.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "211973026193-kcvctjp7aq6bbfq8f1rq6ko78jb8guo8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "fr.facturele.app",
+            "certificate_hash": "7da32b4d83f0e38d3035f1934abb0ae7aaff425b"
+          }
+        },
+        {
+          "client_id": "211973026193-40naqvlso1khcl3gtofs4et50lhi6htq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB70Tl0PxpCOXXrVrpCbgbZ70kwIys7wqE"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "211973026193-40naqvlso1khcl3gtofs4et50lhi6htq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

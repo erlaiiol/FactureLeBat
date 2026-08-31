@@ -45,19 +45,30 @@ function buildService(options: {
 }
 
 describe('PlanGateService.assertCanCreateInvoice', () => {
-  it('allows a company with zero invoices regardless of subscription status', async () => {
-    const { service } = buildService({ invoiceCount: 0, fields: {} });
-    await expect(service.assertCanCreateInvoice('company-1')).resolves.toBeUndefined();
+  it('allows MANUAL unconditionally, regardless of invoice count or subscription', async () => {
+    const { service, getBillingFields, countInvoices } = buildService({
+      invoiceCount: 5,
+      fields: {},
+    });
+    await expect(service.assertCanCreateInvoice('company-1', 'MANUAL')).resolves.toBeUndefined();
+    // Short-circuits before even reading billing fields or the invoice count.
+    expect(getBillingFields).not.toHaveBeenCalled();
+    expect(countInvoices).not.toHaveBeenCalled();
   });
 
-  it('blocks a company past its first invoice with no subscription or grant', async () => {
+  it('allows GUIDED with zero GUIDED invoices regardless of subscription status', async () => {
+    const { service } = buildService({ invoiceCount: 0, fields: {} });
+    await expect(service.assertCanCreateInvoice('company-1', 'GUIDED')).resolves.toBeUndefined();
+  });
+
+  it('blocks GUIDED past its first free invoice with no subscription or grant', async () => {
     const { service } = buildService({ invoiceCount: 1, fields: {} });
-    await expect(service.assertCanCreateInvoice('company-1')).rejects.toBeInstanceOf(
+    await expect(service.assertCanCreateInvoice('company-1', 'GUIDED')).rejects.toBeInstanceOf(
       PremiumRequiredException,
     );
   });
 
-  it('allows a company past its first invoice with an ACTIVE Essentiel subscription', async () => {
+  it('allows GUIDED past its first invoice with an ACTIVE Essentiel subscription', async () => {
     const { service } = buildService({
       invoiceCount: 5,
       fields: {
@@ -65,10 +76,10 @@ describe('PlanGateService.assertCanCreateInvoice', () => {
         subscriptionPlanTier: PlanTier.ESSENTIEL,
       },
     });
-    await expect(service.assertCanCreateInvoice('company-1')).resolves.toBeUndefined();
+    await expect(service.assertCanCreateInvoice('company-1', 'GUIDED')).resolves.toBeUndefined();
   });
 
-  it('blocks a company whose subscription is PAST_DUE or CANCELED', async () => {
+  it('blocks GUIDED when the subscription is PAST_DUE or CANCELED', async () => {
     const { service } = buildService({
       invoiceCount: 2,
       fields: {
@@ -76,29 +87,49 @@ describe('PlanGateService.assertCanCreateInvoice', () => {
         subscriptionPlanTier: PlanTier.PREMIUM,
       },
     });
-    await expect(service.assertCanCreateInvoice('company-1')).rejects.toBeInstanceOf(
+    await expect(service.assertCanCreateInvoice('company-1', 'GUIDED')).rejects.toBeInstanceOf(
       PremiumRequiredException,
     );
   });
 
-  it('allows a company with a still-valid grant (promo code / admin / referral)', async () => {
+  it('allows GUIDED with a still-valid grant (promo code / admin / referral)', async () => {
     const future = new Date(Date.now() + 60_000);
     const { service } = buildService({
       invoiceCount: 3,
       fields: { premiumGrantedUntil: future, grantedPlanTier: PlanTier.ESSENTIEL },
     });
-    await expect(service.assertCanCreateInvoice('company-1')).resolves.toBeUndefined();
+    await expect(service.assertCanCreateInvoice('company-1', 'GUIDED')).resolves.toBeUndefined();
   });
 
-  it('blocks a company whose grant has already expired', async () => {
+  it('blocks GUIDED when the grant has already expired', async () => {
     const past = new Date(Date.now() - 60_000);
     const { service } = buildService({
       invoiceCount: 3,
       fields: { premiumGrantedUntil: past, grantedPlanTier: PlanTier.PREMIUM },
     });
-    await expect(service.assertCanCreateInvoice('company-1')).rejects.toBeInstanceOf(
+    await expect(service.assertCanCreateInvoice('company-1', 'GUIDED')).rejects.toBeInstanceOf(
       PremiumRequiredException,
     );
+  });
+
+  it('blocks QUICK_ACTION with no active plan even with zero invoices', async () => {
+    const { service } = buildService({ invoiceCount: 0, fields: {} });
+    await expect(
+      service.assertCanCreateInvoice('company-1', 'QUICK_ACTION'),
+    ).rejects.toBeInstanceOf(PremiumRequiredException);
+  });
+
+  it('allows QUICK_ACTION with an active plan', async () => {
+    const { service } = buildService({
+      invoiceCount: 0,
+      fields: {
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
+        subscriptionPlanTier: PlanTier.ESSENTIEL,
+      },
+    });
+    await expect(
+      service.assertCanCreateInvoice('company-1', 'QUICK_ACTION'),
+    ).resolves.toBeUndefined();
   });
 });
 

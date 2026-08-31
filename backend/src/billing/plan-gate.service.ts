@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
+import { InvoiceEntryMode, PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { BillingFields, BillingRepository } from './billing.repository';
 import { CatalogLimitExceededException } from './catalog-limit-exceeded.exception';
 import {
@@ -13,35 +13,64 @@ import { PlanFeatureLockedException } from './plan-feature-locked.exception';
 import { PremiumRequiredException } from './premium-required.exception';
 
 // Phase 14's original business rule, generalized by Phase 30 from a single
-// boolean ("premium or not") to 3 tiers — isolated from both the Stripe
-// plumbing (StripeClientService) and the HTTP surface (BillingController):
+// boolean ("premium or not") to 3 tiers, then revised again (1.2, "manual
+// mode free tier") from one flat rule into a per-channel one — isolated from
+// both the Stripe plumbing (StripeClientService) and the HTTP surface
+// (BillingController):
 // - a company may always configure its environment (customers/products/
-//   services) up to its tier's cap, and may always create its very first
-//   invoice for free, with NO cap at all on invoices/devis themselves — see
-//   docs/roadmap.md Phase 30's "no limit on devis/factures, at any tier".
-// - every invoice after the first requires an active subscription or a live
-//   grant of ANY tier (Stripe or promo-code/admin/referral-issued — all
+//   services) up to its tier's cap, with NO cap at all on invoices/devis
+//   themselves — see docs/roadmap.md Phase 30's "no limit on devis/
+//   factures, at any tier" (still true: nothing here ever caps a *count* of
+//   documents, only which channel produced them).
+// - MANUAL (the free-form canvas) stays free and unlimited on every tier,
+//   forever — the "almost always available" promise the manual mode is
+//   meant to keep even for an artisan who never subscribes.
+// - GUIDED (mode rapide) carries exactly one lifetime free invoice, counted
+//   over GUIDED invoices only (see BillingRepository.countInvoices) so an
+//   artisan's MANUAL usage never consumes or blocks it. Every GUIDED
+//   invoice after that one requires an active subscription or a live grant
+//   of ANY tier (Stripe or promo-code/admin/referral-issued — all
 //   interchangeable here, see BillingRepository.grantPlanDays).
+// - QUICK_ACTION (the invoice board's "Facture à partir du devis"/"Créer un
+//   devis" one-click shortcuts, InvoiceService.convertToFacture/
+//   convertToDevis) and voice-originated invoices carry no free credit at
+//   all — voice is additionally kept out of reach entirely for a free
+//   company by the frontend's premiumRequiredGuard on the `vocal` route, so
+//   it never even reaches this check, but QUICK_ACTION has no route to gate
+//   (it's a menu action within the invoice board), so it's enforced here.
 // - two features (Phase 17 analytics, Phase 10 AI assistant) require a
 //   tier whose PLAN_DEFINITIONS entry actually includes them.
+export type InvoiceCreationChannel = 'MANUAL' | 'GUIDED' | 'QUICK_ACTION';
+
 @Injectable()
 export class PlanGateService {
   constructor(private readonly repository: BillingRepository) {}
 
   // Deliberately called from InvoiceService.create()/previewPdf() (both),
-  // and nowhere earlier in the flow — see docs/roadmap.md Phase 14's
-  // "frustrate at the last moment" instruction, unchanged by Phase 30.
-  async assertCanCreateInvoice(companyId: string): Promise<void> {
-    const [fields, invoiceCount] = await Promise.all([
-      this.repository.getBillingFields(companyId),
-      this.repository.countInvoices(companyId),
-    ]);
-
-    if (invoiceCount < 1) {
-      return; // free trial invoice — always allowed regardless of subscription
+  // and nowhere earlier in the flow for MANUAL/GUIDED — see
+  // docs/roadmap.md Phase 14's "frustrate at the last moment" instruction.
+  // QUICK_ACTION is the one exception: its two callers are locked
+  // preventively behind a lock icon in the invoice board UI before this is
+  // ever reached, since there's no multi-step flow there to frustrate at
+  // the end of — see InvoiceListRowComponent's premiumRequired input.
+  async assertCanCreateInvoice(companyId: string, channel: InvoiceCreationChannel): Promise<void> {
+    if (channel === 'MANUAL') {
+      return; // free and unlimited on every tier, see the header comment above
     }
+
+    const fields = await this.repository.getBillingFields(companyId);
     if (getEffectivePlanTier(fields)) {
       return;
+    }
+
+    if (channel === 'GUIDED') {
+      const guidedInvoiceCount = await this.repository.countInvoices(
+        companyId,
+        InvoiceEntryMode.GUIDED,
+      );
+      if (guidedInvoiceCount < 1) {
+        return; // free trial invoice — always allowed regardless of subscription
+      }
     }
     throw new PremiumRequiredException();
   }

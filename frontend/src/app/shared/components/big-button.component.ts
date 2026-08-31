@@ -16,7 +16,8 @@ export type ButtonTone = 'solid' | 'subtle';
       [type]="type()"
       [disabled]="disabled()"
       class="w-full rounded-xl px-6 py-4 text-lg font-semibold shadow-sm transition
-             disabled:cursor-not-allowed disabled:opacity-50"
+             duration-[120ms] active:scale-[0.97] active:duration-0
+             disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
       [class]="variantClasses()"
     >
       <ng-content />

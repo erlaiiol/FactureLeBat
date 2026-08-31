@@ -4,6 +4,7 @@ import { PaywallService } from '../../core/services/paywall.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { BigButtonComponent } from './big-button.component';
 import { IconCloseComponent } from './icon-close.component';
+import { ModalMorphComponent } from './modal-morph.component';
 
 // Mounted once at the app root (app.html), same "one shared overlay,
 // triggered from anywhere" pattern as TourOverlayComponent — reads
@@ -13,7 +14,7 @@ import { IconCloseComponent } from './icon-close.component';
 @Component({
   selector: 'app-paywall-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BigButtonComponent, IconCloseComponent],
+  imports: [BigButtonComponent, IconCloseComponent, ModalMorphComponent],
   templateUrl: './paywall-modal.component.html',
 })
 export class PaywallModalComponent {

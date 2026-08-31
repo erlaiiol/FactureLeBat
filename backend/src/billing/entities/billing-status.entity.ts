@@ -27,6 +27,10 @@ export interface BillingStatus {
   cancelAtPeriodEnd: boolean;
   premiumGrantedUntil: Date | null;
   grantedPlanTier: PlanTier | null;
+  // 1.2/manual-mode-free-tier revision: specifically mode rapide's (GUIDED)
+  // one lifetime free credit, not "any invoice ever created" — MANUAL mode
+  // is free and unlimited on every tier and never sets this true. See
+  // PlanGateService.assertCanCreateInvoice.
   freeInvoiceUsed: boolean;
   stripeConfigured: boolean;
   customerCount: number;

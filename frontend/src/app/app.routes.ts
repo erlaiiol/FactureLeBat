@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
+import { premiumRequiredGuard } from './core/guards/premium-required.guard';
 import { rapportsRedirectGuard } from './core/guards/rapports-redirect.guard';
 
 // Phase 13: every feature route below needs a valid session — wrapped as
@@ -83,6 +84,10 @@ const protectedRoutes: Routes = [
       // own `revue` child once a draft resolves.
       {
         path: 'vocal',
+        // 1.2/manual-mode-free-tier revision: unlike rapide/manuel above,
+        // this mode carries no free credit at all — see
+        // premiumRequiredGuard's own comment.
+        canActivate: [premiumRequiredGuard],
         loadComponent: () =>
           import('./features/invoice-create/voice/invoice-create-voice-capture.page').then(
             (m) => m.InvoiceCreateVoiceCapturePage,

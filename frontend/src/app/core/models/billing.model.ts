@@ -25,6 +25,8 @@ export interface BillingStatus {
   cancelAtPeriodEnd: boolean;
   premiumGrantedUntil: string | null;
   grantedPlanTier: PlanTier | null;
+  // Specifically mode rapide's (GUIDED) one lifetime free credit — mode
+  // manuel stays free and unlimited on every tier and never sets this true.
   freeInvoiceUsed: boolean;
   stripeConfigured: boolean;
   customerCount: number;

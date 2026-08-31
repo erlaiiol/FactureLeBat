@@ -26,9 +26,16 @@
             <button
               type="button"
               (click)="copyCustomerEmail(email)"
-              class="shrink-0 text-sm font-medium text-primary hover:underline"
+              class="action-confirm-morph flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
+              [class.text-success]="copiedEmail() === email"
+              [class.text-primary]="copiedEmail() !== email"
             >
-              Copier
+              @if (copiedEmail() === email) {
+                <app-icon-check [size]="14" />
+                Copié !
+              } @else {
+                Copier
+              }
             </button>
           </div>
         }
@@ -146,9 +153,16 @@
           <button
             type="button"
             (click)="copyCustomerEmail(email)"
-            class="shrink-0 text-sm font-medium text-primary hover:underline"
+            class="action-confirm-morph flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
+            [class.text-success]="copiedEmail() === email"
+            [class.text-primary]="copiedEmail() !== email"
           >
-            Copier
+            @if (copiedEmail() === email) {
+              <app-icon-check [size]="14" />
+              Copié !
+            } @else {
+              Copier
+            }
           </button>
         </div>
       }

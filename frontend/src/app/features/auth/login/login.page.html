@@ -65,29 +65,48 @@
   @if (!platformService.isIosApp()) {
     <!-- Apple 4.8: an app offering a third-party sign-in must also offer
     Sign in with Apple, unless it offers no third-party sign-in at all —
-    hiding Google here on iOS (email/password stays available) keeps this
-    app out of that requirement instead of building Sign in with Apple.
-    See docs/roadmap.md Phase 22. -->
-    @if (platformService.isNativeApp()) {
-      <!-- Android app: native Credential Manager sign-in, not the browser
-      redirect below — Google blocks that redirect inside an embedded
-      WebView. See GoogleNativeLoginService. -->
+    hiding this whole block on iOS (email/password stays available) keeps
+    this app out of that requirement. The Apple button below is a disabled
+    placeholder, not a real Sign in with Apple integration, so it stays
+    inside this same iOS-hidden block rather than being shown there too —
+    see docs/roadmap.md Phase 22 and Phase 1.5. -->
+    <div class="flex flex-col gap-2">
+      @if (platformService.isNativeApp()) {
+        <!-- Android app: native Credential Manager sign-in, not the browser
+        redirect below — Google blocks that redirect inside an embedded
+        WebView. See GoogleNativeLoginService. -->
+        <button
+          type="button"
+          (click)="googleLoginNative()"
+          [disabled]="saving()"
+          class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle disabled:opacity-50"
+        >
+          <app-icon-google />
+          Continuer avec Google
+        </button>
+      } @else {
+        <a
+          [href]="googleLoginUrl"
+          class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle"
+        >
+          <app-icon-google />
+          Continuer avec Google
+        </a>
+      }
+
+      <!-- Placeholder only — no Apple Developer account/key yet, so there's
+      nothing to wire up. See docs/roadmap.md Phase 1.5 for the full plan. -->
       <button
         type="button"
-        (click)="googleLoginNative()"
-        [disabled]="saving()"
-        class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle disabled:opacity-50"
+        disabled
+        title="Connexion avec Apple — bientôt disponible"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink opacity-50"
       >
-        Continuer avec Google
+        <app-icon-apple />
+        Continuer avec Apple
+        <span class="text-xs font-normal text-ink-soft">(bientôt disponible)</span>
       </button>
-    } @else {
-      <a
-        [href]="googleLoginUrl"
-        class="flex items-center justify-center gap-2 rounded-xl border border-line px-6 py-3 text-sm font-semibold text-ink hover:bg-secondary-subtle"
-      >
-        Continuer avec Google
-      </a>
-    }
+    </div>
   }
 
   @if (demoProfiles().length > 0) {

@@ -33,19 +33,27 @@
               }}
             </app-badge>
           } @else if (s.freeInvoiceUsed) {
-            <app-badge variant="danger" tone="solid">Facture gratuite utilisée</app-badge>
+            <app-badge variant="danger" tone="solid">Facture rapide gratuite utilisée</app-badge>
           } @else {
             <app-badge variant="info" tone="subtle">Essai gratuit disponible</app-badge>
           }
         </div>
 
-        @if (!s.freeInvoiceUsed && !s.hasPremiumAccess) {
-          <p class="text-ink-soft">
-            Vous pouvez créer votre première facture gratuitement, sans abonnement. Un abonnement
-            sera nécessaire à partir de la deuxième — devis et factures restent ensuite illimités,
-            quel que soit le palier choisi.
-          </p>
-        }
+        <p class="text-ink-soft">
+          Le mode manuel reste gratuit et illimité, avec ou sans abonnement.
+          @if (!s.hasPremiumAccess) {
+            En mode rapide,
+            @if (s.freeInvoiceUsed) {
+              votre facture gratuite a déjà été utilisée — un abonnement est nécessaire pour en
+              créer d'autres.
+            } @else {
+              vous pouvez créer une facture gratuitement, sans abonnement.
+            }
+            La facturation à voix haute et les actions rapides de « Mes documents » (convertir un
+            devis en facture, créer un devis rétroactif) nécessitent un abonnement dès la première
+            utilisation.
+          }
+        </p>
 
         @if (s.subscriptionStatus === 'ACTIVE') {
           <p class="text-ink-soft">
@@ -302,7 +310,12 @@
                 tone="subtle"
                 (click)="copyReferralLink(r)"
               >
-                {{ referralLinkCopied() ? 'Copié !' : 'Copier le lien' }}
+                <span class="action-confirm-morph flex items-center justify-center gap-2">
+                  @if (referralLinkCopied()) {
+                    <app-icon-check [size]="16" />
+                  }
+                  {{ referralLinkCopied() ? 'Copié !' : 'Copier le lien' }}
+                </span>
               </app-big-button>
             </div>
             <p class="text-sm text-ink-soft">

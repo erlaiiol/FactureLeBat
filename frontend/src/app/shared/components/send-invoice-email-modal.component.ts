@@ -16,6 +16,7 @@ import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from './big-button.component';
 import { FieldHintComponent } from './field-hint.component';
 import { IconCloseComponent } from './icon-close.component';
+import { ModalMorphComponent } from './modal-morph.component';
 
 // Same closable-modal shape as app-pdf-preview-modal — a self-contained
 // dialog the caller opens by setting `invoice`, closes via the `closed`
@@ -25,7 +26,13 @@ import { IconCloseComponent } from './icon-close.component';
 @Component({
   selector: 'app-send-invoice-email-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent, IconCloseComponent],
+  imports: [
+    ReactiveFormsModule,
+    BigButtonComponent,
+    FieldHintComponent,
+    IconCloseComponent,
+    ModalMorphComponent,
+  ],
   templateUrl: './send-invoice-email-modal.component.html',
 })
 export class SendInvoiceEmailModalComponent {
@@ -40,6 +47,8 @@ export class SendInvoiceEmailModalComponent {
   protected readonly templateLoading = signal(true);
   protected readonly sending = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  // See InvoicePreviewModalComponent's identical field for why.
+  protected readonly displayedInvoice = signal<InvoiceWithTotals | null>(null);
 
   protected readonly form = this.fb.nonNullable.group({
     to: ['', [Validators.required, Validators.email]],
@@ -55,6 +64,7 @@ export class SendInvoiceEmailModalComponent {
       if (!invoice) {
         return;
       }
+      this.displayedInvoice.set(invoice);
       this.templateLoading.set(true);
       this.errorMessage.set(null);
       this.form.reset({ to: invoice.customerEmail ?? '', subject: '', message: '' });

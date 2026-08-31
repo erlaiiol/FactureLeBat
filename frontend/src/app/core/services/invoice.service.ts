@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable, timeout } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  ConvertToFactureRequest,
   CreateInvoiceRequest,
   DocumentType,
   InvoiceMailTemplate,
@@ -135,8 +136,14 @@ export class InvoiceService {
 
   // Phase 14.3: turns a devis into a real, independently-numbered facture —
   // see InvoiceService.convertToFacture on the backend.
-  convertToFacture(devisId: string): Observable<InvoiceWithTotals> {
-    return this.http.post<InvoiceWithTotals>(`${this.baseUrl}/${devisId}/convert-to-facture`, {});
+  convertToFacture(
+    devisId: string,
+    request: ConvertToFactureRequest = {},
+  ): Observable<InvoiceWithTotals> {
+    return this.http.post<InvoiceWithTotals>(
+      `${this.baseUrl}/${devisId}/convert-to-facture`,
+      request,
+    );
   }
 
   // Retroactive devis creation: an untouched clone of the facture, numbered

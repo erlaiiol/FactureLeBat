@@ -171,7 +171,7 @@ export class InvoiceCreateLinesStepPage {
   // Desktop-only (`sm` breakpoint, matching styles.css's .fixed-add-flyout
   // and this page's own fixed-position container): on a phone the two "+"
   // circles are already a large, obviously-tappable fraction of the
-  // viewport (see ux-roadmap.md's mobile-first vision) the way they never
+  // viewport (see docs/front/'s mobile-first vision) the way they never
   // are on a 15"+ screen, so there's nothing this reveal explains that the
   // button itself doesn't already — it would just cover the page the
   // artisan just landed on with two expanded pills for no reason.
@@ -534,16 +534,66 @@ export class InvoiceCreateLinesStepPage {
 
   protected removeLine(index: number): void {
     const group = this.lines.at(index);
-    const removedClientId = group.controls.clientId.value;
-    this.lines.removeAt(index);
-    this.syncAllServiceLineWeights();
-    this.uncollapseLine(group);
-    // Phase 34: a discount targeting this line would otherwise keep a
-    // clientId matching nothing — resolvedDiscountAmountCents/
-    // buildInvoiceRequest already fall back gracefully to the general total
-    // in that case, but clearing it here keeps the form's own "Appliquer
-    // sur" selection from silently pointing at a line that no longer exists.
-    this.clearDiscountTargetsReferencing(removedClientId, 'targetLineClientId');
+    this.playLineOut(this.morphId(group), () => {
+      // Re-finds the group's own current index rather than trusting the
+      // closed-over `index` — another line can finish its own removeAt
+      // (synchronous) while this one is still mid-`lineOut`, shifting every
+      // index after it.
+      const currentIndex = this.lines.controls.indexOf(group);
+      if (currentIndex === -1) {
+        return;
+      }
+      const removedClientId = group.controls.clientId.value;
+      this.lines.removeAt(currentIndex);
+      this.syncAllServiceLineWeights();
+      this.uncollapseLine(group);
+      // Phase 34: a discount targeting this line would otherwise keep a
+      // clientId matching nothing — resolvedDiscountAmountCents/
+      // buildInvoiceRequest already fall back gracefully to the general total
+      // in that case, but clearing it here keeps the form's own "Appliquer
+      // sur" selection from silently pointing at a line that no longer exists.
+      this.clearDiscountTargetsReferencing(removedClientId, 'targetLineClientId');
+    });
+  }
+
+  // `lineOut` (docs/design-system.md): the exit counterpart to `anim-line-in`
+  // — fade + downward slide + scale-down, played on the outgoing row before
+  // `onDone` (the actual FormArray removal) runs, instead of an instant
+  // disappearance. Uses `element.animate()` directly (matching `cardMorph`'s
+  // own WAAPI technique) rather than a CSS class + `transitionend` listener,
+  // for the same `.finished`-promise reliability reasoning. Reduced motion
+  // and a missing/already-detached element both skip straight to `onDone`.
+  // `lineOut`, follow-up (2026-08-31): fade+slide+scale alone left the
+  // outgoing row's full-height layout box in place for the whole 250ms,
+  // then the actual FormArray removal (in `onDone`) collapsed it to zero
+  // in a single frame — a visible "snap" right after the smooth part
+  // finished. Animating `maxHeight` (with `overflow: hidden`) down to 0 in
+  // the same keyframes closes the row's own box in lockstep with the fade,
+  // so there's nothing left to snap by the time `onDone` runs. The
+  // remaining rows still use `gap-6`/`gap-4` (flex/grid, not margin) on
+  // their shared container — `gap` is applied uniformly between every
+  // pair of children and can't be shrunk for one child in isolation via
+  // CSS alone, so a small (one `gap` unit) snap remains once the row is
+  // actually removed from the DOM. Meaningfully smaller than before (a
+  // fixed ~16-24px gap vs. the row's full former height), not a complete
+  // fix — a real per-sibling FLIP reflow would close that residual too,
+  // but that's explicitly out of scope (see this phase's own non-goal).
+  private playLineOut(morphId: string, onDone: () => void): void {
+    const el = document.querySelector<HTMLElement>(`[data-morph-id="${morphId}"]`);
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      onDone();
+      return;
+    }
+    const startHeight = el.getBoundingClientRect().height;
+    el.style.overflow = 'hidden';
+    const animation = el.animate(
+      [
+        { opacity: 1, transform: 'translateY(0) scale(1)', maxHeight: `${startHeight}px` },
+        { opacity: 0, transform: 'translateY(8px) scale(0.97)', maxHeight: '0px' },
+      ],
+      { duration: 250, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' },
+    );
+    animation.finished.then(onDone).catch(onDone);
   }
 
   // Phase 13.5: the catalog flyout's entry point for a Product row — always
@@ -707,11 +757,17 @@ export class InvoiceCreateLinesStepPage {
 
   protected removeServiceLine(index: number): void {
     const group = this.serviceLines.at(index);
-    const removedClientId = group.controls.clientId.value;
-    this.serviceLines.removeAt(index);
-    this.uncollapseServiceLine(group);
-    // Phase 34: same stale-target cleanup as removeLine above.
-    this.clearDiscountTargetsReferencing(removedClientId, 'targetServiceLineClientId');
+    this.playLineOut(this.morphId(group), () => {
+      const currentIndex = this.serviceLines.controls.indexOf(group);
+      if (currentIndex === -1) {
+        return;
+      }
+      const removedClientId = group.controls.clientId.value;
+      this.serviceLines.removeAt(currentIndex);
+      this.uncollapseServiceLine(group);
+      // Phase 34: same stale-target cleanup as removeLine above.
+      this.clearDiscountTargetsReferencing(removedClientId, 'targetServiceLineClientId');
+    });
   }
 
   private clearDiscountTargetsReferencing(
@@ -814,8 +870,14 @@ export class InvoiceCreateLinesStepPage {
 
   protected removeDiscountLine(index: number): void {
     const group = this.discountLines.at(index);
-    this.discountLines.removeAt(index);
-    this.uncollapseDiscountLine(group);
+    this.playLineOut(this.morphId(group), () => {
+      const currentIndex = this.discountLines.controls.indexOf(group);
+      if (currentIndex === -1) {
+        return;
+      }
+      this.discountLines.removeAt(currentIndex);
+      this.uncollapseDiscountLine(group);
+    });
   }
 
   // Same flyout entry point as pickProduct/pickService, for a Discount —

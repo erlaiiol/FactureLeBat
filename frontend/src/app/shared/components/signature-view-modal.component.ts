@@ -2,13 +2,16 @@ import {
   ChangeDetectionStrategy,
   Component,
   HostListener,
+  effect,
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { IconCloseComponent } from './icon-close.component';
+import { ModalMorphComponent } from './modal-morph.component';
 
 // "Voir la signature" — a plain full-size lightbox for the attached
 // InvoiceSignature image. No PDF/canvas-viewer complexity needed (unlike
@@ -16,7 +19,7 @@ import { IconCloseComponent } from './icon-close.component';
 @Component({
   selector: 'app-signature-view-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconCloseComponent],
+  imports: [IconCloseComponent, ModalMorphComponent],
   templateUrl: './signature-view-modal.component.html',
 })
 export class SignatureViewModalComponent {
@@ -25,8 +28,20 @@ export class SignatureViewModalComponent {
   readonly invoice = input<InvoiceWithTotals | null>(null);
   readonly closed = output<void>();
 
+  // See InvoicePreviewModalComponent's identical field for why.
+  protected readonly displayedInvoice = signal<InvoiceWithTotals | null>(null);
+
+  constructor() {
+    effect(() => {
+      const current = this.invoice();
+      if (current) {
+        this.displayedInvoice.set(current);
+      }
+    });
+  }
+
   protected imageUrl(): string {
-    const invoice = this.invoice();
+    const invoice = this.displayedInvoice();
     return invoice ? this.invoiceService.signatureUrl(invoice.id) : '';
   }
 

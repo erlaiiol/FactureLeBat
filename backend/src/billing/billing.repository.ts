@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
+import { InvoiceEntryMode, PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { PrismaService } from '../database/prisma.service';
 import { higherTier } from './plan-config';
 
@@ -49,8 +49,14 @@ export class BillingRepository {
   // never persisted" convention as the rest of this app (see
   // docs/roadmap.md's Phase 5/7/8.5 implementation notes). Cheap: an
   // indexed count on Invoice.companyId.
-  countInvoices(companyId: string): Promise<number> {
-    return this.prisma.invoice.count({ where: { companyId } });
+  //
+  // 1.2/manual-mode-free-tier revision: entryMode narrows the count to just
+  // GUIDED invoices (mode rapide) — the one channel that still carries a
+  // single lifetime free credit, see PlanGateService.assertCanCreateInvoice.
+  // MANUAL invoices are free and unlimited on every tier, so they must never
+  // enter this count or they'd wrongly consume/block the GUIDED credit.
+  countInvoices(companyId: string, entryMode?: InvoiceEntryMode): Promise<number> {
+    return this.prisma.invoice.count({ where: { companyId, ...(entryMode && { entryMode }) } });
   }
 
   // Phase 30: catalog-capacity checks (PlanGateService.assertCatalogCapacity)

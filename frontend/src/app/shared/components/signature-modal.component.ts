@@ -5,6 +5,7 @@ import {
   DestroyRef,
   ElementRef,
   HostListener,
+  effect,
   inject,
   input,
   output,
@@ -17,6 +18,7 @@ import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from './big-button.component';
 import { FieldHintComponent } from './field-hint.component';
 import { IconCloseComponent } from './icon-close.component';
+import { ModalMorphComponent } from './modal-morph.component';
 
 // The photo tab's client-side compression target (see onPhotoSelected) —
 // keeps storage/PDF size predictable regardless of camera resolution, same
@@ -42,7 +44,7 @@ type SignatureTab = 'draw' | 'photo';
 @Component({
   selector: 'app-signature-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BigButtonComponent, FieldHintComponent, IconCloseComponent],
+  imports: [BigButtonComponent, FieldHintComponent, IconCloseComponent, ModalMorphComponent],
   templateUrl: './signature-modal.component.html',
 })
 export class SignatureModalComponent {
@@ -52,6 +54,20 @@ export class SignatureModalComponent {
   readonly invoice = input<InvoiceWithTotals | null>(null);
   readonly closed = output<void>();
   readonly signed = output<InvoiceWithTotals>();
+
+  // See InvoicePreviewModalComponent's identical field for why: modalMorph
+  // needs the panel's content to survive the close animation after
+  // `invoice()` itself may already be null.
+  protected readonly displayedInvoice = signal<InvoiceWithTotals | null>(null);
+
+  constructor() {
+    effect(() => {
+      const current = this.invoice();
+      if (current) {
+        this.displayedInvoice.set(current);
+      }
+    });
+  }
 
   protected readonly activeTab = signal<SignatureTab>('draw');
   protected readonly uploading = signal(false);

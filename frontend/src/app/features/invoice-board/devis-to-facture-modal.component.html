@@ -1,0 +1,54 @@
+<app-modal-morph
+  [open]="devis() !== null"
+  ariaLabel="Facture à partir du devis"
+  panelClass="flex w-full max-w-md flex-col gap-5 rounded-2xl bg-surface p-6 shadow-2xl"
+  (backdropClose)="close()"
+>
+  @if (displayedDevis(); as devis) {
+    <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
+      Facture à partir du devis {{ devis.number }}
+    </h2>
+
+    <div class="flex flex-col gap-4 rounded-lg border border-line p-4">
+      <p class="font-medium text-ink">Facture identique</p>
+      <p class="text-sm text-ink-soft">
+        Crée directement la facture, à l'identique du devis. Vous pouvez ajuster ces deux points
+        avant de valider.
+      </p>
+
+      <app-simplified-display-slider
+        [level]="simplifiedDisplay()"
+        (levelChange)="onSimplifiedDisplayChange($event)"
+      />
+
+      <app-invoice-deposit-field
+        [requested]="depositRequested()"
+        [percentageBasisPoints]="depositPercentageBasisPoints()"
+        [amountCents]="depositAmountCents()"
+        [autoCalc]="depositAutoCalc()"
+        (requestedChange)="onDepositRequestedChange($event)"
+        (percentageBasisPointsChange)="onDepositPercentageChange($event)"
+        (amountEurosChange)="onDepositAmountEurosChange($event)"
+        (resetAutoCalc)="onResetDepositAutoCalc()"
+      />
+
+      <app-big-button (click)="confirmIdentical()">Facture identique</app-big-button>
+    </div>
+
+    <button
+      type="button"
+      (click)="requestCreateFromDevis()"
+      class="text-center text-sm font-medium text-primary hover:underline"
+    >
+      Reprendre la facture à partir du devis
+    </button>
+
+    <button
+      type="button"
+      (click)="close()"
+      class="text-center text-sm font-medium text-ink-soft hover:underline"
+    >
+      Annuler
+    </button>
+  }
+</app-modal-morph>

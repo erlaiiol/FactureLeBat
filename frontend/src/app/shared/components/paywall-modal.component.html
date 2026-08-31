@@ -1,51 +1,43 @@
-@if (paywallService.visible()) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Abonnement requis"
-    (click)="paywallService.dismiss()"
-  >
-    <div
-      class="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6 shadow-2xl"
-      (click)="$event.stopPropagation()"
+<app-modal-morph
+  [open]="paywallService.visible()"
+  ariaLabel="Abonnement requis"
+  panelClass="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6 shadow-2xl"
+  (backdropClose)="paywallService.dismiss()"
+>
+  <div class="flex items-start justify-between gap-2">
+    <h2 class="font-heading text-lg font-bold tracking-wide text-ink uppercase">
+      Facture gratuite déjà utilisée
+    </h2>
+    <button
+      type="button"
+      (click)="paywallService.dismiss()"
+      class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
+      aria-label="Fermer"
     >
-      <div class="flex items-start justify-between gap-2">
-        <h2 class="font-heading text-lg font-bold tracking-wide text-ink uppercase">
-          Facture gratuite déjà utilisée
-        </h2>
-        <button
-          type="button"
-          (click)="paywallService.dismiss()"
-          class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
-          aria-label="Fermer"
-        >
-          <app-icon-close [size]="18" />
-        </button>
-      </div>
-      <p class="text-ink-soft">
-        Vous avez pu essayer FactureLe et configurer librement votre environnement (clients,
-        produits, prestations). Pour créer de nouvelles factures, un abonnement est nécessaire.
-      </p>
-      @if (platformService.isIosApp()) {
-        <!-- Apple 3.1.1 "external subscription, business tool" pattern: no
-        tappable element here may start a payment flow, not even a link to
-        /abonnement — see docs/roadmap.md Phase 22. -->
-        <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
-          Rendez-vous sur facturele.net depuis un navigateur pour vous abonner.
-        </p>
-      } @else {
-        <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
-          Voir les offres
-        </app-big-button>
-      }
-      <button
-        type="button"
-        (click)="paywallService.dismiss()"
-        class="text-center text-sm font-medium text-ink-soft hover:underline"
-      >
-        Plus tard
-      </button>
-    </div>
+      <app-icon-close [size]="18" />
+    </button>
   </div>
-}
+  <p class="text-ink-soft">
+    Vous avez pu essayer FactureLe et configurer librement votre environnement (clients, produits,
+    prestations). Pour créer de nouvelles factures, un abonnement est nécessaire.
+  </p>
+  @if (platformService.isIosApp()) {
+    <!-- Apple 3.1.1 "external subscription, business tool" pattern: no
+    tappable element here may start a payment flow, not even a link to
+    /abonnement — see docs/roadmap.md Phase 22. -->
+    <p class="rounded-lg bg-secondary-subtle p-3 text-sm text-ink-soft">
+      Rendez-vous sur facturele.net depuis un navigateur pour vous abonner.
+    </p>
+  } @else {
+    <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
+      Voir les offres
+    </app-big-button>
+  }
+  <button
+    type="button"
+    (click)="paywallService.dismiss()"
+    class="text-center text-sm font-medium text-ink-soft hover:underline"
+  >
+    Plus tard
+  </button>
+</app-modal-morph>

@@ -35,11 +35,15 @@ encode gzip
 
 # Phase 21 hardening. CSP is deliberately hand-fitted to what this app
 # actually loads, confirmed by reading the frontend rather than assumed:
-#   - script-src 'self' only: no CDN scripts, no Stripe.js/Google Identity
-#     script (checkout/OAuth are both full-page redirects via
-#     window.location/<a href>, never an embedded SDK — see
-#     billing/subscribe.page.ts, auth.service.ts#googleLoginUrl), no inline
-#     <script> in index.html, no JIT eval in an AOT prod build.
+#   - script-src 'self', plus one 'sha256-...' hash: no CDN scripts, no
+#     Stripe.js/Google Identity script (checkout/OAuth are both full-page
+#     redirects via window.location/<a href>, never an embedded SDK — see
+#     billing/subscribe.page.ts, auth.service.ts#googleLoginUrl), no JIT eval
+#     in an AOT prod build. The one exception is index.html's JSON-LD
+#     structured-data <script> (SEO quick win, 2026-08-31) — allow-listed by
+#     content hash rather than 'unsafe-inline' so nothing else inline can run;
+#     see index.html's own comment for how to regenerate the hash if that
+#     block's content ever changes.
 #   - style-src needs 'unsafe-inline': the tour overlay (tour-position.util),
 #     manual-invoice column/row resize (interactjs), and the line-marking
 #     badge all set inline `style.*` via JS at runtime — a legitimate,
@@ -80,7 +84,7 @@ header {
 	X-Content-Type-Options "nosniff"
 	Referrer-Policy "strict-origin-when-cross-origin"
 	X-Frame-Options "DENY"
-	Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-hfyn496X7xHhGggIoWQrolBO3W5kI3GzyuMP0SRyPBE='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
 	-Server
 }

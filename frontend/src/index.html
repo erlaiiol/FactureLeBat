@@ -2,9 +2,60 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <title>FactureLe</title>
+    <title>FactureLe — Devis et factures en un clic, quoi que vous fassiez</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Static SEO/social defaults: this is what non-JS crawlers and link
+    unfurlers (Slack, WhatsApp, iMessage, Twitter) see, since they read the
+    raw HTML and don't execute the Angular bundle. Kept in sync with the
+    landing page's own dynamic Title/Meta calls (landing.page.ts) — that
+    page owns '/' (see app.routes.ts), so these ARE effectively its tags;
+    Googlebot renders JS and picks up the dynamic version regardless. -->
+    <meta
+      name="description"
+      content="Que vous vendiez, répariez, enseigniez ou créiez, la question reste la même : je facture comment ? Configurez une seule fois vos clients, produits et prestations, puis créez vos devis et factures en un clic, directement devant le client. Essai gratuit, sans carte bancaire."
+    />
+    <link rel="canonical" href="https://facturele.net/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FactureLe" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:url" content="https://facturele.net/" />
+    <meta
+      property="og:title"
+      content="FactureLe — Devis et factures en un clic, quoi que vous fassiez"
+    />
+    <meta
+      property="og:description"
+      content="Configurez une seule fois vos clients, produits et prestations, puis créez vos devis et factures en un clic, directement devant le client. Essai gratuit, sans carte bancaire."
+    />
+    <meta property="og:image" content="https://facturele.net/facturele_logo.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta
+      name="twitter:title"
+      content="FactureLe — Devis et factures en un clic, quoi que vous fassiez"
+    />
+    <meta
+      name="twitter:description"
+      content="Configurez une seule fois vos clients, produits et prestations, puis créez vos devis et factures en un clic, directement devant le client."
+    />
+    <meta name="twitter:image" content="https://facturele.net/facturele_logo.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "FactureLe",
+        "url": "https://facturele.net/",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web, iOS, Android",
+        "description": "Devis et factures en un clic pour artisans, indépendants et auto-entrepreneurs. Configurez une seule fois vos clients, produits et prestations.",
+        "offers": {
+          "@type": "Offer",
+          "priceCurrency": "EUR",
+          "category": "Freemium"
+        },
+        "inLanguage": "fr-FR"
+      }
+    </script>
     <!-- Phase 22: the web deployment gets its CSP from infra/Caddyfile's
     response header (see docs/deployment.md), but a Capacitor app's WebView
     serves this HTML from the local bundle, which never passes through
@@ -26,9 +77,17 @@
     to hand them to pdf.js — without it, Safari/iOS/Capacitor block the
     fetch outright ("Refused to connect to blob:..."), even though the PDF
     request itself succeeded. -->
+    <!-- script-src's hash below allow-lists the exact bytes of the JSON-LD
+    block near the end of <head> (its whitespace is part of the hash input —
+    if that script tag's content ever changes, regenerate with:
+    python3 -c "import re,hashlib,base64; print('sha256-'+base64.b64encode(hashlib.sha256(re.search(r'<script type=\"application/ld\+json\">(.*?)</script>', open('dist/frontend/browser/index.html').read(), 16).group(1).encode()).digest()).decode())"
+    against a fresh `ng build` output, not this source file, since Angular's
+    own build step is what index.html actually ships as. Keep this CSP and
+    infra/Caddyfile's header CSP in sync, same as the file-level comment
+    above already asks for the rest of the policy.) -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self' 'sha256-hfyn496X7xHhGggIoWQrolBO3W5kI3GzyuMP0SRyPBE='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />

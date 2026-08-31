@@ -84,9 +84,15 @@
   --color-atelier-moss: #5c6b4f;
 
   --ease-out-sharp: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-touch: 120ms;
   --duration-entrance: 250ms;
   --duration-emphasis: 400ms;
   --duration-materialize: 550ms;
+  /* `pageSlideTransition` (docs/design-system.md), native app shells only —
+     close to native iOS/Android push-transition timing, deliberately not
+     the Materialize band verbatim (that one was tuned for "a box changing
+     size," not "a full-screen view sliding into place"). */
+  --duration-page-transition: 320ms;
 
   /* ease-out-sharp reaches ~95% of its visual travel by 50% of elapsed
      time (verified numerically — a cubic-bezier(.2,.8,.2,1) curve is
@@ -199,7 +205,7 @@ button:not(:disabled) {
   animation: line-in var(--duration-entrance) var(--ease-out-sharp);
 }
 
-/* ux-roadmap.md Phase 1 (Global Shell): every routed page fades up a few
+/* docs/front/ Phase 1 (Global Shell & Shared Overlays): every routed page fades up a few
    pixels on arrival instead of popping in with the router swap. Replayed by
    App on every NavigationEnd by toggling this class on the <main> wrapper
    (forcing a reflow in between so the same class name restarts the
@@ -230,6 +236,37 @@ button:not(:disabled) {
 }
 .anim-page-in {
   animation: page-in var(--duration-entrance) var(--ease-out-sharp);
+}
+
+/* `pageSlideTransition` (docs/design-system.md, front-1-global-shell-and-
+   overlays.md): native-app-only directional replacement for `.anim-page-in`
+   — App.replayPageEnterAnimation picks one of these three based on platform
+   + the triggering NavigationStart's own `navigationTrigger`. */
+@keyframes page-slide-forward {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes page-slide-back {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.anim-page-slide-forward {
+  animation: page-slide-forward var(--duration-page-transition) var(--ease-out-sharp);
+}
+.anim-page-slide-back {
+  animation: page-slide-back var(--duration-page-transition) var(--ease-out-sharp);
 }
 
 /* design-system.md's `asyncReveal`: the display treatment for any element
@@ -416,6 +453,44 @@ button:not(:disabled) {
 }
 .nav-dropdown-chevron {
   transition: transform var(--duration-entrance) var(--ease-out-sharp);
+}
+
+/* docs/design-system.md's `modalMorph` (ModalMorphComponent,
+   shared/utils/flip-morph.ts): the panel's transform is driven entirely by
+   the Web Animations API (`el.animate()`), not this class — CSS here only
+   covers the two things that stay stable across the whole open/close cycle.
+   `transform-origin: 0 0` matches the top-left-based math flip-morph.ts's
+   `computeFlipTransform` assumes; padding accounts for the safe-area inset
+   the same way quantity-wheel-picker.component.ts already does for the
+   notch/home-indicator on the native app shells. The backdrop's own opacity
+   transition is Emphasis-band and independent of the panel's Materialize-
+   band transform, per the modalMorph spec ("backdrop and panel animate
+   independently"). */
+.modal-morph-backdrop {
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  transition: opacity var(--duration-emphasis) var(--ease-out-sharp);
+}
+.modal-morph-panel {
+  transform-origin: 0 0;
+}
+
+/* docs/design-system.md's `tabSwitch`: a sliding indicator under a plain
+   two-option tab strip (signature-modal.component.html). Both tabs are
+   `flex-1` (equal width by construction), so a hardcoded 50%-width
+   indicator translated by 100% lands exactly under either tab — no rect
+   measurement needed for this specific two-equal-tab case. */
+.tab-switch-indicator {
+  transition: transform var(--duration-entrance) var(--ease-out-sharp);
+}
+
+/* docs/design-system.md's `actionConfirmMorph`: the checkmark icon fades +
+   settles in (Entrance band) when a "Copier" button's confirmed state
+   appears — the text-color swap itself is instant (a real state change,
+   not worth a transition), only the icon's arrival is animated. */
+.action-confirm-morph app-icon-check {
+  display: inline-flex;
+  animation: line-in var(--duration-entrance) var(--ease-out-sharp);
 }
 
 /* Navbar-collapse toggler (app.html, phone widths only): the three bars

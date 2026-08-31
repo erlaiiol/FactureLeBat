@@ -497,7 +497,19 @@ export class InvoiceDraftStore {
     const hasUsableLine = this.lines().some(
       (line) => line.description.trim().length > 0 && line.quantity > 0,
     );
-    return hasCustomerName && hasUsableLine;
+    // A REDISTRIBUTED service line has no line of its own on the invoice —
+    // its amount folds into the product lines' totals (see
+    // resolvedServiceAmountCents' callers in calculation-preview.ts) — so it
+    // can only count as "usable" here when VISIBLE. A REDISTRIBUTED-only
+    // draft with zero product lines has nothing to redistribute into and
+    // must still be blocked.
+    const hasUsableServiceLine = this.serviceLines().some(
+      (serviceLine) =>
+        serviceLine.visibility === 'VISIBLE' &&
+        serviceLine.name.trim().length > 0 &&
+        this.resolvedServiceAmountCents(serviceLine) > 0,
+    );
+    return hasCustomerName && (hasUsableLine || hasUsableServiceLine);
   });
 
   constructor() {

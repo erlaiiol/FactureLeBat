@@ -1,101 +1,93 @@
-@if (gateService.visible()) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Informations manquantes"
-    (click)="dismiss()"
-  >
-    <div
-      class="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6 shadow-2xl"
-      (click)="$event.stopPropagation()"
+<app-modal-morph
+  [open]="gateService.visible()"
+  ariaLabel="Informations manquantes"
+  panelClass="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6 shadow-2xl"
+  (backdropClose)="dismiss()"
+>
+  <div class="flex items-start justify-between gap-2">
+    <h2 class="font-heading text-lg font-bold tracking-wide text-ink uppercase">
+      Avant d'envoyer ce document
+    </h2>
+    <button
+      type="button"
+      (click)="dismiss()"
+      class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
+      aria-label="Fermer"
     >
-      <div class="flex items-start justify-between gap-2">
-        <h2 class="font-heading text-lg font-bold tracking-wide text-ink uppercase">
-          Avant d'envoyer ce document
-        </h2>
-        <button
-          type="button"
-          (click)="dismiss()"
-          class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
-          aria-label="Fermer"
-        >
-          <app-icon-close [size]="18" />
-        </button>
-      </div>
-      <p class="text-ink-soft">
-        Ces informations sont obligatoires sur toute facture ou devis. Le reste (TVA, assurance
-        décennale…) peut être complété plus tard, dans "Mon entreprise".
-      </p>
-
-      @if (loading()) {
-        <p class="text-sm text-ink-soft">Chargement…</p>
-      } @else {
-        <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-3">
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium text-ink-soft">Nom de l'entreprise</span>
-            <input
-              formControlName="name"
-              type="text"
-              class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
-              [class.border-danger]="form.controls.name.invalid && form.controls.name.touched"
-            />
-          </label>
-
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium text-ink-soft">SIRET (14 chiffres)</span>
-            <input
-              formControlName="siret"
-              type="text"
-              inputmode="numeric"
-              maxlength="14"
-              class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
-              [class.border-danger]="form.controls.siret.invalid && form.controls.siret.touched"
-            />
-            <app-field-hint text="Votre numéro d'identification légal." />
-          </label>
-
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium text-ink-soft">Adresse</span>
-            <input
-              formControlName="addressLine1"
-              type="text"
-              class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
-              [class.border-danger]="
-                form.controls.addressLine1.invalid && form.controls.addressLine1.touched
-              "
-            />
-          </label>
-
-          <div class="flex gap-3">
-            <label class="flex w-32 flex-col gap-1">
-              <span class="text-sm font-medium text-ink-soft">Code postal</span>
-              <input
-                formControlName="postalCode"
-                type="text"
-                inputmode="numeric"
-                class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
-                [class.border-danger]="
-                  form.controls.postalCode.invalid && form.controls.postalCode.touched
-                "
-              />
-            </label>
-            <label class="flex flex-1 flex-col gap-1">
-              <span class="text-sm font-medium text-ink-soft">Ville</span>
-              <input
-                formControlName="city"
-                type="text"
-                class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
-                [class.border-danger]="form.controls.city.invalid && form.controls.city.touched"
-              />
-            </label>
-          </div>
-
-          <app-big-button variant="primary" tone="solid" type="submit" [disabled]="saving()">
-            {{ saving() ? 'Enregistrement…' : 'Enregistrer et continuer' }}
-          </app-big-button>
-        </form>
-      }
-    </div>
+      <app-icon-close [size]="18" />
+    </button>
   </div>
-}
+  <p class="text-ink-soft">
+    Ces informations sont obligatoires sur toute facture ou devis. Le reste (TVA, assurance
+    décennale…) peut être complété plus tard, dans "Mon entreprise".
+  </p>
+
+  @if (loading()) {
+    <p class="text-sm text-ink-soft">Chargement…</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-3">
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink-soft">Nom de l'entreprise</span>
+        <input
+          formControlName="name"
+          type="text"
+          class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
+          [class.border-danger]="form.controls.name.invalid && form.controls.name.touched"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink-soft">SIRET (14 chiffres)</span>
+        <input
+          formControlName="siret"
+          type="text"
+          inputmode="numeric"
+          maxlength="14"
+          class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
+          [class.border-danger]="form.controls.siret.invalid && form.controls.siret.touched"
+        />
+        <app-field-hint text="Votre numéro d'identification légal." />
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink-soft">Adresse</span>
+        <input
+          formControlName="addressLine1"
+          type="text"
+          class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
+          [class.border-danger]="
+            form.controls.addressLine1.invalid && form.controls.addressLine1.touched
+          "
+        />
+      </label>
+
+      <div class="flex gap-3">
+        <label class="flex w-32 flex-col gap-1">
+          <span class="text-sm font-medium text-ink-soft">Code postal</span>
+          <input
+            formControlName="postalCode"
+            type="text"
+            inputmode="numeric"
+            class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
+            [class.border-danger]="
+              form.controls.postalCode.invalid && form.controls.postalCode.touched
+            "
+          />
+        </label>
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm font-medium text-ink-soft">Ville</span>
+          <input
+            formControlName="city"
+            type="text"
+            class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
+            [class.border-danger]="form.controls.city.invalid && form.controls.city.touched"
+          />
+        </label>
+      </div>
+
+      <app-big-button variant="primary" tone="solid" type="submit" [disabled]="saving()">
+        {{ saving() ? 'Enregistrement…' : 'Enregistrer et continuer' }}
+      </app-big-button>
+    </form>
+  }
+</app-modal-morph>

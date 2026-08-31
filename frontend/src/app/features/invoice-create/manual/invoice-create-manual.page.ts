@@ -24,6 +24,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { TrialOfferService } from '../../../core/services/trial-offer.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
+import { IconCheckComponent } from '../../../shared/components/icon-check.component';
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
 import { IconTrashComponent } from '../../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
@@ -58,6 +59,7 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
     RouterLink,
     BigButtonComponent,
     FieldHintComponent,
+    IconCheckComponent,
     IconCloseComponent,
     IconTrashComponent,
     PdfPreviewModalComponent,
@@ -406,13 +408,19 @@ export class InvoiceCreateManualPage {
     this.toastService.success('Email envoyé au client.');
   }
 
+  // `actionConfirmMorph` (docs/design-system.md): see
+  // InvoiceCreatePreviewStepPage's identical field for why this replaced
+  // the success toast with inline button feedback.
+  protected readonly copiedEmail = signal<string | null>(null);
+
   // Phase 1.1-11 follow-up: same convenience as mode rapide's preview-step
   // success card — the client's email is just as worth a one-click copy
   // here.
   protected async copyCustomerEmail(email: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(email);
-      this.toastService.success('Email copié dans le presse-papiers.');
+      this.copiedEmail.set(email);
+      setTimeout(() => this.copiedEmail.set(null), 1600);
     } catch {
       this.toastService.error(
         'Impossible de copier automatiquement — sélectionnez le texte à la main.',
