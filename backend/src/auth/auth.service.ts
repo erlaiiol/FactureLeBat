@@ -274,7 +274,12 @@ export class AuthService {
         audience: this.googleClientId,
       });
       payload = ticket.getPayload();
-    } catch {
+    } catch (error) {
+      // verifyIdToken's own rejection reason (bad signature, expired token,
+      // audience mismatch against this.googleClientId, ...) was previously
+      // discarded entirely — nothing distinguished "client sent garbage"
+      // from "our GOOGLE_CLIENT_ID/webClientId are out of sync" server-side.
+      this.logger.warn(`Vérification du jeton Google échouée : ${String(error)}`);
       throw new UnauthorizedException('Jeton Google invalide.');
     }
     if (!payload?.sub || !payload.email) {

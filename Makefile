@@ -1,4 +1,7 @@
-.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod logs-prod logs-backend-prod logs-frontend-prod logs-caddy-prod logs-postgres-prod mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod
+.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod logs-files-prod-tail logs-errors-prod-tail logs-prod logs-backend-prod logs-frontend-prod logs-caddy-prod logs-postgres-prod logs-prod-tail logs-backend-prod-tail logs-frontend-prod-tail logs-caddy-prod-tail logs-postgres-prod-tail mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod
+
+# Overridable line count for every *-tail target below, e.g. `make logs-backend-prod-tail TAIL=300`.
+TAIL ?= 100
 
 dev:
 	docker compose -f infra/docker-compose.yml up --build -V
@@ -65,6 +68,15 @@ logs-files-prod:
 logs-errors-prod:
 	docker compose -f infra/docker-compose.prod.yml exec backend tail -f logs/error-*.log
 
+# One-shot (no -f) bounded dumps of the two targets above — last $(TAIL)
+# lines then exit, instead of an open `tail -f` session. Meant for pasting a
+# snapshot somewhere (a chat, an issue) rather than watching live.
+logs-files-prod-tail:
+	docker compose -f infra/docker-compose.prod.yml exec backend tail -n $(TAIL) logs/combined-*.log
+
+logs-errors-prod-tail:
+	docker compose -f infra/docker-compose.prod.yml exec backend tail -n $(TAIL) logs/error-*.log
+
 # Docker's own log driver for the prod stack (same idea as `logs` above,
 # just pointed at docker-compose.prod.yml) — only goes back as far as
 # Docker's retention and disappears if a container is recreated, unlike
@@ -87,6 +99,27 @@ logs-caddy-prod:
 
 logs-postgres-prod:
 	docker compose -f infra/docker-compose.prod.yml logs -f postgres
+
+# Same four, bounded to the last $(TAIL) lines instead of Docker's full
+# buffered history — the plain `logs -f` targets above replay everything
+# since container start before following, which is unreadable on a
+# long-running VPS. Still follows after that initial dump (`-f` stays); drop
+# it yourself for a true one-shot snapshot, e.g.:
+#   docker compose -f infra/docker-compose.prod.yml logs --tail=100 backend
+logs-prod-tail:
+	docker compose -f infra/docker-compose.prod.yml logs -f --tail=$(TAIL)
+
+logs-backend-prod-tail:
+	docker compose -f infra/docker-compose.prod.yml logs -f --tail=$(TAIL) backend
+
+logs-frontend-prod-tail:
+	docker compose -f infra/docker-compose.prod.yml logs -f --tail=$(TAIL) frontend
+
+logs-caddy-prod-tail:
+	docker compose -f infra/docker-compose.prod.yml logs -f --tail=$(TAIL) caddy
+
+logs-postgres-prod-tail:
+	docker compose -f infra/docker-compose.prod.yml logs -f --tail=$(TAIL) postgres
 
 # Real-server commands (see docs/deployment.md) — run these against a repo
 # checkout already running `make prod`, e.g. on the OVH VPS.
