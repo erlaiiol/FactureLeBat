@@ -1,52 +1,37 @@
-@if (isOpen()) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Aperçu de la facture"
-    (click)="closed.emit()"
-  >
-    <div
-      class="flex h-full w-full max-w-3xl flex-col rounded-2xl bg-surface shadow-2xl"
-      (click)="$event.stopPropagation()"
+<app-modal-morph
+  [open]="isOpen()"
+  ariaLabel="Aperçu de la facture"
+  panelClass="flex h-full w-full max-w-3xl flex-col rounded-2xl bg-surface shadow-2xl"
+  (backdropClose)="closed.emit()"
+>
+  <div class="flex items-center justify-between border-b border-line p-4">
+    <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
+      Aperçu de la facture
+    </h2>
+    <button
+      type="button"
+      (click)="closed.emit()"
+      class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
+      aria-label="Fermer l'aperçu"
     >
-      <div class="flex items-center justify-between border-b border-line p-4">
-        <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
-          Aperçu de la facture
-        </h2>
-        <button
-          type="button"
-          (click)="closed.emit()"
-          class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
-          aria-label="Fermer l'aperçu"
-        >
-          <app-icon-close [size]="18" />
-        </button>
-      </div>
-      @if (pdfBlobUrl(); as url) {
-        @if (useCanvasViewer) {
-          <app-pdf-canvas-viewer
-            [blobUrl]="url"
-            class="flex min-h-0 flex-1 flex-col rounded-b-2xl"
-          />
-        } @else if (safeUrl(); as safe) {
-          <iframe
-            [src]="safe"
-            class="min-h-0 flex-1 rounded-b-2xl"
-            title="Aperçu PDF de la facture"
-          >
-          </iframe>
-        }
-      } @else {
-        <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-ink-soft">
-          <div
-            class="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-primary"
-            role="status"
-            aria-label="Génération du PDF en cours"
-          ></div>
-          <p class="text-sm">Génération du PDF en cours…</p>
-        </div>
-      }
-    </div>
+      <app-icon-close [size]="18" />
+    </button>
   </div>
-}
+  @if (pdfBlobUrl(); as url) {
+    @if (useCanvasViewer) {
+      <app-pdf-canvas-viewer [blobUrl]="url" class="flex min-h-0 flex-1 flex-col rounded-b-2xl" />
+    } @else if (safeUrl(); as safe) {
+      <iframe [src]="safe" class="min-h-0 flex-1 rounded-b-2xl" title="Aperçu PDF de la facture">
+      </iframe>
+    }
+  } @else {
+    <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-ink-soft">
+      <div
+        class="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-primary"
+        role="status"
+        aria-label="Génération du PDF en cours"
+      ></div>
+      <p class="text-sm">Génération du PDF en cours…</p>
+    </div>
+  }
+</app-modal-morph>

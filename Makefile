@@ -1,4 +1,4 @@
-.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod logs-files-prod-tail logs-errors-prod-tail logs-prod logs-backend-prod logs-frontend-prod logs-caddy-prod logs-postgres-prod logs-prod-tail logs-backend-prod-tail logs-frontend-prod-tail logs-caddy-prod-tail logs-postgres-prod-tail mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod
+.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod logs-files-prod-tail logs-errors-prod-tail logs-prod logs-backend-prod logs-frontend-prod logs-caddy-prod logs-postgres-prod logs-prod-tail logs-backend-prod-tail logs-frontend-prod-tail logs-caddy-prod-tail logs-postgres-prod-tail mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod android-logcat
 
 # Overridable line count for every *-tail target below, e.g. `make logs-backend-prod-tail TAIL=300`.
 TAIL ?= 100
@@ -263,3 +263,17 @@ ios-dev:
 
 ios-prod:
 	sh frontend/scripts/run-ios.sh prod
+
+# Native Google Sign-In debugging (see docs/deployment.md's "Native Google
+# Sign-In" section and node_modules/@capgo/capacitor-social-login/README.md's
+# Android troubleshooting section): clears the device's log buffer, then
+# streams only the plugin's own tags — every other tag is silenced (`*:S`).
+# Run this, THEN trigger "Continuer avec Google" in the app while it's still
+# running, so the failure lands in the freshly-cleared buffer. Prints the
+# app's actual package name, signing SHA-1, and (masked) webClientId, which
+# is what actually needs to match Google Cloud Console's Android OAuth
+# client — everything the on-screen error message can't show. Needs a
+# device/emulator already connected (`adb devices`).
+android-logcat:
+	adb logcat -c
+	adb logcat GoogleProvider:* CapgoSocialLogin:* *:S

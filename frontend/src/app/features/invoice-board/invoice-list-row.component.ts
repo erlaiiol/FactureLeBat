@@ -11,9 +11,11 @@ import {
 import { RouterLink } from '@angular/router';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { PaywallService } from '../../core/services/paywall.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { IconCheckComponent } from '../../shared/components/icon-check.component';
 import { IconDotsVerticalComponent } from '../../shared/components/icon-dots-vertical.component';
+import { IconLockComponent } from '../../shared/components/icon-lock.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { isOverdue } from './invoice-status.util';
 
@@ -50,11 +52,13 @@ import { isOverdue } from './invoice-status.util';
     BadgeComponent,
     IconCheckComponent,
     IconDotsVerticalComponent,
+    IconLockComponent,
   ],
   templateUrl: './invoice-list-row.component.html',
 })
 export class InvoiceListRowComponent {
   private readonly invoiceService = inject(InvoiceService);
+  private readonly paywallService = inject(PaywallService);
 
   readonly invoice = input.required<InvoiceWithTotals>();
   // Devis-only: the number of the facture it was converted into, if any —
@@ -73,6 +77,14 @@ export class InvoiceListRowComponent {
   readonly highlighted = input(false);
   readonly converting = input(false);
   readonly sharing = input(false);
+  // 1.2/manual-mode-free-tier revision: true for a free-tier company —
+  // "Facture à partir du devis"/"Créer un devis" (openConvertModal/
+  // createDevisFromFacture below) carry no free credit at all, unlike mode
+  // rapide's one lifetime invoice, so they're locked preventively here
+  // (lock icon, click opens the paywall instead of emitting) rather than
+  // failing only once the backend's QUICK_ACTION gate is hit — see
+  // PlanGateService.assertCanCreateInvoice's header comment.
+  readonly premiumRequired = input(false);
   // Phase 1.2-4 (2026 e-invoicing reform): whether this company can
   // transmit via SUPER PDP at all (gates showing the action) and whether
   // this specific row is mid-transmission (busy state) — same pattern as
@@ -103,8 +115,11 @@ export class InvoiceListRowComponent {
   readonly transmit = output<void>();
   readonly refreshTransmissionStatus = output<void>();
   readonly cancelAutoTransmit = output<void>();
-  readonly convertToFacture = output<void>();
-  readonly createFromDevis = output<void>();
+  // Opens DevisToFactureModalComponent — merges what used to be two separate
+  // actions ("Facture identique" and "Facture à partir du devis") into one
+  // entry point, since both are just different ways to turn this same devis
+  // into a facture (see InvoiceBoardPage.openConvertModal).
+  readonly openConvertModal = output<void>();
   readonly createDevisFromFacture = output<void>();
   readonly toggleHighlight = output<void>();
   readonly toggleStatusMenu = output<void>();
@@ -279,5 +294,27 @@ export class InvoiceListRowComponent {
     });
     this.actionsMenuMaxHeight.set(Math.max(120, openAbove ? spaceAbove : spaceBelow));
     this.toggleActionsMenu.emit();
+  }
+
+  // Both quick-creation menu entries funnel through here rather than
+  // emitting openConvertModal/createDevisFromFacture directly when
+  // premiumRequired() — same paywall the global 402 interceptor would show,
+  // just triggered preventively instead of after a doomed request.
+  protected onConvertModalClick(): void {
+    this.toggleActionsMenu.emit();
+    if (this.premiumRequired()) {
+      this.paywallService.show();
+      return;
+    }
+    this.openConvertModal.emit();
+  }
+
+  protected onCreateDevisFromFactureClick(): void {
+    this.toggleActionsMenu.emit();
+    if (this.premiumRequired()) {
+      this.paywallService.show();
+      return;
+    }
+    this.createDevisFromFacture.emit();
   }
 }

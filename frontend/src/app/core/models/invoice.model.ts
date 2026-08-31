@@ -22,6 +22,17 @@ export type DocumentType = 'DEVIS' | 'FACTURE';
 // InvoiceWithTotals.simplifiedDisplay and backend SimplifiedDisplayLevel.
 export type SimplifiedDisplayLevel = 'NONE' | 'SIMPLIFIED' | 'GENERIC';
 
+// "Facture identique" from DevisToFactureModalComponent: everything else
+// carries through from the devis untouched (InvoiceService.convertToFacture
+// on the backend), but the artisan can override the display mode or note a
+// deposit right there. Deposit fields are both-or-neither, same convention
+// as CreateInvoiceRequest's.
+export interface ConvertToFactureRequest {
+  simplifiedDisplay?: SimplifiedDisplayLevel;
+  depositPercentageBasisPoints?: number;
+  depositAmountCents?: number;
+}
+
 // Phase 1.1-8 (2026 e-invoicing reform): "nature de l'opération" — GUIDED
 // derives it (never sent by the frontend), MANUAL sends an explicit choice.
 // See CreateInvoiceRequest.manualNatureOfOperation and

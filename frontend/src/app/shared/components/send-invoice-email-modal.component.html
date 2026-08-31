@@ -1,73 +1,67 @@
-@if (invoice(); as invoice) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Envoyer la facture par email"
-    (click)="closed.emit()"
-  >
-    <div
-      class="flex max-h-full w-full max-w-lg flex-col rounded-2xl bg-surface shadow-2xl"
-      (click)="$event.stopPropagation()"
-    >
-      <div class="flex items-center justify-between border-b border-line p-4">
-        <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
-          Envoyer {{ invoice.number }} par email
-        </h2>
-        <button
-          type="button"
-          (click)="closed.emit()"
-          class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
-          aria-label="Fermer"
-        >
-          <app-icon-close [size]="18" />
-        </button>
-      </div>
-
-      <div class="overflow-y-auto p-4">
-        @if (templateLoading()) {
-          <p class="text-ink-soft">Chargement du message…</p>
-        } @else {
-          <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
-            <label class="flex flex-col gap-1">
-              <span class="text-sm font-medium text-ink-soft">Destinataire</span>
-              <input
-                formControlName="to"
-                type="email"
-                class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
-              />
-              <app-field-hint text="Pré-rempli avec l'email du client, modifiable." />
-            </label>
-
-            <label class="flex flex-col gap-1">
-              <span class="text-sm font-medium text-ink-soft">Sujet</span>
-              <input
-                formControlName="subject"
-                type="text"
-                class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
-              />
-            </label>
-
-            <label class="flex flex-col gap-1">
-              <span class="text-sm font-medium text-ink-soft">Message</span>
-              <textarea
-                formControlName="message"
-                rows="8"
-                class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
-              ></textarea>
-              <app-field-hint text="La facture en PDF est jointe automatiquement à cet email." />
-            </label>
-
-            <app-big-button type="submit" [disabled]="sending()">
-              {{ sending() ? 'Envoi…' : "Envoyer l'email" }}
-            </app-big-button>
-
-            @if (errorMessage(); as message) {
-              <p class="text-center font-medium text-danger">{{ message }}</p>
-            }
-          </form>
-        }
-      </div>
+<app-modal-morph
+  [open]="invoice() !== null"
+  ariaLabel="Envoyer la facture par email"
+  panelClass="flex max-h-full w-full max-w-lg flex-col rounded-2xl bg-surface shadow-2xl"
+  (backdropClose)="closed.emit()"
+>
+  @if (displayedInvoice(); as invoice) {
+    <div class="flex items-center justify-between border-b border-line p-4">
+      <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
+        Envoyer {{ invoice.number }} par email
+      </h2>
+      <button
+        type="button"
+        (click)="closed.emit()"
+        class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
+        aria-label="Fermer"
+      >
+        <app-icon-close [size]="18" />
+      </button>
     </div>
-  </div>
-}
+
+    <div class="overflow-y-auto p-4">
+      @if (templateLoading()) {
+        <p class="text-ink-soft">Chargement du message…</p>
+      } @else {
+        <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
+          <label class="flex flex-col gap-1">
+            <span class="text-sm font-medium text-ink-soft">Destinataire</span>
+            <input
+              formControlName="to"
+              type="email"
+              class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+            />
+            <app-field-hint text="Pré-rempli avec l'email du client, modifiable." />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-sm font-medium text-ink-soft">Sujet</span>
+            <input
+              formControlName="subject"
+              type="text"
+              class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink"
+            />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-sm font-medium text-ink-soft">Message</span>
+            <textarea
+              formControlName="message"
+              rows="8"
+              class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
+            ></textarea>
+            <app-field-hint text="La facture en PDF est jointe automatiquement à cet email." />
+          </label>
+
+          <app-big-button type="submit" [disabled]="sending()">
+            {{ sending() ? 'Envoi…' : "Envoyer l'email" }}
+          </app-big-button>
+
+          @if (errorMessage(); as message) {
+            <p class="text-center font-medium text-danger">{{ message }}</p>
+          }
+        </form>
+      }
+    </div>
+  }
+</app-modal-morph>

@@ -29,6 +29,7 @@ import {
   matchesDeclaredImageType,
 } from '../common/raster-image-upload.util';
 import { ConvertToDevisDto } from './dto/convert-to-devis.dto';
+import { ConvertToFactureDto } from './dto/convert-to-facture.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { GetNextNumberQueryDto } from './dto/get-next-number-query.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
@@ -99,8 +100,9 @@ export class InvoiceController {
   convertToFacture(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
+    @Body() dto: ConvertToFactureDto,
   ): Promise<InvoiceWithTotals> {
-    return this.invoiceService.convertToFacture(user.companyId, id);
+    return this.invoiceService.convertToFacture(user.companyId, id, dto);
   }
 
   // Retroactive devis creation: an untouched clone of the facture, numbered

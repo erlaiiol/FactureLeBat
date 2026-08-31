@@ -12,7 +12,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom, Subscription, TimeoutError } from 'rxjs';
-import { InvoiceWithTotals } from '../../core/models/invoice.model';
+import { ConvertToFactureRequest, InvoiceWithTotals } from '../../core/models/invoice.model';
+import { BillingService } from '../../core/services/billing.service';
 import { CompanyService } from '../../core/services/company.service';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { InvoiceShareService } from '../../core/services/invoice-share.service';
@@ -25,6 +26,7 @@ import { IconCloseComponent } from '../../shared/components/icon-close.component
 import { SignatureModalComponent } from '../../shared/components/signature-modal.component';
 import { SignatureViewModalComponent } from '../../shared/components/signature-view-modal.component';
 import { CreateDevisModalComponent } from './create-devis-modal.component';
+import { DevisToFactureModalComponent } from './devis-to-facture-modal.component';
 import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component';
 import { InvoiceListRowComponent } from './invoice-list-row.component';
 import { InvoicePreviewModalComponent } from './invoice-preview-modal.component';
@@ -119,6 +121,7 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
     InvoiceListRowComponent,
     InvoiceDueDateModalComponent,
     CreateDevisModalComponent,
+    DevisToFactureModalComponent,
     InvoicePreviewModalComponent,
     SendInvoiceEmailModalComponent,
     SignatureModalComponent,
@@ -134,6 +137,7 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
 export class InvoiceBoardPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly invoiceShareService = inject(InvoiceShareService);
+  private readonly billingService = inject(BillingService);
   private readonly companyService = inject(CompanyService);
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
@@ -180,6 +184,13 @@ export class InvoiceBoardPage {
   // entry point until now.
   protected readonly refreshingTransmissionId = signal<string | null>(null);
 
+  // 1.2/manual-mode-free-tier revision: passed to every row as
+  // premiumRequired — see InvoiceListRowComponent's own comment on that
+  // input for why these two quick-creation actions carry no free credit.
+  protected readonly quickActionsLocked = computed(
+    () => !this.billingService.status()?.hasPremiumAccess,
+  );
+
   // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): a shared
   // "now" tick for every row's countdown label — one interval for the whole
   // board rather than one per row (InvoiceListRowComponent reads this via
@@ -217,6 +228,9 @@ export class InvoiceBoardPage {
   // Which facture is waiting on the "Créer un devis" (retroactive) modal —
   // see openCreateDevisModal/onDevisCreated below.
   protected readonly createDevisModalInvoice = signal<InvoiceWithTotals | null>(null);
+  // Which devis is waiting on the merged "Facture à partir du devis" modal
+  // (see DevisToFactureModalComponent, openConvertModal below).
+  protected readonly convertModalDevis = signal<InvoiceWithTotals | null>(null);
 
   // Phase 26: the devis/facture pair currently highlighted (see
   // attachedFactureOf/toggleHighlight/isHighlighted below) — at most one
@@ -695,14 +709,14 @@ export class InvoiceBoardPage {
       });
   }
 
-  protected convertDevis(devis: InvoiceWithTotals): void {
+  protected convertDevis(devis: InvoiceWithTotals, options: ConvertToFactureRequest = {}): void {
     if (this.convertingDevisId()) {
       return;
     }
     this.convertingDevisId.set(devis.id);
     this.errorMessage.set(null);
     this.invoiceService
-      .convertToFacture(devis.id)
+      .convertToFacture(devis.id, options)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (facture) => {
@@ -740,6 +754,38 @@ export class InvoiceBoardPage {
     void this.router.navigate(commands, {
       queryParams: { type: 'FACTURE', fromDevisId: devis.id },
     });
+  }
+
+  // Opens DevisToFactureModalComponent — the merged "Facture identique" /
+  // "Reprendre la facture à partir du devis" picker (see
+  // onConvertModalIdenticalConfirmed/onConvertModalCreateFromDevis below).
+  protected openConvertModal(devis: InvoiceWithTotals): void {
+    this.convertModalDevis.set(devis);
+  }
+
+  protected onConvertModalClosed(): void {
+    this.convertModalDevis.set(null);
+  }
+
+  // Same "close first, the action gives its own feedback" convention as
+  // onPreviewShare below — convertDevis already toasts on success and sets
+  // errorMessage on failure, no need to keep the modal open for that.
+  protected onConvertModalIdenticalConfirmed(options: ConvertToFactureRequest): void {
+    const devis = this.convertModalDevis();
+    if (!devis) {
+      return;
+    }
+    this.onConvertModalClosed();
+    this.convertDevis(devis, options);
+  }
+
+  protected onConvertModalCreateFromDevis(): void {
+    const devis = this.convertModalDevis();
+    if (!devis) {
+      return;
+    }
+    this.onConvertModalClosed();
+    this.createFromDevis(devis);
   }
 
   // Retroactive devis creation: opens the number-picker modal (see
@@ -819,22 +865,13 @@ export class InvoiceBoardPage {
     void this.onShare(invoice);
   }
 
-  protected onPreviewConvertToFacture(): void {
+  protected onPreviewOpenConvertModal(): void {
     const invoice = this.previewInvoice();
     if (!invoice) {
       return;
     }
     this.closePreview();
-    this.convertDevis(invoice);
-  }
-
-  protected onPreviewCreateFromDevis(): void {
-    const invoice = this.previewInvoice();
-    if (!invoice) {
-      return;
-    }
-    this.closePreview();
-    this.createFromDevis(invoice);
+    this.openConvertModal(invoice);
   }
 
   protected onPreviewCreateDevisFromFacture(): void {

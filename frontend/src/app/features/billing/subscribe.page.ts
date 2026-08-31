@@ -11,6 +11,7 @@ import { PlatformService } from '../../core/services/platform.service';
 import { ReferralService } from '../../core/services/referral.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { IconCheckComponent } from '../../shared/components/icon-check.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 function extractErrorMessage(error: HttpErrorResponse, fallback: string): string {
@@ -35,7 +36,7 @@ function extractErrorMessage(error: HttpErrorResponse, fallback: string): string
 @Component({
   selector: 'app-subscribe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, BadgeComponent, DatePipe],
+  imports: [ReactiveFormsModule, BigButtonComponent, BadgeComponent, DatePipe, IconCheckComponent],
   templateUrl: './subscribe.page.html',
 })
 export class SubscribePage {

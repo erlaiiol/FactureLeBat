@@ -1,45 +1,39 @@
-@if (invoice(); as invoice) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Créer un devis"
-    (click)="close()"
-  >
-    <div
-      class="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6 shadow-2xl"
-      (click)="$event.stopPropagation()"
+<app-modal-morph
+  [open]="invoice() !== null"
+  ariaLabel="Créer un devis"
+  panelClass="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6 shadow-2xl"
+  (backdropClose)="close()"
+>
+  @if (displayedInvoice(); as invoice) {
+    <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
+      Créer un devis pour {{ invoice.customerName }}
+    </h2>
+    <p class="text-ink">
+      Un devis identique à la facture {{ invoice.number }} sera créé. Choisissez son numéro.
+    </p>
+
+    <input
+      type="text"
+      [value]="number()"
+      (input)="onNumberInput($any($event.target).value)"
+      [disabled]="suggestionLoading()"
+      placeholder="Numéro du devis"
+      class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink disabled:opacity-60"
+    />
+
+    <app-big-button [disabled]="!number().trim() || submitting()" (click)="confirm()">
+      {{ submitting() ? 'Création…' : 'Créer le devis' }}
+    </app-big-button>
+    <button
+      type="button"
+      (click)="close()"
+      class="text-center text-sm font-medium text-ink-soft hover:underline"
     >
-      <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
-        Créer un devis pour {{ invoice.customerName }}
-      </h2>
-      <p class="text-ink">
-        Un devis identique à la facture {{ invoice.number }} sera créé. Choisissez son numéro.
-      </p>
+      Annuler
+    </button>
 
-      <input
-        type="text"
-        [value]="number()"
-        (input)="onNumberInput($any($event.target).value)"
-        [disabled]="suggestionLoading()"
-        placeholder="Numéro du devis"
-        class="rounded-lg border border-line bg-surface px-4 py-3 text-lg text-ink disabled:opacity-60"
-      />
-
-      <app-big-button [disabled]="!number().trim() || submitting()" (click)="confirm()">
-        {{ submitting() ? 'Création…' : 'Créer le devis' }}
-      </app-big-button>
-      <button
-        type="button"
-        (click)="close()"
-        class="text-center text-sm font-medium text-ink-soft hover:underline"
-      >
-        Annuler
-      </button>
-
-      @if (errorMessage(); as message) {
-        <p class="text-center font-medium text-danger">{{ message }}</p>
-      }
-    </div>
-  </div>
-}
+    @if (errorMessage(); as message) {
+      <p class="text-center font-medium text-danger">{{ message }}</p>
+    }
+  }
+</app-modal-morph>

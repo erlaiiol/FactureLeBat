@@ -179,13 +179,13 @@
               [transmitting]="transmittingInvoiceId() === item.id"
               [refreshingTransmission]="refreshingTransmissionId() === item.id"
               [nowMs]="nowMs()"
+              [premiumRequired]="quickActionsLocked()"
               [statusMenuOpen]="isStatusMenuOpen(item.id)"
               [actionsMenuOpen]="isActionsMenuOpen(item.id)"
               (transmit)="onTransmit(item)"
               (refreshTransmissionStatus)="onRefreshTransmissionStatus(item)"
               (cancelAutoTransmit)="onCancelAutoTransmit(item)"
-              (convertToFacture)="convertDevis(item)"
-              (createFromDevis)="createFromDevis(item)"
+              (openConvertModal)="openConvertModal(item)"
               (createDevisFromFacture)="openCreateDevisModal(item)"
               (toggleHighlight)="toggleHighlight(item)"
               (toggleStatusMenu)="toggleStatusMenu(item.id)"
@@ -225,6 +225,13 @@
     (created)="onDevisCreated($event)"
   />
 
+  <app-devis-to-facture-modal
+    [devis]="convertModalDevis()"
+    (closed)="onConvertModalClosed()"
+    (identicalConfirmed)="onConvertModalIdenticalConfirmed($event)"
+    (createFromDevisRequested)="onConvertModalCreateFromDevis()"
+  />
+
   <app-send-invoice-email-modal
     [invoice]="emailModalInvoice()"
     (closed)="closeEmailModal()"
@@ -246,8 +253,7 @@
     [converting]="convertingDevisId() === previewInvoice()?.id"
     (closed)="closePreview()"
     (share)="onPreviewShare()"
-    (convertToFacture)="onPreviewConvertToFacture()"
-    (createFromDevis)="onPreviewCreateFromDevis()"
+    (openConvertModal)="onPreviewOpenConvertModal()"
     (createDevisFromFacture)="onPreviewCreateDevisFromFacture()"
   />
 </div>

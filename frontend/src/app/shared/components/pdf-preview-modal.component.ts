@@ -10,6 +10,7 @@ import {
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { needsCanvasPdfViewer } from '../utils/pdf-viewer-support.util';
 import { IconCloseComponent } from './icon-close.component';
+import { ModalMorphComponent } from './modal-morph.component';
 import { PdfCanvasViewerComponent } from './pdf-canvas-viewer.component';
 
 // A closable modal showing the "simili-pdf" in place, replacing the earlier
@@ -26,7 +27,7 @@ import { PdfCanvasViewerComponent } from './pdf-canvas-viewer.component';
 @Component({
   selector: 'app-pdf-preview-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconCloseComponent, PdfCanvasViewerComponent],
+  imports: [IconCloseComponent, ModalMorphComponent, PdfCanvasViewerComponent],
   templateUrl: './pdf-preview-modal.component.html',
 })
 export class PdfPreviewModalComponent {

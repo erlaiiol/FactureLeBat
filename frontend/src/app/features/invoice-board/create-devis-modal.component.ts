@@ -13,6 +13,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { ModalMorphComponent } from '../../shared/components/modal-morph.component';
 
 // Retroactive devis creation: opened from a facture row's "Créer un devis"
 // action (or the preview modal's equivalent), for an artisan who forgot to
@@ -26,7 +27,7 @@ import { BigButtonComponent } from '../../shared/components/big-button.component
 @Component({
   selector: 'app-create-devis-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BigButtonComponent],
+  imports: [BigButtonComponent, ModalMorphComponent],
   templateUrl: './create-devis-modal.component.html',
 })
 export class CreateDevisModalComponent {
@@ -41,6 +42,8 @@ export class CreateDevisModalComponent {
   protected readonly suggestionLoading = signal(true);
   protected readonly submitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  // See InvoicePreviewModalComponent's identical field for why.
+  protected readonly displayedInvoice = signal<InvoiceWithTotals | null>(null);
 
   constructor() {
     // Re-loads whenever a different facture opens the modal (the modal
@@ -51,6 +54,7 @@ export class CreateDevisModalComponent {
       if (!invoice) {
         return;
       }
+      this.displayedInvoice.set(invoice);
       this.number.set('');
       this.errorMessage.set(null);
       this.suggestionLoading.set(true);

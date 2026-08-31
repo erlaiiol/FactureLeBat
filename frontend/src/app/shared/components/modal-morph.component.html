@@ -1,0 +1,25 @@
+@if (visible()) {
+  <div
+    class="modal-morph-backdrop fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
+    [class.opacity-0]="!open()"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="ariaLabel()"
+    (click)="backdropClose.emit()"
+  >
+    <div #panel class="modal-morph-panel" [class]="panelClass()" (click)="$event.stopPropagation()">
+      <!-- `display: contents` — a purely visual mask on the projected
+           content only. `contentVisible` must NOT touch `#panel` itself:
+           that's the element the FLIP transform actually animates, and
+           hiding it (`visibility: hidden`) would make the whole grow/
+           shrink invisible, popping the panel in at full size the instant
+           it finishes instead of visibly growing into place — exactly the
+           bug a live Playwright check confirmed (2026-08-31): the
+           animation was genuinely running the whole time, just on an
+           invisible element. -->
+      <div class="contents" [class.invisible]="!contentVisible()">
+        <ng-content />
+      </div>
+    </div>
+  </div>
+}

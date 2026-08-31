@@ -15,6 +15,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import {
   ActivatedRoute,
   NavigationEnd,
+  NavigationStart,
   Router,
   RouterLink,
   RouterLinkActive,
@@ -37,6 +38,7 @@ import { TrialOfferModalComponent } from './shared/components/trial-offer-modal.
 import { TourAnchorDirective } from './shared/tour/tour-anchor.directive';
 import { TourService } from './shared/tour/tour.service';
 import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
+import { LastClickOriginService } from './shared/utils/last-click-origin.service';
 
 // "Mon abonnement" nav button's three visual states — mirrors the same
 // hasPremiumAccess/freeInvoiceUsed logic subscribe.page.html already used
@@ -60,6 +62,16 @@ const BILLING_DOT_CLASSES: Record<BillingButtonState, string> = {
   blocked: 'bg-danger',
   trial: 'border border-ink-soft/50',
 };
+
+// `pageSlideTransition`: every class `replayPageEnterAnimation` might have
+// applied on a previous navigation — all removed before picking the next
+// one, since which one was last used depends on that navigation's own
+// trigger.
+const PAGE_ENTER_ANIMATION_CLASSES = [
+  'anim-page-in',
+  'anim-page-slide-forward',
+  'anim-page-slide-back',
+];
 
 // Phase 1.1-9: '/dossiers' added so the "Mon répertoire" button highlights
 // while browsing it too, same standing as the three routes already here.
@@ -117,10 +129,18 @@ export class App {
   protected readonly platformService = inject(PlatformService);
   private readonly pushRegistrationService = inject(PushRegistrationService);
   private readonly deepLinkService = inject(DeepLinkService);
+  // Side-effect-only: registers modalMorph's app-wide click-origin listener
+  // (docs/front/front-1-global-shell-and-overlays.md) — never read directly
+  // here, ModalMorphComponent injects the same singleton.
+  private readonly lastClickOriginService = inject(LastClickOriginService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
   private readonly activatedRoute = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+
+  // `pageSlideTransition` — see the constructor's own subscription for why
+  // this is set on NavigationStart and read on the following NavigationEnd.
+  private lastNavigationTrigger: NavigationStart['navigationTrigger'] | null = null;
 
   // "Mon répertoire" dropdown (Clients/Produits/Prestations grouped as the
   // artisan's reusable records) — wrapper ref lets the outside-click
@@ -150,7 +170,7 @@ export class App {
   @ViewChild('topBar') private readonly topBarRef?: ElementRef<HTMLElement>;
   private navHeightObserver?: ResizeObserver;
 
-  // ux-roadmap.md Phase 1: replays the `page-in` fade (styles.css) on the
+  // docs/front/ Phase 1: replays the `page-in` fade (styles.css) on the
   // <main> wrapper for every navigation, so a routed page fades up instead
   // of popping in with the router swap — one place for every route, rather
   // than each page owning its own copy of the same class.
@@ -199,6 +219,24 @@ export class App {
     // Registered once, regardless of auth state — a referral link can be
     // tapped whether or not the artisan is currently logged in.
     this.deepLinkService.listen();
+
+    // `pageSlideTransition` (docs/design-system.md): captured on every
+    // NavigationStart, consumed by the very next NavigationEnd below —
+    // navigations are strictly sequential in normal operation, so no
+    // per-navigation-id correlation is needed. 'popstate' is the browser/
+    // native shell's own signal for "this came from back/forward, a
+    // hardware back button, or an edge-swipe gesture" — treated as "go
+    // back" direction; anything else (a real link tap, a programmatic
+    // `router.navigate`) is treated as "go forward". This is a conservative
+    // heuristic, not a true history-position tracker (a same-direction
+    // 'popstate' *forward* press would still read as "back") — deliberately
+    // simple given this touches every single route in the app; see
+    // front-1's own "riskiest item in this phase" framing.
+    this.router.events.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((event) => {
+      if (event instanceof NavigationStart) {
+        this.lastNavigationTrigger = event.navigationTrigger;
+      }
+    });
 
     // Closes the dropdown on any navigation, not just clicks on its own
     // links — covers browser back/forward and any other route change while
@@ -318,14 +356,31 @@ export class App {
   // Removing and re-adding the class (with a forced reflow between the two)
   // is what makes the same CSS animation restart on every navigation —
   // toggling a class that's already present is a no-op to the browser.
+  // `pageSlideTransition`: picks a directional slide over the plain fade on
+  // native app shells only — the push/pop-stack metaphor a slide implies is
+  // specifically a native-app convention, not a browser-tab one (web keeps
+  // the original plain fade unconditionally). All three classes are removed
+  // regardless of which one was last applied, since which one that was
+  // depends on the previous navigation's own trigger.
   private replayPageEnterAnimation(): void {
     const element = this.mainContentRef?.nativeElement;
     if (!element) {
       return;
     }
-    element.classList.remove('anim-page-in');
+    for (const cls of PAGE_ENTER_ANIMATION_CLASSES) {
+      element.classList.remove(cls);
+    }
     void element.offsetWidth;
-    element.classList.add('anim-page-in');
+    element.classList.add(this.pageEnterAnimationClass());
+  }
+
+  private pageEnterAnimationClass(): string {
+    if (!this.platformService.isNativeApp()) {
+      return 'anim-page-in';
+    }
+    return this.lastNavigationTrigger === 'popstate'
+      ? 'anim-page-slide-back'
+      : 'anim-page-slide-forward';
   }
 
   private isDataSectionRoute(url: string): boolean {

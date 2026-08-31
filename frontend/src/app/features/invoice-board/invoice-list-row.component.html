@@ -89,27 +89,27 @@
             <button
               type="button"
               [disabled]="converting()"
-              (click)="convertToFacture.emit(); toggleActionsMenu.emit()"
-              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+              (click)="onConvertModalClick()"
+              [title]="premiumRequired() ? 'Réservé aux offres payantes — voir les offres' : null"
+              class="flex items-center gap-1.5 px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
             >
-              {{ converting() ? 'Création…' : 'Facture identique' }}
-            </button>
-            <button
-              type="button"
-              [disabled]="converting()"
-              (click)="createFromDevis.emit(); toggleActionsMenu.emit()"
-              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
-            >
-              Facture à partir du devis
+              @if (premiumRequired()) {
+                <app-icon-lock [size]="13" />
+              }
+              {{ converting() ? 'Création…' : 'Facture à partir du devis' }}
             </button>
           }
           @if (!isDevis() && !invoice().retroactiveDevis) {
             <button
               type="button"
               [disabled]="converting()"
-              (click)="createDevisFromFacture.emit(); toggleActionsMenu.emit()"
-              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+              (click)="onCreateDevisFromFactureClick()"
+              [title]="premiumRequired() ? 'Réservé aux offres payantes — voir les offres' : null"
+              class="flex items-center gap-1.5 px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
             >
+              @if (premiumRequired()) {
+                <app-icon-lock [size]="13" />
+              }
               Créer un devis
             </button>
           }

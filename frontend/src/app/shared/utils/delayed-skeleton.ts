@@ -1,6 +1,6 @@
 import { DestroyRef, Signal, effect, inject, signal } from '@angular/core';
 
-// ux-roadmap.md's asyncReveal pitfall: "skeleton flash on already-fast
+// docs/front/'s asyncReveal pitfall: "skeleton flash on already-fast
 // responses" — showing and immediately hiding a placeholder on a fast call
 // reads as a flicker, not a wait being smoothed over. A slow connection
 // gets the intended calm pause; a fast one never sees the skeleton at all.

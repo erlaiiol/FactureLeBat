@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DocumentType } from '../../../core/models/invoice.model';
+import { BillingService } from '../../../core/services/billing.service';
+import { PaywallService } from '../../../core/services/paywall.service';
+import { IconLockComponent } from '../../../shared/components/icon-lock.component';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { InvoiceDraftStore } from '../invoice-draft.store';
 
@@ -63,11 +66,29 @@ const FLAT_CLASSES =
 @Component({
   selector: 'app-invoice-create-mode-choice-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, TourAnchorDirective],
+  imports: [RouterLink, TourAnchorDirective, IconLockComponent],
   templateUrl: './invoice-create-mode-choice.page.html',
 })
 export class InvoiceCreateModeChoicePage {
+  private readonly billingService = inject(BillingService);
+  private readonly paywallService = inject(PaywallService);
+
   protected readonly documentType = signal<DocumentType>('FACTURE');
+
+  // 1.2/manual-mode-free-tier revision: mode vocal carries no free credit at
+  // all (unlike mode rapide's one lifetime invoice), so it's locked
+  // preventively here instead of failing at submission — see
+  // premiumRequiredGuard, which enforces the same rule at the route level
+  // for a company that navigates straight to the URL.
+  protected readonly voiceLocked = computed(() => !this.billingService.status()?.hasPremiumAccess);
+
+  protected onVoiceTileClick(event: MouseEvent): void {
+    if (!this.voiceLocked()) {
+      return;
+    }
+    event.preventDefault();
+    this.paywallService.show();
+  }
 
   constructor() {
     // Every arrival here is an explicit "nouvelle facture" entry point (nav

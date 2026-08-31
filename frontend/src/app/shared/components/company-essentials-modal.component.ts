@@ -16,6 +16,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from './big-button.component';
 import { FieldHintComponent } from './field-hint.component';
 import { IconCloseComponent } from './icon-close.component';
+import { ModalMorphComponent } from './modal-morph.component';
 
 function toUpdateCompanyRequest(profile: CompanyProfile): UpdateCompanyRequest {
   return {
@@ -62,7 +63,13 @@ function toUpdateCompanyRequest(profile: CompanyProfile): UpdateCompanyRequest {
 @Component({
   selector: 'app-company-essentials-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, FieldHintComponent, IconCloseComponent],
+  imports: [
+    ReactiveFormsModule,
+    BigButtonComponent,
+    FieldHintComponent,
+    IconCloseComponent,
+    ModalMorphComponent,
+  ],
   templateUrl: './company-essentials-modal.component.html',
 })
 export class CompanyEssentialsModalComponent {
