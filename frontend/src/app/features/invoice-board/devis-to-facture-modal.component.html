@@ -8,40 +8,59 @@
     <h2 class="font-heading uppercase tracking-wide text-lg font-bold text-ink">
       Facture à partir du devis {{ devis.number }}
     </h2>
+    <p class="text-sm text-ink-soft">Comment voulez-vous procéder&nbsp;?</p>
 
-    <div class="flex flex-col gap-4 rounded-lg border border-line p-4">
-      <p class="font-medium text-ink">Facture identique</p>
-      <p class="text-sm text-ink-soft">
-        Crée directement la facture, à l'identique du devis. Vous pouvez ajuster ces deux points
-        avant de valider.
-      </p>
+    <!-- The faster, one-click path — accented so it visibly reads as the
+         default, without making the alternative below look like an
+         afterthought (same-size card, same-size button, its own heading). -->
+    <div class="flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary-subtle/10 p-4">
+      <h3 class="font-heading uppercase tracking-wide text-base font-bold text-ink">
+        Facture identique
+      </h3>
+      <p class="text-sm text-ink-soft">Crée directement la facture, à l'identique du devis.</p>
 
-      <app-simplified-display-slider
-        [level]="simplifiedDisplay()"
-        (levelChange)="onSimplifiedDisplayChange($event)"
-      />
+      <!-- Indented + left-bordered, not another full bordered box — signals
+           "these are options for the choice above", not two more sibling
+           choices at the same level (invoice-deposit-field.component still
+           has its own internal border, shared with mode rapide/manuel where
+           it stands alone; the indent here is what tells them apart from
+           "Facture identique" itself, not a change to that component). -->
+      <div class="flex flex-col gap-3 border-l-2 border-primary/30 pl-3">
+        <app-simplified-display-slider
+          [level]="simplifiedDisplay()"
+          (levelChange)="onSimplifiedDisplayChange($event)"
+        />
 
-      <app-invoice-deposit-field
-        [requested]="depositRequested()"
-        [percentageBasisPoints]="depositPercentageBasisPoints()"
-        [amountCents]="depositAmountCents()"
-        [autoCalc]="depositAutoCalc()"
-        (requestedChange)="onDepositRequestedChange($event)"
-        (percentageBasisPointsChange)="onDepositPercentageChange($event)"
-        (amountEurosChange)="onDepositAmountEurosChange($event)"
-        (resetAutoCalc)="onResetDepositAutoCalc()"
-      />
+        <app-invoice-deposit-field
+          [requested]="depositRequested()"
+          [percentageBasisPoints]="depositPercentageBasisPoints()"
+          [amountCents]="depositAmountCents()"
+          [autoCalc]="depositAutoCalc()"
+          (requestedChange)="onDepositRequestedChange($event)"
+          (percentageBasisPointsChange)="onDepositPercentageChange($event)"
+          (amountEurosChange)="onDepositAmountEurosChange($event)"
+          (resetAutoCalc)="onResetDepositAutoCalc()"
+        />
+      </div>
 
-      <app-big-button (click)="confirmIdentical()">Facture identique</app-big-button>
+      <app-big-button (click)="confirmIdentical()">Créer la facture identique</app-big-button>
     </div>
 
-    <button
-      type="button"
-      (click)="requestCreateFromDevis()"
-      class="text-center text-sm font-medium text-primary hover:underline"
-    >
-      Reprendre la facture à partir du devis
-    </button>
+    <!-- Same card shape/size as "Facture identique" above, neutral instead
+         of accented — a real second choice, not a minor link buried below
+         the first one. -->
+    <div class="flex flex-col gap-3 rounded-xl border border-line p-4">
+      <h3 class="font-heading uppercase tracking-wide text-base font-bold text-ink">
+        Reprendre à partir du devis
+      </h3>
+      <p class="text-sm text-ink-soft">
+        Repassez par les étapes de création pour ajuster les lignes avant de valider — utile si des
+        produits ou prestations ont changé depuis le devis.
+      </p>
+      <app-big-button variant="secondary" tone="solid" (click)="requestCreateFromDevis()">
+        Reprendre la facture
+      </app-big-button>
+    </div>
 
     <button
       type="button"
