@@ -39,21 +39,21 @@
           }
         </div>
 
-        <p class="text-ink-soft">
-          Le mode manuel reste gratuit et illimité, avec ou sans abonnement.
-          @if (!s.hasPremiumAccess) {
-            En mode rapide,
-            @if (s.freeInvoiceUsed) {
-              votre facture gratuite a déjà été utilisée — un abonnement est nécessaire pour en
-              créer d'autres.
-            } @else {
-              vous pouvez créer une facture gratuitement, sans abonnement.
-            }
-            La facturation à voix haute et les actions rapides de « Mes documents » (convertir un
-            devis en facture, créer un devis rétroactif) nécessitent un abonnement dès la première
-            utilisation.
+        <ul class="flex flex-col gap-2 rounded-xl border border-line bg-bg p-4">
+          @for (row of channelStatusRows(s); track row.label) {
+            <li class="flex items-start gap-2 text-sm">
+              @if (row.locked) {
+                <app-icon-lock [size]="14" class="mt-0.5 shrink-0 text-ink-soft" />
+              } @else {
+                <app-icon-check [size]="14" class="mt-0.5 shrink-0 text-success" />
+              }
+              <span>
+                <span class="font-medium text-ink">{{ row.label }}</span>
+                <span class="text-ink-soft"> — {{ row.note }}</span>
+              </span>
+            </li>
           }
-        </p>
+        </ul>
 
         @if (s.subscriptionStatus === 'ACTIVE') {
           <p class="text-ink-soft">
@@ -189,7 +189,7 @@
                 <p class="text-sm text-ink-soft">{{ plan.tagline }}</p>
 
                 <ul class="flex flex-1 flex-col gap-1.5 text-sm text-ink">
-                  <li>✓ Devis &amp; factures illimités</li>
+                  <li>✓ Mode rapide, vocal &amp; actions rapides illimités</li>
                   <li>
                     {{
                       plan.customerLimit === null
