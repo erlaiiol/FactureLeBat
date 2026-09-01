@@ -311,6 +311,20 @@ export const routes: Routes = [
         (m) => m.MentionsLegalesPage,
       ),
   },
+  // Public reform explainer, linked from the landing page's "Prêt pour la
+  // réforme" pillar card — same flat/ungated placement as the legal pages
+  // above, no guestGuard: a signed-in artisan following the link (or
+  // finding it via search) shouldn't be bounced out of it. `fullBleed`
+  // like the landing page itself: full-width hero/CTA sections, not the
+  // app shell's `max-w-3xl` form/list container.
+  {
+    path: 'reforme-facturation-electronique',
+    data: { fullBleed: true },
+    loadComponent: () =>
+      import('./features/reforme-facturation/reforme-facturation.page').then(
+        (m) => m.ReformeFacturationPage,
+      ),
+  },
   // Phase 1.3-7 ("Partager"): the @Public() share-link landing page — no
   // session required or expected (see InvoiceController.createShareLink on
   // the backend), same "flat, ungated" placement as the auth/legal routes

@@ -4,7 +4,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { PlanCatalog, PlanTier } from '../../core/models/billing.model';
+import { BillingStatus, PlanCatalog, PlanTier } from '../../core/models/billing.model';
 import { BillingService } from '../../core/services/billing.service';
 import { ReferralStatus } from '../../core/models/referral.model';
 import { PlatformService } from '../../core/services/platform.service';
@@ -12,7 +12,44 @@ import { ReferralService } from '../../core/services/referral.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { IconCheckComponent } from '../../shared/components/icon-check.component';
+import { IconLockComponent } from '../../shared/components/icon-lock.component';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
+
+// 1.2/manual-mode-free-tier revision: one row per creation channel, in the
+// same order as the mode-choice screen (rapide, manuel, vocal) plus the
+// invoice board's own quick actions — see PlanGateService.
+// assertCanCreateInvoice's header comment for the underlying rule each row
+// describes. A plain function, not a class method, since it only reads its
+// argument — kept out of the component so the template's `@for` gets a
+// stable, easily-testable list rather than a recomputing method call.
+function channelStatusRows(s: BillingStatus): { label: string; note: string; locked: boolean }[] {
+  return [
+    {
+      label: 'Mode manuel',
+      note: 'Gratuit et illimité, avec ou sans abonnement.',
+      locked: false,
+    },
+    {
+      label: 'Mode rapide',
+      note: s.hasPremiumAccess
+        ? 'Illimité.'
+        : s.freeInvoiceUsed
+          ? 'Facture gratuite déjà utilisée — abonnement requis pour continuer.'
+          : 'Une facture gratuite disponible, sans abonnement.',
+      locked: !s.hasPremiumAccess && s.freeInvoiceUsed,
+    },
+    {
+      label: 'Facturation à voix haute',
+      note: s.hasPremiumAccess ? 'Illimité.' : 'Abonnement requis dès la première utilisation.',
+      locked: !s.hasPremiumAccess,
+    },
+    {
+      label: 'Actions rapides (Mes documents)',
+      note: s.hasPremiumAccess ? 'Illimité.' : 'Abonnement requis dès la première utilisation.',
+      locked: !s.hasPremiumAccess,
+    },
+  ];
+}
 
 function extractErrorMessage(error: HttpErrorResponse, fallback: string): string {
   const body = error.error as { message?: string | string[] } | null;
@@ -36,10 +73,19 @@ function extractErrorMessage(error: HttpErrorResponse, fallback: string): string
 @Component({
   selector: 'app-subscribe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BigButtonComponent, BadgeComponent, DatePipe, IconCheckComponent],
+  imports: [
+    ReactiveFormsModule,
+    BigButtonComponent,
+    BadgeComponent,
+    DatePipe,
+    IconCheckComponent,
+    IconLockComponent,
+  ],
   templateUrl: './subscribe.page.html',
 })
 export class SubscribePage {
+  protected readonly channelStatusRows = channelStatusRows;
+
   private readonly billingService = inject(BillingService);
   private readonly referralService = inject(ReferralService);
   private readonly destroyRef = inject(DestroyRef);

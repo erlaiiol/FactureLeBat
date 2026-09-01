@@ -116,8 +116,20 @@ export class InvoiceMailService {
     const pdfBuffer = await this.pdfService.generateInvoicePdf(pdfData);
     const filePrefix = invoice.documentType === 'DEVIS' ? 'devis' : 'facture';
 
+    // dto.format (set when this send is the SMTP fallback tier of the
+    // "Partager"/"Partager en Factur-X" buttons — see SendInvoiceEmailDto's
+    // own comment) reflects what the artisan actually clicked, so it
+    // overrides the company-wide default; omitted (e.g. sends triggered
+    // from the board, which has no Factur-X button) keeps today's behavior.
+    const attachFacturX =
+      dto.format === 'facturx'
+        ? true
+        : dto.format === 'pdf'
+          ? false
+          : raw.company.autoAttachFacturX;
+
     const attachment = await this.buildAttachment(
-      raw.company.autoAttachFacturX,
+      attachFacturX,
       invoice.documentType,
       pdfBuffer,
       pdfData,
@@ -144,23 +156,25 @@ export class InvoiceMailService {
   }
 
   // Phase 1.3-2 (2026 e-invoicing reform, workflow automation): attaches the
-  // Factur-X hybrid instead of the plain PDF when the company opted in
-  // (Company.autoAttachFacturX) and this is a FACTURE — same rule as every
-  // other e-invoicing action, a DEVIS never gets a Factur-X attachment
-  // regardless of the toggle. A genuine Factur-X generation failure (a real
-  // Schematron/XSD error — this never talks to SUPER PDP, so a PA outage
-  // can't be the cause) falls back to the plain PDF and logs a warning
-  // rather than blocking the send: getting *something* to the client on
-  // time matters more here than always sending the structured version.
+  // Factur-X hybrid instead of the plain PDF when either the artisan
+  // explicitly asked for it (dto.format, resolved by the caller) or the
+  // company opted in by default (Company.autoAttachFacturX), and this is a
+  // FACTURE — same rule as every other e-invoicing action, a DEVIS never
+  // gets a Factur-X attachment regardless. A genuine Factur-X generation
+  // failure (a real Schematron/XSD error — this never talks to SUPER PDP,
+  // so a PA outage can't be the cause) falls back to the plain PDF and logs
+  // a warning rather than blocking the send: getting *something* to the
+  // client on time matters more here than always sending the structured
+  // version.
   private async buildAttachment(
-    autoAttachFacturX: boolean,
+    attachFacturX: boolean,
     documentType: DocumentType,
     pdfBuffer: Buffer,
     pdfData: InvoicePdfData,
     filePrefix: string,
     invoiceNumber: string,
   ): Promise<SendMailAttachment> {
-    if (autoAttachFacturX && documentType === 'FACTURE') {
+    if (attachFacturX && documentType === 'FACTURE') {
       try {
         const hybridBuffer = await this.facturXService.generateHybridPdf(pdfBuffer, pdfData);
         return { filename: `${filePrefix}-${invoiceNumber}-factur-x.pdf`, content: hybridBuffer };

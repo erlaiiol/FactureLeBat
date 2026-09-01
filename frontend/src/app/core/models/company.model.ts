@@ -84,6 +84,13 @@ export interface CompanyProfile {
   autoAttachFacturX: boolean;
   autoTransmitViaPa: boolean;
   autoSyncReceivedInvoices: boolean;
+  // Which quantity-entry control the mobile line-item form defaults to —
+  // the digit-wheel picker (false) or a plain numeric keyboard (true). See
+  // schema.prisma's comment on Company.preferKeyboardQuantityInput. Set via
+  // its own PATCH /company/quantity-input-mode, not the big profile form
+  // (see CompanyService.updateQuantityInputMode) — deliberately absent from
+  // UpdateCompanyRequest below.
+  preferKeyboardQuantityInput: boolean;
   // Whether a logo has been uploaded (CompanyService.uploadLogo) — never the
   // image bytes themselves, see CompanyService.logoUrl for how the frontend
   // actually displays it.

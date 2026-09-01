@@ -50,7 +50,13 @@
               rows="8"
               class="rounded-lg border border-line bg-surface px-4 py-3 text-ink"
             ></textarea>
-            <app-field-hint text="La facture en PDF est jointe automatiquement à cet email." />
+            <app-field-hint
+              [text]="
+                format() === 'facturx'
+                  ? 'La facture électronique (Factur-X) est jointe automatiquement à cet email.'
+                  : 'La facture en PDF est jointe automatiquement à cet email.'
+              "
+            />
           </label>
 
           <app-big-button type="submit" [disabled]="sending()">

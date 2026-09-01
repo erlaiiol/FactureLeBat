@@ -536,6 +536,27 @@
 </section>
 
 <section class="mt-8 flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+  <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
+    Saisie des quantités
+  </h2>
+
+  <label class="flex items-center gap-2">
+    <input
+      type="checkbox"
+      class="h-5 w-5"
+      [checked]="companyService.preferKeyboardQuantityInput() ?? false"
+      (change)="onQuantityInputModeChange($any($event.target).checked)"
+    />
+    <span class="text-sm font-medium text-ink">
+      Utiliser le clavier plutôt que la molette pour saisir les quantités sur mobile
+    </span>
+  </label>
+  <app-field-hint
+    text="Vous pouvez aussi changer ce réglage à tout moment directement depuis le sélecteur de quantité, sur une ligne de facture ou de devis."
+  />
+</section>
+
+<section class="mt-8 flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
   <div class="flex items-start justify-between gap-2">
     <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">
       Envoyer mes factures par email

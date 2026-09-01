@@ -185,6 +185,10 @@ export class InvoiceCreatePreviewStepPage {
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly createdInvoice = signal<InvoiceWithTotals | null>(null);
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
+  // Which button ('pdf' from share(), 'facturx' from shareFacturX()) opened
+  // the compose-email modal — forwarded to it so the SMTP tier attaches the
+  // same file the artisan actually asked for (InvoiceMailService.send).
+  protected readonly emailModalFormat = signal<'pdf' | 'facturx'>('pdf');
   protected readonly sharingInvoiceId = signal<string | null>(null);
   // 2026-08-25 review: mirrors sharingInvoiceId, kept as its own signal
   // rather than widening that one with a format field — a plain-PDF share
@@ -381,7 +385,8 @@ export class InvoiceCreatePreviewStepPage {
     }
   }
 
-  protected openEmailModal(invoice: InvoiceWithTotals): void {
+  protected openEmailModal(invoice: InvoiceWithTotals, format: 'pdf' | 'facturx' = 'pdf'): void {
+    this.emailModalFormat.set(format);
     this.emailModalInvoice.set(invoice);
   }
 
@@ -429,7 +434,7 @@ export class InvoiceCreatePreviewStepPage {
     try {
       const outcome = await this.invoiceShareService.share(invoice, 'facturx');
       if (outcome === 'compose-email') {
-        this.openEmailModal(invoice);
+        this.openEmailModal(invoice, 'facturx');
       }
     } catch {
       this.toastService.error('Impossible de partager la facture électronique pour le moment.');

@@ -41,6 +41,12 @@ export class SendInvoiceEmailModalComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly invoice = input<InvoiceWithTotals | null>(null);
+  // Which file the "Partager"/"Partager en Factur-X" button was on before
+  // falling through to this SMTP tier (InvoiceShareService) — sent along so
+  // the backend attaches that same file instead of falling back to the
+  // company-wide Company.autoAttachFacturX default. Undefined for callers
+  // with no Factur-X button (e.g. the board), same as before this existed.
+  readonly format = input<'pdf' | 'facturx' | undefined>(undefined);
   readonly closed = output<void>();
   readonly sent = output<InvoiceWithTotals>();
 
@@ -100,7 +106,7 @@ export class SendInvoiceEmailModalComponent {
     this.errorMessage.set(null);
 
     this.invoiceService
-      .sendEmail(invoice.id, value)
+      .sendEmail(invoice.id, { ...value, format: this.format() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (updated) => {

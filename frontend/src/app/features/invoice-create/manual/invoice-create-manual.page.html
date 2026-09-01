@@ -149,6 +149,7 @@
   />
   <app-send-invoice-email-modal
     [invoice]="emailModalInvoice()"
+    [format]="emailModalFormat()"
     (closed)="closeEmailModal()"
     (sent)="onEmailSent($event)"
   />

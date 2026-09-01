@@ -136,6 +136,20 @@ export class CompanyRepository {
     });
   }
 
+  // Narrow, single-column update — same "own small method" pattern as
+  // saveSuperPdpTokens/clearSuperPdpTokens below, not routed through the
+  // full-replace update() above, since QuantityWheelPickerComponent only
+  // ever has this one field to send, never the rest of the profile.
+  async updatePreferKeyboardQuantityInput(
+    companyId: string,
+    preferKeyboardQuantityInput: boolean,
+  ): Promise<void> {
+    await this.prisma.company.update({
+      where: { id: companyId },
+      data: { preferKeyboardQuantityInput },
+    });
+  }
+
   isSuperPdpConnected(companyId: string): Promise<boolean> {
     return this.prisma.company
       .findUniqueOrThrow({ where: { id: companyId }, select: { superPdpConnectedAt: true } })
