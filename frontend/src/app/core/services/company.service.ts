@@ -16,12 +16,43 @@ export class CompanyService {
   // null means "not fetched yet this session", not "known disconnected".
   readonly superPdpConnected = signal<boolean | null>(null);
 
+  // Same app-shell-wide cache reasoning as superPdpConnected above —
+  // QuantityWheelPickerComponent (one instance per line item) reads this on
+  // every sheet open, not just company-settings.page.ts. null means "not
+  // fetched yet this session", treated as "molette" (the original default)
+  // rather than "clavier" everywhere it's read.
+  readonly preferKeyboardQuantityInput = signal<boolean | null>(null);
+
   getProfile(): Observable<CompanyProfile> {
-    return this.http.get<CompanyProfile>(this.baseUrl);
+    return this.http
+      .get<CompanyProfile>(this.baseUrl)
+      .pipe(
+        tap((profile) => this.preferKeyboardQuantityInput.set(profile.preferKeyboardQuantityInput)),
+      );
   }
 
   updateProfile(profile: UpdateCompanyRequest): Observable<CompanyProfile> {
-    return this.http.patch<CompanyProfile>(this.baseUrl, profile);
+    return this.http
+      .patch<CompanyProfile>(this.baseUrl, profile)
+      .pipe(
+        tap((updated) => this.preferKeyboardQuantityInput.set(updated.preferKeyboardQuantityInput)),
+      );
+  }
+
+  // Own lightweight endpoint, deliberately not routed through updateProfile
+  // above — same reasoning as TourService.setTourEnabled: the picker only
+  // ever has this one field to send, never the rest of the required profile
+  // shape UpdateCompanyRequest carries. Returns the request rather than
+  // subscribing internally so each caller (the picker, company-settings.page)
+  // can surface its own success/failure feedback.
+  updateQuantityInputMode(preferKeyboardQuantityInput: boolean): Observable<CompanyProfile> {
+    return this.http
+      .patch<CompanyProfile>(`${this.baseUrl}/quantity-input-mode`, {
+        preferKeyboardQuantityInput,
+      })
+      .pipe(
+        tap((updated) => this.preferKeyboardQuantityInput.set(updated.preferKeyboardQuantityInput)),
+      );
   }
 
   uploadLogo(file: File): Observable<CompanyProfile> {

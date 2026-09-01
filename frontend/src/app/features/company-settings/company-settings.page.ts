@@ -39,7 +39,7 @@ import {
   templateUrl: './company-settings.page.html',
 })
 export class CompanySettingsPage {
-  private readonly companyService = inject(CompanyService);
+  protected readonly companyService = inject(CompanyService);
   private readonly mailSettingsService = inject(MailSettingsService);
   private readonly receivedInvoiceService = inject(ReceivedInvoiceService);
   private readonly authService = inject(AuthService);
@@ -620,6 +620,17 @@ export class CompanySettingsPage {
   protected onTourEnabledChange(enabled: boolean): void {
     this.tourService
       .setTourEnabled(enabled)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        error: () => this.toastService.error('Impossible de mettre à jour ce réglage.'),
+      });
+  }
+
+  // Same "own lightweight endpoint, caller surfaces its own errors" pattern
+  // as onTourEnabledChange above — see CompanyService.updateQuantityInputMode.
+  protected onQuantityInputModeChange(preferKeyboard: boolean): void {
+    this.companyService
+      .updateQuantityInputMode(preferKeyboard)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         error: () => this.toastService.error('Impossible de mettre à jour ce réglage.'),

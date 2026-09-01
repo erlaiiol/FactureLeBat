@@ -341,6 +341,16 @@ model Company {
   autoTransmitViaPa        Boolean @default(false)
   autoSyncReceivedInvoices Boolean @default(false)
 
+  // Which quantity-entry control the mobile app's line-item form defaults
+  // to — the digit-wheel picker (false, the original native-app default) or
+  // a plain numeric keyboard (true). Settable explicitly in "Mon
+  // entreprise", same as tourEnabled above, but also written implicitly the
+  // instant the artisan slides the picker's own Clavier/Molette toggle (see
+  // QuantityWheelPickerComponent) — same column either way, so the choice
+  // sticks across devices without a separate local-only setting to keep in
+  // sync.
+  preferKeyboardQuantityInput Boolean @default(false)
+
   // A short personal note the artisan writes once, appended to the default
   // invoice/devis message on every send — the native "Partager" share sheet,
   // the SMTP compose modal, and the mailto fallback all read this same value

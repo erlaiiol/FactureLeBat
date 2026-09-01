@@ -417,10 +417,17 @@ export interface UpdateInvoiceStatusRequest {
 
 // All optional: `to` defaults server-side to the invoice's own
 // customerEmail, `subject`/`message` default to the backend's template.
+// `format`: which file the artisan actually clicked "Partager"/"Partager en
+// Factur-X" for — when present, overrides Company.autoAttachFacturX for
+// this send so the compose-email fallback tier attaches the same file the
+// artisan asked for. Omitted (e.g. from the board, which has no Factur-X
+// button) falls back to the company-wide default, same as before this field
+// existed.
 export interface SendInvoiceEmailRequest {
   to?: string;
   subject?: string;
   message?: string;
+  format?: 'pdf' | 'facturx';
 }
 
 // The exact subject/text send() would use if the artisan sends without

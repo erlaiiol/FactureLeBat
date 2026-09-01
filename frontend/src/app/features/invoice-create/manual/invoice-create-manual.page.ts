@@ -109,6 +109,10 @@ export class InvoiceCreateManualPage {
   protected readonly sharingInvoiceId = signal<string | null>(null);
   protected readonly sharingFacturXInvoiceId = signal<string | null>(null);
   protected readonly emailModalInvoice = signal<InvoiceWithTotals | null>(null);
+  // Which button ('pdf' from share(), 'facturx' from shareFacturX()) opened
+  // the compose-email modal — forwarded to it so the SMTP tier attaches the
+  // same file the artisan actually asked for (InvoiceMailService.send).
+  protected readonly emailModalFormat = signal<'pdf' | 'facturx'>('pdf');
   // Phase 1.1-1
   protected readonly signatureModalInvoice = signal<InvoiceWithTotals | null>(null);
 
@@ -362,6 +366,7 @@ export class InvoiceCreateManualPage {
     try {
       const outcome = await this.invoiceShareService.share(invoice);
       if (outcome === 'compose-email') {
+        this.emailModalFormat.set('pdf');
         this.emailModalInvoice.set(invoice);
       }
     } catch {
@@ -389,6 +394,7 @@ export class InvoiceCreateManualPage {
     try {
       const outcome = await this.invoiceShareService.share(invoice, 'facturx');
       if (outcome === 'compose-email') {
+        this.emailModalFormat.set('facturx');
         this.emailModalInvoice.set(invoice);
       }
     } catch {

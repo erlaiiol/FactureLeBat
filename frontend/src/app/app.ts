@@ -282,6 +282,26 @@ export class App {
       }
     });
 
+    // Populates CompanyService's cached quantityInputMode preference for
+    // QuantityWheelPickerComponent (and company-settings.page.ts) without
+    // requiring a visit to the settings page first — same "once per login"
+    // fetch as the SUPER PDP effect above, via getProfile's own tap rather
+    // than a dedicated status endpoint.
+    effect(() => {
+      if (this.authService.isAuthenticated()) {
+        untracked(() => {
+          this.companyService
+            .getProfile()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              error: () => {},
+            });
+        });
+      } else {
+        this.companyService.preferKeyboardQuantityInput.set(null);
+      }
+    });
+
     // Phase 22: registers this device's push token once per login, same
     // "isAuthenticated only flips on log in/out" reasoning as the billing
     // effect above — a no-op on web, see PushRegistrationService.

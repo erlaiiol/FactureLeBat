@@ -1,0 +1,217 @@
+<div class="bg-atelier-bg text-atelier-ink font-atelier-sans">
+  <header class="flex items-center justify-between gap-4 px-4 py-4 sm:px-8">
+    <a routerLink="/" class="flex items-center gap-2">
+      <img src="/android-chrome-192x192.png" alt="" width="36" height="36" class="rounded-lg" />
+      <span class="font-atelier-heading text-xl font-semibold tracking-tight">FactureLe</span>
+    </a>
+    <div class="flex items-center gap-3 sm:gap-4">
+      <a routerLink="/connexion" class="text-atelier-ink-soft text-sm font-medium underline"
+        >Connexion</a
+      >
+      <a
+        routerLink="/inscription"
+        class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-fg transition hover:brightness-90"
+        >Essayer gratuitement</a
+      >
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section
+    class="mx-auto flex max-w-3xl flex-col items-center gap-5 px-4 py-14 text-center sm:py-20"
+  >
+    <span
+      class="text-atelier-walnut inline-flex items-center gap-1.5 rounded-full border-2 border-atelier-walnut/40 bg-atelier-surface px-3 py-1 text-xs font-medium"
+    >
+      Réforme 2026-2027
+    </span>
+    <h1 class="font-atelier-heading text-3xl leading-tight font-semibold sm:text-5xl">
+      La réforme de la facturation électronique, expliquée simplement
+    </h1>
+    <p class="text-atelier-ink-soft max-w-xl text-lg">
+      À partir de 2026, la facturation entre entreprises change en France. Voici ce que dit la
+      réforme, les échéances qui vous concernent, et comment FactureLe s'en occupe déjà pour vous.
+    </p>
+    <a
+      routerLink="/inscription"
+      class="w-full max-w-xs rounded-xl bg-primary px-6 py-4 text-center text-lg font-semibold text-primary-fg shadow-sm transition hover:brightness-90"
+      >Créer mon compte</a
+    >
+  </section>
+
+  <!-- Qu'est-ce que la réforme -->
+  <section class="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+    <h2 class="font-atelier-heading text-2xl font-semibold sm:text-3xl">
+      Qu'est-ce que la réforme ?
+    </h2>
+    <div class="text-atelier-ink-soft mt-4 space-y-4">
+      <p>
+        La facturation électronique devient obligatoire entre entreprises assujetties à la TVA
+        (B2B). Un PDF simple envoyé par email ne suffira plus&nbsp;: la facture doit être transmise
+        sous un format structuré, le <strong class="text-atelier-ink">Factur-X</strong>, et
+        acheminée via une <strong class="text-atelier-ink">Plateforme Agréée (PA)</strong> par
+        l'administration — pas par email direct entre entreprises.
+      </p>
+      <p>
+        Le portail public de l'administration (PPF) n'est plus, depuis 2024, qu'un annuaire&nbsp;:
+        il ne sert plus à transmettre les factures. Il faut passer par une Plateforme Agréée — ce
+        n'est pas un choix de FactureLe, c'est ce qu'impose la réforme à toutes les entreprises
+        concernées.
+      </p>
+    </div>
+  </section>
+
+  <!-- Échéances -->
+  <section class="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+    <h2 class="font-atelier-heading text-2xl font-semibold sm:text-3xl">
+      Les échéances qui vous concernent
+    </h2>
+    <div class="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <h3 class="font-atelier-heading text-lg font-semibold">Réception</h3>
+        <p class="text-atelier-walnut mt-1 text-sm font-semibold">Depuis le 1er septembre 2026</p>
+        <p class="text-atelier-ink-soft mt-2 text-sm">
+          Toute entreprise assujettie à la TVA doit être en mesure de recevoir des factures
+          électroniques de ses fournisseurs.
+        </p>
+      </div>
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <h3 class="font-atelier-heading text-lg font-semibold">Émission</h3>
+        <p class="text-atelier-walnut mt-1 text-sm font-semibold">Depuis le 1er septembre 2027</p>
+        <p class="text-atelier-ink-soft mt-2 text-sm">
+          Pour les TPE, PME et auto-entrepreneurs&nbsp;: obligation d'émettre vos propres factures
+          au format électronique.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comment FactureLe s'en occupe -->
+  <section class="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+    <h2 class="font-atelier-heading text-2xl font-semibold sm:text-3xl">
+      Comment FactureLe s'en occupe pour vous
+    </h2>
+    <p class="text-atelier-ink-soft mt-3">
+      Pas de nouvelle plateforme à configurer ailleurs, pas de compte tiers à ouvrir&nbsp;: tout se
+      passe depuis FactureLe.
+    </p>
+    <ul class="mt-6 space-y-4">
+      <li class="flex items-start gap-3">
+        <span
+          class="bg-atelier-walnut text-atelier-surface mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+        >
+          <app-icon-check [size]="12" />
+        </span>
+        <span class="text-atelier-ink-soft">
+          <strong class="text-atelier-ink">Format Factur-X déjà intégré</strong> — chaque facture
+          peut être générée au format structuré exigé par la réforme, en un clic.
+        </span>
+      </li>
+      <li class="flex items-start gap-3">
+        <span
+          class="bg-atelier-walnut text-atelier-surface mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+        >
+          <app-icon-check [size]="12" />
+        </span>
+        <span class="text-atelier-ink-soft">
+          <strong class="text-atelier-ink">Plateforme Agréée intégrée</strong> — la transmission de
+          vos factures se fait directement depuis FactureLe, sans compte à créer ailleurs.
+        </span>
+      </li>
+      <li class="flex items-start gap-3">
+        <span
+          class="bg-atelier-walnut text-atelier-surface mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+        >
+          <app-icon-check [size]="12" />
+        </span>
+        <span class="text-atelier-ink-soft">
+          <strong class="text-atelier-ink">Réception centralisée</strong> — les factures que vos
+          fournisseurs vous envoient arrivent dans un espace dédié, prêtes à consulter.
+        </span>
+      </li>
+      <li class="flex items-start gap-3">
+        <span
+          class="bg-atelier-walnut text-atelier-surface mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+        >
+          <app-icon-check [size]="12" />
+        </span>
+        <span class="text-atelier-ink-soft">
+          <strong class="text-atelier-ink">Automatisable</strong> — une fois configurée, la
+          facturation électronique peut se transmettre toute seule, sans y repenser à chaque
+          facture.
+        </span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Pourquoi c'est un atout -->
+  <section class="mx-auto max-w-5xl px-4 py-10 sm:py-14">
+    <h2 class="font-atelier-heading text-center text-2xl font-semibold sm:text-3xl">
+      Pourquoi c'est un atout, pas juste une contrainte
+    </h2>
+    <div class="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <h3 class="font-atelier-heading text-lg font-semibold">Pour vous</h3>
+        <p class="text-atelier-ink-soft mt-2 text-sm">
+          Rien à changer dans votre façon de facturer&nbsp;: le format et la transmission se font
+          depuis l'écran que vous utilisez déjà, sans plateforme ni compte supplémentaire à gérer.
+        </p>
+      </div>
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <h3 class="font-atelier-heading text-lg font-semibold">Pour vos clients</h3>
+        <p class="text-atelier-ink-soft mt-2 text-sm">
+          Une facture structurée s'intègre directement dans leurs outils comptables&nbsp;: moins de
+          ressaisie, moins d'erreurs, un traitement plus rapide de votre côté comme du leur.
+        </p>
+      </div>
+      <div class="bg-atelier-surface rounded-2xl p-6">
+        <h3 class="font-atelier-heading text-lg font-semibold">Pour votre facturation</h3>
+        <p class="text-atelier-ink-soft mt-2 text-sm">
+          Fini les PDF envoyés par email qui se perdent dans une boîte de réception&nbsp;: tout est
+          transmis, tracé et centralisé au même endroit que vos devis et factures.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Questions honnêtes -->
+  <section class="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+    <h2 class="font-atelier-heading text-2xl font-semibold sm:text-3xl">Questions fréquentes</h2>
+    <div class="mt-6 space-y-6">
+      <div>
+        <h3 class="font-atelier-heading font-semibold">
+          Est-ce que ça change mes déclarations URSSAF ?
+        </h3>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Non. C'est une obligation distincte&nbsp;: la réforme ne change rien à ce que vous devez
+          déclarer, ni aux montants concernés.
+        </p>
+      </div>
+      <div>
+        <h3 class="font-atelier-heading font-semibold">
+          Est-ce que FactureLe couvre tout ce que prévoit la réforme ?
+        </h3>
+        <p class="text-atelier-ink-soft mt-1 text-sm">
+          Émission au format Factur-X, transmission via plateforme agréée et réception des factures
+          fournisseurs sont déjà couvertes. L'e-reporting (données agrégées transmises pour vos
+          ventes à des particuliers ou à l'étranger, distinct de la facture électronique elle-même)
+          n'est pas encore couvert à ce jour.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-atelier-walnut px-4 py-14 text-center sm:py-20">
+    <h2 class="font-atelier-heading text-atelier-surface text-2xl font-semibold sm:text-3xl">
+      Soyez prêt sans y penser
+    </h2>
+    <a
+      routerLink="/inscription"
+      class="mx-auto mt-6 block w-full max-w-xs rounded-xl bg-primary px-6 py-4 text-center text-lg font-semibold text-primary-fg shadow-sm transition hover:brightness-90"
+      >Créer mon compte</a
+    >
+    <a routerLink="/" class="text-atelier-surface/80 mt-4 inline-block text-sm underline"
+      >← Retour à l'accueil</a
+    >
+  </section>
+</div>

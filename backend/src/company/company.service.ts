@@ -45,6 +45,20 @@ export class CompanyService {
     return { ...dto, autoTransmitViaPa: false, autoSyncReceivedInvoices: false };
   }
 
+  // Persists QuantityWheelPickerComponent's own Clavier/Molette toggle, or
+  // the equivalent checkbox in "Mon entreprise" — same column either way,
+  // see schema.prisma's comment on Company.preferKeyboardQuantityInput.
+  async updateQuantityInputMode(
+    companyId: string,
+    preferKeyboardQuantityInput: boolean,
+  ): Promise<CompanyProfile> {
+    await this.companyRepository.updatePreferKeyboardQuantityInput(
+      companyId,
+      preferKeyboardQuantityInput,
+    );
+    return this.getProfile(companyId);
+  }
+
   // Phase: top-right invoice logo. Only PdfService's PDF-building path and
   // GET /company/logo need the actual bytes — see CompanyRepository.findLogo's
   // comment for why this is never folded into getProfile above.

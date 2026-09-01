@@ -23,6 +23,7 @@ import {
 } from '../common/raster-image-upload.util';
 import { CompanyService } from './company.service';
 import { UpdateCompanyDto } from './dto/update-company.dto';
+import { UpdateQuantityInputModeDto } from './dto/update-quantity-input-mode.dto';
 import { CompanyProfile } from './entities/company.entity';
 
 // A generous bound for a logo image, not a real limit — keeps a single
@@ -45,6 +46,17 @@ export class CompanyController {
     @Body() dto: UpdateCompanyDto,
   ): Promise<CompanyProfile> {
     return this.companyService.updateProfile(user.companyId, dto);
+  }
+
+  @Patch('quantity-input-mode')
+  updateQuantityInputMode(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateQuantityInputModeDto,
+  ): Promise<CompanyProfile> {
+    return this.companyService.updateQuantityInputMode(
+      user.companyId,
+      dto.preferKeyboardQuantityInput,
+    );
   }
 
   // The artisan's own logo — shown top-right on every invoice/devis PDF

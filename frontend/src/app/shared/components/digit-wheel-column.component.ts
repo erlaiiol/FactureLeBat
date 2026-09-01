@@ -4,10 +4,13 @@ import {
   ElementRef,
   afterNextRender,
   effect,
+  inject,
   input,
   output,
   viewChild,
 } from '@angular/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { PlatformService } from '../../core/services/platform.service';
 
 // One column of the quantity odometer (see QuantityWheelPickerComponent) —
 // a single digit 0-9 the artisan scrolls/swipes through, snapping to the
@@ -55,6 +58,7 @@ export class DigitWheelColumnComponent {
 
   protected readonly digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+  private readonly platform = inject(PlatformService);
   private readonly scroller = viewChild.required<ElementRef<HTMLDivElement>>('scroller');
   private scrollSettleTimer: ReturnType<typeof setTimeout> | undefined;
   // Tracks the digit last reported to valueChange (or the initial value) so
@@ -63,6 +67,14 @@ export class DigitWheelColumnComponent {
   // scroll settling — the latter must never re-trigger its own scrollTo,
   // which would fight the momentum still finishing on-screen.
   private lastKnownDigit: number | undefined;
+  // Separate from lastKnownDigit: ticks on every row the finger passes
+  // during the scroll, not just once it settles, so the odometer feels
+  // like it's clicking through detents as it moves.
+  private lastHapticDigit: number | undefined;
+  // Programmatic scrollTo calls (initial mount, an externally-driven value
+  // change) fire the same `scroll` events a swipe does — without this guard
+  // every open of the sheet would buzz once for "free", with no touch behind it.
+  private suppressHapticsUntil = 0;
 
   constructor() {
     // The scroller's own size isn't laid out until after the first render,
@@ -85,6 +97,8 @@ export class DigitWheelColumnComponent {
 
   protected scrollToDigit(digit: number, behavior: 'auto' | 'smooth' = 'smooth'): void {
     this.lastKnownDigit = digit;
+    this.lastHapticDigit = digit;
+    this.suppressHapticsUntil = Date.now() + (behavior === 'smooth' ? 400 : 50);
     this.scroller().nativeElement.scrollTo({
       top: digit * DigitWheelColumnComponent.ROW_HEIGHT_PX,
       behavior,
@@ -97,8 +111,27 @@ export class DigitWheelColumnComponent {
   // last event is the same "debounce until it stops moving" approach used
   // for scroll-position-derived state elsewhere, just without a library.
   protected onScroll(): void {
+    this.tickHapticIfDigitChanged();
     clearTimeout(this.scrollSettleTimer);
     this.scrollSettleTimer = setTimeout(() => this.commitScrollPosition(), 120);
+  }
+
+  // Fires on every row crossed mid-swipe (not debounced like the commit
+  // above) so each digit feels like its own detent, the way a physical
+  // odometer clicks through numbers rather than buzzing once at the end.
+  private tickHapticIfDigitChanged(): void {
+    if (!this.platform.isNativeApp() || Date.now() < this.suppressHapticsUntil) {
+      return;
+    }
+    const scrollTop = this.scroller().nativeElement.scrollTop;
+    const digit = Math.min(
+      9,
+      Math.max(0, Math.round(scrollTop / DigitWheelColumnComponent.ROW_HEIGHT_PX)),
+    );
+    if (digit !== this.lastHapticDigit) {
+      this.lastHapticDigit = digit;
+      void Haptics.impact({ style: ImpactStyle.Light });
+    }
   }
 
   private commitScrollPosition(): void {

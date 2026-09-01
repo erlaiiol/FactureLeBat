@@ -1,13 +1,18 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
+  effect,
   forwardRef,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
+import { CompanyService } from '../../core/services/company.service';
 import { PlatformService } from '../../core/services/platform.service';
+import { ToastService } from '../../core/services/toast.service';
 import { BigButtonComponent } from './big-button.component';
 import { DigitWheelColumnComponent } from './digit-wheel-column.component';
 
@@ -59,20 +64,43 @@ import { DigitWheelColumnComponent } from './digit-wheel-column.component';
           (click)="closeSheet()"
         >
           <div
-            class="sheet-in flex w-full flex-col items-center gap-4 rounded-t-2xl bg-surface p-4 shadow-2xl"
+            class="sheet-in flex w-full flex-col items-center gap-3 rounded-t-2xl bg-surface p-3 shadow-2xl"
             style="padding-bottom: max(1rem, env(safe-area-inset-bottom))"
             (click)="$event.stopPropagation()"
           >
-            <span class="text-sm font-medium text-ink-soft">Quantité</span>
-            <div class="flex items-center rounded-lg border border-line bg-bg px-1">
-              <app-digit-wheel-column [value]="digits()[0]" (valueChange)="setDigit(0, $event)" />
-              <app-digit-wheel-column [value]="digits()[1]" (valueChange)="setDigit(1, $event)" />
-              <app-digit-wheel-column [value]="digits()[2]" (valueChange)="setDigit(2, $event)" />
-              <app-digit-wheel-column [value]="digits()[3]" (valueChange)="setDigit(3, $event)" />
-              <span class="mx-0.5 font-mono text-lg font-semibold text-ink-soft">,</span>
-              <app-digit-wheel-column [value]="digits()[4]" (valueChange)="setDigit(4, $event)" />
-              <app-digit-wheel-column [value]="digits()[5]" (valueChange)="setDigit(5, $event)" />
+            <div class="flex w-full items-center justify-between px-1">
+              <span class="text-sm font-medium text-ink-soft">Quantité</span>
+              <button
+                type="button"
+                (click)="toggleKeyboardMode()"
+                class="text-sm font-medium text-brand"
+              >
+                {{ keyboardMode() ? 'Molette' : 'Clavier' }}
+              </button>
             </div>
+
+            @if (keyboardMode()) {
+              <input
+                #keyboardInput
+                type="number"
+                step="0.01"
+                inputmode="decimal"
+                [value]="quantity()"
+                (input)="onKeyboardInput($any($event.target).value)"
+                class="w-32 rounded border border-line px-2 py-1.5 text-center text-lg font-mono tabular-nums"
+              />
+            } @else {
+              <div class="flex items-center rounded-lg border border-line bg-bg px-1">
+                <app-digit-wheel-column [value]="digits()[0]" (valueChange)="setDigit(0, $event)" />
+                <app-digit-wheel-column [value]="digits()[1]" (valueChange)="setDigit(1, $event)" />
+                <app-digit-wheel-column [value]="digits()[2]" (valueChange)="setDigit(2, $event)" />
+                <app-digit-wheel-column [value]="digits()[3]" (valueChange)="setDigit(3, $event)" />
+                <span class="mx-0.5 font-mono text-lg font-semibold text-ink-soft">,</span>
+                <app-digit-wheel-column [value]="digits()[4]" (valueChange)="setDigit(4, $event)" />
+                <app-digit-wheel-column [value]="digits()[5]" (valueChange)="setDigit(5, $event)" />
+              </div>
+            }
+
             <app-big-button type="button" (click)="closeSheet()">OK</app-big-button>
           </div>
         </div>
@@ -82,6 +110,8 @@ import { DigitWheelColumnComponent } from './digit-wheel-column.component';
 })
 export class QuantityWheelPickerComponent implements ControlValueAccessor {
   protected readonly platform = inject(PlatformService);
+  private readonly companyService = inject(CompanyService);
+  private readonly toastService = inject(ToastService);
 
   // Whole-number cents cap the odometer can express — clamped defensively
   // so a value from outside this component (e.g. hand-edited draft data)
@@ -95,6 +125,18 @@ export class QuantityWheelPickerComponent implements ControlValueAccessor {
 
   protected readonly quantity = signal(0);
   protected readonly sheetOpen = signal(false);
+  protected readonly keyboardMode = signal(false);
+
+  private readonly keyboardInput = viewChild<ElementRef<HTMLInputElement>>('keyboardInput');
+
+  constructor() {
+    effect(() => {
+      const input = this.keyboardInput();
+      if (input) {
+        input.nativeElement.focus();
+      }
+    });
+  }
 
   protected readonly formattedQuantity = computed(() =>
     QuantityWheelPickerComponent.QUANTITY_FORMATTER.format(this.quantity()),
@@ -132,12 +174,28 @@ export class QuantityWheelPickerComponent implements ControlValueAccessor {
   }
 
   protected openSheet(): void {
+    // Defaults to whichever mode the artisan last settled on — implicitly
+    // by sliding the toggle below, or explicitly in "Mon entreprise" — not
+    // hardcoded to the molette, so the choice actually sticks across opens.
+    this.keyboardMode.set(this.companyService.preferKeyboardQuantityInput() ?? false);
     this.sheetOpen.set(true);
   }
 
   protected closeSheet(): void {
     this.sheetOpen.set(false);
     this.onTouched();
+  }
+
+  protected toggleKeyboardMode(): void {
+    const next = !this.keyboardMode();
+    this.keyboardMode.set(next);
+    // Fire-and-forget, same "silent success, toast on failure" pattern as
+    // company-settings.page.ts's onTourEnabledChange — a failed save here
+    // shouldn't block entering the quantity, just surface that the
+    // preference itself didn't stick.
+    this.companyService.updateQuantityInputMode(next).subscribe({
+      error: () => this.toastService.error('Impossible d’enregistrer cette préférence.'),
+    });
   }
 
   protected setDigit(index: number, newDigit: number): void {
