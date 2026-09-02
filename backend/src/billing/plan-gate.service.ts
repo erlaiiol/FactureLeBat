@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceEntryMode, PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { BillingFields, BillingRepository } from './billing.repository';
 import { CatalogLimitExceededException } from './catalog-limit-exceeded.exception';
+import { FacturXQuotaExceededException } from './facturx-quota-exceeded.exception';
 import {
   CatalogKind,
+  FACTURX_FREE_MONTHLY_LIMIT,
   GatedFeature,
   PLAN_DEFINITIONS,
   TRIAL_OFFER_WINDOW_HOURS,
@@ -140,6 +142,44 @@ export class PlanGateService {
       return;
     }
     throw new PlanFeatureLockedException(feature);
+  }
+
+  // 1.2/facturx-monthly-quota revision: FACTURX_FREE_MONTHLY_LIMIT distinct
+  // invoices per calendar month for a free-tier company, unlimited on every
+  // paid tier — see Invoice.facturXFirstUsedAt's own schema comment for what
+  // counts as "one" (generate/download, PA transmission, or an explicit
+  // emailed attachment, whichever happens first for a given invoice; further
+  // access to that same invoice is always free). Called by the 3 sites that
+  // actually generate the hybrid — InvoiceController.downloadFacturX,
+  // EInvoiceTransmissionService.transmit, InvoiceMailService.buildAttachment
+  // — the last of which uses canUseFacturX (non-throwing) instead, since an
+  // exhausted quota there should silently fall back to a plain PDF rather
+  // than block an outgoing invoice email.
+  async canUseFacturX(companyId: string, invoiceId: string): Promise<boolean> {
+    const alreadyUsed = await this.repository.getInvoiceFacturXUsedAt(companyId, invoiceId);
+    if (alreadyUsed) {
+      return true; // this invoice's slot, if any, was already spent — free from here on
+    }
+    const fields = await this.repository.getBillingFields(companyId);
+    if (getEffectivePlanTier(fields)) {
+      return true;
+    }
+    const usedThisMonth = await this.repository.countFacturXUsedThisMonth(companyId);
+    return usedThisMonth < FACTURX_FREE_MONTHLY_LIMIT;
+  }
+
+  async assertCanUseFacturX(companyId: string, invoiceId: string): Promise<void> {
+    if (!(await this.canUseFacturX(companyId, invoiceId))) {
+      throw new FacturXQuotaExceededException(FACTURX_FREE_MONTHLY_LIMIT);
+    }
+  }
+
+  // Called after a successful generateHybridPdf, never before — marks this
+  // invoice's slot spent (a no-op if it already was, or if the company is on
+  // a paid tier and the slot was never actually needed — see
+  // BillingRepository.markInvoiceFacturXUsed's conditional update).
+  async recordFacturXUsed(companyId: string, invoiceId: string): Promise<void> {
+    await this.repository.markInvoiceFacturXUsed(companyId, invoiceId);
   }
 }
 

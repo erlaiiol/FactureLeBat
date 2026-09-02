@@ -107,10 +107,15 @@
         [href]="facturXUrl(invoice.id)"
         target="_blank"
         class="w-full max-w-sm border-t border-line pt-4"
-        (click)="guardDownloadClick($event)"
+        (click)="guardFacturXDownloadClick($event, invoice)"
       >
         <app-big-button variant="secondary" tone="subtle">
-          Télécharger la facture électronique
+          <span class="flex items-center justify-center gap-1.5">
+            @if (facturXLocked(invoice)) {
+              <app-icon-lock [size]="14" />
+            }
+            Télécharger la facture électronique
+          </span>
         </app-big-button>
       </a>
       <div class="w-full max-w-sm">
@@ -120,14 +125,23 @@
           [disabled]="sharingFacturXInvoiceId() === invoice.id"
           (click)="shareFacturX(invoice)"
         >
-          {{
-            sharingFacturXInvoiceId() === invoice.id
-              ? 'Partage…'
-              : 'Partager (facture électronique)'
-          }}
+          <span class="flex items-center justify-center gap-1.5">
+            @if (facturXLocked(invoice)) {
+              <app-icon-lock [size]="14" />
+            }
+            {{
+              sharingFacturXInvoiceId() === invoice.id
+                ? 'Partage…'
+                : 'Partager (facture électronique)'
+            }}
+          </span>
         </app-big-button>
         <p class="mt-1 text-center text-xs text-ink-soft">
-          Format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique
+          @if (facturXLocked(invoice)) {
+            Quota de factures électroniques gratuites atteint ce mois-ci
+          } @else {
+            Format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique
+          }
         </p>
       </div>
     }

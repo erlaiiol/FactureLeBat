@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { EInvoiceTransmissionStatus } from '../../../generated/prisma/enums';
+import { PlanGateService } from '../../billing/plan-gate.service';
 import { InvoiceWithTotals } from '../entities/invoice.entity';
 import { FacturXService } from '../facturx/facturx.service';
 import { InvoiceMapper } from '../invoice.mapper';
@@ -27,6 +28,7 @@ export class EInvoiceTransmissionService {
     private readonly facturXService: FacturXService,
     private readonly companySuperPdp: CompanySuperPdpService,
     private readonly provider: SuperPdpProvider,
+    private readonly planGate: PlanGateService,
   ) {}
 
   async transmit(companyId: string, invoiceId: string): Promise<InvoiceWithTotals> {
@@ -50,9 +52,17 @@ export class EInvoiceTransmissionService {
       throw new ConflictException('Cette facture a déjà été transmise à la plateforme agréée.');
     }
 
+    // 1.2/facturx-monthly-quota revision: same quota as a manual download —
+    // transmitting via PA still generates the same Factur-X hybrid, and
+    // counts toward (or is covered by) the same per-invoice credit. Checked
+    // before SuperPdpProvider.transmit, an external call there's no
+    // undoing.
+    await this.planGate.assertCanUseFacturX(companyId, invoiceId);
+
     const pdfData = await this.invoiceService.getPdfData(companyId, invoiceId);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(pdfData);
     const hybridBuffer = await this.facturXService.generateHybridPdf(pdfBuffer, pdfData);
+    await this.planGate.recordFacturXUsed(companyId, invoiceId);
 
     const accessToken = await this.companySuperPdp.getValidAccessToken(companyId);
     const { providerReference } = await this.provider.transmit({

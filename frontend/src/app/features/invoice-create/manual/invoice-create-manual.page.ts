@@ -20,18 +20,21 @@ import { CompanyEssentialsGateService } from '../../../core/services/company-ess
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
 import { KeyboardVisibilityService } from '../../../core/services/keyboard-visibility.service';
+import { PaywallService } from '../../../core/services/paywall.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TrialOfferService } from '../../../core/services/trial-offer.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { FieldHintComponent } from '../../../shared/components/field-hint.component';
 import { IconCheckComponent } from '../../../shared/components/icon-check.component';
 import { IconCloseComponent } from '../../../shared/components/icon-close.component';
+import { IconLockComponent } from '../../../shared/components/icon-lock.component';
 import { IconTrashComponent } from '../../../shared/components/icon-trash.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
 import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
 import { SignatureModalComponent } from '../../../shared/components/signature-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
+import { facturXLockedFor } from '../../../shared/utils/facturx-quota.util';
 import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
 import { InvoiceDepositFieldComponent } from '../components/invoice-deposit-field.component';
 import { InvoiceTotalsSummaryComponent } from '../components/invoice-totals-summary.component';
@@ -61,6 +64,7 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
     FieldHintComponent,
     IconCheckComponent,
     IconCloseComponent,
+    IconLockComponent,
     IconTrashComponent,
     PdfPreviewModalComponent,
     SendInvoiceEmailModalComponent,
@@ -81,6 +85,7 @@ export class InvoiceCreateManualPage {
   private readonly companyEssentialsGate = inject(CompanyEssentialsGateService);
   private readonly toastService = inject(ToastService);
   private readonly billingService = inject(BillingService);
+  private readonly paywallService = inject(PaywallService);
   private readonly trialOfferService = inject(TrialOfferService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly store = inject(ManualInvoiceDraftStore);
@@ -347,6 +352,23 @@ export class InvoiceCreateManualPage {
     return this.invoiceService.facturXUrl(invoiceId);
   }
 
+  // 1.2/facturx-monthly-quota revision — see facturXLockedFor's own comment.
+  protected facturXLocked(invoice: InvoiceWithTotals): boolean {
+    return facturXLockedFor(invoice, this.billingService.status());
+  }
+
+  // Same anchor-click guard as guardDownloadClick above, layered with the
+  // quota check first — see InvoiceCreatePreviewStepPage's own
+  // guardFacturXDownloadClick.
+  protected guardFacturXDownloadClick(event: MouseEvent, invoice: InvoiceWithTotals): void {
+    if (this.facturXLocked(invoice)) {
+      event.preventDefault();
+      this.paywallService.show();
+      return;
+    }
+    this.guardDownloadClick(event);
+  }
+
   // 2026-08-25 review: same three-tier "Partager" as mode rapide's
   // preview-step success card (InvoiceShareService), brought here to close
   // the gap copyCustomerEmail's old comment used to call out explicitly.
@@ -380,6 +402,10 @@ export class InvoiceCreateManualPage {
   // gated by the template's own @if before this button.
   protected async shareFacturX(invoice: InvoiceWithTotals): Promise<void> {
     if (this.sharingFacturXInvoiceId()) {
+      return;
+    }
+    if (this.facturXLocked(invoice)) {
+      this.paywallService.show();
       return;
     }
     if (

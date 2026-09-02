@@ -32,6 +32,7 @@ function buildService(
     countInvoices: jest.fn().mockResolvedValue(0),
     countCustomers: jest.fn().mockResolvedValue(0),
     countCatalogItems: jest.fn().mockResolvedValue(0),
+    countFacturXUsedThisMonth: jest.fn().mockResolvedValue(0),
   } as unknown as BillingRepository;
 
   const isConfigured = jest.fn().mockReturnValue(options.stripeConfigured ?? true);

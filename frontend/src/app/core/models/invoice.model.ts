@@ -390,6 +390,12 @@ export interface InvoiceWithTotals {
   eInvoiceTransmissionStatus: EInvoiceTransmissionStatus;
   eInvoiceTransmittedAt: string | null;
   eInvoiceRejectionReason: string | null;
+  // 1.2/facturx-monthly-quota revision: whether this invoice's Factur-X
+  // credit slot has already been spent — re-accessing it (download/PA
+  // transmit/email) is always free from here on, regardless of the
+  // company's monthly count. See BillingStatus.facturXUsedThisMonth for the
+  // company-wide count this is checked against the first time.
+  facturXUsed: boolean;
   // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set while
   // this FACTURE is queued for automatic PA transmission
   // (Company.autoTransmitViaPa) — non-null and in the future means still

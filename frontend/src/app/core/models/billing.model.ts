@@ -33,6 +33,11 @@ export interface BillingStatus {
   customerLimit: number | null;
   catalogItemCount: number;
   catalogItemLimit: number | null;
+  // Calendar-month count of distinct invoices whose Factur-X was
+  // generated/downloaded/transmitted/emailed — facturXFreeLimit is null on
+  // every paid tier (unlimited), FACTURX_FREE_MONTHLY_LIMIT on free.
+  facturXUsedThisMonth: number;
+  facturXFreeLimit: number | null;
   trialOffer: TrialOffer | null;
 }
 

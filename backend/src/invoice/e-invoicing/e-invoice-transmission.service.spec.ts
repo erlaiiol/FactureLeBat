@@ -3,6 +3,7 @@ import { CompanySuperPdpService } from './company-super-pdp.service';
 import { EInvoiceTransmissionService } from './e-invoice-transmission.service';
 import { SuperPdpProvider } from './super-pdp-provider.service';
 import { SuperPdpUnavailableError } from './super-pdp-unavailable.error';
+import { PlanGateService } from '../../billing/plan-gate.service';
 import { FacturXService } from '../facturx/facturx.service';
 import { InvoiceMapper } from '../invoice.mapper';
 import { InvoiceRepository } from '../invoice.repository';
@@ -68,6 +69,11 @@ function buildService(
   const getStatus = jest.fn().mockResolvedValue({ status: 'ACCEPTED', rejectionReason: null });
   const provider = { transmit, getStatus } as unknown as SuperPdpProvider;
 
+  const planGate = {
+    assertCanUseFacturX: jest.fn().mockResolvedValue(undefined),
+    recordFacturXUsed: jest.fn().mockResolvedValue(undefined),
+  } as unknown as PlanGateService;
+
   const service = new EInvoiceTransmissionService(
     invoiceService,
     invoiceRepository,
@@ -76,8 +82,9 @@ function buildService(
     facturXService,
     companySuperPdp,
     provider,
+    planGate,
   );
-  return { service, updateEInvoiceTransmission, transmit, getStatus, findByIdRepo };
+  return { service, updateEInvoiceTransmission, transmit, getStatus, findByIdRepo, planGate };
 }
 
 describe('EInvoiceTransmissionService', () => {

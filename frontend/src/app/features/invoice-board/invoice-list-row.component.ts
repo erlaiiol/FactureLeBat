@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { InvoiceWithTotals } from '../../core/models/invoice.model';
+import { BillingService } from '../../core/services/billing.service';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { PaywallService } from '../../core/services/paywall.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
@@ -17,6 +18,7 @@ import { IconCheckComponent } from '../../shared/components/icon-check.component
 import { IconDotsVerticalComponent } from '../../shared/components/icon-dots-vertical.component';
 import { IconLockComponent } from '../../shared/components/icon-lock.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
+import { facturXLockedFor } from '../../shared/utils/facturx-quota.util';
 import { isOverdue } from './invoice-status.util';
 
 // Phase 26: a real <tr> — every document (devis or facture) is always its
@@ -59,6 +61,7 @@ import { isOverdue } from './invoice-status.util';
 export class InvoiceListRowComponent {
   private readonly invoiceService = inject(InvoiceService);
   private readonly paywallService = inject(PaywallService);
+  private readonly billingService = inject(BillingService);
 
   readonly invoice = input.required<InvoiceWithTotals>();
   // Devis-only: the number of the facture it was converted into, if any —
@@ -148,6 +151,16 @@ export class InvoiceListRowComponent {
   protected readonly overdue = computed(() => !this.isDevis() && isOverdue(this.invoice()));
   protected readonly signed = computed(
     () => this.invoice().hasSignatureProof || this.invoice().manuallySigned,
+  );
+
+  // 1.2/facturx-monthly-quota revision: gates "Facture électronique"
+  // (download) and "Envoyer via PA" (transmit) — see facturXLockedFor's own
+  // comment. Distinct from premiumRequired above: that one is a flat
+  // company-wide lock (0 free credit for these two actions), this one
+  // depends on both the company's monthly usage AND this specific
+  // invoice's own facturXUsed flag.
+  protected readonly facturXLocked = computed(() =>
+    facturXLockedFor(this.invoice(), this.billingService.status()),
   );
 
   protected readonly statusLabel = computed(() => {
@@ -316,5 +329,26 @@ export class InvoiceListRowComponent {
       return;
     }
     this.createDevisFromFacture.emit();
+  }
+
+  // The "Facture électronique" link is a plain <a [href]>, a real browser
+  // navigation rather than an HttpClient call — the premium-gate
+  // interceptor never sees it, so this is the only place a locked download
+  // gets caught before actually leaving the app.
+  protected onFacturXLinkClick(event: MouseEvent): void {
+    this.toggleActionsMenu.emit();
+    if (this.facturXLocked()) {
+      event.preventDefault();
+      this.paywallService.show();
+    }
+  }
+
+  protected onTransmitClick(): void {
+    this.toggleActionsMenu.emit();
+    if (this.facturXLocked()) {
+      this.paywallService.show();
+      return;
+    }
+    this.transmit.emit();
   }
 }

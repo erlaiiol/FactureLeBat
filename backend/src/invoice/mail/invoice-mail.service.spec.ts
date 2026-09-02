@@ -1,5 +1,6 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PlanGateService } from '../../billing/plan-gate.service';
 import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
 import { MailerService, SendMailParams } from '../../mailer/mailer.service';
@@ -33,6 +34,7 @@ function buildService(options: {
   autoAttachFacturX?: boolean;
   documentType?: 'FACTURE' | 'DEVIS';
   generateHybridPdfError?: Error;
+  canUseFacturX?: boolean;
 }) {
   const raw = rawInvoice(options.autoAttachFacturX ?? false);
   const findById = jest.fn().mockResolvedValue(options.found === false ? null : raw);
@@ -82,6 +84,10 @@ function buildService(options: {
     get: jest.fn().mockReturnValue('http://localhost:4200'),
   } as unknown as ConfigService;
 
+  const canUseFacturX = jest.fn().mockResolvedValue(options.canUseFacturX ?? true);
+  const recordFacturXUsed = jest.fn().mockResolvedValue(undefined);
+  const planGate = { canUseFacturX, recordFacturXUsed } as unknown as PlanGateService;
+
   const service = new InvoiceMailService(
     invoiceRepository,
     mapper,
@@ -90,6 +96,7 @@ function buildService(options: {
     mailSettingsService,
     mailerService,
     facturXService,
+    planGate,
     config,
   );
   return {
@@ -102,6 +109,8 @@ function buildService(options: {
     toPdfData,
     findSignatureImage,
     generateHybridPdf,
+    canUseFacturX,
+    recordFacturXUsed,
   };
 }
 
@@ -222,6 +231,37 @@ describe('InvoiceMailService.send — autoAttachFacturX', () => {
     expect(attachment.filename).toBe('facture-F-000001.pdf');
     expect(attachment.content.toString()).toBe('pdf');
     expect(markSent).toHaveBeenCalled();
+  });
+
+  // 1.2/facturx-monthly-quota revision: an exhausted free-tier quota must
+  // never block the send itself — same silent-fallback outcome as a genuine
+  // generation error above, since Company.autoAttachFacturX can fire with no
+  // artisan in the loop to see a paywall.
+  it('falls back to the plain PDF and still sends when the Factur-X quota is exhausted', async () => {
+    const { service, send, markSent, generateHybridPdf } = buildService({
+      autoAttachFacturX: true,
+      documentType: 'FACTURE',
+      canUseFacturX: false,
+    });
+
+    await service.send(COMPANY_ID, 'inv-1', {});
+
+    expect(generateHybridPdf).not.toHaveBeenCalled();
+    const attachment = send.mock.calls[0][0].attachments![0];
+    expect(attachment.filename).toBe('facture-F-000001.pdf');
+    expect(attachment.content.toString()).toBe('pdf');
+    expect(markSent).toHaveBeenCalled();
+  });
+
+  it('records Factur-X usage after a successful auto-attach', async () => {
+    const { service, recordFacturXUsed } = buildService({
+      autoAttachFacturX: true,
+      documentType: 'FACTURE',
+    });
+
+    await service.send(COMPANY_ID, 'inv-1', {});
+
+    expect(recordFacturXUsed).toHaveBeenCalledWith(COMPANY_ID, 'inv-1');
   });
 });
 

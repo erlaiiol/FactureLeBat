@@ -127,6 +127,7 @@ function invoiceWithLines(overrides: Partial<InvoiceWithLines> = {}): InvoiceWit
     eInvoiceTransmittedAt: null,
     eInvoiceRejectionReason: null,
     superPdpInvoiceId: null,
+    facturXFirstUsedAt: null,
     scheduledTransmitAt: null,
     transmitCancelledAt: null,
     depositPercentageBasisPoints: null,

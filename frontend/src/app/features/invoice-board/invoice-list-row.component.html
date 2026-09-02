@@ -125,11 +125,20 @@
             <a
               [href]="facturXUrl()"
               target="_blank"
-              (click)="toggleActionsMenu.emit()"
-              title="Facture au format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique"
+              (click)="onFacturXLinkClick($event)"
+              [title]="
+                facturXLocked()
+                  ? 'Quota de factures électroniques gratuites atteint ce mois-ci — voir les offres'
+                  : 'Facture au format Factur-X (PDF/A-3 + XML), conforme à la réforme de facturation électronique'
+              "
               class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle"
             >
-              <span class="block">Facture électronique</span>
+              <span class="flex items-center gap-1.5">
+                @if (facturXLocked()) {
+                  <app-icon-lock [size]="13" />
+                }
+                Facture électronique
+              </span>
               <span class="block text-xs font-normal text-ink-soft">Format Factur-X</span>
             </a>
           }
@@ -147,17 +156,24 @@
             <button
               type="button"
               [disabled]="transmitting()"
-              (click)="transmit.emit(); toggleActionsMenu.emit()"
+              (click)="onTransmitClick()"
               [title]="
-                invoice().eInvoiceRejectionReason ??
-                'Transmettre cette facture à votre Plateforme Agréée (SUPER PDP)'
+                facturXLocked()
+                  ? 'Quota de factures électroniques gratuites atteint ce mois-ci — voir les offres'
+                  : (invoice().eInvoiceRejectionReason ??
+                    'Transmettre cette facture à votre Plateforme Agréée (SUPER PDP)')
               "
-              class="px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
+              class="flex items-center gap-1.5 px-3 py-2 text-left text-sm text-ink hover:bg-secondary-subtle disabled:opacity-60"
             >
-              <span class="block">{{ transmitting() ? 'Envoi…' : 'Envoyer via PA' }}</span>
-              @if (invoice().eInvoiceRejectionReason; as reason) {
-                <span class="block text-xs font-normal text-danger">Rejetée : {{ reason }}</span>
+              @if (facturXLocked()) {
+                <app-icon-lock [size]="13" />
               }
+              <span>
+                <span class="block">{{ transmitting() ? 'Envoi…' : 'Envoyer via PA' }}</span>
+                @if (invoice().eInvoiceRejectionReason; as reason) {
+                  <span class="block text-xs font-normal text-danger">Rejetée : {{ reason }}</span>
+                }
+              </span>
             </button>
           } @else if (!isDevis() && superPdpConnected() && alreadyTransmitted()) {
             <button

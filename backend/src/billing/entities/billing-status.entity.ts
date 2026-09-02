@@ -37,5 +37,12 @@ export interface BillingStatus {
   customerLimit: number | null;
   catalogItemCount: number;
   catalogItemLimit: number | null;
+  // 1.2/facturx-monthly-quota revision: same "count + limit, null = unlimited"
+  // shape as customerCount/customerLimit above — facturXUsedThisMonth is the
+  // calendar-month count PlanGateService.canUseFacturX itself checks against
+  // facturXFreeLimit (see FACTURX_FREE_MONTHLY_LIMIT), null on every paid
+  // tier since nothing is ever capped there.
+  facturXUsedThisMonth: number;
+  facturXFreeLimit: number | null;
   trialOffer: TrialOffer | null;
 }

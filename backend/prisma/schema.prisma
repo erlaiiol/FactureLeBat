@@ -970,6 +970,21 @@ model Invoice {
   // app, only ever passed back to the same provider to poll status.
   superPdpInvoiceId          String?
 
+  // 1.2/facturx-monthly-quota revision: set once, the first time this
+  // invoice's Factur-X hybrid is generated for ANY reason — a manual
+  // download (InvoiceController.downloadFacturX), a PA transmission
+  // (EInvoiceTransmissionService.transmit), or an emailed attachment
+  // (InvoiceMailService.buildAttachment, explicit or via
+  // Company.autoAttachFacturX) — never overwritten after that (see
+  // PlanGateService.recordFacturXUsed). A free-tier company gets
+  // FACTURX_FREE_MONTHLY_LIMIT invoices per calendar month counted this
+  // way; re-accessing an invoice already flagged here is always free,
+  // regardless of which of the three actions triggers it or how many times.
+  // Paying companies still get this set (for a consistent historical
+  // record — see BillingRepository.countFacturXUsedThisMonth), it just
+  // never blocks them.
+  facturXFirstUsedAt          DateTime?
+
   // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set at
   // creation only when Company.autoTransmitViaPa was on and SUPER PDP was
   // connected at that moment — null means "not queued" (manual mode, a
@@ -998,6 +1013,10 @@ model Invoice {
   @@unique([companyId, number])
   @@index([companyId])
   @@index([customerId])
+  // BillingRepository.countFacturXUsedThisMonth's own scan (companyId +
+  // facturXFirstUsedAt >= start of month) — same "one index per real query
+  // shape" convention as the two below.
+  @@index([companyId, facturXFirstUsedAt])
   // Cross-tenant sweep for ReminderCronService (Phase 22) — unlike every
   // other index on this table, this one isn't scoped to a single company:
   // the daily job scans NON_PAYEE invoices by dueDate across all artisans.

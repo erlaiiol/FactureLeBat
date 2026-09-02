@@ -248,6 +248,15 @@ export interface InvoiceWithTotals {
   eInvoiceTransmissionStatus: EInvoiceTransmissionStatus;
   eInvoiceTransmittedAt: Date | null;
   eInvoiceRejectionReason: string | null;
+  // 1.2/facturx-monthly-quota revision: whether this invoice's Factur-X
+  // credit slot has already been spent (Invoice.facturXFirstUsedAt is set)
+  // — never the raw timestamp itself, same "opaque, just the boolean the
+  // frontend needs" precedent as scheduledTransmitAt below. Lets
+  // InvoiceListRowComponent/the post-creation success screen tell a
+  // still-locked invoice (never accessed, monthly quota exhausted) apart
+  // from an already-paid-for one (safe to re-download/re-send for free)
+  // without duplicating PlanGateService's own quota math client-side.
+  facturXUsed: boolean;
   // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set while a
   // FACTURE is queued for automatic PA transmission (Company.autoTransmitViaPa),
   // non-null and in the future — the invoice board reads this to show the

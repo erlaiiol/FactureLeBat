@@ -19,12 +19,14 @@ import { CompanyEssentialsGateService } from '../../../core/services/company-ess
 import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
+import { PaywallService } from '../../../core/services/paywall.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TrialOfferService } from '../../../core/services/trial-offer.service';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconCheckComponent } from '../../../shared/components/icon-check.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
+import { IconLockComponent } from '../../../shared/components/icon-lock.component';
 import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
@@ -33,6 +35,7 @@ import { SignatureModalComponent } from '../../../shared/components/signature-mo
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { TypewriterTextComponent } from '../../../shared/components/typewriter-text.component';
 import { delayedSkeleton } from '../../../shared/utils/delayed-skeleton';
+import { facturXLockedFor } from '../../../shared/utils/facturx-quota.util';
 import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
 import { InvoiceDepositFieldComponent } from '../components/invoice-deposit-field.component';
 import { SimplifiedDisplaySliderComponent } from '../components/simplified-display-slider.component';
@@ -92,6 +95,7 @@ function shuffledHintOrder(): HintKey[] {
     IconCheckComponent,
     IconEyeComponent,
     IconEyeOffComponent,
+    IconLockComponent,
     CentsToEurosPipe,
     UnitLabelPipe,
     PdfPreviewModalComponent,
@@ -110,6 +114,7 @@ export class InvoiceCreatePreviewStepPage {
   private readonly companyEssentialsGate = inject(CompanyEssentialsGateService);
   protected readonly companyService = inject(CompanyService);
   protected readonly billingService = inject(BillingService);
+  private readonly paywallService = inject(PaywallService);
   private readonly toastService = inject(ToastService);
   private readonly trialOfferService = inject(TrialOfferService);
   private readonly destroyRef = inject(DestroyRef);
@@ -385,6 +390,23 @@ export class InvoiceCreatePreviewStepPage {
     }
   }
 
+  // 1.2/facturx-monthly-quota revision — see facturXLockedFor's own comment.
+  protected facturXLocked(invoice: InvoiceWithTotals): boolean {
+    return facturXLockedFor(invoice, this.billingService.status());
+  }
+
+  // Same anchor-click guard as guardDownloadClick above, layered with the
+  // quota check first — a locked Factur-X link still needs the company-
+  // essentials gate once unlocked, but never gets that far while locked.
+  protected guardFacturXDownloadClick(event: MouseEvent, invoice: InvoiceWithTotals): void {
+    if (this.facturXLocked(invoice)) {
+      event.preventDefault();
+      this.paywallService.show();
+      return;
+    }
+    this.guardDownloadClick(event);
+  }
+
   protected openEmailModal(invoice: InvoiceWithTotals, format: 'pdf' | 'facturx' = 'pdf'): void {
     this.emailModalFormat.set(format);
     this.emailModalInvoice.set(invoice);
@@ -420,6 +442,10 @@ export class InvoiceCreatePreviewStepPage {
   // documentType (see the template's own @if before this button).
   protected async shareFacturX(invoice: InvoiceWithTotals): Promise<void> {
     if (this.sharingFacturXInvoiceId()) {
+      return;
+    }
+    if (this.facturXLocked(invoice)) {
+      this.paywallService.show();
       return;
     }
     if (
