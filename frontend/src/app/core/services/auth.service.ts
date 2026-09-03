@@ -163,4 +163,17 @@ export class AuthService {
       )
       .pipe(tap((user) => this.currentUser.set(user)));
   }
+
+  // Native-only counterpart for Apple — see AppleNativeLoginService for why
+  // there's no browser-redirect equivalent to mirror here, unlike Google's
+  // googleLoginUrl/googleTokenLogin pair above.
+  appleTokenLogin(identityToken: string, authorizationCode?: string): Observable<PublicUser> {
+    return this.http
+      .post<PublicUser>(
+        `${this.baseUrl}/apple/token-login`,
+        { identityToken, authorizationCode },
+        { withCredentials: true },
+      )
+      .pipe(tap((user) => this.currentUser.set(user)));
+  }
 }

@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { MarginMode } from '../../core/models/margin.model';
 import { ACTIVITY_CATEGORY_OPTIONS, ActivityCategory } from '../../core/models/report.model';
 import {
   Unit,
@@ -98,6 +99,18 @@ export class ProductFormPage {
     this.packagingItemCount.set(Number.isFinite(count) && count > 0 ? count : null);
   }
 
+  protected isMarginNetAmountMode(): boolean {
+    return this.form.controls.marginMode.value === 'NET_AMOUNT';
+  }
+
+  protected isMarginPercentageMode(): boolean {
+    return this.form.controls.marginMode.value === 'PERCENTAGE';
+  }
+
+  protected setMarginMode(mode: MarginMode | null): void {
+    this.form.controls.marginMode.setValue(mode);
+  }
+
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     description: [''],
@@ -117,6 +130,16 @@ export class ProductFormPage {
     // Phase 17: artisan-set, left unset by default — no automatic detection
     // (see docs/roadmap.md Phase 17's non-goals).
     activityCategory: this.fb.control<ActivityCategory | null>(null),
+    // Phase 1.6: what the artisan actually keeps — left unset by default.
+    // No FormControl-level Validators.min here (unlike priceEuros/
+    // packagingQuantity above): these two are only meaningful when
+    // marginMode picks one of them, and this form gates submission on the
+    // blanket this.form.invalid — a static min validator on an inactive
+    // margin control would incorrectly block every save. Checked manually
+    // in submit() instead, only when marginMode requires it.
+    marginMode: this.fb.control<MarginMode | null>(null),
+    marginAmountEuros: [0],
+    marginPercentage: [0],
   });
 
   constructor() {
@@ -139,6 +162,13 @@ export class ProductFormPage {
                 ? Number(product.packagingQuantity)
                 : null,
               activityCategory: product.activityCategory,
+              marginMode: product.marginMode,
+              marginAmountEuros:
+                product.marginAmountCents != null ? product.marginAmountCents / 100 : 0,
+              marginPercentage:
+                product.marginPercentageBasisPoints != null
+                  ? product.marginPercentageBasisPoints / 100
+                  : 0,
             });
             this.selectedFolderIds.set(product.folders.map((folder) => folder.id));
           },
@@ -214,7 +244,17 @@ export class ProductFormPage {
     if (this.saving()) {
       return; // already in flight — ignore a fast double click/tap
     }
-    if (this.form.invalid) {
+    // Margin controls have no FormControl-level validators (see the form
+    // group's own comment) — checked manually here instead, only when
+    // marginMode picks one of them.
+    const marginInvalid =
+      (this.isMarginNetAmountMode() && !(this.form.controls.marginAmountEuros.value > 0)) ||
+      (this.isMarginPercentageMode() &&
+        !(
+          this.form.controls.marginPercentage.value > 0 &&
+          this.form.controls.marginPercentage.value <= 100
+        ));
+    if (this.form.invalid || marginInvalid) {
       this.form.markAllAsTouched();
       return;
     }
@@ -230,6 +270,11 @@ export class ProductFormPage {
       code: value.code || undefined,
       packagingQuantity: value.packagingQuantity ?? undefined,
       activityCategory: value.activityCategory ?? undefined,
+      marginMode: value.marginMode ?? undefined,
+      marginAmountCents:
+        value.marginMode === 'NET_AMOUNT' ? Math.round(value.marginAmountEuros * 100) : undefined,
+      marginPercentageBasisPoints:
+        value.marginMode === 'PERCENTAGE' ? Math.round(value.marginPercentage * 100) : undefined,
       folderIds: this.selectedFolderIds(),
     };
 

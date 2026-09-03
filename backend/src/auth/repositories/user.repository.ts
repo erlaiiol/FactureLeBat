@@ -7,6 +7,7 @@ export interface CreateUserWithCompanyData {
   email: string;
   passwordHash?: string;
   googleId?: string;
+  appleId?: string;
   newsletterOptIn: boolean;
   termsAcceptedAt: Date;
   termsVersion: string;
@@ -31,6 +32,10 @@ export class UserRepository {
     return this.prisma.user.findUnique({ where: { googleId } });
   }
 
+  findByAppleId(appleId: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { appleId } });
+  }
+
   // One transaction: a Company only ever comes into existence alongside its
   // owning User (strictly 1:1, no team model — see docs/roadmap.md Phase
   // 13). DEFAULT_COMPANY_PROFILE fills the Company's required fields (name,
@@ -47,6 +52,7 @@ export class UserRepository {
           email: data.email,
           passwordHash: data.passwordHash,
           googleId: data.googleId,
+          appleId: data.appleId,
           companyId: company.id,
           newsletterOptIn: data.newsletterOptIn,
           termsAcceptedAt: data.termsAcceptedAt,
@@ -58,6 +64,20 @@ export class UserRepository {
 
   linkGoogleId(userId: string, googleId: string): Promise<User> {
     return this.prisma.user.update({ where: { id: userId }, data: { googleId } });
+  }
+
+  linkAppleId(userId: string, appleId: string): Promise<User> {
+    return this.prisma.user.update({ where: { id: userId }, data: { appleId } });
+  }
+
+  // Best-effort capture, called from AuthService.appleTokenLogin after
+  // exchanging a fresh authorizationCode — overwrites any previous value so
+  // deleteAccount always revokes the most recently issued token.
+  saveAppleRefreshToken(userId: string, appleRefreshTokenEncrypted: string): Promise<User> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { appleRefreshTokenEncrypted },
+    });
   }
 
   updatePasswordHash(userId: string, passwordHash: string): Promise<User> {

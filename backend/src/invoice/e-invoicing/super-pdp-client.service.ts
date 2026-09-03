@@ -27,6 +27,33 @@ export interface SuperPdpTokens {
   expiresAt: Date;
 }
 
+// Phase 1.2-8 (2026 e-invoicing reform): the `sessions` tag's own KYB
+// (know-your-business) verification status. `verified` is the only status
+// under which any other SUPER PDP route stops 403ing — see the `sessions`
+// tag description in the real OpenAPI spec.
+export type SuperPdpCompanyVerificationStatus = 'verified' | 'needs_review' | 'failed';
+
+export interface SuperPdpSessionStatus {
+  companyVerificationStatus: SuperPdpCompanyVerificationStatus;
+}
+
+export type SuperPdpVatRegime = 'monthly' | 'quarterly' | 'simplified' | 'vat_exemption';
+
+// GET /v1.beta/companies/me only ever needs `env` here — same "narrow to
+// what's used" choice as SuperPdpIncomingInvoice above; the real schema also
+// has formal_name/trade_name/address/vat_regime/mandates, none of which
+// FactureLe reads.
+export interface SuperPdpCurrentCompany {
+  env: 'sandbox' | 'production';
+}
+
+export type SuperPdpDirectory = 'peppol' | 'ppf';
+
+export interface SuperPdpDirectoryEntry {
+  directory: SuperPdpDirectory;
+  identifier: string;
+}
+
 export interface SuperPdpInvoice {
   id: number;
   events: SuperPdpInvoiceEvent[];
@@ -375,5 +402,183 @@ export class SuperPdpClientService {
     }
 
     return Buffer.from(await response.arrayBuffer());
+  }
+
+  // GET /v1.beta/oauth2_sessions/me — per the real spec's `sessions` tag:
+  // "If company_verification_status is different than verified, calling
+  // other routes will return 403." SuperPdpProvisioningCronService polls
+  // this before ever attempting the VAT-regime patch or directory-entry
+  // registration below, and CompanySuperPdpController surfaces it so the
+  // artisan sees "en cours de vérification" instead of a dead end.
+  async getSessionStatus(accessToken: string): Promise<SuperPdpSessionStatus> {
+    this.requireConfigured();
+    let response: Awaited<ReturnType<typeof undiciFetch>>;
+    try {
+      response = await undiciFetch(`${API_BASE_URL}/v1.beta/oauth2_sessions/me`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+    } catch (error) {
+      this.logger.warn(`SUPER PDP session status fetch failed: ${String(error)}`);
+      throw new SuperPdpUnavailableError('Unable to reach SUPER PDP');
+    }
+
+    if (!response.ok) {
+      this.logger.warn(`SUPER PDP session status fetch returned status ${response.status}`);
+      throw new SuperPdpUnavailableError(`Unexpected status ${response.status} from SUPER PDP`);
+    }
+
+    let json: { company_verification_status?: SuperPdpCompanyVerificationStatus };
+    try {
+      json = (await response.json()) as typeof json;
+    } catch {
+      throw new SuperPdpUnavailableError('Malformed SUPER PDP session response');
+    }
+    if (!json.company_verification_status) {
+      throw new SuperPdpUnavailableError('Incomplete SUPER PDP session response');
+    }
+    return { companyVerificationStatus: json.company_verification_status };
+  }
+
+  // GET /v1.beta/companies/me — only used to learn which environment
+  // (sandbox/production) this connection resolved to, since that's what
+  // decides which directory a directory entry can target (see
+  // createDirectoryEntry's own comment).
+  async getCurrentCompany(accessToken: string): Promise<SuperPdpCurrentCompany> {
+    this.requireConfigured();
+    let response: Awaited<ReturnType<typeof undiciFetch>>;
+    try {
+      response = await undiciFetch(`${API_BASE_URL}/v1.beta/companies/me`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+    } catch (error) {
+      this.logger.warn(`SUPER PDP current-company fetch failed: ${String(error)}`);
+      throw new SuperPdpUnavailableError('Unable to reach SUPER PDP');
+    }
+
+    if (!response.ok) {
+      this.logger.warn(`SUPER PDP current-company fetch returned status ${response.status}`);
+      throw new SuperPdpUnavailableError(`Unexpected status ${response.status} from SUPER PDP`);
+    }
+
+    let json: { env?: 'sandbox' | 'production' };
+    try {
+      json = (await response.json()) as typeof json;
+    } catch {
+      throw new SuperPdpUnavailableError('Malformed SUPER PDP company response');
+    }
+    if (!json.env) {
+      throw new SuperPdpUnavailableError('Incomplete SUPER PDP company response');
+    }
+    return { env: json.env };
+  }
+
+  // PATCH /v1.beta/companies — "The e-reporting declaration schedule to the
+  // French tax administration (PPF) depends on the VAT regime value," per
+  // the spec's own description. FactureLe already collects the equivalent
+  // data locally (Company.legalStatus/declarationFrequency/
+  // vatOnDebitsOption — see super-pdp-vat-regime.util.ts for the mapping);
+  // this pushes it once SUPER PDP has verified the session.
+  async updateVatRegime(params: {
+    accessToken: string;
+    vatRegime: SuperPdpVatRegime;
+    hasVatOnDebits: boolean;
+  }): Promise<void> {
+    this.requireConfigured();
+    let response: Awaited<ReturnType<typeof undiciFetch>>;
+    try {
+      response = await undiciFetch(`${API_BASE_URL}/v1.beta/companies`, {
+        method: 'PATCH',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: {
+          authorization: `Bearer ${params.accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          vat_regime: params.vatRegime,
+          has_vat_on_debits: params.hasVatOnDebits,
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(`SUPER PDP VAT regime update failed: ${String(error)}`);
+      throw new SuperPdpUnavailableError('Unable to reach SUPER PDP');
+    }
+
+    if (!response.ok) {
+      this.logger.warn(`SUPER PDP VAT regime update returned status ${response.status}`);
+      throw new SuperPdpUnavailableError(`Unexpected status ${response.status} from SUPER PDP`);
+    }
+  }
+
+  // GET /v1.beta/directory_entries — lists this company's existing entries,
+  // checked before createDirectoryEntry below so a repeated provisioning
+  // sweep (e.g. after a transient earlier failure) never creates a
+  // duplicate entry for the same directory/identifier pair.
+  async listDirectoryEntries(accessToken: string): Promise<SuperPdpDirectoryEntry[]> {
+    this.requireConfigured();
+    let response: Awaited<ReturnType<typeof undiciFetch>>;
+    try {
+      response = await undiciFetch(`${API_BASE_URL}/v1.beta/directory_entries`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+    } catch (error) {
+      this.logger.warn(`SUPER PDP directory entries list failed: ${String(error)}`);
+      throw new SuperPdpUnavailableError('Unable to reach SUPER PDP');
+    }
+
+    if (!response.ok) {
+      this.logger.warn(`SUPER PDP directory entries list returned status ${response.status}`);
+      throw new SuperPdpUnavailableError(`Unexpected status ${response.status} from SUPER PDP`);
+    }
+
+    let json: { data?: { directory?: SuperPdpDirectory; identifier?: string }[] };
+    try {
+      json = (await response.json()) as typeof json;
+    } catch {
+      throw new SuperPdpUnavailableError('Malformed SUPER PDP directory entries response');
+    }
+    return (json.data ?? [])
+      .filter((entry) => entry.directory && entry.identifier)
+      .map((entry) => ({ directory: entry.directory!, identifier: entry.identifier! }));
+  }
+
+  // POST /v1.beta/directory_entries — publishes this company to the network
+  // so other platforms can actually route an e-invoice to it; without this,
+  // Phase 1.2-5's reception sync has nothing to ever sync (the company is
+  // simply undiscoverable). Per the real spec: sandbox only accepts the
+  // `peppol` directory, production only accepts `ppf` for French
+  // identifiers — the caller resolves which one from getCurrentCompany's
+  // `env` first.
+  async createDirectoryEntry(params: {
+    accessToken: string;
+    directory: SuperPdpDirectory;
+    identifier: string;
+  }): Promise<void> {
+    this.requireConfigured();
+    let response: Awaited<ReturnType<typeof undiciFetch>>;
+    try {
+      response = await undiciFetch(`${API_BASE_URL}/v1.beta/directory_entries`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: {
+          authorization: `Bearer ${params.accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ directory: params.directory, identifier: params.identifier }),
+      });
+    } catch (error) {
+      this.logger.warn(`SUPER PDP directory entry creation failed: ${String(error)}`);
+      throw new SuperPdpUnavailableError('Unable to reach SUPER PDP');
+    }
+
+    if (!response.ok) {
+      this.logger.warn(`SUPER PDP directory entry creation returned status ${response.status}`);
+      throw new SuperPdpUnavailableError(`Unexpected status ${response.status} from SUPER PDP`);
+    }
   }
 }

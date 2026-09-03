@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { ProductModel as Product } from '../../generated/prisma/models';
 import { FuzzyMatch } from '../common/fuzzy-match';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
+import { MarginConfig } from '../common/margin.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductProfile } from './entities/product.entity';
@@ -81,6 +82,32 @@ export class ProductRepository {
     return this.prisma.product.findFirst({ where: { id, companyId }, include: FOLDERS_INCLUDE });
   }
 
+  // Phase 1.6: batch margin lookup for Margin Analytics — a single query
+  // for every distinct productId referenced across a report's invoice
+  // window, instead of the full INVOICE_INCLUDE growing a live product join
+  // that every other invoice read would then pay for too. Tenant-scoped
+  // like every other read here; a cross-tenant id (already impossible in
+  // practice, since it can only come from this same company's own
+  // invoices) would just be silently absent from the returned map.
+  async findMarginConfigByIds(
+    companyId: string,
+    ids: string[],
+  ): Promise<Map<string, MarginConfig>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const rows = await this.prisma.product.findMany({
+      where: { companyId, id: { in: ids } },
+      select: {
+        id: true,
+        marginMode: true,
+        marginAmountCents: true,
+        marginPercentageBasisPoints: true,
+      },
+    });
+    return new Map(rows.map(({ id, ...config }) => [id, config]));
+  }
+
   // folderIds is already filtered to this company's own folders (see
   // CatalogFolderService.filterOwnedFolderIds, called from ProductService)
   // before it ever reaches here.
@@ -96,6 +123,9 @@ export class ProductRepository {
         code: data.code,
         packagingQuantity: data.packagingQuantity,
         activityCategory: data.activityCategory,
+        marginMode: data.marginMode ?? null,
+        marginAmountCents: data.marginAmountCents ?? null,
+        marginPercentageBasisPoints: data.marginPercentageBasisPoints ?? null,
         companyId,
         folders: { connect: folderIds.map((id) => ({ id })) },
       },
@@ -133,6 +163,9 @@ export class ProductRepository {
           code: data.code ?? null,
           packagingQuantity: data.packagingQuantity ?? null,
           activityCategory: data.activityCategory ?? null,
+          marginMode: data.marginMode ?? null,
+          marginAmountCents: data.marginAmountCents ?? null,
+          marginPercentageBasisPoints: data.marginPercentageBasisPoints ?? null,
         },
       });
       if (count === 0) {

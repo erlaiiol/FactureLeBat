@@ -3,11 +3,14 @@ import { ActivityCategory, InvoiceStatus, LegalStatus } from '../../generated/pr
 import { CompanyModel } from '../../generated/prisma/models';
 import { PlanGateService } from '../billing/plan-gate.service';
 import { CompanyService } from '../company/company.service';
+import { MarginConfig, resolveMarginCents } from '../common/margin.util';
 import { CompanySuperPdpService } from '../invoice/e-invoicing/company-super-pdp.service';
 import { InvoiceWithTotals } from '../invoice/entities/invoice.entity';
 import { InvoiceMapper } from '../invoice/invoice.mapper';
 import { InvoiceRepository } from '../invoice/invoice.repository';
+import { ProductService } from '../product/product.service';
 import { ReceivedInvoiceRepository } from '../received-invoice/received-invoice.repository';
+import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
 import {
   REPORT_CATEGORY_ORDER,
   resolveReportCategory,
@@ -19,6 +22,8 @@ import {
   EInvoicingSnapshot,
   EstimatedCharges,
   EstimatedChargesCategoryRow,
+  MarginAnalytics,
+  MarginByEntry,
   PlafondWarning,
   QuarterlyReport,
   ReportCategory,
@@ -57,6 +62,8 @@ export class ReportsService {
     private readonly planGateService: PlanGateService,
     private readonly companySuperPdp: CompanySuperPdpService,
     private readonly receivedInvoiceRepository: ReceivedInvoiceRepository,
+    private readonly productService: ProductService,
+    private readonly serviceCatalogService: ServiceCatalogService,
   ) {}
 
   async getQuarterlyReport(companyId: string, from: Date, to: Date): Promise<QuarterlyReport> {
@@ -197,6 +204,171 @@ export class ReportsService {
           : null,
       unsentFactureCount,
       receivedInvoiceCount,
+    };
+  }
+
+  // Phase 1.6: "Marge" tab — see docs/1.6/1.6-2-margin-analytics-backend.md
+  // for the full per-line resolution rules this delegates to
+  // resolveMarginCents for. Gated like getActivityAnalytics (business
+  // insight, not a legal necessity) — see this file's class comment isn't
+  // updated for this yet on purpose, ReportsController's own class comment
+  // is where that distinction actually lives.
+  async getMarginAnalytics(companyId: string): Promise<MarginAnalytics> {
+    await this.planGateService.assertFeatureAccess(companyId, 'analytics');
+    const now = new Date();
+    const windowStart = startOfMonthsAgo(now, ANALYTICS_WINDOW_MONTHS - 1);
+
+    const [rawPaid, company] = await Promise.all([
+      this.invoiceRepository.findPaidInRange(companyId, windowStart, now),
+      this.companyService.getProfile(companyId),
+    ]);
+    const paid = rawPaid.map((invoice) => this.invoiceMapper.toInvoiceWithTotals(invoice));
+
+    const productIds = new Set<string>();
+    const serviceIds = new Set<string>();
+    for (const invoice of paid) {
+      if (invoice.entryMode !== 'GUIDED') {
+        continue; // MANUAL rows aren't tied to any catalog item — same skip as getActivityAnalytics.
+      }
+      for (const line of invoice.lines) {
+        if (line.productId) {
+          productIds.add(line.productId);
+        }
+      }
+      for (const serviceLine of invoice.serviceLines) {
+        if (serviceLine.serviceId) {
+          serviceIds.add(serviceLine.serviceId);
+        }
+      }
+    }
+    const [productMarginById, serviceMarginById] = await Promise.all([
+      this.productService.findMarginConfigByIds(companyId, [...productIds]),
+      this.serviceCatalogService.findMarginConfigByIds(companyId, [...serviceIds]),
+    ]);
+
+    let totalRevenueExclVatCents = 0;
+    let totalMarginExclVatCents = 0;
+    let uncategorizedRevenueExclVatCents = 0;
+    const productTotals = new Map<string, { revenue: number; margin: number; count: number }>();
+    const serviceTotals = new Map<string, { revenue: number; margin: number; count: number }>();
+    const clientTotals = new Map<string, { revenue: number; margin: number; count: number }>();
+    const monthTotals = new Map<string, { revenue: number; margin: number }>();
+    for (let i = 0; i < ANALYTICS_WINDOW_MONTHS; i++) {
+      const month = new Date(
+        Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth() + i, 1),
+      );
+      monthTotals.set(monthKey(month), { revenue: 0, margin: 0 });
+    }
+
+    for (const invoice of paid) {
+      // The display label, not a uniqueness key — same convention
+      // getActivityAnalytics' own topClients uses (customerName, never
+      // customerId; a real bug caught live before this fix: the by-client
+      // donut rendered a raw customerId UUID instead of a name).
+      const clientKey = invoice.customerName;
+      // paidAt is always set here — same contract as bucketRevenueByMonth's
+      // identical comment on findPaidInRange.
+      const monthEntry = monthTotals.get(monthKey(invoice.paidAt!));
+
+      if (invoice.entryMode !== 'GUIDED') {
+        // MANUAL invoices have no catalog lines at all — the whole subtotal
+        // is unresolved margin, same precedent as bucketByCategory/
+        // getActivityAnalytics apply to manual rows.
+        totalRevenueExclVatCents += invoice.subtotalExclVatCents;
+        uncategorizedRevenueExclVatCents += invoice.subtotalExclVatCents;
+        addMarginTotal(clientTotals, clientKey, invoice.subtotalExclVatCents, 0);
+        if (monthEntry) {
+          monthEntry.revenue += invoice.subtotalExclVatCents;
+        }
+        continue;
+      }
+
+      let invoiceRevenueCents = 0;
+      let invoiceMarginCents = 0;
+
+      for (const line of invoice.lines) {
+        const revenueCents = line.lineTotalExclVatCents;
+        const config = line.productId ? productMarginById.get(line.productId) : undefined;
+        const marginCents = resolveMarginCents(config, revenueCents, Number(line.billedQuantity));
+        if (!hasCatalogMarginObject(config)) {
+          uncategorizedRevenueExclVatCents += revenueCents;
+        }
+        addMarginTotal(
+          productTotals,
+          line.productCode ?? line.description,
+          revenueCents,
+          marginCents,
+        );
+        invoiceRevenueCents += revenueCents;
+        invoiceMarginCents += marginCents;
+      }
+
+      // A REDISTRIBUTED service line's own margin IS counted here, just
+      // like a VISIBLE one — deliberately different from bucketByCategory's
+      // own REDISTRIBUTED handling, see docs/1.6/README.md's scope decision
+      // for why margin answers a different question than revenue-category
+      // bucketing does. Its REVENUE is a different story: amountCents is
+      // already folded into the product lines' own (inflated)
+      // lineTotalExclVatCents above (see InvoiceMapper), so adding it again
+      // here would double-count the same euros — same reasoning
+      // bucketByCategory's own comment gives for skipping REDISTRIBUTED
+      // entirely. marginByService still gets this row (with its own
+      // amountCents as that row's revenue, for its own marginRatePercent),
+      // just never folded into invoiceRevenueCents/totalRevenueExclVatCents
+      // or uncategorizedRevenueExclVatCents.
+      for (const serviceLine of invoice.serviceLines) {
+        const revenueCents = serviceLine.amountCents;
+        const config = serviceLine.serviceId
+          ? serviceMarginById.get(serviceLine.serviceId)
+          : undefined;
+        const marginCents = resolveMarginCents(config, revenueCents, 1);
+        addMarginTotal(serviceTotals, serviceLine.name, revenueCents, marginCents);
+        invoiceMarginCents += marginCents;
+        if (serviceLine.visibility === 'VISIBLE') {
+          if (!hasCatalogMarginObject(config)) {
+            uncategorizedRevenueExclVatCents += revenueCents;
+          }
+          invoiceRevenueCents += revenueCents;
+        }
+      }
+
+      totalRevenueExclVatCents += invoiceRevenueCents;
+      totalMarginExclVatCents += invoiceMarginCents;
+      addMarginTotal(clientTotals, clientKey, invoiceRevenueCents, invoiceMarginCents);
+      if (monthEntry) {
+        monthEntry.revenue += invoiceRevenueCents;
+        monthEntry.margin += invoiceMarginCents;
+      }
+    }
+    const byCategory = this.bucketByCategory(paid);
+    const estimatedCharges = this.computeEstimatedCharges(company, byCategory);
+    const netProfitAfterCharges = {
+      applicable: estimatedCharges.applicable,
+      totalMarginExclVatCents,
+      estimatedChargesCents: estimatedCharges.totalEstimatedCents,
+      netCents: totalMarginExclVatCents - estimatedCharges.totalEstimatedCents,
+    };
+
+    return {
+      totalRevenueExclVatCents,
+      totalMarginExclVatCents,
+      marginRatePercent: percentOrNull(totalMarginExclVatCents, totalRevenueExclVatCents),
+      marginCoveragePercent: percentOrNull(
+        totalRevenueExclVatCents - uncategorizedRevenueExclVatCents,
+        totalRevenueExclVatCents,
+      ),
+      uncategorizedRevenueExclVatCents,
+      marginByProduct: marginTopEntries(productTotals),
+      marginByService: marginTopEntries(serviceTotals),
+      marginByClient: marginTopEntries(clientTotals),
+      marginByMonth: [...monthTotals.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, totals]) => ({
+          month,
+          revenueExclVatCents: totals.revenue,
+          marginExclVatCents: totals.margin,
+        })),
+      netProfitAfterCharges,
     };
   }
 
@@ -361,6 +533,60 @@ function addToTopEntry(map: Map<string, TopEntry>, label: string, cents: number)
 
 function topEntries(map: Map<string, TopEntry>): TopEntry[] {
   return [...map.values()].sort((a, b) => b.totalCents - a.totalCents).slice(0, TOP_ENTRIES_LIMIT);
+}
+
+// Phase 1.6 (2026-09-03 revision): a line's revenue counts as "covered" the
+// moment it's tied to a real catalog Product/Service, whether or not the
+// artisan ever touched that item's own margin field — resolveMarginCents
+// already assumes 100% margin for an untouched-but-real catalog item (see
+// its own comment), so there's always a resolvable number for it. Only a
+// line with NO catalog link at all (freehand, or a MANUAL invoice) has
+// truly nothing to go on, and stays uncategorized. `findMarginConfigByIds`
+// always returns a row for a real id, whether or not marginMode is set —
+// see that method's own comment — so `config != null` alone is the
+// correct catalog-link check.
+function hasCatalogMarginObject(config: MarginConfig | undefined): boolean {
+  return config != null;
+}
+
+function addMarginTotal(
+  map: Map<string, { revenue: number; margin: number; count: number }>,
+  label: string,
+  revenueCents: number,
+  marginCents: number,
+): void {
+  const existing = map.get(label);
+  if (existing) {
+    existing.revenue += revenueCents;
+    existing.margin += marginCents;
+    existing.count += 1;
+  } else {
+    map.set(label, { revenue: revenueCents, margin: marginCents, count: 1 });
+  }
+}
+
+// Sorted by margin, not revenue — unlike topEntries above, the whole point
+// of Margin Analytics is "what earns you money," which can rank
+// differently from "what sells the most" (see docs/1.6/1.6-2-margin-analytics-backend.md).
+function marginTopEntries(
+  map: Map<string, { revenue: number; margin: number; count: number }>,
+): MarginByEntry[] {
+  return [...map.entries()]
+    .map(([label, totals]) => ({
+      label,
+      revenueExclVatCents: totals.revenue,
+      marginExclVatCents: totals.margin,
+      marginRatePercent: percentOrNull(totals.margin, totals.revenue),
+      count: totals.count,
+    }))
+    .sort((a, b) => b.marginExclVatCents - a.marginExclVatCents)
+    .slice(0, TOP_ENTRIES_LIMIT);
+}
+
+// null (not 0) when there's nothing to divide by — same convention as
+// EInvoicingSnapshot.transmissionRatePercent.
+function percentOrNull(partCents: number, totalCents: number): number | null {
+  return totalCents > 0 ? Math.round((partCents / totalCents) * 100) : null;
 }
 
 function startOfMonthsAgo(from: Date, monthsAgo: number): Date {

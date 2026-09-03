@@ -14,6 +14,7 @@ import { CompanySuperPdpService } from './e-invoicing/company-super-pdp.service'
 import { EInvoiceTransmissionService } from './e-invoicing/e-invoice-transmission.service';
 import { SuperPdpClientService } from './e-invoicing/super-pdp-client.service';
 import { SuperPdpProvider } from './e-invoicing/super-pdp-provider.service';
+import { SuperPdpProvisioningCronService } from './e-invoicing/super-pdp-provisioning-cron.service';
 import { FacturXService } from './facturx/facturx.service';
 import { InvoiceController } from './invoice.controller';
 import { InvoiceMapper } from './invoice.mapper';
@@ -53,6 +54,9 @@ import { PdfModule } from './pdf/pdf.module';
     // delayed-auto-transmit sweep — see its own file for why this lives
     // here rather than a dedicated module.
     AutoTransmitCronService,
+    // Phase 1.2-8 (2026 e-invoicing reform): the VAT-regime-sync/directory-
+    // registration provisioning sweep — see its own file.
+    SuperPdpProvisioningCronService,
   ],
   // Phase 17: ReportsModule reuses the exact same repository queries +
   // totals-computation pipeline the invoice API itself uses (see

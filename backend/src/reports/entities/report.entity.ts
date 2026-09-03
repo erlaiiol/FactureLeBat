@@ -129,6 +129,56 @@ export interface ActivityAnalytics {
 // ReportsService.getEInvoicingSnapshot's own comment for why this is a
 // separate, ungated method/endpoint rather than a few more fields folded
 // into the (Phase 30-gated) analytics payload.
+// Phase 1.6: one product/service/client's contribution to Margin Analytics
+// — the "cercles" data source. marginRatePercent is null (not 0) on a
+// zero-revenue bucket, same "nothing to divide by" convention as
+// EInvoicingSnapshot.transmissionRatePercent below.
+export interface MarginByEntry {
+  label: string;
+  revenueExclVatCents: number;
+  marginExclVatCents: number;
+  marginRatePercent: number | null;
+  count: number;
+}
+
+export interface MarginMonthPoint {
+  month: string; // "2026-01", same shape as RevenueMonthPoint
+  revenueExclVatCents: number;
+  marginExclVatCents: number;
+}
+
+// Only meaningful for LegalStatus.MICRO_ENTREPRENEUR — mirrors
+// EstimatedCharges.applicable exactly (same computeEstimatedCharges call,
+// over Margin Analytics' own 12-month window rather than the quarterly
+// report's arbitrary range). netCents is never floored at 0 — a negative
+// net is a real, honest figure, not an error to hide.
+export interface NetProfitAfterCharges {
+  applicable: boolean;
+  totalMarginExclVatCents: number;
+  estimatedChargesCents: number;
+  netCents: number;
+}
+
+// Phase 1.6: "Marge" tab — see docs/1.6/1.6-2-margin-analytics-backend.md.
+// Same 12-month PAYEE window as ActivityAnalytics, gated behind the same
+// paid `analytics` plan feature (ReportsService.getMarginAnalytics).
+export interface MarginAnalytics {
+  totalRevenueExclVatCents: number;
+  totalMarginExclVatCents: number;
+  marginRatePercent: number | null;
+  // % of totalRevenueExclVatCents that had a resolvable margin config —
+  // this stat is honest about being partial until the artisan configures
+  // more catalog items, never silently treats "unconfigured" as "zero
+  // margin."
+  marginCoveragePercent: number | null;
+  uncategorizedRevenueExclVatCents: number;
+  marginByProduct: MarginByEntry[];
+  marginByService: MarginByEntry[];
+  marginByClient: MarginByEntry[];
+  marginByMonth: MarginMonthPoint[];
+  netProfitAfterCharges: NetProfitAfterCharges;
+}
+
 export interface EInvoicingSnapshot {
   // App-wide (SUPERPDP_CLIENT_ID/SECRET set on this deployment at all) and
   // per-company (this artisan completed the OAuth2 connection) — same two-

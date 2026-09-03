@@ -59,3 +59,85 @@ describe('CreateServiceDto — Phase 13.5 pricing mode', () => {
     expect(errors).not.toHaveLength(0);
   });
 });
+
+describe('CreateServiceDto — Phase 1.6 margin', () => {
+  it('accepts no margin configured at all', async () => {
+    const errors = await validateDto(basePayload({ pricingMode: 'FIXED', priceCents: 15000 }));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts NET_AMOUNT margin at or below a FIXED priceCents', async () => {
+    const errors = await validateDto(
+      basePayload({
+        pricingMode: 'FIXED',
+        priceCents: 15000,
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 5000,
+      }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects NET_AMOUNT margin above a FIXED priceCents', async () => {
+    const errors = await validateDto(
+      basePayload({
+        pricingMode: 'FIXED',
+        priceCents: 15000,
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 15001,
+      }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('accepts NET_AMOUNT margin on a PERCENTAGE-priced service (no priceCents to cap against)', async () => {
+    const errors = await validateDto(
+      basePayload({
+        pricingMode: 'PERCENTAGE',
+        percentageBasisPoints: 3000,
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 1_000_000,
+      }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts PERCENTAGE margin at 100% — a pure-markup "Marge 30%" style service', async () => {
+    const errors = await validateDto(
+      basePayload({
+        pricingMode: 'PERCENTAGE',
+        percentageBasisPoints: 3000,
+        marginMode: 'PERCENTAGE',
+        marginPercentageBasisPoints: 10_000,
+      }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects marginMode NET_AMOUNT with no marginAmountCents', async () => {
+    const errors = await validateDto(
+      basePayload({ pricingMode: 'FIXED', priceCents: 15000, marginMode: 'NET_AMOUNT' }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects marginMode NET_AMOUNT that also carries marginPercentageBasisPoints', async () => {
+    const errors = await validateDto(
+      basePayload({
+        pricingMode: 'FIXED',
+        priceCents: 15000,
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 5000,
+        marginPercentageBasisPoints: 3000,
+      }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+
+  it('rejects marginPercentageBasisPoints/marginAmountCents set with no marginMode', async () => {
+    const errors = await validateDto(
+      basePayload({ pricingMode: 'FIXED', priceCents: 15000, marginAmountCents: 5000 }),
+    );
+    expect(errors).not.toHaveLength(0);
+  });
+});

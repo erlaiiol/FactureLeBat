@@ -1,10 +1,20 @@
 import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import appleSignin from 'apple-signin-auth';
 import * as bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import { AuthTokenPurpose, UserRole } from '../../generated/prisma/enums';
 import { UserModel as User } from '../../generated/prisma/models';
+
+// register/login/refresh/resetPassword all run real bcrypt (cost factor
+// 12, see BCRYPT_SALT_ROUNDS) — deliberately, a mocked hash couldn't catch
+// a real hashing/compare regression. A single real bcrypt op is normally
+// well under jest's 5s default, but occasionally exceeds it under CPU
+// contention (parallel workers, a loaded dev machine) — bumped instead of
+// mocking away the thing these tests exist to catch.
+jest.setTimeout(20_000);
+import { encryptSecret } from '../common/secret-crypto.util';
 import { MailerService } from '../mailer/mailer.service';
 import { ReferralService } from '../referral/referral.service';
 import { AuthService } from './auth.service';
@@ -27,6 +37,8 @@ function buildUser(overrides: Partial<User> = {}): User {
     email: 'artisan@example.com',
     passwordHash: null,
     googleId: null,
+    appleId: null,
+    appleRefreshTokenEncrypted: null,
     role: UserRole.ARTISAN,
     companyId: 'company-1',
     newsletterOptIn: false,
@@ -47,8 +59,11 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
   const findByEmail = jest.fn();
   const findById = jest.fn();
   const findByGoogleId = jest.fn();
+  const findByAppleId = jest.fn();
   const createWithCompany = jest.fn<Promise<User>, [CreateUserWithCompanyData]>();
   const linkGoogleId = jest.fn();
+  const linkAppleId = jest.fn();
+  const saveAppleRefreshToken = jest.fn();
   const updatePasswordHash = jest.fn();
   const markEmailVerified = jest.fn();
   const deleteAccountFn = jest.fn();
@@ -56,8 +71,11 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
     findByEmail,
     findById,
     findByGoogleId,
+    findByAppleId,
     createWithCompany,
     linkGoogleId,
+    linkAppleId,
+    saveAppleRefreshToken,
     updatePasswordHash,
     markEmailVerified,
     deleteAccount: deleteAccountFn,
@@ -119,6 +137,9 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
     findByEmail,
     findById,
     findByGoogleId,
+    findByAppleId,
+    linkAppleId,
+    saveAppleRefreshToken,
     createWithCompany,
     deleteAccountFn,
     updatePasswordHash,
@@ -308,6 +329,81 @@ describe('AuthService.googleTokenLogin', () => {
   });
 });
 
+describe('AuthService.appleTokenLogin', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('verifies the identity token then logs into the linked account', async () => {
+    const { service, findByAppleId, refreshCreate } = buildService({
+      APPLE_CLIENT_ID: 'fr.facturele.app',
+    });
+    const user = buildUser({ appleId: 'apple-123', emailVerifiedAt: new Date() });
+    findByAppleId.mockResolvedValue(user);
+    jest
+      .spyOn(appleSignin, 'verifyIdToken')
+      .mockResolvedValue({ sub: 'apple-123', email: user.email } as Awaited<
+        ReturnType<typeof appleSignin.verifyIdToken>
+      >);
+
+    const result = await service.appleTokenLogin('raw-identity-token');
+
+    expect(result.user.email).toBe(user.email);
+    expect(refreshCreate).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
+      expect.any(Date),
+      true,
+    );
+  });
+
+  it('rejects a token that fails signature/audience verification', async () => {
+    const { service } = buildService({ APPLE_CLIENT_ID: 'fr.facturele.app' });
+    jest.spyOn(appleSignin, 'verifyIdToken').mockRejectedValue(new Error('bad token'));
+
+    await expect(service.appleTokenLogin('raw-identity-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects a verified token missing an email claim', async () => {
+    const { service } = buildService({ APPLE_CLIENT_ID: 'fr.facturele.app' });
+    jest
+      .spyOn(appleSignin, 'verifyIdToken')
+      .mockResolvedValue({ sub: 'apple-123' } as Awaited<
+        ReturnType<typeof appleSignin.verifyIdToken>
+      >);
+
+    await expect(service.appleTokenLogin('raw-identity-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('never blocks login on a failed best-effort refresh-token capture', async () => {
+    const { service, findByAppleId } = buildService({
+      APPLE_CLIENT_ID: 'fr.facturele.app',
+      APPLE_TEAM_ID: 'team-1',
+      APPLE_KEY_ID: 'key-1',
+      APPLE_PRIVATE_KEY: 'fake-key',
+      APP_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    });
+    const user = buildUser({ appleId: 'apple-123', emailVerifiedAt: new Date() });
+    findByAppleId.mockResolvedValue(user);
+    jest
+      .spyOn(appleSignin, 'verifyIdToken')
+      .mockResolvedValue({ sub: 'apple-123', email: user.email } as Awaited<
+        ReturnType<typeof appleSignin.verifyIdToken>
+      >);
+    jest.spyOn(appleSignin, 'getClientSecret').mockImplementation(() => {
+      throw new Error('boom');
+    });
+
+    await expect(
+      service.appleTokenLogin('raw-identity-token', 'raw-authorization-code'),
+    ).resolves.toBeDefined();
+  });
+});
+
 describe('AuthService.refresh', () => {
   it('rotates a valid token and preserves its remembered flag', async () => {
     const {
@@ -493,6 +589,51 @@ describe('AuthService.deleteAccount', () => {
   it('allows a Google-only account (no password set) to delete without confirming a password', async () => {
     const { service, findById, deleteAccountFn } = buildService();
     findById.mockResolvedValue(buildUser({ passwordHash: null, googleId: 'g-1' }));
+
+    await service.deleteAccount('user-1', 'company-1', {});
+
+    expect(deleteAccountFn).toHaveBeenCalledWith('company-1');
+  });
+
+  it('revokes the stored Apple grant before deleting an Apple-linked account', async () => {
+    const { service, findById, deleteAccountFn } = buildService({
+      APPLE_CLIENT_ID: 'fr.facturele.app',
+      APPLE_TEAM_ID: 'team-1',
+      APPLE_KEY_ID: 'key-1',
+      APPLE_PRIVATE_KEY: 'fake-key',
+      APP_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    });
+    const encrypted = encryptSecret('apple-refresh-token', Buffer.alloc(32).toString('base64'));
+    findById.mockResolvedValue(
+      buildUser({ passwordHash: null, appleId: 'apple-1', appleRefreshTokenEncrypted: encrypted }),
+    );
+    jest.spyOn(appleSignin, 'getClientSecret').mockReturnValue('client-secret');
+    const revokeSpy = jest.spyOn(appleSignin, 'revokeAuthorizationToken').mockResolvedValue({});
+
+    await service.deleteAccount('user-1', 'company-1', {});
+
+    expect(revokeSpy).toHaveBeenCalledWith(
+      'apple-refresh-token',
+      expect.objectContaining({ clientID: 'fr.facturele.app', tokenTypeHint: 'refresh_token' }),
+    );
+    expect(deleteAccountFn).toHaveBeenCalledWith('company-1');
+  });
+
+  it('still deletes the account when Apple revocation fails', async () => {
+    const { service, findById, deleteAccountFn } = buildService({
+      APPLE_CLIENT_ID: 'fr.facturele.app',
+      APPLE_TEAM_ID: 'team-1',
+      APPLE_KEY_ID: 'key-1',
+      APPLE_PRIVATE_KEY: 'fake-key',
+      APP_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    });
+    const encrypted = encryptSecret('apple-refresh-token', Buffer.alloc(32).toString('base64'));
+    findById.mockResolvedValue(
+      buildUser({ passwordHash: null, appleId: 'apple-1', appleRefreshTokenEncrypted: encrypted }),
+    );
+    jest.spyOn(appleSignin, 'getClientSecret').mockImplementation(() => {
+      throw new Error('boom');
+    });
 
     await service.deleteAccount('user-1', 'company-1', {});
 

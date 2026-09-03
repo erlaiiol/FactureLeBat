@@ -1,4 +1,5 @@
 import { CatalogFolderRef } from './catalog-folder.model';
+import { MarginMode } from './margin.model';
 import { ActivityCategory } from './report.model';
 import { Unit } from './unit.model';
 
@@ -20,6 +21,11 @@ export interface ProductProfile {
   // Phase 17: which URSSAF turnover category this product's sales fall
   // under — artisan-set, null when left uncategorized.
   activityCategory: ActivityCategory | null;
+  // Phase 1.6: what the artisan actually keeps per unit sold — null when not
+  // declared. See MarginMode.
+  marginMode: MarginMode | null;
+  marginAmountCents: number | null;
+  marginPercentageBasisPoints: number | null;
   // Phase 1.1-2: zero, one, or several dossiers this product belongs to.
   folders: CatalogFolderRef[];
   createdAt: string;
@@ -36,6 +42,9 @@ export interface UpsertProductRequest {
   code?: string;
   packagingQuantity?: number;
   activityCategory?: ActivityCategory;
+  marginMode?: MarginMode;
+  marginAmountCents?: number;
+  marginPercentageBasisPoints?: number;
   folderIds?: string[];
 }
 

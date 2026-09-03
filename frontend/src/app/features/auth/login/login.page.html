@@ -62,52 +62,49 @@
     </app-big-button>
   </form>
 
-  @if (!platformService.isIosApp()) {
-    <!-- Apple 4.8: an app offering a third-party sign-in must also offer
-    Sign in with Apple, unless it offers no third-party sign-in at all —
-    hiding this whole block on iOS (email/password stays available) keeps
-    this app out of that requirement. The Apple button below is a disabled
-    placeholder, not a real Sign in with Apple integration, so it stays
-    inside this same iOS-hidden block rather than being shown there too —
-    see docs/roadmap.md Phase 22 and Phase 1.5. -->
-    <div class="flex flex-col gap-2">
-      @if (platformService.isNativeApp()) {
-        <!-- Android app: native Credential Manager sign-in, not the browser
-        redirect below — Google blocks that redirect inside an embedded
-        WebView. See GoogleNativeLoginService. -->
-        <button
-          type="button"
-          (click)="googleLoginNative()"
-          [disabled]="saving()"
-          class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle disabled:opacity-50"
-        >
-          <app-icon-google />
-          Continuer avec Google
-        </button>
-      } @else {
-        <a
-          [href]="googleLoginUrl"
-          class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle"
-        >
-          <app-icon-google />
-          Continuer avec Google
-        </a>
-      }
-
-      <!-- Placeholder only — no Apple Developer account/key yet, so there's
-      nothing to wire up. See docs/roadmap.md Phase 1.5 for the full plan. -->
+  <!-- Google renders everywhere (web redirect, or the native Credential
+  Manager flow inside any Capacitor shell — Android AND iOS, since
+  isNativeApp() covers both). Apple only ever renders on iOS: it's the
+  guideline-4.8 counterpart to Google there (an app offering a third-party
+  sign-in must also offer Sign in with Apple, at least as prominent — see
+  docs/roadmap.md Phase 1.5), and this app has no browser/Android Apple
+  flow to show elsewhere. -->
+  <div class="flex flex-col gap-2">
+    @if (platformService.isNativeApp()) {
+      <!-- Native app: Credential Manager sign-in, not the browser redirect
+      below — Google blocks that redirect inside an embedded WebView. See
+      GoogleNativeLoginService. -->
       <button
         type="button"
-        disabled
-        title="Connexion avec Apple — bientôt disponible"
-        class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink opacity-50"
+        (click)="googleLoginNative()"
+        [disabled]="saving()"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle disabled:opacity-50"
+      >
+        <app-icon-google />
+        Continuer avec Google
+      </button>
+    } @else {
+      <a
+        [href]="googleLoginUrl"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle"
+      >
+        <app-icon-google />
+        Continuer avec Google
+      </a>
+    }
+
+    @if (platformService.isIosApp()) {
+      <button
+        type="button"
+        (click)="appleLoginNative()"
+        [disabled]="saving()"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle disabled:opacity-50"
       >
         <app-icon-apple />
         Continuer avec Apple
-        <span class="text-xs font-normal text-ink-soft">(bientôt disponible)</span>
       </button>
-    </div>
-  }
+    }
+  </div>
 
   @if (demoProfiles().length > 0) {
     <!-- Only ever non-empty on a `make demo` stack (DEMO_MODE=true) — see

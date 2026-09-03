@@ -168,6 +168,32 @@ class EnvironmentVariables {
   @IsString()
   GOOGLE_CALLBACK_URL = 'http://localhost:3000/api/auth/google/callback';
 
+  // Phase 1.5 Sign in with Apple, native-only (see docs/roadmap.md) — the
+  // iOS app's bundle ID, doubling as the identity token's expected `aud`
+  // claim (no Services ID/redirect needed for this native-only flow, unlike
+  // Google's browser-redirect pair above). Optional as a standalone value:
+  // AppleOAuthEnabledGuard 503s POST /auth/apple/token-login when unset.
+  @IsOptional()
+  @IsString()
+  APPLE_CLIENT_ID?: string;
+
+  // The three below are a separate, optional-within-optional group: only
+  // needed to exchange a native login's authorizationCode for a refresh
+  // token this app can later revoke on account deletion (AuthService's
+  // captureAppleRefreshToken/revokeAppleTokenIfAny) — login itself works
+  // with APPLE_CLIENT_ID alone.
+  @IsOptional()
+  @IsString()
+  APPLE_TEAM_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  APPLE_KEY_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  APPLE_PRIVATE_KEY?: string;
+
   // Where /auth/google/callback and email-verification/password-reset links
   // send the browser once the backend is done — the frontend's own origin.
   @IsOptional()

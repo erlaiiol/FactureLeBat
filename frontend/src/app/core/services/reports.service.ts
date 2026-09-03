@@ -2,7 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ActivityAnalytics, EInvoicingSnapshot, QuarterlyReport } from '../models/report.model';
+import {
+  ActivityAnalytics,
+  EInvoicingSnapshot,
+  MarginAnalytics,
+  QuarterlyReport,
+} from '../models/report.model';
 
 @Injectable({ providedIn: 'root' })
 export class ReportsService {
@@ -33,5 +38,11 @@ export class ReportsService {
   // StatsReportsPage's own comment.
   getEInvoicingSnapshot(): Observable<EInvoicingSnapshot> {
     return this.http.get<EInvoicingSnapshot>(`${this.baseUrl}/e-invoicing-snapshot`);
+  }
+
+  // Phase 1.6: same premium gate as getActivityAnalytics — see
+  // StatsReportsPage's own comment.
+  getMarginAnalytics(): Observable<MarginAnalytics> {
+    return this.http.get<MarginAnalytics>(`${this.baseUrl}/margin`);
   }
 }

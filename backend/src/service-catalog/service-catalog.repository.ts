@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { ServiceModel as Service } from '../../generated/prisma/models';
 import { FuzzyMatch } from '../common/fuzzy-match';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
+import { MarginConfig } from '../common/margin.util';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceProfile } from './entities/service.entity';
@@ -81,6 +82,27 @@ export class ServiceCatalogRepository {
     return this.prisma.service.findFirst({ where: { id, companyId }, include: FOLDERS_INCLUDE });
   }
 
+  // Phase 1.6: same batch margin lookup as ProductRepository.findMarginConfigByIds,
+  // for ReportsService.getMarginAnalytics.
+  async findMarginConfigByIds(
+    companyId: string,
+    ids: string[],
+  ): Promise<Map<string, MarginConfig>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const rows = await this.prisma.service.findMany({
+      where: { companyId, id: { in: ids } },
+      select: {
+        id: true,
+        marginMode: true,
+        marginAmountCents: true,
+        marginPercentageBasisPoints: true,
+      },
+    });
+    return new Map(rows.map(({ id, ...config }) => [id, config]));
+  }
+
   // folderIds is already filtered to this company's own folders (see
   // CatalogFolderService.filterOwnedFolderIds, called from
   // ServiceCatalogService) before it ever reaches here.
@@ -95,6 +117,9 @@ export class ServiceCatalogRepository {
         defaultVisibility: data.defaultVisibility,
         code: data.code,
         activityCategory: data.activityCategory ?? null,
+        marginMode: data.marginMode ?? null,
+        marginAmountCents: data.marginAmountCents ?? null,
+        marginPercentageBasisPoints: data.marginPercentageBasisPoints ?? null,
         companyId,
         folders: { connect: folderIds.map((id) => ({ id })) },
       },
@@ -133,6 +158,9 @@ export class ServiceCatalogRepository {
           defaultVisibility: data.defaultVisibility,
           code: data.code ?? null,
           activityCategory: data.activityCategory ?? null,
+          marginMode: data.marginMode ?? null,
+          marginAmountCents: data.marginAmountCents ?? null,
+          marginPercentageBasisPoints: data.marginPercentageBasisPoints ?? null,
         },
       });
       if (count === 0) {

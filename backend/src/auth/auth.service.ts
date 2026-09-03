@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import appleSignin from 'apple-signin-auth';
 import * as bcrypt from 'bcrypt';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import type { StringValue } from 'ms';
@@ -17,6 +18,7 @@ import {
   RefreshTokenModel as RefreshToken,
   UserModel as User,
 } from '../../generated/prisma/models';
+import { decryptSecret, encryptSecret } from '../common/secret-crypto.util';
 import { SmtpCredentials } from '../mail-settings/entities/mail-settings.entity';
 import { MailerService } from '../mailer/mailer.service';
 import { ReferralService } from '../referral/referral.service';
@@ -48,6 +50,11 @@ export interface IssuedTokens {
 
 export interface GoogleProfile {
   googleId: string;
+  email: string;
+}
+
+export interface AppleProfile {
+  appleId: string;
   email: string;
 }
 
@@ -96,6 +103,19 @@ export class AuthService {
   private readonly googleClientId?: string;
   private readonly googleOAuthClient: OAuth2Client;
 
+  // Native-only counterpart to the above — no browser-redirect flow, no
+  // Services ID: the iOS app's ASAuthorizationController mints an identity
+  // token whose `aud` is the app's own bundle ID, so that's what this is
+  // (see frontend's AppleNativeLoginService and docs/roadmap.md Phase 1.5).
+  // Team ID/Key ID/private key are a separate, optional concern — only
+  // needed to exchange an authorizationCode for a refresh token, itself
+  // only needed to revoke Apple's grant on account deletion.
+  private readonly appleClientId?: string;
+  private readonly appleTeamId?: string;
+  private readonly appleKeyId?: string;
+  private readonly applePrivateKey?: string;
+  private readonly appEncryptionKey?: string;
+
   constructor(
     private readonly userRepository: UserRepository,
     private readonly refreshTokenRepository: RefreshTokenRepository,
@@ -140,6 +160,16 @@ export class AuthService {
 
     this.googleClientId = config.get<string>('GOOGLE_CLIENT_ID');
     this.googleOAuthClient = new OAuth2Client(this.googleClientId);
+
+    this.appleClientId = config.get<string>('APPLE_CLIENT_ID');
+    this.appleTeamId = config.get<string>('APPLE_TEAM_ID');
+    this.appleKeyId = config.get<string>('APPLE_KEY_ID');
+    // \n-escaped in the env file (a real newline can't survive a single-line
+    // KEY=VALUE), unescaped back to a real PEM block here — same convention
+    // as every other multi-line credential this app reads from env.
+    const rawApplePrivateKey = config.get<string>('APPLE_PRIVATE_KEY');
+    this.applePrivateKey = rawApplePrivateKey?.replace(/\\n/g, '\n');
+    this.appEncryptionKey = config.get<string>('APP_ENCRYPTION_KEY');
   }
 
   async register(dto: RegisterDto): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
@@ -286,6 +316,103 @@ export class AuthService {
       throw new UnauthorizedException('Jeton Google invalide.');
     }
     return this.handleGoogleLogin({ googleId: payload.sub, email: payload.email });
+  }
+
+  async handleAppleLogin(
+    profile: AppleProfile,
+  ): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
+    let user = await this.userRepository.findByAppleId(profile.appleId);
+    if (!user) {
+      const existingByEmail = await this.userRepository.findByEmail(profile.email);
+      // Same email, first time via Apple: link rather than create a second
+      // account for the same person — mirrors handleGoogleLogin exactly.
+      user = existingByEmail
+        ? await this.userRepository.linkAppleId(existingByEmail.id, profile.appleId)
+        : await this.userRepository.createWithCompany({
+            email: profile.email,
+            appleId: profile.appleId,
+            newsletterOptIn: false,
+            termsAcceptedAt: new Date(),
+            termsVersion: CURRENT_TERMS_VERSION,
+            referralCode: await this.referralService.generateUniqueCode(),
+          });
+    }
+
+    // Apple only ever asserts a *verified* email — same trust as Google's
+    // own login satisfying our email-verification requirement.
+    if (!user.emailVerifiedAt) {
+      user = await this.userRepository.markEmailVerified(user.id);
+    }
+
+    const tokens = await this.issueTokens(user, true);
+    return { user: toPublicUser(user), tokens };
+  }
+
+  // Native counterpart to Google's googleTokenLogin — see AppleNativeLoginService.
+  // The identityToken is the only thing needed to log in; authorizationCode
+  // (present on every native Apple sign-in, unlike name/email) is optional
+  // and only used, best-effort, to capture a token this app can later
+  // revoke on account deletion.
+  async appleTokenLogin(
+    identityToken: string,
+    authorizationCode?: string,
+  ): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
+    let payload: Awaited<ReturnType<typeof appleSignin.verifyIdToken>>;
+    try {
+      payload = await appleSignin.verifyIdToken(identityToken, {
+        audience: this.appleClientId,
+      });
+    } catch (error) {
+      this.logger.warn(`Vérification du jeton Apple échouée : ${String(error)}`);
+      throw new UnauthorizedException('Jeton Apple invalide.');
+    }
+    if (!payload?.sub || !payload.email) {
+      throw new UnauthorizedException('Jeton Apple invalide.');
+    }
+
+    const result = await this.handleAppleLogin({ appleId: payload.sub, email: payload.email });
+
+    if (
+      authorizationCode &&
+      this.appleTeamId &&
+      this.appleKeyId &&
+      this.applePrivateKey &&
+      this.appEncryptionKey
+    ) {
+      // Never blocks or fails the login itself — see requestPasswordReset's
+      // sibling comment above for the same "boots fine without it" posture.
+      this.captureAppleRefreshToken(result.user.id, authorizationCode).catch((error: unknown) =>
+        this.logger.warn(`Échec de la récupération du refresh token Apple : ${String(error)}`),
+      );
+    }
+
+    return result;
+  }
+
+  private async captureAppleRefreshToken(userId: string, authorizationCode: string): Promise<void> {
+    const clientSecret = appleSignin.getClientSecret({
+      clientID: this.appleClientId!,
+      teamID: this.appleTeamId!,
+      keyIdentifier: this.appleKeyId!,
+      privateKey: this.applePrivateKey!,
+    });
+    // No redirectUri for this exchange — this is a native device flow's
+    // authorizationCode, which Apple's /auth/token endpoint doesn't tie to
+    // one (that's only meaningful for a browser-redirect flow, which this
+    // app doesn't have for Apple — see AuthService's class-level Apple
+    // comment). The library types it as required regardless, so this is an
+    // explicit empty value, not an oversight.
+    const { refresh_token: refreshToken } = await appleSignin.getAuthorizationToken(
+      authorizationCode,
+      { clientID: this.appleClientId!, redirectUri: '', clientSecret },
+    );
+    if (!refreshToken) {
+      return;
+    }
+    await this.userRepository.saveAppleRefreshToken(
+      userId,
+      encryptSecret(refreshToken, this.appEncryptionKey!),
+    );
   }
 
   async refresh(rawRefreshToken: string | undefined): Promise<{
@@ -437,7 +564,42 @@ export class AuthService {
     // Google-only accounts (no passwordHash) have nothing to re-confirm
     // with — the authenticated session + CSRF check already on this route
     // establish intent on their own.
+    await this.revokeAppleTokenIfAny(user);
     await this.userRepository.deleteAccount(companyId);
+  }
+
+  // Apple's Sign in with Apple guidelines expect an app to revoke its grant
+  // when the underlying account is deleted, not just stop using it — best-
+  // effort and never blocks deletion: a revoke failure (Apple's endpoint
+  // down, an already-expired refresh token, ...) would otherwise strand an
+  // artisan mid-RGPD-deletion over a third party's own account bookkeeping.
+  private async revokeAppleTokenIfAny(user: User): Promise<void> {
+    if (
+      !user.appleRefreshTokenEncrypted ||
+      !this.appleClientId ||
+      !this.appleTeamId ||
+      !this.appleKeyId ||
+      !this.applePrivateKey ||
+      !this.appEncryptionKey
+    ) {
+      return;
+    }
+    try {
+      const refreshToken = decryptSecret(user.appleRefreshTokenEncrypted, this.appEncryptionKey);
+      const clientSecret = appleSignin.getClientSecret({
+        clientID: this.appleClientId,
+        teamID: this.appleTeamId,
+        keyIdentifier: this.appleKeyId,
+        privateKey: this.applePrivateKey,
+      });
+      await appleSignin.revokeAuthorizationToken(refreshToken, {
+        clientID: this.appleClientId,
+        clientSecret,
+        tokenTypeHint: 'refresh_token',
+      });
+    } catch (error) {
+      this.logger.warn(`Échec de la révocation du jeton Apple : ${String(error)}`);
+    }
   }
 
   private async issueTokens(user: User, rememberMe: boolean): Promise<IssuedTokens> {

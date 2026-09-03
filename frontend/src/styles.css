@@ -73,6 +73,25 @@
   --color-info-subtle-fg: #1e425c;
   --color-info-subtle-border: #a9c7da;
 
+  /* Phase 1.6: categorical chart series (Margin Analytics' donut
+     breakdowns) — five hues, deliberately none of them the app's own
+     reserved semantic hues (primary orange, danger red, warning amber,
+     badge chartreuse) so a chart slice never reads as a status. This
+     specific order (blue, aqua, violet, magenta, green) is the one subset
+     of the `dataviz` skill's validated 8-slot categorical theme that
+     clears its adjacent-pair CVD/contrast gates in BOTH light and dark at
+     this app's own surface colors — order matters here, re-run
+     `validate_palette.js` before reordering or adding a 6th slot. Light
+     mode's aqua/magenta steps sit below 3:1 contrast (the skill's own
+     documented trade-off for this theme) — mitigated by always pairing a
+     slice with a visible legend entry (label + amount), never color alone.
+     See docs/1.6/1.6-3-margin-stats-frontend.md. */
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #1baf7a;
+  --color-chart-3: #4a3aa7;
+  --color-chart-4: #e87ba4;
+  --color-chart-5: #008300;
+
   /* "Atelier sobre" — secondary identity, accent-only (tour, PDF header,
      "Mon activité"). Never used on data-entry screens. No dark variant:
      it's an occasional warm accent, not a working theme. */
@@ -152,6 +171,15 @@
   --color-info-subtle: #13293a;
   --color-info-subtle-fg: #a9c7da;
   --color-info-subtle-border: #1e425c;
+
+  /* Phase 1.6 — same five slots as light mode above, dark-surface steps
+     from the same `dataviz` skill theme, re-validated against this
+     specific order for the dark surface (#1a1a19). */
+  --color-chart-1: #3987e5;
+  --color-chart-2: #199e70;
+  --color-chart-3: #9085e9;
+  --color-chart-4: #d55181;
+  --color-chart-5: #008300;
 }
 
 * {

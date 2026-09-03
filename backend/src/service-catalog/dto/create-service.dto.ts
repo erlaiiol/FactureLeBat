@@ -12,9 +12,11 @@ import {
 } from 'class-validator';
 import {
   ActivityCategory,
+  MarginMode,
   ServicePricingMode,
   ServiceVisibility,
 } from '../../../generated/prisma/enums';
+import { ServiceMarginConsistency } from './service-margin-consistency.validator';
 import { ServicePricingConsistency } from './service-pricing-consistency.validator';
 
 // Same finite-but-generous bound as CreateProductDto/CreateInvoiceLineDto:
@@ -73,6 +75,26 @@ export class CreateServiceDto {
   @IsOptional()
   @IsEnum(ActivityCategory)
   activityCategory?: ActivityCategory;
+
+  // Phase 1.6: same margin declaration as CreateProductDto.marginMode —
+  // unset by default. @ServiceMarginConsistency validates both enum
+  // membership and cross-field consistency in one pass — see that
+  // validator's own comment for why it's deliberately not paired with
+  // @IsOptional()/@IsEnum() here, and docs/1.6/1.6-1-margin-data-model.md.
+  @ServiceMarginConsistency()
+  marginMode?: MarginMode;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PRICE_CENTS)
+  marginAmountCents?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PERCENTAGE_BASIS_POINTS)
+  marginPercentageBasisPoints?: number;
 
   // Phase 1.1-2: same folder picker as CreateProductDto.folderIds.
   @IsOptional()

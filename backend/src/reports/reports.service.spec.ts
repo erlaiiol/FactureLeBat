@@ -3,7 +3,9 @@ import { CompanySuperPdpService } from '../invoice/e-invoicing/company-super-pdp
 import { InvoiceCalculationService } from '../invoice/calculation/invoice-calculation.service';
 import { InvoiceMapper } from '../invoice/invoice.mapper';
 import { InvoiceRepository, InvoiceWithLines } from '../invoice/invoice.repository';
+import { ProductService } from '../product/product.service';
 import { ReceivedInvoiceRepository } from '../received-invoice/received-invoice.repository';
+import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
 import { CompanyService } from '../company/company.service';
 import { CompanyProfile } from '../company/entities/company.entity';
 import { ReportsService } from './reports.service';
@@ -18,6 +20,7 @@ function companyFixture(overrides: Partial<CompanyProfile> = {}): CompanyProfile
     superPdpRefreshTokenEncrypted: null,
     superPdpTokenExpiresAt: null,
     superPdpConnectedAt: null,
+    superPdpDirectoryRegisteredAt: null,
     addressLine1: '1 rue des Artisans',
     addressLine2: null,
     postalCode: '69001',
@@ -185,6 +188,17 @@ describe('ReportsService', () => {
     const receivedInvoiceRepository = {
       countInRange,
     } as unknown as jest.Mocked<ReceivedInvoiceRepository>;
+    // Phase 1.6: empty by default — most fixtures use freehand
+    // (productId/serviceId null) lines, which never call this at all (see
+    // getMarginAnalytics' own empty-set short-circuit).
+    const findProductMarginConfigByIds = jest.fn().mockResolvedValue(new Map());
+    const productService = {
+      findMarginConfigByIds: findProductMarginConfigByIds,
+    } as unknown as jest.Mocked<ProductService>;
+    const findServiceMarginConfigByIds = jest.fn().mockResolvedValue(new Map());
+    const serviceCatalogService = {
+      findMarginConfigByIds: findServiceMarginConfigByIds,
+    } as unknown as jest.Mocked<ServiceCatalogService>;
     const mapper = new InvoiceMapper(new InvoiceCalculationService());
     const service = new ReportsService(
       invoiceRepository,
@@ -193,6 +207,8 @@ describe('ReportsService', () => {
       planGateService,
       companySuperPdp,
       receivedInvoiceRepository,
+      productService,
+      serviceCatalogService,
     );
     return {
       service,
@@ -208,6 +224,8 @@ describe('ReportsService', () => {
       isConnected,
       isConfigured,
       countInRange,
+      findProductMarginConfigByIds,
+      findServiceMarginConfigByIds,
     };
   }
 
@@ -443,6 +461,330 @@ describe('ReportsService', () => {
       expect(analytics.topClients[0].label).toBe('Client B');
       expect(analytics.topClients[0].totalCents).toBe(90000);
       expect(analytics.activeClientCount).toBe(2);
+    });
+  });
+
+  // Phase 1.6
+  describe('getMarginAnalytics', () => {
+    it('is gated behind the analytics plan feature', async () => {
+      const { service, assertFeatureAccess, invoiceRepository, companyService } = setup();
+      invoiceRepository.findPaidInRange.mockResolvedValue([]);
+      companyService.getProfile.mockResolvedValue(companyFixture());
+
+      await service.getMarginAnalytics('company-1');
+
+      expect(assertFeatureAccess).toHaveBeenCalledWith('company-1', 'analytics');
+    });
+
+    it('resolves a PERCENTAGE product margin as a share of the line total', async () => {
+      const { service, invoiceRepository, companyService, findProductMarginConfigByIds } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      findProductMarginConfigByIds.mockResolvedValue(
+        new Map([
+          [
+            'prod-1',
+            {
+              marginMode: 'PERCENTAGE',
+              marginAmountCents: null,
+              marginPercentageBasisPoints: 5000,
+            },
+          ],
+        ]),
+      );
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({
+          lines: [{ ...invoiceFixture().lines[0], productId: 'prod-1' }],
+        }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      // lineTotalExclVatCents = 45000 (10 x 4500) — 50% of that is 22500.
+      expect(margin.totalMarginExclVatCents).toBe(22500);
+      expect(margin.totalRevenueExclVatCents).toBe(45000);
+      expect(margin.marginRatePercent).toBe(50);
+      expect(margin.uncategorizedRevenueExclVatCents).toBe(0);
+    });
+
+    it('resolves a NET_AMOUNT product margin per billed quantity', async () => {
+      const { service, invoiceRepository, companyService, findProductMarginConfigByIds } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      findProductMarginConfigByIds.mockResolvedValue(
+        new Map([
+          [
+            'prod-1',
+            {
+              marginMode: 'NET_AMOUNT',
+              marginAmountCents: 1000,
+              marginPercentageBasisPoints: null,
+            },
+          ],
+        ]),
+      );
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({
+          lines: [{ ...invoiceFixture().lines[0], productId: 'prod-1' }],
+        }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      // 1000 (per unit) x 10 (billed quantity) = 10000.
+      expect(margin.totalMarginExclVatCents).toBe(10000);
+    });
+
+    it('clamps a NET_AMOUNT margin to what the line actually billed', async () => {
+      const { service, invoiceRepository, companyService, findProductMarginConfigByIds } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      findProductMarginConfigByIds.mockResolvedValue(
+        new Map([
+          [
+            'prod-1',
+            {
+              marginMode: 'NET_AMOUNT',
+              marginAmountCents: 100_000, // far above the line's own 45000 cents total
+              marginPercentageBasisPoints: null,
+            },
+          ],
+        ]),
+      );
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({
+          lines: [{ ...invoiceFixture().lines[0], productId: 'prod-1' }],
+        }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      expect(margin.totalMarginExclVatCents).toBe(45000);
+    });
+
+    it('counts a REDISTRIBUTED service line, unlike revenue-category bucketing', async () => {
+      const { service, invoiceRepository, companyService, findServiceMarginConfigByIds } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      findServiceMarginConfigByIds.mockResolvedValue(
+        new Map([
+          [
+            'svc-1',
+            {
+              marginMode: 'PERCENTAGE',
+              marginAmountCents: null,
+              marginPercentageBasisPoints: 10_000,
+            },
+          ],
+        ]),
+      );
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({
+          serviceLines: [
+            {
+              id: 'sl-1',
+              invoiceId: 'inv-1',
+              position: 0,
+              serviceId: 'svc-1',
+              name: 'Marge 30%',
+              description: null,
+              amountCents: 5000,
+              visibility: 'REDISTRIBUTED',
+              activityCategory: null,
+              createdAt: new Date('2026-04-10'),
+              weights: [
+                { id: 'w-1', invoiceServiceLineId: 'sl-1', invoiceLineId: 'line-1', weight: 1 },
+              ],
+            },
+          ],
+        }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      // The service's own 100% margin is counted on top of the (unconfigured)
+      // product line's own 0 margin: 5000 from the service alone.
+      expect(margin.totalMarginExclVatCents).toBe(5000);
+      // The line's own lineTotalExclVatCents is already inflated to 50000
+      // (45000 base + the 5000 redistributed) by InvoiceCalculationService's
+      // real weighted-split math — the REDISTRIBUTED service's 5000
+      // amountCents must NOT be added a second time on top of that already-
+      // inflated total, same double-count bucketByCategory itself avoids
+      // for revenue-category totals.
+      expect(margin.totalRevenueExclVatCents).toBe(50000);
+      expect(margin.marginByService[0]).toMatchObject({
+        label: 'Marge 30%',
+        marginExclVatCents: 5000,
+      });
+    });
+
+    it('treats a MANUAL invoice as fully unresolved margin, never silently zero-revenue', async () => {
+      const { service, invoiceRepository, companyService } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({
+          entryMode: 'MANUAL',
+          lines: [],
+          serviceLines: [],
+          manualColumns: [],
+          manualRows: [],
+          subtotalOverrideCents: 20000,
+        }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      expect(margin.totalRevenueExclVatCents).toBe(20000);
+      expect(margin.totalMarginExclVatCents).toBe(0);
+      expect(margin.uncategorizedRevenueExclVatCents).toBe(20000);
+      expect(margin.marginCoveragePercent).toBe(0);
+    });
+
+    it('returns null rates, not 0, when there is no revenue at all', async () => {
+      const { service, invoiceRepository, companyService } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      invoiceRepository.findPaidInRange.mockResolvedValue([]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      expect(margin.marginRatePercent).toBeNull();
+      expect(margin.marginCoveragePercent).toBeNull();
+    });
+
+    it('defaults an untouched catalog product to 100% margin, and counts it as covered', async () => {
+      // Requested directly by the user (2026-09-03): a real catalog
+      // Product/Service the artisan hasn't touched the margin field on yet
+      // defaults to 100% margin (the whole line is assumed profit) rather
+      // than 0/uncategorized — findMarginConfigByIds returns a row for
+      // every id it was asked about whether or not marginMode is actually
+      // set, and that row alone (not marginMode) is what "covered" means
+      // now. Superseded the previous behavior (marginMode null == fully
+      // uncategorized, 0% coverage), which read as 39% "covered" with a 0%
+      // average margin rate when caught live — incoherent under the old
+      // rule, and the direct motivation for this default.
+      const { service, invoiceRepository, companyService, findProductMarginConfigByIds } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      findProductMarginConfigByIds.mockResolvedValue(
+        new Map([
+          [
+            'prod-1',
+            { marginMode: null, marginAmountCents: null, marginPercentageBasisPoints: null },
+          ],
+        ]),
+      );
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({ lines: [{ ...invoiceFixture().lines[0], productId: 'prod-1' }] }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      expect(margin.totalMarginExclVatCents).toBe(45000);
+      expect(margin.uncategorizedRevenueExclVatCents).toBe(0);
+      expect(margin.marginCoveragePercent).toBe(100);
+    });
+
+    it('still treats a genuinely freehand line (no catalog link at all) as uncategorized', async () => {
+      // The 100% default only applies to a real catalog Product/Service —
+      // a freehand line has no object to assume anything about.
+      const { service, invoiceRepository, companyService } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({ lines: [{ ...invoiceFixture().lines[0], productId: null }] }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      expect(margin.totalMarginExclVatCents).toBe(0);
+      expect(margin.uncategorizedRevenueExclVatCents).toBe(45000);
+      expect(margin.marginCoveragePercent).toBe(0);
+    });
+
+    it('reports marginCoveragePercent for a mix of configured and unconfigured lines', async () => {
+      const { service, invoiceRepository, companyService, findProductMarginConfigByIds } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      findProductMarginConfigByIds.mockResolvedValue(
+        new Map([
+          [
+            'prod-1',
+            {
+              marginMode: 'PERCENTAGE',
+              marginAmountCents: null,
+              marginPercentageBasisPoints: 5000,
+            },
+          ],
+        ]),
+      );
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({
+          id: 'inv-1',
+          lines: [{ ...invoiceFixture().lines[0], id: 'line-1', productId: 'prod-1' }],
+        }),
+        invoiceFixture({
+          id: 'inv-2',
+          lines: [{ ...invoiceFixture().lines[0], id: 'line-2', productId: null }],
+        }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      // 45000 configured out of 90000 total revenue = 50% coverage.
+      expect(margin.marginCoveragePercent).toBe(50);
+      expect(margin.uncategorizedRevenueExclVatCents).toBe(45000);
+    });
+
+    it('labels marginByClient with the customer name, not the raw customerId — regression', async () => {
+      // Caught live against real demo data (a customer with a real
+      // Customer row, so customerId is set): the by-client donut rendered
+      // a bare UUID as the slice label instead of "Sophie Bernard".
+      const { service, invoiceRepository, companyService } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({ customerId: 'cust-123', customerName: 'Sophie Bernard' }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      expect(margin.marginByClient[0].label).toBe('Sophie Bernard');
+    });
+
+    it('reports netProfitAfterCharges as not applicable for a COMPANY (non-micro-entrepreneur)', async () => {
+      const { service, invoiceRepository, companyService } = setup();
+      companyService.getProfile.mockResolvedValue(companyFixture());
+      invoiceRepository.findPaidInRange.mockResolvedValue([]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      expect(margin.netProfitAfterCharges.applicable).toBe(false);
+    });
+
+    it('computes netProfitAfterCharges for a micro-entrepreneur from margin minus estimated charges', async () => {
+      const { service, invoiceRepository, companyService, findProductMarginConfigByIds } = setup();
+      companyService.getProfile.mockResolvedValue(
+        companyFixture({ legalStatus: 'MICRO_ENTREPRENEUR', cotisationVenteBasisPoints: 1000 }),
+      );
+      findProductMarginConfigByIds.mockResolvedValue(
+        new Map([
+          [
+            'prod-1',
+            {
+              marginMode: 'PERCENTAGE',
+              marginAmountCents: null,
+              marginPercentageBasisPoints: 5000,
+            },
+          ],
+        ]),
+      );
+      invoiceRepository.findPaidInRange.mockResolvedValue([
+        invoiceFixture({
+          lines: [{ ...invoiceFixture().lines[0], productId: 'prod-1' }],
+          company: companyFixture({ legalStatus: 'MICRO_ENTREPRENEUR' }),
+        }),
+      ]);
+
+      const margin = await service.getMarginAnalytics('company-1');
+
+      // Margin: 50% of 45000 = 22500. Charges: 10% cotisation on the same
+      // VENTE_MARCHANDISES revenue (45000) = 4500. Net = 22500 - 4500 = 18000.
+      expect(margin.netProfitAfterCharges.applicable).toBe(true);
+      expect(margin.netProfitAfterCharges.totalMarginExclVatCents).toBe(22500);
+      expect(margin.netProfitAfterCharges.estimatedChargesCents).toBe(4500);
+      expect(margin.netProfitAfterCharges.netCents).toBe(18000);
     });
   });
 

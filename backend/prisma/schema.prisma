@@ -66,6 +66,19 @@ enum ServicePricingMode {
   PERCENTAGE
 }
 
+// Phase 1.6: how a catalog Product/Service's margin (what the artisan
+// actually keeps, distinct from its price) is declared. NET_AMOUNT is a
+// flat euro amount, HT ("3€ sur les 6€ facturés"); PERCENTAGE is a share of
+// the item's own HT price ("50% sur les 6€"), same basis-point convention
+// as ServicePricingMode.PERCENTAGE above. Exactly one of
+// marginAmountCents/marginPercentageBasisPoints is meaningful per mode
+// (enforced by MarginConsistency at the DTO boundary, not the DB) — see
+// docs/1.6/1.6-1-margin-data-model.md.
+enum MarginMode {
+  NET_AMOUNT
+  PERCENTAGE
+}
+
 // Phase 9.5: which input surface authored an invoice's line data. GUIDED
 // (default) is the pre-existing catalog/form-driven flow — lines/serviceLines
 // below. MANUAL is the free-form PDF-like canvas: its body lives in the
@@ -326,6 +339,18 @@ model Company {
   superPdpRefreshTokenEncrypted String?
   superPdpTokenExpiresAt        DateTime?
   superPdpConnectedAt           DateTime?
+
+  // Phase 1.2-8 (2026 e-invoicing reform): stamped once SUPER PDP-side
+  // provisioning (VAT regime pushed, directory entry published — see
+  // SuperPdpProvisioningCronService) has completed for this connection.
+  // Null the whole time between "artisan granted consent" and "SUPER PDP's
+  // KYB review verified the session" (`GET /v1.beta/oauth2_sessions/me`'s
+  // `company_verification_status`) — every other SUPER PDP endpoint 403s
+  // until then, so this can't happen synchronously in the OAuth callback,
+  // only from the provisioning cron polling session status afterward.
+  // Cleared on disconnect (clearSuperPdpTokens) so a reconnect re-provisions
+  // rather than trusting a stale prior registration.
+  superPdpDirectoryRegisteredAt DateTime?
 
   // Phase 1.3-1 (2026 e-invoicing reform, workflow automation): how hands-off
   // this artisan wants the e-invoicing pipeline to be — three independent
@@ -650,6 +675,15 @@ model User {
   email        String  @unique
   passwordHash String?
   googleId     String? @unique
+  appleId      String? @unique
+
+  // AES-256-GCM encrypted (see common/secret-crypto.util.ts, same primitive
+  // as Phase 12's SMTP password / Phase 1.2-4's SUPER PDP tokens) — an
+  // Apple refresh token obtained by exchanging the native flow's
+  // authorizationCode server-side. Only ever captured to support revoking
+  // it on account deletion (Apple's Sign in with Apple guidelines expect
+  // this); login itself never needs it.
+  appleRefreshTokenEncrypted String?
 
   role UserRole @default(ARTISAN)
 
@@ -1141,6 +1175,15 @@ model Product {
   // line built from this product reports as "non catégorisé".
   activityCategory ActivityCategory?
 
+  // Phase 1.6: what the artisan actually keeps per unit sold, distinct from
+  // priceCents above — see MarginMode. Optional; left unset, this product's
+  // sales report as "marge non renseignée" in Margin Analytics rather than
+  // contributing 0 (never silently assumed zero-profit). See
+  // docs/1.6/1.6-1-margin-data-model.md.
+  marginMode                  MarginMode?
+  marginAmountCents           Int?
+  marginPercentageBasisPoints Int?
+
   // Phase 13: every catalog row belongs to exactly one tenant.
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1186,6 +1229,18 @@ model Service {
   // Phase 17: same URSSAF turnover categorization as Product.activityCategory
   // above, for this service's own sales.
   activityCategory ActivityCategory?
+
+  // Phase 1.6: same margin declaration as Product.marginMode above, applied
+  // to this service's own resolved invoice amount (percentage of the
+  // service's own HT price/PERCENTAGE-pricing invoice amount; net amount is
+  // per invoice line, not per unit — a service line has no quantity). A
+  // markup-only service (e.g. the "Marge 30%" REDISTRIBUTED example from
+  // Phase 5) legitimately sets this to PERCENTAGE 100%: it has no cost
+  // basis of its own, so its entire billed amount is margin. See
+  // docs/1.6/1.6-1-margin-data-model.md.
+  marginMode                  MarginMode?
+  marginAmountCents           Int?
+  marginPercentageBasisPoints Int?
 
   // Phase 11: same short artisan-defined reference as Product.code — makes
   // searching/scanning a large service catalog faster than by name alone.

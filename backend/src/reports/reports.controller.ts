@@ -6,7 +6,12 @@ import { PdfService } from '../invoice/pdf/pdf.service';
 import { CATEGORY_LABELS } from './activity-category.util';
 import { buildQuarterlyReportCsv } from './csv.util';
 import { ReportPeriodQueryDto } from './dto/report-period-query.dto';
-import { ActivityAnalytics, EInvoicingSnapshot, QuarterlyReport } from './entities/report.entity';
+import {
+  ActivityAnalytics,
+  EInvoicingSnapshot,
+  MarginAnalytics,
+  QuarterlyReport,
+} from './entities/report.entity';
 import { ReportsService } from './reports.service';
 
 // Phase 17: the quarterly declaration (getQuarterly/getQuarterlyPdf/
@@ -23,6 +28,9 @@ import { ReportsService } from './reports.service';
 // as the quarterly declaration — see that method's own comment and
 // docs/1.3/1.3-6-activity-analytics-metrics.md. Don't assume every route on
 // this controller is either "quarterly = free" or "analytics = gated."
+// Phase 1.6 adds a fourth: getMarginAnalytics is gated the same way
+// getAnalytics is — margin is a business-insight stat, not a legal
+// necessity — see docs/1.6/README.md's scope decisions.
 @Controller('reports')
 export class ReportsController {
   constructor(
@@ -112,5 +120,10 @@ export class ReportsController {
   @Get('e-invoicing-snapshot')
   getEInvoicingSnapshot(@CurrentUser() user: AuthenticatedUser): Promise<EInvoicingSnapshot> {
     return this.reportsService.getEInvoicingSnapshot(user.companyId);
+  }
+
+  @Get('margin')
+  getMargin(@CurrentUser() user: AuthenticatedUser): Promise<MarginAnalytics> {
+    return this.reportsService.getMarginAnalytics(user.companyId);
   }
 }

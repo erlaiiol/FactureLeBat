@@ -14,11 +14,13 @@ import {
   ActivityAnalytics,
   CATEGORY_LABELS,
   EInvoicingSnapshot,
+  MarginAnalytics,
   QuarterlyReport,
 } from '../../core/models/report.model';
 import { CompanyService } from '../../core/services/company.service';
 import { ReportsService } from '../../core/services/reports.service';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
+import { MarginDonutChartComponent } from '../../shared/components/margin-donut-chart.component';
 import { RevenueBarChartComponent } from '../../shared/components/revenue-bar-chart.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
@@ -33,7 +35,13 @@ import {
   startOfDayFromInput,
 } from './report-period.util';
 
-type StatsReportsTab = 'apercu' | 'rapport';
+type StatsReportsTab = 'apercu' | 'rapport' | 'marge';
+
+// Phase 1.6: which product/service/client breakdown the "Marge" tab's one
+// donut chart currently shows — a segmented toggle above a single chart
+// reads better on mobile width than three charts stacked (decided by
+// looking at it live, see docs/1.6/1.6-3-margin-stats-frontend.md).
+type MarginBreakdown = 'product' | 'service' | 'client';
 
 // Merges the former standalone "Statistiques" and "Rapports" nav tabs into
 // one page (two views over the same ReportsService/ReportsModule — see both
@@ -50,6 +58,7 @@ type StatsReportsTab = 'apercu' | 'rapport';
     CentsToEurosPipe,
     DatePipe,
     RevenueBarChartComponent,
+    MarginDonutChartComponent,
     TourAnchorDirective,
     BigButtonComponent,
     RouterLink,
@@ -76,7 +85,7 @@ export class StatsReportsPage {
   protected setTab(tab: StatsReportsTab): void {
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { vue: tab === 'rapport' ? 'rapport' : null },
+      queryParams: { vue: tab === 'apercu' ? null : tab },
       queryParamsHandling: 'merge',
     });
   }
@@ -102,6 +111,55 @@ export class StatsReportsPage {
   protected readonly eInvoicingSnapshotLoading = signal(true);
   protected readonly eInvoicingSnapshotShowSkeleton = delayedSkeleton(
     this.eInvoicingSnapshotLoading,
+  );
+
+  // --- Marge (Phase 1.6) ---
+
+  protected readonly marginAnalytics = signal<MarginAnalytics | null>(null);
+  protected readonly marginAnalyticsLoading = signal(true);
+  protected readonly marginAnalyticsShowSkeleton = delayedSkeleton(this.marginAnalyticsLoading);
+  protected readonly marginAnalyticsError = signal(false);
+  // Same paid `analytics` plan gate as Vue d'ensemble — see
+  // ReportsService.getMarginAnalytics' own comment.
+  protected readonly marginAnalyticsLocked = signal(false);
+
+  protected readonly marginBreakdown = signal<MarginBreakdown>('product');
+
+  protected setMarginBreakdown(breakdown: MarginBreakdown): void {
+    this.marginBreakdown.set(breakdown);
+  }
+
+  protected readonly marginBreakdownEntries = computed(() => {
+    const data = this.marginAnalytics();
+    if (!data) {
+      return [];
+    }
+    switch (this.marginBreakdown()) {
+      case 'product':
+        return data.marginByProduct;
+      case 'service':
+        return data.marginByService;
+      case 'client':
+        return data.marginByClient;
+    }
+  });
+
+  // RevenueBarChartComponent takes RevenueMonthPoint[] (totalExclVatCents) —
+  // reused here as two separate single-series charts (revenue, then
+  // margin) rather than inventing a dual-axis chart, which the dataviz
+  // skill's own "one axis" rule rules out anyway.
+  protected readonly revenueMonthPoints = computed(() =>
+    (this.marginAnalytics()?.marginByMonth ?? []).map((point) => ({
+      month: point.month,
+      totalExclVatCents: point.revenueExclVatCents,
+    })),
+  );
+
+  protected readonly marginMonthPoints = computed(() =>
+    (this.marginAnalytics()?.marginByMonth ?? []).map((point) => ({
+      month: point.month,
+      totalExclVatCents: point.marginExclVatCents,
+    })),
   );
 
   // --- Rapport & déclaration (former ReportsPage) ---
@@ -145,7 +203,8 @@ export class StatsReportsPage {
 
   constructor() {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
-      this.tab.set(params.get('vue') === 'rapport' ? 'rapport' : 'apercu');
+      const vue = params.get('vue');
+      this.tab.set(vue === 'rapport' || vue === 'marge' ? vue : 'apercu');
     });
 
     this.reportsService
@@ -168,6 +227,30 @@ export class StatsReportsPage {
             this.analyticsLocked.set(true);
           } else {
             this.analyticsError.set(true);
+          }
+        },
+      });
+
+    this.reportsService
+      .getMarginAnalytics()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (margin) => {
+          this.marginAnalyticsLoading.set(false);
+          this.marginAnalytics.set(margin);
+        },
+        error: (error: unknown) => {
+          this.marginAnalyticsLoading.set(false);
+          const body =
+            error instanceof HttpErrorResponse ? (error.error as { error?: string } | null) : null;
+          if (
+            error instanceof HttpErrorResponse &&
+            error.status === 402 &&
+            body?.error === 'PlanFeatureLocked'
+          ) {
+            this.marginAnalyticsLocked.set(true);
+          } else {
+            this.marginAnalyticsError.set(true);
           }
         },
       });

@@ -137,6 +137,80 @@
         text="Facultatif — utilisé pour répartir votre chiffre d'affaires dans le rapport trimestriel."
       />
     </label>
+
+    <div class="flex flex-col gap-2 rounded-lg border border-line bg-bg p-3">
+      <span class="text-sm font-semibold text-ink">Marge (facultatif)</span>
+      <p class="text-xs text-ink-soft">
+        Ce que vous gardez réellement sur cette prestation — jamais affiché au client, uniquement
+        utilisé pour vos statistiques de marge.
+      </p>
+      <div class="flex overflow-hidden rounded-lg border border-line">
+        <button
+          type="button"
+          (click)="setMarginMode(null)"
+          [class.bg-primary]="!isMarginNetAmountMode() && !isMarginPercentageMode()"
+          [class.text-primary-fg]="!isMarginNetAmountMode() && !isMarginPercentageMode()"
+          class="flex-1 px-3 py-2 text-sm font-semibold"
+        >
+          Non renseignée
+        </button>
+        <button
+          type="button"
+          (click)="setMarginMode('NET_AMOUNT')"
+          [class.bg-primary]="isMarginNetAmountMode()"
+          [class.text-primary-fg]="isMarginNetAmountMode()"
+          class="flex-1 px-3 py-2 text-sm font-semibold"
+        >
+          Montant net
+        </button>
+        <button
+          type="button"
+          (click)="setMarginMode('PERCENTAGE')"
+          [class.bg-primary]="isMarginPercentageMode()"
+          [class.text-primary-fg]="isMarginPercentageMode()"
+          class="flex-1 px-3 py-2 text-sm font-semibold"
+        >
+          Pourcentage
+        </button>
+      </div>
+
+      @if (isMarginNetAmountMode()) {
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink">Marge nette (€)</span>
+          <input
+            formControlName="marginAmountEuros"
+            type="number"
+            step="0.01"
+            min="0.01"
+            class="rounded-lg border border-line px-4 py-3 text-lg"
+          />
+          <app-field-hint
+            text="Ex : 3€ sur les 6€ facturés — ce que vous gardez par ligne vendue, hors frais et charges."
+          />
+        </label>
+      } @else if (isMarginPercentageMode()) {
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-ink">
+            Marge : {{ form.controls.marginPercentage.value }}%
+          </span>
+          <input
+            formControlName="marginPercentage"
+            type="range"
+            min="1"
+            max="100"
+            step="1"
+            class="accent-primary"
+          />
+          <app-field-hint
+            text="Ex : 50% du prix HT — recalculé automatiquement si vous changez le prix. Une prestation de pure marge (ex : « Marge 30% » répartie) peut légitimement aller jusqu'à 100%."
+          />
+        </div>
+      } @else {
+        <app-field-hint
+          text="Tant que vous ne renseignez pas de marge ici, vos statistiques de marge considèrent par défaut que 100% du prix de cette prestation est votre marge."
+        />
+      }
+    </div>
   </app-advanced-settings>
 
   @if (errorMessage(); as message) {

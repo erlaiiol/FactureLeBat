@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DeclarationFrequency, LegalStatus } from '../../../generated/prisma/enums';
 import { CompanyRepository } from '../../company/company.repository';
 import { decryptSecret, encryptSecret } from '../../common/secret-crypto.util';
-import { SuperPdpClientService } from './super-pdp-client.service';
+import { resolveSuperPdpVatRegime } from './super-pdp-vat-regime.util';
+import {
+  SuperPdpClientService,
+  SuperPdpCompanyVerificationStatus,
+} from './super-pdp-client.service';
 import { SuperPdpUnavailableError } from './super-pdp-unavailable.error';
 
 // A token refreshed with less than this much time left is treated as
@@ -19,6 +24,7 @@ const REFRESH_BUFFER_MS = 60_000;
 // touches Company rows.
 @Injectable()
 export class CompanySuperPdpService {
+  private readonly logger = new Logger(CompanySuperPdpService.name);
   private readonly encryptionKey?: string;
   // Dedupes concurrent refreshes for the same company within this process —
   // without it, two requests racing an about-to-expire token (e.g.
@@ -123,5 +129,89 @@ export class CompanySuperPdpService {
     if (!this.isConfigured()) {
       throw new SuperPdpUnavailableError('SUPER PDP is not configured on this deployment');
     }
+  }
+
+  // Phase 1.2-8 (2026 e-invoicing reform): CompanySuperPdpController's
+  // GET /status reads this so the settings page can distinguish "connected,
+  // SUPER PDP is still running its KYB check" from a genuinely broken
+  // connection — null only when there's no connection to check at all.
+  async getVerificationStatus(
+    companyId: string,
+  ): Promise<SuperPdpCompanyVerificationStatus | null> {
+    if (!this.isConfigured() || !(await this.isConnected(companyId))) {
+      return null;
+    }
+    const accessToken = await this.getValidAccessToken(companyId);
+    const session = await this.superPdpClient.getSessionStatus(accessToken);
+    return session.companyVerificationStatus;
+  }
+
+  // Phase 1.2-8 (2026 e-invoicing reform): the actual provisioning step a
+  // fresh OAuth consent can't perform synchronously — SUPER PDP 403s every
+  // route until its own KYB review verifies the session (see
+  // super-pdp-client.service.ts's getSessionStatus comment), which can take
+  // anywhere from minutes to days. Called by
+  // SuperPdpProvisioningCronService for every company whose
+  // superPdpDirectoryRegisteredAt is still null; safe to call repeatedly —
+  // it only ever writes that column once the two real side effects (VAT
+  // regime pushed, directory entry confirmed present) have both succeeded.
+  async provisionCompany(company: {
+    id: string;
+    siret: string;
+    legalStatus: LegalStatus;
+    declarationFrequency: DeclarationFrequency;
+    vatOnDebitsOption: boolean;
+  }): Promise<'provisioned' | 'pending_verification'> {
+    const accessToken = await this.getValidAccessToken(company.id);
+
+    const session = await this.superPdpClient.getSessionStatus(accessToken);
+    if (session.companyVerificationStatus !== 'verified') {
+      return 'pending_verification';
+    }
+
+    await this.superPdpClient.updateVatRegime({
+      accessToken,
+      vatRegime: resolveSuperPdpVatRegime(company.legalStatus, company.declarationFrequency),
+      hasVatOnDebits: company.vatOnDebitsOption,
+    });
+
+    await this.ensureDirectoryEntry(accessToken, company.siret, company.id);
+
+    await this.companyRepository.markSuperPdpDirectoryRegistered(company.id);
+    return 'provisioned';
+  }
+
+  // SIREN is the first 9 digits of the 14-digit SIRET — the identifier
+  // format the real spec documents for the `ppf` directory (plain SIREN,
+  // SIREN_SIRET, or SIREN_SUFFIXE; plain SIREN is the whole-legal-entity
+  // form, the right one here). The `peppol` directory (sandbox only) uses
+  // the spec's own documented example format, scheme `0225` + the same
+  // 9-digit SIREN.
+  private async ensureDirectoryEntry(
+    accessToken: string,
+    siret: string,
+    companyId: string,
+  ): Promise<void> {
+    const siren = siret.slice(0, 9);
+    if (siren.length < 9) {
+      this.logger.warn(
+        `Company ${companyId} has no usable SIRET, skipping SUPER PDP directory registration`,
+      );
+      return;
+    }
+
+    const { env } = await this.superPdpClient.getCurrentCompany(accessToken);
+    const directory = env === 'production' ? 'ppf' : 'peppol';
+    const identifier = directory === 'ppf' ? siren : `0225:${siren}`;
+
+    const existingEntries = await this.superPdpClient.listDirectoryEntries(accessToken);
+    const alreadyPublished = existingEntries.some(
+      (entry) => entry.directory === directory && entry.identifier === identifier,
+    );
+    if (alreadyPublished) {
+      return;
+    }
+
+    await this.superPdpClient.createDirectoryEntry({ accessToken, directory, identifier });
   }
 }

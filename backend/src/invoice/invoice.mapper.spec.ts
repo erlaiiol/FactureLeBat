@@ -16,6 +16,7 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     superPdpRefreshTokenEncrypted: null,
     superPdpTokenExpiresAt: null,
     superPdpConnectedAt: null,
+    superPdpDirectoryRegisteredAt: null,
     addressLine1: '1 rue des Artisans',
     addressLine2: null,
     postalCode: '69001',

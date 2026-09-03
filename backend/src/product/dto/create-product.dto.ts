@@ -13,7 +13,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ActivityCategory, Unit } from '../../../generated/prisma/enums';
+import { ActivityCategory, MarginMode, Unit } from '../../../generated/prisma/enums';
+import { ProductMarginConsistency } from './product-margin-consistency.validator';
 
 // Generous but finite upper bound: rejects an obviously-wrong input (a stray
 // extra zero) before it reaches invoice-line prefill, not a real business
@@ -21,6 +22,8 @@ import { ActivityCategory, Unit } from '../../../generated/prisma/enums';
 const MAX_PRICE_CENTS = 100_000_000; // 1,000,000.00 €
 // Matches CreateInvoiceLineDto's MAX_QUANTITY — same sanity-cap reasoning.
 const MAX_PACKAGING_QUANTITY = 1_000_000;
+// Basis points, same convention as Company.vatRateBasisPoints — 10000 = 100%.
+const MAX_PERCENTAGE_BASIS_POINTS = 10_000;
 
 export class CreateProductDto {
   @IsString()
@@ -78,6 +81,26 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ActivityCategory)
   activityCategory?: ActivityCategory;
+
+  // Phase 1.6: what the artisan actually keeps per unit sold — unset by
+  // default (no margin declared). @ProductMarginConsistency validates both
+  // enum membership and cross-field consistency in one pass — see that
+  // validator's own comment for why it's deliberately not paired with
+  // @IsOptional()/@IsEnum() here, and docs/1.6/1.6-1-margin-data-model.md.
+  @ProductMarginConsistency()
+  marginMode?: MarginMode;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PRICE_CENTS)
+  marginAmountCents?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PERCENTAGE_BASIS_POINTS)
+  marginPercentageBasisPoints?: number;
 
   // Phase 1.1-2: zero, one, or several CatalogFolder ids this product should
   // belong to — committed only when the form is actually saved (see

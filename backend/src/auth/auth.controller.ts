@@ -20,6 +20,7 @@ import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.
 import { REFRESH_TOKEN_COOKIE } from './auth.constants';
 import { AuthService, GoogleProfile } from './auth.service';
 import { clearAuthCookies, setAuthCookies } from './cookie.util';
+import { AppleTokenLoginDto } from './dto/apple-token-login.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { DemoLoginDto } from './dto/demo-login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -29,6 +30,7 @@ import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { PublicUser } from './entities/public-user.entity';
+import { AppleOAuthEnabledGuard } from './guards/apple-oauth-enabled.guard';
 import { DemoModeEnabledGuard } from './guards/demo-mode-enabled.guard';
 import { GoogleOAuthEnabledGuard } from './guards/google-oauth-enabled.guard';
 
@@ -172,6 +174,26 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.googleTokenLogin(dto.idToken);
+    setAuthCookies(res, tokens, this.isProduction);
+    return user;
+  }
+
+  // Native-only counterpart to Google's token-login route above — no
+  // browser-redirect equivalent exists for Apple here (see
+  // AuthService.appleTokenLogin and docs/roadmap.md Phase 1.5).
+  @Public()
+  @UseGuards(AppleOAuthEnabledGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('apple/token-login')
+  @HttpCode(HttpStatus.OK)
+  async appleTokenLogin(
+    @Body() dto: AppleTokenLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<PublicUser> {
+    const { user, tokens } = await this.authService.appleTokenLogin(
+      dto.identityToken,
+      dto.authorizationCode,
+    );
     setAuthCookies(res, tokens, this.isProduction);
     return user;
   }

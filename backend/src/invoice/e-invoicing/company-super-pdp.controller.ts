@@ -34,12 +34,21 @@ export class CompanySuperPdpController {
   }
 
   @Get('status')
-  async status(
-    @CurrentUser() user: AuthenticatedUser,
-  ): Promise<{ configured: boolean; connected: boolean }> {
+  async status(@CurrentUser() user: AuthenticatedUser): Promise<{
+    configured: boolean;
+    connected: boolean;
+    verificationStatus: 'verified' | 'needs_review' | 'failed' | null;
+  }> {
     const configured = this.companySuperPdp.isConfigured();
     const connected = configured ? await this.companySuperPdp.isConnected(user.companyId) : false;
-    return { configured, connected };
+    // Best-effort: a transient SUPER PDP hiccup here shouldn't make the
+    // whole status check fail — the settings page just falls back to not
+    // showing a verification-specific message, same "degrade gracefully"
+    // posture as the rest of this integration.
+    const verificationStatus = connected
+      ? await this.companySuperPdp.getVerificationStatus(user.companyId).catch(() => null)
+      : null;
+    return { configured, connected, verificationStatus };
   }
 
   // Redirects the artisan's browser straight to SUPER PDP's own consent

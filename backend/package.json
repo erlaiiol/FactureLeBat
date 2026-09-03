@@ -41,6 +41,7 @@
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",
     "@stafyniaksacha/facturx": "^0.6.0",
+    "apple-signin-auth": "^2.1.0",
     "bcrypt": "^6.0.0",
     "cheerio": "^1.2.0",
     "class-transformer": "^0.5.1",

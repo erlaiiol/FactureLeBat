@@ -2,6 +2,15 @@ import { PdfService } from '../pdf/pdf.service';
 import { InvoicePdfData } from '../pdf/invoice-pdf-data.interface';
 import { FacturXService } from './facturx.service';
 
+// Every test here runs the real pdfmake + Factur-X hybrid PDF/A-3
+// generation pipeline (font embedding, XML embedding, no mocks) —
+// deliberately, since a mocked pipeline couldn't catch a real malformed
+// hybrid PDF. That real work occasionally exceeds jest's 5s default under
+// CPU contention (parallel workers, a loaded dev machine) even though any
+// single run in isolation is comfortably faster — bumped instead of
+// mocking away the thing these tests exist to catch.
+jest.setTimeout(20_000);
+
 function sampleFactureData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {
   return {
     number: 'F-000001',
