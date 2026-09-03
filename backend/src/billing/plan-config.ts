@@ -101,6 +101,13 @@ export const TRIAL_OFFER_TIER = PlanTier.PREMIUM;
 export const TRIAL_OFFER_PRICE_EUROS = 2;
 export const TRIAL_OFFER_WINDOW_HOURS = 48;
 
+// 1.2/facturx-monthly-quota revision: how many distinct invoices a free-tier
+// company (no active plan) can generate/download, transmit via PA, or
+// explicitly email as Factur-X per calendar month — see
+// PlanGateService.assertCanUseFacturX and Invoice.facturXFirstUsedAt's own
+// schema comment for what counts as "one". Unlimited on every paid tier.
+export const FACTURX_FREE_MONTHLY_LIMIT = 5;
+
 export type CatalogKind = 'customer' | 'catalogItem';
 export type GatedFeature = 'analytics' | 'aiSourcing' | 'dossiers';
 

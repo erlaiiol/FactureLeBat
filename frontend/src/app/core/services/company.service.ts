@@ -79,9 +79,22 @@ export class CompanyService {
   // completed the OAuth2 consent — gates the "Connecter SUPER PDP"/
   // "Envoyer via PA" UI the same way Stripe's own stripeConfigured flag
   // gates the subscribe page.
-  getSuperPdpStatus(): Observable<{ configured: boolean; connected: boolean }> {
+  getSuperPdpStatus(): Observable<{
+    configured: boolean;
+    connected: boolean;
+    // Phase 1.2-8 (2026 e-invoicing reform): SUPER PDP's own async KYB
+    // review outcome — null while not connected, or if that check itself
+    // failed (see CompanySuperPdpController.status's own comment); a fresh
+    // consent normally sits at `needs_review` until SuperPdpProvisioning
+    // CronService's backend sweep sees it turn `verified`.
+    verificationStatus: 'verified' | 'needs_review' | 'failed' | null;
+  }> {
     return this.http
-      .get<{ configured: boolean; connected: boolean }>(`${this.baseUrl}/super-pdp/status`)
+      .get<{
+        configured: boolean;
+        connected: boolean;
+        verificationStatus: 'verified' | 'needs_review' | 'failed' | null;
+      }>(`${this.baseUrl}/super-pdp/status`)
       .pipe(tap((status) => this.superPdpConnected.set(status.connected)));
   }
 

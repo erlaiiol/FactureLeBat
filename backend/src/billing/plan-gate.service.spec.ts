@@ -1,6 +1,7 @@
 import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { BillingFields, BillingRepository } from './billing.repository';
 import { CatalogLimitExceededException } from './catalog-limit-exceeded.exception';
+import { FacturXQuotaExceededException } from './facturx-quota-exceeded.exception';
 import { PlanFeatureLockedException } from './plan-feature-locked.exception';
 import { PlanGateService, isTrialOfferActive } from './plan-gate.service';
 import { PremiumRequiredException } from './premium-required.exception';
@@ -9,6 +10,8 @@ function buildService(options: {
   invoiceCount?: number;
   customerCount?: number;
   catalogItemCount?: number;
+  facturXUsedAt?: Date | null;
+  facturXUsedThisMonth?: number;
   fields: Partial<BillingFields>;
 }) {
   const fields: BillingFields = {
@@ -29,18 +32,27 @@ function buildService(options: {
   const countCustomers = jest.fn().mockResolvedValue(options.customerCount ?? 0);
   const countCatalogItems = jest.fn().mockResolvedValue(options.catalogItemCount ?? 0);
   const startTrialOfferWindow = jest.fn().mockResolvedValue(undefined);
+  const getInvoiceFacturXUsedAt = jest.fn().mockResolvedValue(options.facturXUsedAt ?? null);
+  const markInvoiceFacturXUsed = jest.fn().mockResolvedValue(undefined);
+  const countFacturXUsedThisMonth = jest.fn().mockResolvedValue(options.facturXUsedThisMonth ?? 0);
   const repository = {
     getBillingFields,
     countInvoices,
     countCustomers,
     countCatalogItems,
     startTrialOfferWindow,
+    getInvoiceFacturXUsedAt,
+    markInvoiceFacturXUsed,
+    countFacturXUsedThisMonth,
   } as unknown as BillingRepository;
   return {
     service: new PlanGateService(repository),
     getBillingFields,
     countInvoices,
     startTrialOfferWindow,
+    getInvoiceFacturXUsedAt,
+    markInvoiceFacturXUsed,
+    countFacturXUsedThisMonth,
   };
 }
 
@@ -271,5 +283,51 @@ describe('isTrialOfferActive', () => {
         subscriptionPlanTier: PlanTier.PREMIUM,
       }),
     ).toBe(false);
+  });
+});
+
+describe('PlanGateService.assertCanUseFacturX / canUseFacturX', () => {
+  it('allows a free-tier company under the monthly limit', async () => {
+    const { service } = buildService({ facturXUsedThisMonth: 4, fields: {} });
+    await expect(service.canUseFacturX('company-1', 'inv-1')).resolves.toBe(true);
+  });
+
+  it('blocks a free-tier company that already hit the monthly limit', async () => {
+    const { service } = buildService({ facturXUsedThisMonth: 5, fields: {} });
+    await expect(service.canUseFacturX('company-1', 'inv-1')).resolves.toBe(false);
+    await expect(service.assertCanUseFacturX('company-1', 'inv-1')).rejects.toBeInstanceOf(
+      FacturXQuotaExceededException,
+    );
+  });
+
+  it('is unlimited for a company with an active plan, regardless of usage this month', async () => {
+    const { service } = buildService({
+      facturXUsedThisMonth: 99,
+      fields: {
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
+        subscriptionPlanTier: PlanTier.ESSENTIEL,
+      },
+    });
+    await expect(service.canUseFacturX('company-1', 'inv-1')).resolves.toBe(true);
+  });
+
+  it('is always free to re-access an invoice whose slot was already spent, even over the limit', async () => {
+    const { service, getBillingFields, countInvoices } = buildService({
+      facturXUsedAt: new Date(),
+      facturXUsedThisMonth: 99,
+      fields: {},
+    });
+    await expect(service.canUseFacturX('company-1', 'inv-1')).resolves.toBe(true);
+    // Short-circuits before even checking the plan or the monthly count.
+    expect(getBillingFields).not.toHaveBeenCalled();
+    expect(countInvoices).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlanGateService.recordFacturXUsed', () => {
+  it('delegates to the repository’s idempotent conditional update', async () => {
+    const { service, markInvoiceFacturXUsed } = buildService({ fields: {} });
+    await service.recordFacturXUsed('company-1', 'inv-1');
+    expect(markInvoiceFacturXUsed).toHaveBeenCalledWith('company-1', 'inv-1');
   });
 });

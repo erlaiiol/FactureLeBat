@@ -1410,7 +1410,7 @@ The board's 5 columns + drag-and-drop (`invoice-board.page.html`, `interactjs`-b
 - **Board mobile UX**: of the three directions listed above, went with a hybrid — priority view (En retard + Non payées) shown by default below `lg`, other 3 columns one tap away via a "Tout voir" toggle, horizontal navigation between all 5 via CSS scroll-snap. Verified in a real headless-browser pass at a 375px viewport (register → board → toggle → scroll to the last column), not just reasoned about.
 - **Prod domain**: none existed yet at implementation time (`infra/.env`'s `DOMAIN` was still `:80`). Will be `https://facturele.net` — hardcoded into `capacitor.config.ts` with a `// TODO` comment (grep-able) rather than left as a placeholder guess, per the user's explicit instruction, in case the domain choice changes before launch.
 - **App identifier**: `fr.facturele.app` (iOS bundle id / Android `applicationId`), consistent with the FactureLeBat → FactureLe rename direction already underway elsewhere in the project.
-- **Google login hidden on iOS, not Sign in with Apple.** Apple guideline 4.8 requires an app offering third-party sign-in to also offer Sign in with Apple, unless it offers no third-party sign-in at all. Building real Sign in with Apple (a new backend OAuth strategy, Apple JWT verification, a paid Apple Developer Program Services ID/key configured before it's even testable) was weighed against simply not offering Google sign-in inside the iOS app shell — email/password stays available there, Google stays available on web and Android unchanged. Chosen for scope: this closes the same compliance requirement at a fraction of the cost — see the known limitation below for the one real gap it leaves (a Google-only account can't sign into the iOS app at all).
+- ~~**Google login hidden on iOS, not Sign in with Apple.**~~ **Superseded by Phase 1.5** — real Sign in with Apple shipped, so Google is no longer hidden on iOS either; see Phase 1.5 below. Original reasoning kept for context: Apple guideline 4.8 requires an app offering third-party sign-in to also offer Sign in with Apple, unless it offers no third-party sign-in at all. Building real Sign in with Apple (a new backend OAuth strategy, Apple JWT verification, a paid Apple Developer Program Services ID/key configured before it's even testable) was weighed against simply not offering Google sign-in inside the iOS app shell — email/password stays available there, Google stays available on web and Android unchanged. Chosen for scope at the time: this closed the same compliance requirement at a fraction of the cost — see the known limitation below for the one real gap it left (a Google-only account couldn't sign into the iOS app at all).
 
 ## Implementation notes
 
@@ -1423,7 +1423,7 @@ The board's 5 columns + drag-and-drop (`invoice-board.page.html`, `interactjs`-b
   - Generated iOS app icon confirmed alpha-channel-free (`sips -g hasAlpha` → `no`) — Apple's App Store Connect validation rejects icons with transparency, `@capacitor/assets` already flattens correctly, verified rather than assumed.
   - `ITSAppUsesNonExemptEncryption: false` added to `Info.plist` — this app only ever uses standard HTTPS/TLS, so this answers Apple's export-compliance question once instead of on every build upload.
   - A `<meta http-equiv="Content-Security-Policy">` tag was added to `frontend/src/index.html`, mirroring `infra/Caddyfile`'s header CSP: a Capacitor WebView serves its HTML from the local bundle, which never passes through Caddy, so the header-based CSP (Phase 21) silently didn't apply to the native app at all until this. Header-only directives (`frame-ancestors`, `Permissions-Policy`) can't be expressed via a meta tag and stay server-side-only, which is fine since a native app shell isn't embeddable in a browser frame anyway.
-  - Apple guideline 4.8 (Sign in with Apple) handled by hiding Google login on iOS rather than building a second OAuth provider — see Decided-with-the-user above. **Known limitation**: an artisan whose only account is a Google-created one (`googleId` set, no `passwordHash`) cannot log into the iOS app at all, since neither Google login nor a usable password exists there — not discovered/fixed in this pass, flagged here for a follow-up (likely a "set a password" flow reachable from the web).
+  - ~~Apple guideline 4.8 (Sign in with Apple) handled by hiding Google login on iOS rather than building a second OAuth provider~~ — **superseded by Phase 1.5**: real Sign in with Apple now ships alongside Google on iOS, closing both the compliance requirement and the Google-only-account gap this bullet used to flag.
   - Account deletion (RGPD, Phase 13) already lives in `company-settings.page.ts`, reachable from a normal authenticated route, not gated behind billing — already satisfies Apple guideline 5.1.1(v)'s in-app account deletion requirement without any change.
   - `/mentions-legales`, `/cgu`, `/confidentialite` are already public routes (Phase 20), reachable from a fresh unauthenticated install on either store — confirmed, not assumed.
   - Android: `POST_NOTIFICATIONS` permission (API 33+) and default notification-channel/icon metadata added to `AndroidManifest.xml`; `compileSdk`/`targetSdk` 36 (Capacitor 8's own template default) already satisfies Play's rolling target-API-level policy with no change needed.
@@ -2566,6 +2566,28 @@ Verified: full backend suite (456 tests, including one new test covering the ref
 
 ---
 
+# Phase 1.2-8 — SUPER PDP Post-Connect Provisioning: Session Verification, Directory Publishing, VAT Regime Sync
+
+Prompted by the user asking, on 2026-09-03, what was actually left after pointing at SUPER PDP's own `POST /v1.beta/companies` API page — the route itself turned out to be a dead end (see Decided below), but re-reading the real, current OpenAPI spec (`https://api.superpdp.tech/openapi/superpdp.json`, v1.30.0.beta — same source 1.2-4/1.2-5 used, re-fetched fresh rather than trusted from memory) end to end surfaced three genuine gaps 1.2-4/1.2-5/1.2-6 had missed, none of which the earlier phases' own notes flagged.
+
+**Decided: `POST /v1.beta/companies` ("Enroll a company") is not for FactureLe.** Its own description is explicit: *"This route is for accountants only. Access is denied by default. If you have a multi-tenant model, you must use the OAuth2.1 Authorization code flow."* FactureLe already uses that flow (1.2-4) — one artisan, one consent grant. No code needed here; this phase exists for the three gaps found while checking that, not for the route itself.
+
+**Gap 1 — the OAuth `sessions` tag was never read.** Per the spec's own tag description: after a successful OAuth2 exchange, SUPER PDP runs an asynchronous KYB (know-your-business) review (`GET /v1.beta/oauth2_sessions/me` → `company_verification_status`: `verified`/`needs_review`/`failed`) — *"An active token does not grant immediate access to all endpoints... Requests to protected routes will return a 403 Forbidden until the session status is verified."* 1.2-4's `isConnected()` only ever checked whether tokens existed, so a freshly-connected artisan mid-review would have hit a bare "SUPER PDP unavailable" error on their first transmit/sync attempt instead of an accurate "verification in progress."
+
+**Gap 2 — no directory entry was ever published.** `POST /v1.beta/directory_entries` is what makes a company *discoverable* on the e-invoicing network at all (`ppf` directory in production, `peppol` in sandbox — the spec documents both as directory-specific, not interchangeable). Without it, 1.2-5's reception sync had nothing to ever find: not because no supplier sent an e-invoice, but because the artisan's SIREN was never listed anywhere a sender's platform could route to.
+
+**Gap 3 — VAT regime was never pushed.** `PATCH /v1.beta/companies` (`vat_regime`/`has_vat_on_debits`) drives SUPER PDP's e-reporting declaration schedule to the PPF. FactureLe already has the equivalent data (`Company.legalStatus`/`declarationFrequency`/`vatOnDebitsOption`) but never synced it.
+
+**Why none of this could run synchronously in the OAuth callback** (unlike 1.2-4's original design instinct): Gap 1 directly implies it — every other SUPER PDP route 403s until `verified`, and a fresh consent is essentially never already verified at the moment `CompanySuperPdpController.callback` fires. Provisioning has to be a retryable, asynchronous step.
+
+**Built**: `SuperPdpProvisioningCronService` (`invoice/e-invoicing/`), same `@nestjs/schedule` sweep pattern as `AutoTransmitCronService`/`ReceivedInvoiceSyncCronService`, every 30 minutes — more eager than 1.3-4's daily reception sync since a company is fully invisible on the network until this catches their session turning `verified`. It calls the new `CompanySuperPdpService.provisionCompany()`: checks `getSessionStatus`, and if `verified`, pushes the VAT regime (`super-pdp-vat-regime.util.ts` maps FactureLe's model onto SUPER PDP's 4-value enum — `simplified` is never produced, since FactureLe doesn't model régime simplifié as its own concept, only réel normal mensuel/trimestriel and franchise en base), then `ensureDirectoryEntry` (derives the SIREN as the first 9 digits of `Company.siret`, resolves `ppf`-vs-`peppol` from `GET /v1.beta/companies/me`'s `env`, lists existing entries first so a repeated sweep never double-publishes). `Company.superPdpDirectoryRegisteredAt` (new nullable column, migration `20260903144831_super_pdp_directory_registered_at`) gates the sweep and is cleared on disconnect so a reconnect always re-provisions rather than trusting a stale prior registration. `CompanySuperPdpController`'s `GET /status` now also returns `verificationStatus`, surfaced in company-settings ("SUPER PDP connecté — vérification en cours" / a `failed` state pointing at SUPER PDP's own support contact) instead of the binary connected/not-connected pill from 1.2-4.
+
+**Non-goals**: no live SUPER PDP account exists yet (same "built against the real spec, never exercised against a live call" posture as 1.2-4/1.2-5/1.2-6 — see 1.2-4's own note), so this is unit-tested for its logic only, no network mocking added beyond what the file already had. No change to the `sessions`/`directory_entries` error surfaced by a *manual* "Envoyer via PA"/"Actualiser" click before provisioning completes — it still falls back to the existing generic SUPER PDP error, same as before this phase; only the connect-time status view was worth the UI investment given how rarely an artisan would click those in the provisioning window.
+
+Verified: backend suite green (new tests: `super-pdp-vat-regime.util.spec.ts`, `super-pdp-provisioning-cron.service.spec.ts`, and new `CompanySuperPdpService.getVerificationStatus`/`provisionCompany` cases in its existing spec), `tsc --noEmit` clean on both sides for every file this phase touched, migration applied against the real dev DB.
+
+---
+
 # Phase 1.3 — E-Invoicing Workflow Automation & Customization
 
 Full detail moved to [docs/1.3/](./1.3/README.md) on 2026-08-25 — seven
@@ -2641,113 +2663,229 @@ decisions.
 ## Objective
 
 Offer a second third-party login option, "Continuer avec Apple", next to
-the existing Google button on `/connexion`. **Status (2026-08-30): UI
-placeholder shipped, real OAuth not started.** The button renders now,
-disabled, labeled "bientôt disponible" — it exists to stop the login
-screen looking Google-only/unfinished and to make the eventual real
-integration a smaller, purely-backend follow-up, but it makes no network
-call yet. This phase doc is written up front, same precedent as Phase
-1.2/1.3/1.4, so the plan below doesn't have to be re-derived once the
-blocker is cleared.
+the existing Google button on `/connexion`. **Status (2026-09-02): code
+complete, native-only scope, not yet runnable end-to-end.** Backend and
+frontend both implemented and unit-tested; still blocked on the user
+completing Apple Developer Program enrollment (Sole Proprietor/Individual
+— Organization was attempted first but Apple/D&B's lookup of the existing
+D-U-N-S number, already on hand from the Play Store listing, classifies
+this business as a sole proprietorship with no legal personality distinct
+from the individual, which the Organization enrollment type requires and
+Sole Proprietor doesn't) and creating the App ID capability/Sign in with
+Apple key this needs — see Current state below. Enrollment type has no
+effect on anything built in this phase: Team ID/App ID/Services ID/keys
+work identically either way.
+
+## Scope narrowed from the original plan: native-iOS-only, no Services ID
+
+The plan below as originally written (still kept further down for
+context) assumed a Services ID + a browser-redirect web flow, mirroring
+Google's `googleAuth`/`googleCallback` pair. Once actually building this,
+that turned out to be more than the App Store compliance goal (guideline
+4.8) needs: the iOS app's native `ASAuthorizationController` flow mints an
+identity token whose `aud` claim is already the app's own bundle ID
+(`fr.facturele.app`), so **no Services ID, no redirect URI, no web/Android
+Apple button** were built — only what `AppleOAuthEnabledGuard` gates
+behind `APPLE_CLIENT_ID`. This mirrors Google's own native/web split, just
+inverted: Google is native-only on the *Android* side (browser redirect
+still covers web), Apple is native-only on the *iOS* side (no redirect
+counterpart exists for it at all, and none is offered on web/Android).
+Concretely, `APPLE_CLIENT_ID` at deploy time is just the bundle ID, not a
+value created in Apple's portal.
+
+## What shipped
+
+- **Backend** (mirrors the Google native-token-login path exactly):
+  `User.appleId` (unique, nullable) + `User.appleRefreshTokenEncrypted`
+  (`backend/prisma/schema.prisma`, migration
+  `20260902075014_add_apple_sign_in`); `AppleOAuthEnabledGuard`
+  (`backend/src/auth/guards/apple-oauth-enabled.guard.ts`, gates on
+  `APPLE_CLIENT_ID` alone); `AppleTokenLoginDto`
+  (`backend/src/auth/dto/apple-token-login.dto.ts`);
+  `AuthService.handleAppleLogin`/`appleTokenLogin` (verifies the identity
+  token via `apple-signin-auth`'s JWKS check, creates-or-links a `User`
+  exactly like `handleGoogleLogin`); `POST /auth/apple/token-login`
+  (`auth.controller.ts`).
+- **Revocation on account deletion** (not something Google's flow needs,
+  since Google has no equivalent expectation): if the native login also
+  hands back an `authorizationCode` (present on every login, unlike
+  name/email), the backend best-effort exchanges it server-side for a
+  refresh token (`apple-signin-auth`'s `getAuthorizationToken`, no
+  redirect URI needed for a native-flow code) and stores it AES-256-GCM
+  encrypted at rest (`common/secret-crypto.util.ts` — same primitive as
+  the SMTP password and Phase 1.2-4's SUPER PDP tokens, gated on the same
+  `APP_ENCRYPTION_KEY`). `AuthService.deleteAccount` then best-effort
+  revokes it (`revokeAuthorizationToken`) before the RGPD deletion cascade
+  — Apple's Sign in with Apple guidelines expect this on account deletion,
+  distinct from and in addition to Phase 22's already-satisfied guideline
+  5.1.1(v) (in-app deletion existing at all). All of this needs
+  `APPLE_TEAM_ID`/`APPLE_KEY_ID`/`APPLE_PRIVATE_KEY` configured too — login
+  itself works with `APPLE_CLIENT_ID` alone, this is additive.
+- **Frontend**: `AppleNativeLoginService`
+  (`frontend/src/app/core/services/apple-native-login.service.ts`, mirrors
+  `GoogleNativeLoginService` — `SocialLogin.login({ provider: 'apple' })`,
+  same `USER_CANCELLED` cancellation handling, confirmed against the
+  plugin's own bundled Swift source rather than assumed);
+  `AuthService.appleTokenLogin` (frontend); `login.page.ts`'s
+  `appleLoginNative()`. `login.page.html`'s login section is no longer
+  hidden on iOS at all — Google now renders there too (via the existing
+  native branch, `platformService.isNativeApp()` already covered iOS) and
+  Apple renders only on iOS (`platformService.isIosApp()`), both equally
+  prominent per guideline 4.8. This is also what reverses Phase 22's
+  Google-hidden-on-iOS decision — see that phase's own updated note.
+- **Tests**: `backend/src/auth/auth.service.spec.ts` — 6 new cases
+  (`appleTokenLogin` success/bad-signature/missing-email/best-effort
+  capture-never-blocks-login, `deleteAccount` revoke success + revoke
+  failure doesn't block deletion), all 28 tests in the file passing. No
+  frontend service spec added — this repo has no existing precedent for
+  testing `core/services/*` (confirmed: zero `.spec.ts` files there before
+  this pass either), so none was invented just for this; not yet exercised
+  live in Xcode/a real device (no Mac available inside this environment) —
+  same class of caveat Phase 22 itself already carries for native-only
+  behavior.
 
 ## Current state / blocker
 
-Sign in with Apple requires a paid Apple Developer Program membership
-(99 $/year) to create a Services ID and a private key (`.p8`) used to sign
-the client secret — the user does not have that account yet. Nothing
-about the real integration below can be built or even tested without it,
-so this phase currently ships only the part that has zero dependency on
-any Apple credential: the disabled button and its logo.
+Everything above is written and unit-tested, but cannot run end-to-end
+yet: it needs `APPLE_CLIENT_ID` (the bundle ID, no portal action needed)
+plus the "Sign In with Apple" capability actually enabled on the
+`fr.facturele.app` App ID in Apple's developer portal, and — for the
+revocation feature only — a Sign in with Apple key (`.p8` +
+`APPLE_TEAM_ID`/`APPLE_KEY_ID`). The user is completing Apple Developer
+Program enrollment now as Sole Proprietor/Individual — Organization was
+rejected by Apple/D&B's lookup of the existing D-U-N-S number (already on
+hand from the Play Store listing) as a sole proprietorship, which doesn't
+qualify for Organization (no legal personality distinct from the
+individual), so no separate D-U-N-S wait is expected here either. Sole
+Proprietor enrollment still uses the D-U-N-S number and, per Apple's own
+docs, can carry a business/trading name ("FactureLe") as the seller
+rather than only the personal legal name — worth confirming during that
+flow. Once the capability/key exist: set
+`APPLE_CLIENT_ID`/`APPLE_TEAM_ID`/`APPLE_KEY_ID`/`APPLE_PRIVATE_KEY` (see
+`backend/.env.example`), add the "Sign In with Apple" capability to the
+Xcode target's Signing & Capabilities (a manual step, same class as Phase
+22's Firebase SPM dependency — `git grep APPLE_CLIENT_ID` finds every spot
+this touches), then exercise the real flow on a device/simulator.
+
+## Original plan (superseded by the native-only scope above, kept for context)
 
 ## Relationship to Phase 22's Google-hiding decision
 
-Phase 22 chose to hide Google sign-in inside the iOS native app rather
+Phase 22 originally hid Google sign-in inside the iOS native app rather
 than build Sign in with Apple, specifically to stay outside Apple
 guideline 4.8 (an app offering third-party sign-in must also offer Sign
-in with Apple, unless it offers none at all). That reasoning still holds
-exactly as-is until this phase's real OAuth ships: a disabled, non-functional
-Apple button would not satisfy 4.8 either — the guideline requires an
-actual working integration, not a button. So the new Apple placeholder
-is rendered inside the *same* `@if (!platformService.isIosApp())` block
-as Google in `login.page.html`, meaning it stays invisible inside the
-native iOS app too, same as Google — Phase 22's compliance posture is
-unchanged by this phase. Once the real integration ships (last checklist
-item below), Phase 22's Google-hiding decision itself should be
-revisited, since offering genuine Sign in with Apple removes the reason
-it existed.
+in with Apple, unless it offers none at all). That reasoning held exactly
+as-is through this phase's earlier, UI-only pass (2026-08-30): a disabled,
+non-functional Apple button doesn't satisfy 4.8 either — the guideline
+requires an actual working integration, not a button — so the placeholder
+stayed inside the same iOS-hidden block as Google at the time. Now that
+real Sign in with Apple has shipped (see "What shipped" above), that
+reasoning no longer applies: `login.page.html` no longer hides this
+section on iOS at all, Google renders there via its existing native
+branch, and Apple renders alongside it — see Phase 22's own bullet, now
+marked superseded.
 
 ## Features
 
-- [x] "Continuer avec Apple" button on `/connexion`, disabled, "(bientôt
-      disponible)" label + tooltip — same visual weight as the Google
-      button, both now carrying their real logo (`IconGoogleComponent`,
-      `IconAppleComponent`) instead of plain text. No network call, no new
-      dependency. `frontend/src/app/features/auth/login/login.page.html`.
+- [x] "Continuer avec Apple" button on `/connexion`, real logo
+      (`IconAppleComponent`), rendered only on iOS
+      (`platformService.isIosApp()`), same visual weight as Google's — see
+      "What shipped" above.
 - [ ] Apple Developer Program membership obtained — blocking, outside this
-      track's engineering scope, precondition for everything below.
-- [ ] Services ID + Sign in with Apple private key created in Apple's
-      developer portal, return URLs configured for both the web domain and
-      the native app's redirect scheme.
-- [ ] Backend `AppleStrategy` (mirrors `backend/src/auth/strategies/google.strategy.ts`):
-      verifies the Apple identity token (JWT, Apple's public JWKS), creates
-      or links an account — a new `User.appleId` (nullable, unique),
-      same precedent as the existing `googleId` column. Handles the
-      Apple-specific case where the user's real email is masked behind a
-      `@privaterelay.appleid.com` relay address.
-- [ ] `POST /auth/apple/token-login` route mirroring `/auth/google/token-login` —
-      Sign in with Apple on the web hands back an identity token directly
-      (no separate server-side redirect exchange needed), so the existing
-      "frontend gets a token, backend verifies it" shape Google's native
-      path already uses is the right fit for Apple on web too.
-- [ ] Native (iOS/Android): `@capgo/capacitor-social-login` — already a
-      project dependency for Google (`GoogleNativeLoginService`) — ships
-      its own Apple provider out of the box
-      (`node_modules/@capgo/capacitor-social-login/dist/esm/apple-provider.d.ts`,
-      `AppleSocialLogin`). No new native dependency needed, just
-      `SocialLogin.initialize({ apple: { clientId } })` alongside the
-      existing `google` config.
-- [ ] Button re-enabled and wired to the real flow (web token exchange
-      + native path above).
-- [ ] Revisit Phase 22's Google-hidden-on-iOS decision once this ships —
-      see "Relationship to Phase 22" above.
-- [ ] Tests (once the backend/native pieces above exist):
-  - Backend: `apple.strategy.spec.ts` (token verification, new-account vs.
-    linking an existing account, the masked-relay-email case),
-    `auth.e2e-spec.ts` (new token-login route, mirroring the existing
-    Google e2e coverage).
-  - Frontend: `auth.service.spec.ts` (new `appleTokenLogin` method). No
-    dedicated spec for `login.page.ts` itself — this repo's established
-    convention is that presentational form/list pages have no unit tests
-    (`login.page.ts`/`register.page.ts` have none today either; see Phase
-    1.1-9's Notes for the same precedent spelled out for a different
-    component).
-- [ ] `infra/audit-config.sh`: once the real env var names are settled by
-      whichever library implements `AppleStrategy`, add a
-      `audit_feature_group "Connexion Apple" "..." "$BACKEND_ENV"` (and its
-      `$INFRA_ENV` twin) next to the existing "Connexion Google" one. Not
-      added yet — no code exists yet that reads any such variable, so
-      there's nothing to audit; a plain `info` note pointing here is added
-      in the meantime (see the script's "Connexion Google" line).
+      track's engineering scope, precondition for exercising any of the
+      below on a real device. In progress (Sole Proprietor/Individual —
+      see "Current state / blocker" above for why Organization wasn't
+      eligible; D-U-N-S already on hand).
+- [ ] "Sign In with Apple" capability enabled on the `fr.facturele.app` App
+      ID in Apple's developer portal (no Services ID — native-only scope,
+      see above), plus a Sign in with Apple key (`.p8`) for the
+      revocation-on-delete feature. Blocked on the item above.
+- [x] Backend identity-token verification (`AuthService.appleTokenLogin`,
+      mirrors `handleGoogleLogin`'s create-or-link logic): verifies via
+      `apple-signin-auth`'s JWKS check, creates or links an account — a new
+      `User.appleId` (nullable, unique), same precedent as the existing
+      `googleId` column.
+- [x] `POST /auth/apple/token-login` route mirroring `/auth/google/token-login`.
+- [x] Native (iOS): `@capgo/capacitor-social-login`'s bundled Apple
+      provider wired up (`AppleNativeLoginService`,
+      `SocialLogin.initialize({ apple: {} })`, `clientId`/`redirectUrl`
+      omitted — both are only meaningful for a web/Android flow this app
+      doesn't have).
+- [x] Button wired to the real flow (native path above; no web token
+      exchange exists — narrower than originally planned, see "Scope
+      narrowed" above).
+- [x] Revisited Phase 22's Google-hidden-on-iOS decision — reversed, see
+      that phase's own updated note and "What shipped" above.
+- [x] Tests: `backend/src/auth/auth.service.spec.ts` (6 new cases, see
+      "What shipped"). No `auth.e2e-spec.ts`/`apple.strategy.spec.ts` —
+      there's no `AppleStrategy` in this scope (no passport strategy at
+      all for Apple, same as Google's own native token-login path, which
+      also has no e2e coverage today), and no dedicated spec for
+      `login.page.ts` — this repo's established convention is that
+      presentational form/list pages have no unit tests
+      (`login.page.ts`/`register.page.ts` had none before this pass
+      either; see Phase 1.1-9's Notes for the same precedent spelled out
+      for a different component).
+- [x] `infra/audit-config.sh`: `audit_feature_group "Connexion Apple"
+      "APPLE_CLIENT_ID" "$BACKEND_ENV"` (and its `$INFRA_ENV` twin) added
+      next to "Connexion Google", replacing the placeholder `info` line
+      that used to point here.
 
-## Non-goals — for now
+## Non-goals
 
-- No real Apple authentication in this pass — everything except the
-  disabled button above is a plan, not code, until the Developer Program
-  blocker clears.
-- No Apple button on `/inscription` in this pass — that page's existing
-  Google button doesn't even have Phase 22's native-app variant that
-  `/connexion` has (it's web-only), so extending it to Apple is deferred
-  to the same later pass that builds the real integration, not bundled in
-  here.
-- No removal of Phase 22's Google-hidden-on-iOS behavior — stays exactly
-  as shipped until Apple sign-in is genuinely functional, see above.
+- **No Services ID, no web/Android Apple button, no browser-redirect
+  route.** See "Scope narrowed" above — this was the original plan, not
+  what shipped. Revisit only if Apple sign-in is ever wanted outside the
+  iOS app shell.
+- No Apple button on `/inscription` — that page's existing Google button
+  doesn't even have Phase 22's native-app variant that `/connexion` has
+  (it's web-only), so extending it to Apple stays deferred to a future
+  pass, not bundled in here.
+- **No handling of Apple's masked-relay email
+  (`@privaterelay.appleid.com`) beyond storing it as the account's email
+  as-is.** This app never sends transactional email to a freshly-created
+  Apple account today (registration confirmation is Google/Apple-exempt —
+  see `handleAppleLogin`'s auto-verify), so nothing currently depends on
+  relay-address deliverability; revisit if/when that changes (e.g. a
+  password-reset-style flow for an Apple-only account).
 
 ## Notes
 
 - Key finding from this pass's research: `@capgo/capacitor-social-login`
   (already installed, already used for Google) bundles a working Apple
-  provider — the future native ticket is config only, not a new plugin
-  integration.
-- The 99 $/year Apple Developer Program cost is the concrete, non-technical
-  blocker that motivated splitting this into "UI now, OAuth later" rather
-  than one pass.
+  provider — the native integration was config only, not a new plugin
+  dependency.
+- The 99 $/year Apple Developer Program cost is the concrete,
+  non-technical blocker that motivated shipping this in two passes ("UI
+  now" in the original 2026-08-30 pass, "real OAuth, narrowed to
+  native-only" in this one) rather than one — see "Current state /
+  blocker" above for exactly what's still needed to exercise it.
+- `apple-signin-auth` (new backend dependency) was chosen over hand-rolled
+  JWT/JWKS verification for the same reason `google-auth-library` was
+  already in use for Google: one purpose-built library over bespoke crypto
+  code, and it also happens to provide the `getClientSecret`/
+  `getAuthorizationToken`/`revokeAuthorizationToken` helpers the
+  revocation-on-delete feature needs, so no second library was pulled in
+  for that.
+
+---
+
+# Phase 1.6 — Marge & Bénéfice: Profitability Statistics
+
+Full detail in [docs/1.6/](./1.6/README.md). **Status: shipped and
+live-verified (2026-09-02).** Requested directly by the user: every stat this app has
+today is revenue-shaped (how much came in) — none of it says how much the
+artisan actually keeps. Adds an optional margin field to `Product`/
+`Service` (net € per unit, or % of the item's own HT price with a slider —
+artisan's choice per item, in "paramètres avancés"), then a new gated
+"Marge" tab in "Mon activité" with circular breakdowns by product, by
+service, and by client, a monthly margin-vs-revenue trend, and an optional
+net-profit-after-charges figure crossed with Phase 17's existing
+micro-entrepreneur estimated-charges computation. Three phases: 1.6-1
+(schema + catalog form UI) → 1.6-2 (backend computation, gated behind the
+same `analytics` plan feature as Phase 17/30's own top-clients/top-products
+view) → 1.6-3 (the tab and its charts). Numbered 1.6, not 1.5, to avoid
+colliding with the Phase 1.5 Sign in with Apple track above. See
+[docs/1.6/README.md](./1.6/README.md) for the full scope decisions,
+including how the existing "Marge 30%" `REDISTRIBUTED`-service convention
+(Phase 5) coexists with this rather than being replaced by it.

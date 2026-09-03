@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { MarginMode } from '../../core/models/margin.model';
 import { ACTIVITY_CATEGORY_OPTIONS, ActivityCategory } from '../../core/models/report.model';
 import { ServicePricingMode, ServiceVisibility } from '../../core/models/service.model';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
@@ -66,6 +67,13 @@ export class ServiceFormPage {
     code: [''],
     // Phase 17: artisan-set, left unset by default.
     activityCategory: this.fb.control<ActivityCategory | null>(null),
+    // Phase 1.6: what the artisan actually keeps — left unset by default,
+    // same "autofill, not a lock" posture as every other optional catalog
+    // field. marginAmountEuros/marginPercentage are two separate controls,
+    // same reasoning as priceEuros/percentage above.
+    marginMode: this.fb.control<MarginMode | null>(null),
+    marginAmountEuros: [0, [Validators.min(0.01)]],
+    marginPercentage: [0, [Validators.min(0.01), Validators.max(100)]],
   });
 
   // Phase 1.1-2: zero, one, or several CatalogFolder ids — local,
@@ -78,6 +86,18 @@ export class ServiceFormPage {
 
   protected setPricingMode(mode: ServicePricingMode): void {
     this.form.controls.pricingMode.setValue(mode);
+  }
+
+  protected isMarginNetAmountMode(): boolean {
+    return this.form.controls.marginMode.value === 'NET_AMOUNT';
+  }
+
+  protected isMarginPercentageMode(): boolean {
+    return this.form.controls.marginMode.value === 'PERCENTAGE';
+  }
+
+  protected setMarginMode(mode: MarginMode | null): void {
+    this.form.controls.marginMode.setValue(mode);
   }
 
   constructor() {
@@ -98,6 +118,13 @@ export class ServiceFormPage {
               defaultVisibility: service.defaultVisibility,
               code: service.code ?? '',
               activityCategory: service.activityCategory,
+              marginMode: service.marginMode,
+              marginAmountEuros:
+                service.marginAmountCents != null ? service.marginAmountCents / 100 : 0,
+              marginPercentage:
+                service.marginPercentageBasisPoints != null
+                  ? service.marginPercentageBasisPoints / 100
+                  : 0,
             });
             this.selectedFolderIds.set(service.folders.map((folder) => folder.id));
           },
@@ -117,7 +144,16 @@ export class ServiceFormPage {
       this.form.controls.pricingMode.value === 'FIXED'
         ? this.form.controls.priceEuros
         : this.form.controls.percentage;
-    if (this.form.controls.name.invalid || pricingControl.invalid) {
+    const marginControl = this.isMarginNetAmountMode()
+      ? this.form.controls.marginAmountEuros
+      : this.isMarginPercentageMode()
+        ? this.form.controls.marginPercentage
+        : null;
+    if (
+      this.form.controls.name.invalid ||
+      pricingControl.invalid ||
+      (marginControl?.invalid ?? false)
+    ) {
       this.form.markAllAsTouched();
       return;
     }
@@ -133,6 +169,11 @@ export class ServiceFormPage {
       defaultVisibility: value.defaultVisibility,
       code: value.code || undefined,
       activityCategory: value.activityCategory ?? undefined,
+      marginMode: value.marginMode ?? undefined,
+      marginAmountCents:
+        value.marginMode === 'NET_AMOUNT' ? Math.round(value.marginAmountEuros * 100) : undefined,
+      marginPercentageBasisPoints:
+        value.marginMode === 'PERCENTAGE' ? Math.round(value.marginPercentage * 100) : undefined,
       folderIds: this.selectedFolderIds(),
     };
 

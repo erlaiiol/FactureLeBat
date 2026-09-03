@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentType, InvoiceStatus } from '../../../generated/prisma/enums';
+import { PlanGateService } from '../../billing/plan-gate.service';
 import { CompanyService } from '../../company/company.service';
 import { MailSettingsService } from '../../mail-settings/mail-settings.service';
 import { MailerService, SendMailAttachment } from '../../mailer/mailer.service';
@@ -39,6 +40,7 @@ export class InvoiceMailService {
     private readonly mailSettingsService: MailSettingsService,
     private readonly mailerService: MailerService,
     private readonly facturXService: FacturXService,
+    private readonly planGate: PlanGateService,
     config: ConfigService,
   ) {
     this.frontendUrl = config.get<string>('FRONTEND_URL', 'http://localhost:4200');
@@ -129,6 +131,8 @@ export class InvoiceMailService {
           : raw.company.autoAttachFacturX;
 
     const attachment = await this.buildAttachment(
+      companyId,
+      invoiceId,
       attachFacturX,
       invoice.documentType,
       pdfBuffer,
@@ -166,7 +170,18 @@ export class InvoiceMailService {
   // a warning rather than blocking the send: getting *something* to the
   // client on time matters more here than always sending the structured
   // version.
+  //
+  // 1.2/facturx-monthly-quota revision: an exhausted free-tier quota gets
+  // the exact same silent-fallback treatment as a generation error, for the
+  // exact same reason — unlike downloadFacturX/transmit (an explicit
+  // artisan action, fair to refuse with a 402), this can fire from
+  // Company.autoAttachFacturX on every single FACTURE email with no artisan
+  // in the loop to see a paywall; blocking the send itself would be a much
+  // worse outcome than just not attaching the structured version this time.
+  // Uses canUseFacturX (non-throwing), not assertCanUseFacturX.
   private async buildAttachment(
+    companyId: string,
+    invoiceId: string,
     attachFacturX: boolean,
     documentType: DocumentType,
     pdfBuffer: Buffer,
@@ -174,9 +189,14 @@ export class InvoiceMailService {
     filePrefix: string,
     invoiceNumber: string,
   ): Promise<SendMailAttachment> {
-    if (attachFacturX && documentType === 'FACTURE') {
+    if (
+      attachFacturX &&
+      documentType === 'FACTURE' &&
+      (await this.planGate.canUseFacturX(companyId, invoiceId))
+    ) {
       try {
         const hybridBuffer = await this.facturXService.generateHybridPdf(pdfBuffer, pdfData);
+        await this.planGate.recordFacturXUsed(companyId, invoiceId);
         return { filename: `${filePrefix}-${invoiceNumber}-factur-x.pdf`, content: hybridBuffer };
       } catch (error) {
         this.logger.warn(

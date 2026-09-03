@@ -4,6 +4,7 @@ import { PlanGateService } from '../billing/plan-gate.service';
 import { CatalogFolderService } from '../catalog-folder/catalog-folder.service';
 import { FuzzyMatch } from '../common/fuzzy-match';
 import { NoRowsAffectedError } from '../common/errors/no-rows-affected.error';
+import { MarginConfig } from '../common/margin.util';
 import { ProductRepository } from './product.repository';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -42,6 +43,12 @@ export class ProductService {
   // ProductRepository.searchFuzzy.
   searchFuzzy(companyId: string, query: string): Promise<FuzzyMatch<ProductModel>[]> {
     return this.productRepository.searchFuzzy(companyId, query);
+  }
+
+  // Phase 1.6: batch margin lookup for ReportsService.getMarginAnalytics —
+  // see ProductRepository.findMarginConfigByIds.
+  findMarginConfigByIds(companyId: string, ids: string[]): Promise<Map<string, MarginConfig>> {
+    return this.productRepository.findMarginConfigByIds(companyId, ids);
   }
 
   // Phase 30: catalog-size cap (products + services combined) — see

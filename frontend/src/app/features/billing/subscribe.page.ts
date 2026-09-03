@@ -48,6 +48,13 @@ function channelStatusRows(s: BillingStatus): { label: string; note: string; loc
       note: s.hasPremiumAccess ? 'Illimité.' : 'Abonnement requis dès la première utilisation.',
       locked: !s.hasPremiumAccess,
     },
+    {
+      label: 'Facture électronique (Factur-X)',
+      note: s.hasPremiumAccess
+        ? 'Illimité — génération, consultation et envoi.'
+        : `${s.facturXUsedThisMonth}/${s.facturXFreeLimit} factures ce mois-ci (génération, consultation, envoi).`,
+      locked: !s.hasPremiumAccess && s.facturXUsedThisMonth >= (s.facturXFreeLimit ?? Infinity),
+    },
   ];
 }
 

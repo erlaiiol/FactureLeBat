@@ -8,6 +8,7 @@ import { BillingStatus, TrialOffer } from './entities/billing-status.entity';
 import { PlanCatalog } from './entities/plan-catalog.entity';
 import { NoBillingCustomerError } from './no-billing-customer.error';
 import {
+  FACTURX_FREE_MONTHLY_LIMIT,
   PLAN_DEFINITIONS,
   PLAN_TIER_ORDER,
   TRIAL_OFFER_PRICE_EUROS,
@@ -50,15 +51,18 @@ export class BillingService {
   }
 
   async getStatus(companyId: string): Promise<BillingStatus> {
-    const [fields, guidedInvoiceCount, customerCount, catalogItemCount] = await Promise.all([
-      this.repository.getBillingFields(companyId),
-      // 1.2/manual-mode-free-tier revision: only mode rapide's own free
-      // credit, not every invoice — MANUAL is unrestricted and never
-      // consumes it, see PlanGateService.assertCanCreateInvoice.
-      this.repository.countInvoices(companyId, InvoiceEntryMode.GUIDED),
-      this.repository.countCustomers(companyId),
-      this.repository.countCatalogItems(companyId),
-    ]);
+    const [fields, guidedInvoiceCount, customerCount, catalogItemCount, facturXUsedThisMonth] =
+      await Promise.all([
+        this.repository.getBillingFields(companyId),
+        // 1.2/manual-mode-free-tier revision: only mode rapide's own free
+        // credit, not every invoice — MANUAL is unrestricted and never
+        // consumes it, see PlanGateService.assertCanCreateInvoice.
+        this.repository.countInvoices(companyId, InvoiceEntryMode.GUIDED),
+        this.repository.countCustomers(companyId),
+        this.repository.countCatalogItems(companyId),
+        // 1.2/facturx-monthly-quota revision — see PlanGateService.canUseFacturX.
+        this.repository.countFacturXUsedThisMonth(companyId),
+      ]);
     const planTier = getEffectivePlanTier(fields);
     const capsTier = planTier ?? PlanTier.ESSENTIEL;
     const trialOffer: TrialOffer | null = isTrialOfferActive(fields)
@@ -83,6 +87,8 @@ export class BillingService {
       customerLimit: PLAN_DEFINITIONS[capsTier].customerLimit,
       catalogItemCount,
       catalogItemLimit: PLAN_DEFINITIONS[capsTier].catalogItemLimit,
+      facturXUsedThisMonth,
+      facturXFreeLimit: planTier === null ? FACTURX_FREE_MONTHLY_LIMIT : null,
       trialOffer,
     };
   }

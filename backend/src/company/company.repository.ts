@@ -219,7 +219,47 @@ export class CompanyRepository {
         superPdpRefreshTokenEncrypted: null,
         superPdpTokenExpiresAt: null,
         superPdpConnectedAt: null,
+        // A reconnect must re-provision from scratch (re-check the new
+        // session's verification status, re-confirm the directory entry
+        // still exists) rather than trusting a registration made under a
+        // now-severed connection — see schema.prisma's comment on this
+        // column.
+        superPdpDirectoryRegisteredAt: null,
       },
+    });
+  }
+
+  // Phase 1.2-8 (2026 e-invoicing reform): SuperPdpProvisioningCronService's
+  // own sweep source, same "connected but not yet ___" shape as
+  // findCompaniesForAutoSync above. Selects exactly the fields the
+  // provisioning step needs (siret to derive the SIREN identifier,
+  // legalStatus/declarationFrequency/vatOnDebitsOption for
+  // resolveSuperPdpVatRegime) so it isn't a second round-trip per company.
+  findCompaniesPendingSuperPdpProvisioning(): Promise<
+    {
+      id: string;
+      siret: string;
+      legalStatus: Company['legalStatus'];
+      declarationFrequency: Company['declarationFrequency'];
+      vatOnDebitsOption: boolean;
+    }[]
+  > {
+    return this.prisma.company.findMany({
+      where: { superPdpConnectedAt: { not: null }, superPdpDirectoryRegisteredAt: null },
+      select: {
+        id: true,
+        siret: true,
+        legalStatus: true,
+        declarationFrequency: true,
+        vatOnDebitsOption: true,
+      },
+    });
+  }
+
+  async markSuperPdpDirectoryRegistered(companyId: string): Promise<void> {
+    await this.prisma.company.update({
+      where: { id: companyId },
+      data: { superPdpDirectoryRegisteredAt: new Date() },
     });
   }
 }

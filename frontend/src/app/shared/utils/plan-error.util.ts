@@ -15,6 +15,15 @@ export function planFeatureLockedMessage(error: unknown): string | null {
   return planErrorMessage(error, 'PlanFeatureLocked');
 }
 
+// 1.2/facturx-monthly-quota revision: PlanGateService.assertCanUseFacturX's
+// own 402 (backend's FacturXQuotaExceededException) — same "own
+// discriminator, own local message" pattern as the two above, kept out of
+// the shared premium-gate interceptor for the same reason (its generic
+// free-trial-invoice paywall copy would be wrong here).
+export function facturXQuotaMessage(error: unknown): string | null {
+  return planErrorMessage(error, 'FacturXQuotaExceeded');
+}
+
 function planErrorMessage(error: unknown, discriminator: string): string | null {
   if (!(error instanceof HttpErrorResponse) || error.status !== 402) {
     return null;

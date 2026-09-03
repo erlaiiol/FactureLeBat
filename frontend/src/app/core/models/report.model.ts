@@ -107,6 +107,48 @@ export interface ActivityAnalytics {
 // snapshot, deliberately separate from ActivityAnalytics above — see
 // StatsReportsPage's own comment for why it renders outside the
 // analyticsLocked() gate.
+// Phase 1.6: one product/service/client's contribution to Margin Analytics
+// — the donut charts' data source. marginRatePercent is null (not 0) on a
+// zero-revenue bucket.
+export interface MarginByEntry {
+  label: string;
+  revenueExclVatCents: number;
+  marginExclVatCents: number;
+  marginRatePercent: number | null;
+  count: number;
+}
+
+export interface MarginMonthPoint {
+  month: string;
+  revenueExclVatCents: number;
+  marginExclVatCents: number;
+}
+
+// Only meaningful for a micro-entrepreneur — same "applicable" gate as
+// EstimatedCharges above. netCents is never floored at 0 — a negative net
+// is a real, honest figure.
+export interface NetProfitAfterCharges {
+  applicable: boolean;
+  totalMarginExclVatCents: number;
+  estimatedChargesCents: number;
+  netCents: number;
+}
+
+// Phase 1.6: "Marge" tab — see docs/1.6/1.6-3-margin-stats-frontend.md.
+// Same gate/window as ActivityAnalytics.
+export interface MarginAnalytics {
+  totalRevenueExclVatCents: number;
+  totalMarginExclVatCents: number;
+  marginRatePercent: number | null;
+  marginCoveragePercent: number | null;
+  uncategorizedRevenueExclVatCents: number;
+  marginByProduct: MarginByEntry[];
+  marginByService: MarginByEntry[];
+  marginByClient: MarginByEntry[];
+  marginByMonth: MarginMonthPoint[];
+  netProfitAfterCharges: NetProfitAfterCharges;
+}
+
 export interface EInvoicingSnapshot {
   configured: boolean;
   connected: boolean;

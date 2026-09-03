@@ -822,11 +822,23 @@
   } @else if (superPdpConnected()) {
     <div class="flex flex-col gap-3">
       <div class="flex items-center gap-3">
-        <span
-          class="rounded-full bg-success-subtle px-3 py-1 text-sm font-medium text-success-subtle-fg"
-        >
-          SUPER PDP connecté
-        </span>
+        @if (superPdpVerificationStatus() === 'failed') {
+          <span class="rounded-full bg-danger-subtle px-3 py-1 text-sm font-medium text-danger">
+            Vérification refusée
+          </span>
+        } @else if (superPdpVerificationStatus() !== 'verified') {
+          <span
+            class="rounded-full bg-secondary-subtle px-3 py-1 text-sm font-medium text-ink-soft"
+          >
+            SUPER PDP connecté — vérification en cours
+          </span>
+        } @else {
+          <span
+            class="rounded-full bg-success-subtle px-3 py-1 text-sm font-medium text-success-subtle-fg"
+          >
+            SUPER PDP connecté
+          </span>
+        }
         <button
           type="button"
           [disabled]="superPdpBusy()"
@@ -836,17 +848,30 @@
           {{ superPdpBusy() ? 'Déconnexion…' : 'Déconnecter' }}
         </button>
       </div>
-      <p class="text-sm text-ink-soft">
-        Envoyez vos factures via le bouton « Envoyer via PA » sur chacune de vos factures, et
-        retrouvez vos factures reçues
-        @if (receivedInvoiceCount(); as count) {
-          ({{ count }})
-        }
-        dans
-        <a routerLink="/factures-recues" class="font-medium text-primary hover:underline">
-          Factures reçues </a
-        >.
-      </p>
+      @if (superPdpVerificationStatus() === 'failed') {
+        <p class="text-sm text-danger">
+          SUPER PDP n'a pas pu valider votre entreprise pour ce compte. Contactez leur support
+          (contact&#64;superpdp.tech) ou reconnectez-vous avec un compte différent.
+        </p>
+      } @else if (superPdpVerificationStatus() !== 'verified') {
+        <p class="text-sm text-ink-soft">
+          SUPER PDP vérifie votre entreprise avant de débloquer l'envoi et la réception — cela peut
+          prendre de quelques minutes à quelques jours. Rien à faire de votre côté, revenez plus
+          tard.
+        </p>
+      } @else {
+        <p class="text-sm text-ink-soft">
+          Envoyez vos factures via le bouton « Envoyer via PA » sur chacune de vos factures, et
+          retrouvez vos factures reçues
+          @if (receivedInvoiceCount(); as count) {
+            ({{ count }})
+          }
+          dans
+          <a routerLink="/factures-recues" class="font-medium text-primary hover:underline">
+            Factures reçues </a
+          >.
+        </p>
+      }
     </div>
   } @else {
     <div class="flex flex-col gap-2">

@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { DeclarationFrequency, LegalStatus } from '../../../generated/prisma/enums';
 import { CompanyRepository } from '../../company/company.repository';
 import { encryptSecret } from '../../common/secret-crypto.util';
 import { CompanySuperPdpService } from './company-super-pdp.service';
@@ -17,6 +18,9 @@ function buildService(
       superPdpTokenExpiresAt: Date | null;
     };
     refreshResult?: { accessToken: string; refreshToken: string; expiresAt: Date };
+    sessionVerificationStatus?: 'verified' | 'needs_review' | 'failed';
+    currentCompanyEnv?: 'sandbox' | 'production';
+    existingDirectoryEntries?: { directory: 'peppol' | 'ppf'; identifier: string }[];
   } = {},
 ) {
   const findSuperPdpTokens = jest.fn().mockResolvedValue(
@@ -39,12 +43,14 @@ function buildService(
     .mockResolvedValue(undefined);
   const isSuperPdpConnected = jest.fn().mockResolvedValue(true);
   const clearSuperPdpTokens = jest.fn().mockResolvedValue(undefined);
+  const markSuperPdpDirectoryRegistered = jest.fn().mockResolvedValue(undefined);
   const companyRepository = {
     findSuperPdpTokens,
     saveSuperPdpTokens,
     refreshSuperPdpTokens,
     isSuperPdpConnected,
     clearSuperPdpTokens,
+    markSuperPdpDirectoryRegistered,
   } as unknown as CompanyRepository;
 
   const isConfigured = jest.fn().mockReturnValue(options.superPdpConfigured ?? true);
@@ -60,12 +66,26 @@ function buildService(
     refreshToken: 'new-refresh-token',
     expiresAt: new Date(Date.now() + 3600_000),
   });
+  const getSessionStatus = jest.fn().mockResolvedValue({
+    companyVerificationStatus: options.sessionVerificationStatus ?? 'verified',
+  });
+  const getCurrentCompany = jest
+    .fn()
+    .mockResolvedValue({ env: options.currentCompanyEnv ?? 'production' });
+  const listDirectoryEntries = jest.fn().mockResolvedValue(options.existingDirectoryEntries ?? []);
+  const createDirectoryEntry = jest.fn().mockResolvedValue(undefined);
+  const updateVatRegime = jest.fn().mockResolvedValue(undefined);
   const superPdpClient = {
     isConfigured,
     refreshAccessToken,
     exchangeAuthorizationCode,
     buildAuthorizationUrl: jest.fn(),
     verifyState: jest.fn(),
+    getSessionStatus,
+    getCurrentCompany,
+    listDirectoryEntries,
+    createDirectoryEntry,
+    updateVatRegime,
   } as unknown as SuperPdpClientService;
 
   const config = {
@@ -82,6 +102,13 @@ function buildService(
     refreshSuperPdpTokens,
     refreshAccessToken,
     exchangeAuthorizationCode,
+    isSuperPdpConnected,
+    markSuperPdpDirectoryRegistered,
+    getSessionStatus,
+    getCurrentCompany,
+    listDirectoryEntries,
+    createDirectoryEntry,
+    updateVatRegime,
   };
 }
 
@@ -192,6 +219,126 @@ describe('CompanySuperPdpService', () => {
       expect(companyId).toBe('company-1');
       expect(persisted.accessTokenEncrypted).not.toBe('new-access-token');
       expect(persisted.refreshTokenEncrypted).not.toBe('new-refresh-token');
+    });
+  });
+
+  const validTokens = {
+    superPdpAccessTokenEncrypted: encryptSecret('valid-access-token', ENCRYPTION_KEY),
+    superPdpRefreshTokenEncrypted: encryptSecret('valid-refresh-token', ENCRYPTION_KEY),
+    superPdpTokenExpiresAt: new Date(Date.now() + 3600_000),
+  };
+
+  describe('getVerificationStatus', () => {
+    it('is null when not connected', async () => {
+      const { service, isSuperPdpConnected } = buildService();
+      isSuperPdpConnected.mockResolvedValue(false);
+      expect(await service.getVerificationStatus('company-1')).toBeNull();
+    });
+
+    it('is null when SUPER PDP is not configured on this deployment', async () => {
+      const { service } = buildService({ superPdpConfigured: false });
+      expect(await service.getVerificationStatus('company-1')).toBeNull();
+    });
+
+    it('returns the session status from SUPER PDP when connected', async () => {
+      const { service } = buildService({
+        storedTokens: validTokens,
+        sessionVerificationStatus: 'needs_review',
+      });
+      expect(await service.getVerificationStatus('company-1')).toBe('needs_review');
+    });
+  });
+
+  describe('provisionCompany', () => {
+    const company = {
+      id: 'company-1',
+      siret: '85332291500012',
+      legalStatus: LegalStatus.COMPANY,
+      declarationFrequency: DeclarationFrequency.TRIMESTRIELLE,
+      vatOnDebitsOption: false,
+    };
+
+    it('stops at pending_verification without pushing VAT regime or a directory entry', async () => {
+      const { service, updateVatRegime, createDirectoryEntry, markSuperPdpDirectoryRegistered } =
+        buildService({ storedTokens: validTokens, sessionVerificationStatus: 'needs_review' });
+
+      expect(await service.provisionCompany(company)).toBe('pending_verification');
+      expect(updateVatRegime).not.toHaveBeenCalled();
+      expect(createDirectoryEntry).not.toHaveBeenCalled();
+      expect(markSuperPdpDirectoryRegistered).not.toHaveBeenCalled();
+    });
+
+    it('pushes the VAT regime, publishes a ppf directory entry with the SIREN, and marks provisioned once verified', async () => {
+      const { service, updateVatRegime, createDirectoryEntry, markSuperPdpDirectoryRegistered } =
+        buildService({
+          storedTokens: validTokens,
+          sessionVerificationStatus: 'verified',
+          currentCompanyEnv: 'production',
+        });
+
+      expect(await service.provisionCompany(company)).toBe('provisioned');
+      expect(updateVatRegime).toHaveBeenCalledWith({
+        accessToken: 'valid-access-token',
+        vatRegime: 'quarterly',
+        hasVatOnDebits: false,
+      });
+      expect(createDirectoryEntry).toHaveBeenCalledWith({
+        accessToken: 'valid-access-token',
+        directory: 'ppf',
+        identifier: '853322915',
+      });
+      expect(markSuperPdpDirectoryRegistered).toHaveBeenCalledWith('company-1');
+    });
+
+    it('targets the peppol directory with the spec-documented scheme in sandbox', async () => {
+      const { service, createDirectoryEntry } = buildService({
+        storedTokens: validTokens,
+        sessionVerificationStatus: 'verified',
+        currentCompanyEnv: 'sandbox',
+      });
+
+      await service.provisionCompany(company);
+      expect(createDirectoryEntry).toHaveBeenCalledWith({
+        accessToken: 'valid-access-token',
+        directory: 'peppol',
+        identifier: '0225:853322915',
+      });
+    });
+
+    it('never creates a duplicate directory entry when one already exists', async () => {
+      const { service, createDirectoryEntry, markSuperPdpDirectoryRegistered } = buildService({
+        storedTokens: validTokens,
+        sessionVerificationStatus: 'verified',
+        currentCompanyEnv: 'production',
+        existingDirectoryEntries: [{ directory: 'ppf', identifier: '853322915' }],
+      });
+
+      expect(await service.provisionCompany(company)).toBe('provisioned');
+      expect(createDirectoryEntry).not.toHaveBeenCalled();
+      expect(markSuperPdpDirectoryRegistered).toHaveBeenCalledWith('company-1');
+    });
+
+    it('resolves vat_exemption for a micro-entrepreneur regardless of declaration frequency', async () => {
+      const { service, updateVatRegime } = buildService({
+        storedTokens: validTokens,
+        sessionVerificationStatus: 'verified',
+      });
+
+      await service.provisionCompany({ ...company, legalStatus: LegalStatus.MICRO_ENTREPRENEUR });
+      expect(updateVatRegime).toHaveBeenCalledWith(
+        expect.objectContaining({ vatRegime: 'vat_exemption' }),
+      );
+    });
+
+    it('skips directory registration but still completes when the SIRET is unusably short', async () => {
+      const { service, createDirectoryEntry, markSuperPdpDirectoryRegistered } = buildService({
+        storedTokens: validTokens,
+        sessionVerificationStatus: 'verified',
+      });
+
+      expect(await service.provisionCompany({ ...company, siret: '1234' })).toBe('provisioned');
+      expect(createDirectoryEntry).not.toHaveBeenCalled();
+      expect(markSuperPdpDirectoryRegistered).toHaveBeenCalledWith('company-1');
     });
   });
 });

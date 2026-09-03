@@ -6,6 +6,7 @@ import { MailerModule } from '../mailer/mailer.module';
 import { ReferralModule } from '../referral/referral.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AppleOAuthEnabledGuard } from './guards/apple-oauth-enabled.guard';
 import { DemoModeEnabledGuard } from './guards/demo-mode-enabled.guard';
 import { GoogleOAuthEnabledGuard } from './guards/google-oauth-enabled.guard';
 import { AuthTokenRepository } from './repositories/auth-token.repository';
@@ -45,6 +46,7 @@ const googleProviders: Provider[] =
     AuthTokenRepository,
     JwtStrategy,
     GoogleOAuthEnabledGuard,
+    AppleOAuthEnabledGuard,
     DemoModeEnabledGuard,
     ...googleProviders,
   ],

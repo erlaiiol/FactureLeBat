@@ -117,6 +117,14 @@ export class CompanySettingsPage {
   protected readonly superPdpConnected = signal(false);
   protected readonly superPdpStatusLoading = signal(true);
   protected readonly superPdpBusy = signal(false);
+  // Phase 1.2-8 (2026 e-invoicing reform): null while not connected (or the
+  // check itself failed) — see CompanyService.getSuperPdpStatus's own
+  // comment. Read alongside superPdpConnected() to show "en cours de
+  // vérification" rather than treating a fresh, still-pending consent as
+  // fully usable.
+  protected readonly superPdpVerificationStatus = signal<
+    'verified' | 'needs_review' | 'failed' | null
+  >(null);
 
   // Phase 1.2-6 (2026 e-invoicing reform): deadline-awareness copy — computed
   // once from the real clock, not re-derived per render (a settings page
@@ -332,6 +340,7 @@ export class CompanySettingsPage {
           this.superPdpStatusLoading.set(false);
           this.superPdpConfigured.set(status.configured);
           this.superPdpConnected.set(status.connected);
+          this.superPdpVerificationStatus.set(status.verificationStatus);
           if (status.connected) {
             this.loadReceivedInvoiceCount();
           }
@@ -348,6 +357,12 @@ export class CompanySettingsPage {
     const superPdpParam = this.route.snapshot.queryParamMap.get('super_pdp');
     if (superPdpParam === 'connected') {
       this.superPdpConnected.set(true);
+      // Freshly granted consent is never `verified` yet — SUPER PDP's own
+      // KYB review only starts now (see SuperPdpProvisioningCronService's
+      // own comment). Set explicitly rather than left at this signal's
+      // initial null so the "en cours de vérification" note shows
+      // immediately, without waiting on a second status fetch.
+      this.superPdpVerificationStatus.set('needs_review');
       this.loadReceivedInvoiceCount();
       this.toastService.success('SUPER PDP connecté avec succès.');
       this.router.navigate([], { queryParams: {}, replaceUrl: true });
@@ -396,6 +411,7 @@ export class CompanySettingsPage {
         next: () => {
           this.superPdpBusy.set(false);
           this.superPdpConnected.set(false);
+          this.superPdpVerificationStatus.set(null);
           this.receivedInvoiceCount.set(null);
           this.toastService.success('SUPER PDP déconnecté.');
         },

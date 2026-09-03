@@ -59,6 +59,45 @@ export class BillingRepository {
     return this.prisma.invoice.count({ where: { companyId, ...(entryMode && { entryMode }) } });
   }
 
+  // 1.2/facturx-monthly-quota revision — the 3 operations behind
+  // PlanGateService.assertCanUseFacturX/recordFacturXUsed. Read/write
+  // Invoice.facturXFirstUsedAt directly (rather than through
+  // InvoiceRepository) for the same reason countInvoices above already
+  // reaches into the Invoice table: PlanGateService only depends on this one
+  // repository, and every other billing-quota check already lives here.
+
+  // Null means this invoice has never had a Factur-X generated for it (its
+  // free-credit slot, if any, is still unspent) — scoped by companyId so a
+  // stale/foreign id can't be probed cross-tenant.
+  getInvoiceFacturXUsedAt(companyId: string, invoiceId: string): Promise<Date | null> {
+    return this.prisma.invoice
+      .findFirst({ where: { id: invoiceId, companyId }, select: { facturXFirstUsedAt: true } })
+      .then((row) => row?.facturXFirstUsedAt ?? null);
+  }
+
+  // Conditional update (`where: facturXFirstUsedAt: null`), same idempotent-
+  // by-construction pattern as startTrialOfferWindow below — a second,
+  // unrelated call (re-downloading/re-sending the same invoice's Factur-X
+  // later) never resets or re-consumes the free-credit slot.
+  async markInvoiceFacturXUsed(companyId: string, invoiceId: string): Promise<void> {
+    await this.prisma.invoice.updateMany({
+      where: { id: invoiceId, companyId, facturXFirstUsedAt: null },
+      data: { facturXFirstUsedAt: new Date() },
+    });
+  }
+
+  // How many distinct invoices this company has used a Factur-X credit on
+  // this calendar month — the free-tier quota is against a calendar month,
+  // not a rolling 30 days, same "derived, never separately persisted"
+  // convention as countInvoices.
+  countFacturXUsedThisMonth(companyId: string): Promise<number> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return this.prisma.invoice.count({
+      where: { companyId, facturXFirstUsedAt: { gte: startOfMonth } },
+    });
+  }
+
   // Phase 30: catalog-capacity checks (PlanGateService.assertCatalogCapacity)
   // — a "catalog item" is a Product, a Service, or (Phase 32) a Discount,
   // counted together since PLAN_DEFINITIONS caps them as one combined number

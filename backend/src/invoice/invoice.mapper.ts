@@ -280,6 +280,7 @@ export class InvoiceMapper {
       eInvoiceTransmissionStatus: invoice.eInvoiceTransmissionStatus,
       eInvoiceTransmittedAt: invoice.eInvoiceTransmittedAt,
       eInvoiceRejectionReason: invoice.eInvoiceRejectionReason,
+      facturXUsed: invoice.facturXFirstUsedAt !== null,
       scheduledTransmitAt: invoice.scheduledTransmitAt,
       depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
       depositAmountCents: invoice.depositAmountCents,
@@ -380,6 +381,7 @@ export class InvoiceMapper {
       eInvoiceTransmissionStatus: invoice.eInvoiceTransmissionStatus,
       eInvoiceTransmittedAt: invoice.eInvoiceTransmittedAt,
       eInvoiceRejectionReason: invoice.eInvoiceRejectionReason,
+      facturXUsed: invoice.facturXFirstUsedAt !== null,
       scheduledTransmitAt: invoice.scheduledTransmitAt,
       depositPercentageBasisPoints: invoice.depositPercentageBasisPoints,
       depositAmountCents: invoice.depositAmountCents,
@@ -740,6 +742,7 @@ export class InvoiceMapper {
       eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.NOT_SENT,
       eInvoiceTransmittedAt: null,
       eInvoiceRejectionReason: null,
+      facturXUsed: false,
       scheduledTransmitAt: null,
       // Phase 1.1-3: mirrors the artisan's not-yet-submitted deposit toggle
       // straight from the DTO — the preview/aperçu screen is what renders
@@ -865,6 +868,7 @@ export class InvoiceMapper {
       eInvoiceTransmissionStatus: EInvoiceTransmissionStatus.NOT_SENT,
       eInvoiceTransmittedAt: null,
       eInvoiceRejectionReason: null,
+      facturXUsed: false,
       scheduledTransmitAt: null,
       // Phase 1.1-3: same "mirror the not-yet-submitted DTO" reasoning as
       // toPreviewInvoiceWithTotals above.

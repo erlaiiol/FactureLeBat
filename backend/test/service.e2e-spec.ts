@@ -68,6 +68,68 @@ describe('Service catalog (e2e)', () => {
     expect(results.some((service) => service.id === created.id)).toBe(true);
   });
 
+  // Phase 1.6: round-trips both margin modes, and the "Marge 30%"
+  // pure-markup case (Phase 5) that legitimately declares 100% margin on a
+  // PERCENTAGE-priced service with no priceCents to bound against.
+  it('creates and updates a service margin, switching mode nulls the unused field', async () => {
+    const createResponse = await authedRequest(app, session)
+      .post('/api/services')
+      .send({
+        name: 'E2E Margin Service',
+        priceCents: 25000,
+        defaultVisibility: 'VISIBLE',
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 10000,
+      })
+      .expect(201);
+    const created = createResponse.body as ServiceProfile;
+    expect(created.marginMode).toBe('NET_AMOUNT');
+    expect(created.marginAmountCents).toBe(10000);
+    expect(created.marginPercentageBasisPoints).toBeNull();
+
+    const updateResponse = await authedRequest(app, session)
+      .patch(`/api/services/${created.id}`)
+      .send({
+        name: 'E2E Margin Service',
+        priceCents: 25000,
+        defaultVisibility: 'VISIBLE',
+        marginMode: 'PERCENTAGE',
+        marginPercentageBasisPoints: 7000,
+      })
+      .expect(200);
+    const updated = updateResponse.body as ServiceProfile;
+    expect(updated.marginMode).toBe('PERCENTAGE');
+    expect(updated.marginPercentageBasisPoints).toBe(7000);
+    expect(updated.marginAmountCents).toBeNull();
+  });
+
+  it('accepts a pure-markup service: PERCENTAGE pricing with a 100% margin', () => {
+    return authedRequest(app, session)
+      .post('/api/services')
+      .send({
+        name: 'E2E Marge 30%',
+        pricingMode: 'PERCENTAGE',
+        percentageBasisPoints: 3000,
+        defaultVisibility: 'REDISTRIBUTED',
+        marginMode: 'PERCENTAGE',
+        marginPercentageBasisPoints: 10000,
+      })
+      .expect(201);
+  });
+
+  it('rejects a service margin above a FIXED priceCents', () => {
+    return authedRequest(app, session)
+      .post('/api/services')
+      .send({
+        name: 'E2E Bad Margin Service',
+        priceCents: 1000,
+        defaultVisibility: 'VISIBLE',
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 1001,
+      })
+      .expect(400);
+  });
+
   it('rejects a service with a negative price', () => {
     return authedRequest(app, session)
       .post('/api/services')

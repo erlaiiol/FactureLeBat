@@ -6,6 +6,10 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DemoProfile } from '../../../core/models/auth.model';
 import {
+  AppleNativeLoginCancelledError,
+  AppleNativeLoginService,
+} from '../../../core/services/apple-native-login.service';
+import {
   GoogleNativeLoginCancelledError,
   GoogleNativeLoginService,
 } from '../../../core/services/google-native-login.service';
@@ -35,6 +39,7 @@ import { ReferralCodePromptComponent } from '../../../shared/components/referral
 export class LoginPage {
   private readonly authService = inject(AuthService);
   private readonly googleNativeLoginService = inject(GoogleNativeLoginService);
+  private readonly appleNativeLoginService = inject(AppleNativeLoginService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -108,6 +113,30 @@ export class LoginPage {
         console.error('Google native login failed:', error);
         const detail = error instanceof Error ? error.message : String(error);
         this.errorMessage.set(`Connexion avec Google indisponible. (${detail})`);
+      }
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  // iOS-only counterpart to googleLoginNative above — see
+  // AppleNativeLoginService for why there's no web/Android equivalent.
+  protected async appleLoginNative(): Promise<void> {
+    if (this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const { identityToken, authorizationCode } = await this.appleNativeLoginService.login();
+      await firstValueFrom(this.authService.appleTokenLogin(identityToken, authorizationCode));
+      void this.router.navigateByUrl('/');
+    } catch (error) {
+      if (!(error instanceof AppleNativeLoginCancelledError)) {
+        console.error('Apple native login failed:', error);
+        const detail = error instanceof Error ? error.message : String(error);
+        this.errorMessage.set(`Connexion avec Apple indisponible. (${detail})`);
       }
     } finally {
       this.saving.set(false);

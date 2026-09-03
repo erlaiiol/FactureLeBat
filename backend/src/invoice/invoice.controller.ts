@@ -21,6 +21,7 @@ import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
+import { PlanGateService } from '../billing/plan-gate.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
@@ -64,6 +65,7 @@ export class InvoiceController {
     private readonly invoiceMailService: InvoiceMailService,
     private readonly facturXService: FacturXService,
     private readonly eInvoiceTransmissionService: EInvoiceTransmissionService,
+    private readonly planGate: PlanGateService,
     config: ConfigService,
   ) {
     this.frontendUrl = config.get<string>('FRONTEND_URL', 'http://localhost:4200');
@@ -209,8 +211,13 @@ export class InvoiceController {
         "La facture électronique n'est disponible que pour une FACTURE, pas un DEVIS.",
       );
     }
+    // 1.2/facturx-monthly-quota revision: checked after the FACTURE/DEVIS
+    // guard above (a DEVIS should always 400, quota or not), before any
+    // rendering work — see PlanGateService.assertCanUseFacturX.
+    await this.planGate.assertCanUseFacturX(user.companyId, id);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(data);
     const hybridBuffer = await this.facturXService.generateHybridPdf(pdfBuffer, data);
+    await this.planGate.recordFacturXUsed(user.companyId, id);
     return new StreamableFile(hybridBuffer, {
       disposition: `attachment; filename="facture-${data.number}-factur-x.pdf"`,
     });

@@ -68,6 +68,63 @@ describe('Product pipeline (e2e)', () => {
     expect(results.some((product) => product.id === created.id)).toBe(true);
   });
 
+  // Phase 1.6: round-trips both margin modes and confirms switching mode on
+  // update nulls out the field the new mode doesn't use (same PATCH
+  // full-replace contract as supplierName/packagingQuantity above).
+  it('creates and updates a product margin, switching mode nulls the unused field', async () => {
+    const createResponse = await authedRequest(app, session)
+      .post('/api/products')
+      .send({
+        name: 'E2E Margin Product',
+        unit: 'UNIT',
+        priceCents: 6000,
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 3000,
+      })
+      .expect(201);
+    const created = createResponse.body as ProductProfile;
+    expect(created.marginMode).toBe('NET_AMOUNT');
+    expect(created.marginAmountCents).toBe(3000);
+    expect(created.marginPercentageBasisPoints).toBeNull();
+
+    const updateResponse = await authedRequest(app, session)
+      .patch(`/api/products/${created.id}`)
+      .send({
+        name: 'E2E Margin Product',
+        unit: 'UNIT',
+        priceCents: 6000,
+        marginMode: 'PERCENTAGE',
+        marginPercentageBasisPoints: 5000,
+      })
+      .expect(200);
+    const updated = updateResponse.body as ProductProfile;
+    expect(updated.marginMode).toBe('PERCENTAGE');
+    expect(updated.marginPercentageBasisPoints).toBe(5000);
+    expect(updated.marginAmountCents).toBeNull();
+
+    const clearedResponse = await authedRequest(app, session)
+      .patch(`/api/products/${created.id}`)
+      .send({ name: 'E2E Margin Product', unit: 'UNIT', priceCents: 6000 })
+      .expect(200);
+    const cleared = clearedResponse.body as ProductProfile;
+    expect(cleared.marginMode).toBeNull();
+    expect(cleared.marginAmountCents).toBeNull();
+    expect(cleared.marginPercentageBasisPoints).toBeNull();
+  });
+
+  it('rejects a product margin above the product price', () => {
+    return authedRequest(app, session)
+      .post('/api/products')
+      .send({
+        name: 'E2E Bad Margin Product',
+        unit: 'UNIT',
+        priceCents: 1000,
+        marginMode: 'NET_AMOUNT',
+        marginAmountCents: 1001,
+      })
+      .expect(400);
+  });
+
   it('rejects a product with an invalid supplier URL', () => {
     return authedRequest(app, session)
       .post('/api/products')

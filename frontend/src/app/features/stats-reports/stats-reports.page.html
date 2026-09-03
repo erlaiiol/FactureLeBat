@@ -32,6 +32,19 @@
   >
     Rapport &amp; déclaration
   </button>
+  <button
+    type="button"
+    appTourAnchor="stats-tab-marge"
+    (click)="setTab('marge')"
+    [attr.aria-pressed]="tab() === 'marge'"
+    class="font-heading rounded-full px-4 py-2 text-sm font-bold tracking-wide uppercase transition"
+    [class.bg-primary]="tab() === 'marge'"
+    [class.text-primary-fg]="tab() === 'marge'"
+    [class.bg-secondary-subtle]="tab() !== 'marge'"
+    [class.text-ink]="tab() !== 'marge'"
+  >
+    Marge
+  </button>
 </div>
 
 @if (tab() === 'apercu') {
@@ -203,7 +216,7 @@
       </div>
     </div>
   }
-} @else {
+} @else if (tab() === 'rapport') {
   <!-- Rapport & déclaration : ancienne page /rapports -->
   <div
     appTourAnchor="rapport-period"
@@ -446,6 +459,165 @@
               }
             </tbody>
           </table>
+        }
+      </div>
+    </div>
+  }
+} @else {
+  <!-- Marge (Phase 1.6) -->
+  @if (marginAnalyticsLoading()) {
+    @if (marginAnalyticsShowSkeleton()) {
+      <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        @for (tile of [1, 2, 3]; track tile) {
+          <div class="anim-skeleton h-20 rounded-xl"></div>
+        }
+      </div>
+      <div class="anim-skeleton h-48 rounded-xl"></div>
+    }
+  } @else if (marginAnalyticsLocked()) {
+    <div class="flex flex-col items-start gap-3 rounded-2xl border border-line bg-surface p-5">
+      <p class="text-ink-soft">
+        Les statistiques de marge sont réservées aux offres Pro et Premium.
+      </p>
+      <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
+        Voir les offres
+      </app-big-button>
+    </div>
+  } @else if (marginAnalyticsError()) {
+    <p class="text-ink-soft">Impossible de charger votre marge pour le moment.</p>
+  } @else if (marginAnalytics(); as margin) {
+    <div class="anim-preview-in">
+      <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="rounded-xl border border-line bg-surface p-3 text-center">
+          <p class="text-2xl font-semibold">{{ margin.totalMarginExclVatCents | centsToEuros }}</p>
+          <p class="text-xs text-ink-soft">Marge totale HT (12 mois)</p>
+        </div>
+        <div class="rounded-xl border border-line bg-surface p-3 text-center">
+          <p class="text-2xl font-semibold">
+            {{ margin.marginRatePercent !== null ? margin.marginRatePercent + ' %' : '—' }}
+          </p>
+          <p class="text-xs text-ink-soft">Taux de marge moyen</p>
+        </div>
+        <div class="rounded-xl border border-line bg-surface p-3 text-center">
+          <p class="text-2xl font-semibold">
+            {{ margin.marginCoveragePercent !== null ? margin.marginCoveragePercent + ' %' : '—' }}
+          </p>
+          <p class="flex items-center justify-center gap-1 text-xs text-ink-soft">
+            Chiffre d'affaires couvert par une marge
+            <!-- Native details/summary: a "click to reveal" tooltip with no
+                 extra state to manage — same pattern as the totals summary's
+                 VAT info icon, chosen over a hover tooltip since artisans on
+                 a job site can't rely on hover. -->
+            <details class="relative inline-block text-left">
+              <summary
+                class="cursor-pointer list-none text-ink-soft hover:text-ink"
+                aria-label="Comment cette marge est calculée par défaut"
+                title="Comment cette marge est calculée par défaut"
+              >
+                ⓘ
+              </summary>
+              <div
+                class="absolute top-full left-1/2 z-10 mt-1 w-64 -translate-x-1/2 rounded-lg border border-line bg-surface p-2 text-xs font-normal text-ink shadow-lg"
+              >
+                Tant que vous n'avez pas renseigné de marge personnalisée dans les paramètres
+                avancés d'un produit ou d'une prestation, on considère par défaut que 100 % de son
+                prix est votre marge. Configurez une marge réelle pour affiner ces chiffres.
+              </div>
+            </details>
+          </p>
+        </div>
+      </div>
+
+      @if (margin.uncategorizedRevenueExclVatCents > 0) {
+        <p class="mb-6 text-sm text-ink-soft">
+          {{ margin.uncategorizedRevenueExclVatCents | centsToEuros }} de chiffre d'affaires n'est
+          associé à aucun produit ou prestation de votre catalogue — impossible d'en estimer la
+          marge. Passez par vos
+          <a routerLink="/produits" class="font-medium text-primary hover:underline">produits</a>
+          ou
+          <a routerLink="/prestations" class="font-medium text-primary hover:underline"
+            >prestations</a
+          >
+          lors de la création d'une facture pour que ce chiffre d'affaires soit pris en compte.
+        </p>
+      }
+
+      <div class="mb-2 flex gap-2">
+        <button
+          type="button"
+          (click)="setMarginBreakdown('product')"
+          [attr.aria-pressed]="marginBreakdown() === 'product'"
+          class="rounded-full px-3 py-1.5 text-sm font-medium transition"
+          [class.bg-primary]="marginBreakdown() === 'product'"
+          [class.text-primary-fg]="marginBreakdown() === 'product'"
+          [class.bg-secondary-subtle]="marginBreakdown() !== 'product'"
+          [class.text-ink]="marginBreakdown() !== 'product'"
+        >
+          Par produit
+        </button>
+        <button
+          type="button"
+          (click)="setMarginBreakdown('service')"
+          [attr.aria-pressed]="marginBreakdown() === 'service'"
+          class="rounded-full px-3 py-1.5 text-sm font-medium transition"
+          [class.bg-primary]="marginBreakdown() === 'service'"
+          [class.text-primary-fg]="marginBreakdown() === 'service'"
+          [class.bg-secondary-subtle]="marginBreakdown() !== 'service'"
+          [class.text-ink]="marginBreakdown() !== 'service'"
+        >
+          Par prestation
+        </button>
+        <button
+          type="button"
+          (click)="setMarginBreakdown('client')"
+          [attr.aria-pressed]="marginBreakdown() === 'client'"
+          class="rounded-full px-3 py-1.5 text-sm font-medium transition"
+          [class.bg-primary]="marginBreakdown() === 'client'"
+          [class.text-primary-fg]="marginBreakdown() === 'client'"
+          [class.bg-secondary-subtle]="marginBreakdown() !== 'client'"
+          [class.text-ink]="marginBreakdown() !== 'client'"
+        >
+          Par client
+        </button>
+      </div>
+      <div class="mb-6 rounded-xl border border-line bg-surface p-4">
+        <app-margin-donut-chart [entries]="marginBreakdownEntries()" />
+      </div>
+
+      <p class="mb-2 text-sm font-medium text-ink-soft">Chiffre d'affaires encaissé HT, par mois</p>
+      <app-revenue-bar-chart [points]="revenueMonthPoints()" class="mb-6 block" />
+      <p class="mb-2 text-sm font-medium text-ink-soft">Marge, par mois</p>
+      <app-revenue-bar-chart [points]="marginMonthPoints()" class="mb-6 block" />
+
+      <div class="rounded-xl border border-line bg-surface p-4">
+        <h2 class="font-heading mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">
+          Bénéfice net estimé (après charges)
+        </h2>
+        @if (!margin.netProfitAfterCharges.applicable) {
+          <p class="text-sm text-ink-soft">
+            Non disponible pour ce statut — l'impôt d'une société dépend de ses charges réelles, à
+            calculer avec votre expert-comptable.
+          </p>
+        } @else {
+          <p class="text-sm">
+            Marge :
+            <span class="font-semibold">{{
+              margin.netProfitAfterCharges.totalMarginExclVatCents | centsToEuros
+            }}</span>
+          </p>
+          <p class="text-sm">
+            Charges estimées :
+            <span class="font-semibold">{{
+              margin.netProfitAfterCharges.estimatedChargesCents | centsToEuros
+            }}</span>
+          </p>
+          <p class="text-lg font-bold">
+            Reste estimé : {{ margin.netProfitAfterCharges.netCents | centsToEuros }}
+          </p>
+          <p class="mt-2 text-xs text-ink-soft italic">
+            Estimation indicative, sans valeur légale — vérifiez le montant exact avec votre
+            expert-comptable.
+          </p>
         }
       </div>
     </div>

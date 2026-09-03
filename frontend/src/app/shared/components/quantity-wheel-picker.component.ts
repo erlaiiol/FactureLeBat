@@ -73,7 +73,7 @@ import { DigitWheelColumnComponent } from './digit-wheel-column.component';
               <button
                 type="button"
                 (click)="toggleKeyboardMode()"
-                class="text-sm font-medium text-brand"
+                class="rounded border border-primary-subtle-border bg-primary-subtle px-2 py-0.5 text-xs font-medium text-primary-subtle-fg"
               >
                 {{ keyboardMode() ? 'Molette' : 'Clavier' }}
               </button>
@@ -189,6 +189,12 @@ export class QuantityWheelPickerComponent implements ControlValueAccessor {
   protected toggleKeyboardMode(): void {
     const next = !this.keyboardMode();
     this.keyboardMode.set(next);
+    // Written to the shared signal immediately, not only once
+    // updateQuantityInputMode's PATCH resolves — otherwise closing and
+    // reopening this same sheet (or opening a different line's picker)
+    // right after tapping "Clavier" would still read the pre-toggle value
+    // for as long as that round trip takes.
+    this.companyService.preferKeyboardQuantityInput.set(next);
     // Fire-and-forget, same "silent success, toast on failure" pattern as
     // company-settings.page.ts's onTourEnabledChange — a failed save here
     // shouldn't block entering the quantity, just surface that the
