@@ -123,271 +123,297 @@
        and grow past any one hardcoded top-* guess. 8rem fallback matches
        the old hardcoded value, for the brief window before the first
        ResizeObserver measurement lands. -->
+<!-- The centering used to be `top-1/2 -translate-y-1/2` (no need to know
+       the column's own height) — but `translate`/`transform` on an
+       ancestor makes IT the containing block for any `position:fixed`
+       descendant, instead of the viewport. Every backdrop below is
+       `fixed inset-0`, so with that transform in place its "full screen"
+       overlay actually only ever covered this button column's own tiny
+       box: confirmed with a Playwright repro (backdrop bounding box came
+       back the size of one button, not the viewport, at both mobile and
+       `sm` widths — `sm:translate-y-0` still counts as "a value other
+       than none" for this purpose, so `sm` wasn't spared either), which
+       is exactly why clicking anywhere outside the flyout/backdrop's own
+       tiny footprint silently did nothing instead of closing it. Fixed by
+       centering with flex/justify-center on a full-height, transform-free
+       wrapper instead — same "don't need to know the height" property,
+       no transform anywhere in this subtree. The wrapper itself is
+       `pointer-events-none` since it now spans the full viewport height
+       to do that centering, with only empty space above/below the actual
+       button column at most viewport heights; `pointer-events-auto` on
+       the inner column is what makes the buttons (and everything they
+       open) clickable again. -->
 <div
-  class="fixed top-1/2 left-4 z-50 flex -translate-y-1/2 flex-col gap-5 sm:top-[calc(var(--nav-height,8rem)_+_1rem)] sm:translate-y-0"
+  class="pointer-events-none fixed inset-y-0 left-4 z-50 flex flex-col justify-center sm:inset-y-auto sm:top-[calc(var(--nav-height,8rem)_+_1rem)]"
 >
-  <div class="relative">
-    <button
-      type="button"
-      appTourAnchor="invoice-add-product-button"
-      (click)="toggleProductPanel()"
-      class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-primary text-primary-fg shadow-lg"
-      [class.is-open]="productPanelOpen() || productButtonTourHighlighted() || introExpanded()"
-      aria-label="Ajouter un produit"
-    >
-      <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
-        +
-      </span>
-      <span
-        class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
-        [class.opacity-100]="
-          productPanelOpen() || productButtonTourHighlighted() || introExpanded()
-        "
+  <div class="pointer-events-auto flex flex-col gap-5">
+    <div class="relative">
+      <button
+        type="button"
+        appTourAnchor="invoice-add-product-button"
+        (click)="toggleProductPanel()"
+        class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-primary text-primary-fg shadow-lg"
+        [class.is-open]="productPanelOpen() || productButtonTourHighlighted() || introExpanded()"
+        aria-label="Ajouter un produit"
       >
-        Ajouter un produit
-      </span>
-    </button>
-
-    @if (productPanelOpen()) {
-      <div
-        class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
-        (click)="closePanels()"
-      ></div>
-      <div
-        appTourAnchor="invoice-product-flyout"
-        class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
-      >
-        <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
-          Mon catalogue
+        <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+          +
         </span>
-        @if (draftStore.products().length > 0) {
-          <div class="flex flex-col gap-2">
-            @for (group of groupedProducts().groups; track group.folder.id) {
-              <div class="rounded-lg border border-line">
-                <button
-                  type="button"
-                  (click)="toggleFolderExpanded(group.folder.id)"
-                  [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
-                  class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-primary-subtle/30"
-                >
-                  {{ group.folder.name }}
-                  <app-icon-chevron-down
-                    [size]="14"
-                    [rotated]="expandedFolderIds().has(group.folder.id)"
-                  />
-                </button>
-                @if (expandedFolderIds().has(group.folder.id)) {
-                  <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
-                    @for (product of group.items; track product.id) {
-                      <li>
-                        <ng-container
-                          *ngTemplateOutlet="productRow; context: { $implicit: product }"
-                        />
-                      </li>
-                    }
-                  </ul>
-                }
-              </div>
-            }
-            @if (groupedProducts().unassigned.length > 0) {
-              <ul class="flex flex-col gap-2">
-                @for (product of groupedProducts().unassigned; track product.id) {
-                  <li>
-                    <ng-container *ngTemplateOutlet="productRow; context: { $implicit: product }" />
-                  </li>
-                }
-              </ul>
-            }
-          </div>
-        } @else {
-          <p class="text-sm text-ink-soft">Aucun produit enregistré pour l’instant.</p>
-        }
-        <button
-          type="button"
-          appTourAnchor="catalog-new-product"
-          (click)="addFreeLine()"
-          class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
+        <span
+          class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+          [class.opacity-100]="
+            productPanelOpen() || productButtonTourHighlighted() || introExpanded()
+          "
         >
-          + Nouveau produit
-        </button>
-      </div>
-    }
-  </div>
-
-  <div class="relative">
-    <button
-      type="button"
-      appTourAnchor="invoice-add-service-button"
-      (click)="toggleServicePanel()"
-      class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-info text-info-fg shadow-lg"
-      [class.is-open]="servicePanelOpen() || serviceButtonTourHighlighted() || introExpanded()"
-      aria-label="Ajouter une prestation"
-    >
-      <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
-        +
-      </span>
-      <span
-        class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
-        [class.opacity-100]="
-          servicePanelOpen() || serviceButtonTourHighlighted() || introExpanded()
-        "
-      >
-        Ajouter une prestation
-      </span>
-    </button>
-
-    @if (servicePanelOpen()) {
-      <div
-        class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
-        (click)="closePanels()"
-      ></div>
-      <div
-        appTourAnchor="invoice-service-flyout"
-        class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
-      >
-        <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
-          Mes prestations
+          Ajouter un produit
         </span>
-        @if (draftStore.services().length > 0) {
-          <div class="flex flex-col gap-2">
-            @for (group of groupedServices().groups; track group.folder.id) {
-              <div class="rounded-lg border border-line">
-                <button
-                  type="button"
-                  (click)="toggleFolderExpanded(group.folder.id)"
-                  [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
-                  class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-info-subtle/30"
-                >
-                  {{ group.folder.name }}
-                  <app-icon-chevron-down
-                    [size]="14"
-                    [rotated]="expandedFolderIds().has(group.folder.id)"
-                  />
-                </button>
-                @if (expandedFolderIds().has(group.folder.id)) {
-                  <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
-                    @for (service of group.items; track service.id) {
-                      <li>
-                        <ng-container
-                          *ngTemplateOutlet="serviceRow; context: { $implicit: service }"
-                        />
-                      </li>
-                    }
-                  </ul>
-                }
-              </div>
-            }
-            @if (groupedServices().unassigned.length > 0) {
-              <ul class="flex flex-col gap-2">
-                @for (service of groupedServices().unassigned; track service.id) {
-                  <li>
-                    <ng-container *ngTemplateOutlet="serviceRow; context: { $implicit: service }" />
-                  </li>
-                }
-              </ul>
-            }
-          </div>
-        } @else {
-          <p class="text-sm text-ink-soft">Aucune prestation enregistrée pour l’instant.</p>
-        }
-        <button
-          type="button"
-          (click)="addFreeServiceLine()"
-          class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-info hover:bg-info-subtle/30"
+      </button>
+
+      @if (productPanelOpen()) {
+        <div
+          class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
+          (click)="closePanels()"
+        ></div>
+        <div
+          appTourAnchor="invoice-product-flyout"
+          class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
         >
-          + Nouvelle prestation
-        </button>
-      </div>
-    }
-  </div>
-
-  <div class="relative">
-    <button
-      type="button"
-      appTourAnchor="invoice-add-discount-button"
-      (click)="toggleDiscountPanel()"
-      class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-warning text-warning-fg shadow-lg"
-      [class.is-open]="discountPanelOpen() || discountButtonTourHighlighted() || introExpanded()"
-      aria-label="Ajouter une remise"
-    >
-      <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
-        +
-      </span>
-      <span
-        class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
-        [class.opacity-100]="
-          discountPanelOpen() || discountButtonTourHighlighted() || introExpanded()
-        "
-      >
-        Ajouter une remise
-      </span>
-    </button>
-
-    @if (discountPanelOpen()) {
-      <div
-        class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
-        (click)="closePanels()"
-      ></div>
-      <div
-        appTourAnchor="invoice-discount-flyout"
-        class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-warning-subtle-border bg-surface p-4 shadow-xl"
-      >
-        <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
-          Mes remises
-        </span>
-        @if (draftStore.discounts().length > 0) {
-          <div class="flex flex-col gap-2">
-            @for (group of groupedDiscounts().groups; track group.folder.id) {
-              <div class="rounded-lg border border-line">
-                <button
-                  type="button"
-                  (click)="toggleFolderExpanded(group.folder.id)"
-                  [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
-                  class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-warning-subtle/30"
-                >
-                  {{ group.folder.name }}
-                  <app-icon-chevron-down
-                    [size]="14"
-                    [rotated]="expandedFolderIds().has(group.folder.id)"
-                  />
-                </button>
-                @if (expandedFolderIds().has(group.folder.id)) {
-                  <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
-                    @for (discount of group.items; track discount.id) {
-                      <li>
-                        <ng-container
-                          *ngTemplateOutlet="discountRow; context: { $implicit: discount }"
-                        />
-                      </li>
-                    }
-                  </ul>
-                }
-              </div>
-            }
-            @if (groupedDiscounts().unassigned.length > 0) {
-              <ul class="flex flex-col gap-2">
-                @for (discount of groupedDiscounts().unassigned; track discount.id) {
-                  <li>
-                    <ng-container
-                      *ngTemplateOutlet="discountRow; context: { $implicit: discount }"
+          <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+            Mon catalogue
+          </span>
+          @if (draftStore.products().length > 0) {
+            <div class="flex flex-col gap-2">
+              @for (group of groupedProducts().groups; track group.folder.id) {
+                <div class="rounded-lg border border-line">
+                  <button
+                    type="button"
+                    (click)="toggleFolderExpanded(group.folder.id)"
+                    [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
+                    class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-primary-subtle/30"
+                  >
+                    {{ group.folder.name }}
+                    <app-icon-chevron-down
+                      [size]="14"
+                      [rotated]="expandedFolderIds().has(group.folder.id)"
                     />
-                  </li>
-                }
-              </ul>
-            }
-          </div>
-        } @else {
-          <p class="text-sm text-ink-soft">Aucune remise enregistrée pour l’instant.</p>
-        }
-        <button
-          type="button"
-          (click)="addFreeDiscountLine()"
-          class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-warning hover:bg-warning-subtle/30"
+                  </button>
+                  @if (expandedFolderIds().has(group.folder.id)) {
+                    <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
+                      @for (product of group.items; track product.id) {
+                        <li>
+                          <ng-container
+                            *ngTemplateOutlet="productRow; context: { $implicit: product }"
+                          />
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+              @if (groupedProducts().unassigned.length > 0) {
+                <ul class="flex flex-col gap-2">
+                  @for (product of groupedProducts().unassigned; track product.id) {
+                    <li>
+                      <ng-container
+                        *ngTemplateOutlet="productRow; context: { $implicit: product }"
+                      />
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          } @else {
+            <p class="text-sm text-ink-soft">Aucun produit enregistré pour l’instant.</p>
+          }
+          <button
+            type="button"
+            appTourAnchor="catalog-new-product"
+            (click)="addFreeLine()"
+            class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-subtle/30"
+          >
+            + Nouveau produit
+          </button>
+        </div>
+      }
+    </div>
+
+    <div class="relative">
+      <button
+        type="button"
+        appTourAnchor="invoice-add-service-button"
+        (click)="toggleServicePanel()"
+        class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-info text-info-fg shadow-lg"
+        [class.is-open]="servicePanelOpen() || serviceButtonTourHighlighted() || introExpanded()"
+        aria-label="Ajouter une prestation"
+      >
+        <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+          +
+        </span>
+        <span
+          class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+          [class.opacity-100]="
+            servicePanelOpen() || serviceButtonTourHighlighted() || introExpanded()
+          "
         >
-          + Nouvelle remise
-        </button>
-      </div>
-    }
+          Ajouter une prestation
+        </span>
+      </button>
+
+      @if (servicePanelOpen()) {
+        <div
+          class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
+          (click)="closePanels()"
+        ></div>
+        <div
+          appTourAnchor="invoice-service-flyout"
+          class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
+        >
+          <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+            Mes prestations
+          </span>
+          @if (draftStore.services().length > 0) {
+            <div class="flex flex-col gap-2">
+              @for (group of groupedServices().groups; track group.folder.id) {
+                <div class="rounded-lg border border-line">
+                  <button
+                    type="button"
+                    (click)="toggleFolderExpanded(group.folder.id)"
+                    [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
+                    class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-info-subtle/30"
+                  >
+                    {{ group.folder.name }}
+                    <app-icon-chevron-down
+                      [size]="14"
+                      [rotated]="expandedFolderIds().has(group.folder.id)"
+                    />
+                  </button>
+                  @if (expandedFolderIds().has(group.folder.id)) {
+                    <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
+                      @for (service of group.items; track service.id) {
+                        <li>
+                          <ng-container
+                            *ngTemplateOutlet="serviceRow; context: { $implicit: service }"
+                          />
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+              @if (groupedServices().unassigned.length > 0) {
+                <ul class="flex flex-col gap-2">
+                  @for (service of groupedServices().unassigned; track service.id) {
+                    <li>
+                      <ng-container
+                        *ngTemplateOutlet="serviceRow; context: { $implicit: service }"
+                      />
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          } @else {
+            <p class="text-sm text-ink-soft">Aucune prestation enregistrée pour l’instant.</p>
+          }
+          <button
+            type="button"
+            (click)="addFreeServiceLine()"
+            class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-info hover:bg-info-subtle/30"
+          >
+            + Nouvelle prestation
+          </button>
+        </div>
+      }
+    </div>
+
+    <div class="relative">
+      <button
+        type="button"
+        appTourAnchor="invoice-add-discount-button"
+        (click)="toggleDiscountPanel()"
+        class="fixed-add-button group h-14 items-center overflow-hidden rounded-full bg-warning text-warning-fg shadow-lg"
+        [class.is-open]="discountPanelOpen() || discountButtonTourHighlighted() || introExpanded()"
+        aria-label="Ajouter une remise"
+      >
+        <span class="flex h-14 w-14 shrink-0 items-center justify-center text-2xl leading-none">
+          +
+        </span>
+        <span
+          class="flex h-14 items-center overflow-hidden pr-4 font-heading text-sm font-semibold tracking-wide whitespace-nowrap uppercase opacity-0 transition-opacity delay-100 duration-200 group-hover:opacity-100"
+          [class.opacity-100]="
+            discountPanelOpen() || discountButtonTourHighlighted() || introExpanded()
+          "
+        >
+          Ajouter une remise
+        </span>
+      </button>
+
+      @if (discountPanelOpen()) {
+        <div
+          class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
+          (click)="closePanels()"
+        ></div>
+        <div
+          appTourAnchor="invoice-discount-flyout"
+          class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-warning-subtle-border bg-surface p-4 shadow-xl"
+        >
+          <span class="font-heading text-sm font-semibold tracking-wide text-ink uppercase">
+            Mes remises
+          </span>
+          @if (draftStore.discounts().length > 0) {
+            <div class="flex flex-col gap-2">
+              @for (group of groupedDiscounts().groups; track group.folder.id) {
+                <div class="rounded-lg border border-line">
+                  <button
+                    type="button"
+                    (click)="toggleFolderExpanded(group.folder.id)"
+                    [attr.aria-expanded]="expandedFolderIds().has(group.folder.id)"
+                    class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-warning-subtle/30"
+                  >
+                    {{ group.folder.name }}
+                    <app-icon-chevron-down
+                      [size]="14"
+                      [rotated]="expandedFolderIds().has(group.folder.id)"
+                    />
+                  </button>
+                  @if (expandedFolderIds().has(group.folder.id)) {
+                    <ul class="anim-preview-in flex flex-col gap-2 border-t border-line p-2">
+                      @for (discount of group.items; track discount.id) {
+                        <li>
+                          <ng-container
+                            *ngTemplateOutlet="discountRow; context: { $implicit: discount }"
+                          />
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+              @if (groupedDiscounts().unassigned.length > 0) {
+                <ul class="flex flex-col gap-2">
+                  @for (discount of groupedDiscounts().unassigned; track discount.id) {
+                    <li>
+                      <ng-container
+                        *ngTemplateOutlet="discountRow; context: { $implicit: discount }"
+                      />
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          } @else {
+            <p class="text-sm text-ink-soft">Aucune remise enregistrée pour l’instant.</p>
+          }
+          <button
+            type="button"
+            (click)="addFreeDiscountLine()"
+            class="w-full rounded-lg border border-dashed border-line px-4 py-3 text-sm font-semibold text-warning hover:bg-warning-subtle/30"
+          >
+            + Nouvelle remise
+          </button>
+        </div>
+      }
+    </div>
   </div>
 </div>
 
