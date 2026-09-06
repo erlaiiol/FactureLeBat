@@ -149,7 +149,10 @@
     </button>
 
     @if (productPanelOpen()) {
-      <div class="fixed inset-0 z-40 bg-ink/30 sm:bg-transparent" (click)="closePanels()"></div>
+      <div
+        class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
+        (click)="closePanels()"
+      ></div>
       <div
         appTourAnchor="invoice-product-flyout"
         class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-primary-subtle-border bg-surface p-4 shadow-xl"
@@ -234,7 +237,10 @@
     </button>
 
     @if (servicePanelOpen()) {
-      <div class="fixed inset-0 z-40 bg-ink/30 sm:bg-transparent" (click)="closePanels()"></div>
+      <div
+        class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
+        (click)="closePanels()"
+      ></div>
       <div
         appTourAnchor="invoice-service-flyout"
         class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-info-subtle-border bg-surface p-4 shadow-xl"
@@ -318,7 +324,10 @@
     </button>
 
     @if (discountPanelOpen()) {
-      <div class="fixed inset-0 z-40 bg-ink/30 sm:bg-transparent" (click)="closePanels()"></div>
+      <div
+        class="fixed inset-0 z-40 cursor-pointer bg-ink/30 sm:bg-transparent"
+        (click)="closePanels()"
+      ></div>
       <div
         appTourAnchor="invoice-discount-flyout"
         class="fixed-add-flyout z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-xl border border-warning-subtle-border bg-surface p-4 shadow-xl"

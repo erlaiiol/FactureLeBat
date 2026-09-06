@@ -441,7 +441,7 @@
     [class.hidden]="loading()"
     [class.anim-preview-in]="!loading()"
   >
-    <p class="text-xs text-atelier-ink-soft">
+    <p class="text-xs text-ink-soft">
       Taux de cotisations sociales URSSAF par catégorie d'activité — pré-remplis avec les taux
       officiels, mais à corriger vous-même s'ils changent ou si vous relevez de la Cipav.
     </p>
@@ -903,7 +903,7 @@
 
     <label class="flex items-center gap-2">
       <input type="checkbox" class="h-5 w-5" formControlName="autoAttachFacturX" />
-      <span class="text-sm font-medium text-atelier-ink">
+      <span class="text-sm font-medium text-ink">
         Joindre automatiquement la version Factur-X à mes emails de facture
       </span>
     </label>
@@ -927,12 +927,12 @@
         class="h-5 w-5 disabled:cursor-not-allowed"
         formControlName="autoTransmitViaPa"
       />
-      <span class="text-sm font-medium text-atelier-ink">
+      <span class="text-sm font-medium text-ink">
         Transmettre automatiquement mes factures via SUPER PDP
       </span>
     </label>
     @if (!superPdpConnected()) {
-      <p class="-mt-2 text-xs font-medium text-atelier-ink-soft">
+      <p class="-mt-2 text-xs font-medium text-ink-soft">
         Connectez SUPER PDP ci-dessus pour activer cette option
       </p>
     }
@@ -950,12 +950,12 @@
         class="h-5 w-5 disabled:cursor-not-allowed"
         formControlName="autoSyncReceivedInvoices"
       />
-      <span class="text-sm font-medium text-atelier-ink">
+      <span class="text-sm font-medium text-ink">
         Synchroniser automatiquement mes factures reçues
       </span>
     </label>
     @if (!superPdpConnected()) {
-      <p class="-mt-2 text-xs font-medium text-atelier-ink-soft">
+      <p class="-mt-2 text-xs font-medium text-ink-soft">
         Connectez SUPER PDP ci-dessus pour activer cette option
       </p>
     }

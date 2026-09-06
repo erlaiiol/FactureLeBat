@@ -184,6 +184,13 @@
 
 * {
   font-variant-numeric: tabular-nums;
+  /* Android Chrome/WebView (Capacitor) paints its own grey tap-highlight
+     rectangle behind any tapped element by default — a hard-edged square
+     that ignores the element's own border-radius, so it visibly pokes out
+     behind every rounded button/card/link on tap. Disabling it here is the
+     standard fix; :active states already provide our own tap feedback
+     (hover/active utility classes) so nothing is lost. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Cross-app feedback for reactive-form fields: Angular stamps ng-invalid/
