@@ -36,23 +36,23 @@
       <li class="flex items-center gap-2 rounded-xl border border-line bg-surface p-4 hover:bg-bg">
         <a
           [routerLink]="['/clients', customer.id]"
-          class="flex flex-1 items-center justify-between gap-4"
+          class="flex min-w-0 flex-1 items-center justify-between gap-4"
         >
-          <div>
+          <div class="min-w-0">
             <p class="flex items-center gap-1.5 font-semibold text-ink">
-              {{ customer.name }}
+              <span class="min-w-0 truncate">{{ customer.name }}</span>
               @if (customer.isProfessional) {
                 <app-badge variant="secondary" tone="subtle">Pro</app-badge>
               }
             </p>
             @if (customer.companyName) {
-              <p class="text-sm text-ink-soft">{{ customer.companyName }}</p>
+              <p class="truncate text-sm text-ink-soft">{{ customer.companyName }}</p>
             }
-            <p class="text-sm text-ink-soft">
+            <p class="truncate text-sm text-ink-soft">
               {{ customer.address || customer.phone || customer.email || '—' }}
             </p>
             @if (customer.matchSnippet) {
-              <p class="text-xs italic text-ink-soft">…{{ customer.matchSnippet }}…</p>
+              <p class="truncate text-xs italic text-ink-soft">…{{ customer.matchSnippet }}…</p>
             }
           </div>
           <div class="shrink-0 text-right text-xs text-ink-soft">

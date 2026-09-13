@@ -44,8 +44,17 @@ services:
       # machine (see frontend/scripts/run-android.sh / `make android-dev`,
       # `make android-demo`) — added unconditionally since it's meaningless
       # outside an emulator's own virtual network, nothing else can ever
-      # send it as an Origin.
-      CORS_ORIGIN: http://localhost:${FRONTEND_PORT},http://10.0.2.2
+      # send it as an Origin. capacitor://127.0.0.1 is the iOS Simulator's
+      # equivalent (see frontend/scripts/run-ios.sh dev mode): the
+      # Simulator shares the host's network stack, so `sh scripts/run-ios.sh
+      # dev 127.0.0.1` works directly with no LAN IP needed — and its
+      # WKWebView's real Origin is always `capacitor://<hostname>`, never
+      # `http://`, regardless of iosScheme (see capacitor.config.ts's own
+      # comment on `server`). A *physical* iOS device still needs its real
+      # LAN IP added here by hand (`capacitor://192.168.x.x`, not
+      # `http://192.168.x.x:3000` — the port never appears in a Capacitor
+      # WebView's Origin).
+      CORS_ORIGIN: http://localhost:${FRONTEND_PORT},http://10.0.2.2,capacitor://127.0.0.1
       PORT: 3000
       # Unset/false for every normal `make dev` — `make demo` (Makefile) is
       # the only caller that sets DEMO_MODE=true in its own shell env before

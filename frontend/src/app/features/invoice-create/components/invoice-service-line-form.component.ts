@@ -98,12 +98,12 @@ export class InvoiceServiceLineFormComponent {
     const willSave = this.group().controls.saveAsNewService.value;
     if (this.isCatalogLinked()) {
       return willSave
-        ? 'Mettre à jour cette prestation dans le catalogue'
-        : 'Ne pas mettre à jour dans le catalogue';
+        ? 'Se mettra à jour dans votre catalogue'
+        : 'Cliquer pour mettre à jour dans le catalogue';
     }
     return willSave
-      ? 'Enregistrer cette prestation dans mon catalogue'
-      : 'Ne pas enregistrer dans mon catalogue';
+      ? "S'enregistrera dans votre catalogue"
+      : 'Cliquer pour enregistrer dans le catalogue';
   }
 
   protected toggleSaveToCatalog(): void {

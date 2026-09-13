@@ -578,6 +578,16 @@
                 >Admin</a
               >
             }
+            <p class="px-4 py-1 text-sm text-ink-soft">
+              {{ authService.currentUser()?.email }}
+            </p>
+            <button
+              type="button"
+              (click)="logout(); closeMobileMenu()"
+              class="rounded-lg px-4 py-2 text-left text-sm font-medium text-danger hover:bg-danger-subtle"
+            >
+              Déconnexion
+            </button>
 
             <div class="my-1 border-t border-line"></div>
 
@@ -644,16 +654,6 @@
                 </svg>
                 Passer en thème sombre
               }
-            </button>
-            <p class="px-4 py-1 text-sm text-ink-soft">
-              {{ authService.currentUser()?.email }}
-            </p>
-            <button
-              type="button"
-              (click)="logout(); closeMobileMenu()"
-              class="rounded-lg px-4 py-2 text-left text-sm font-medium text-danger hover:bg-danger-subtle"
-            >
-              Déconnexion
             </button>
           </div>
         </div>

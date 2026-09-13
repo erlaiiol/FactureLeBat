@@ -258,6 +258,10 @@ android-demo:
 	$(MAKE) demo
 	sh frontend/scripts/run-android.sh dev $(if $(LOCAL_HOST),$(LOCAL_HOST),10.0.2.2)
 
+# DEVICE picks a specific simulator by exact name instead of whatever's
+# already booted — needed for App Store screenshots, which must come from a
+# specific device size/class (see run-ios.sh's own comment on this):
+#   make ios-prod DEVICE="iPhone 17 Pro Max"
 ios-dev:
 	sh frontend/scripts/run-ios.sh dev $(LOCAL_HOST)
 

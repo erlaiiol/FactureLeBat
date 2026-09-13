@@ -53,6 +53,18 @@
 	upload ("Does your app use encryption?"). -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- @capgo/capacitor-social-login's Package.swift declares FacebookCore/
+	FacebookLogin unconditionally (SocialLoginPlugin's own dependency list),
+	so the Facebook SDK ships inside the binary even though
+	capacitor.config.ts's providers.facebook stays false and no Facebook
+	login is ever offered — these two keys stop that unused SDK from
+	auto-logging app events/collecting the advertising identifier on its
+	own, which would otherwise contradict the App Privacy answers (this app
+	does no tracking) without any code of ours ever calling into it. -->
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<false/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
+	<false/>
 	<!-- Phase 1.4-3: required by @capgo/capacitor-speech-recognition
 	(SFSpeechRecognizer/SpeechAnalyzer + AVAudioSession) — shown once by
 	iOS the first time InvoiceCreateVoiceCapturePage's native path calls
