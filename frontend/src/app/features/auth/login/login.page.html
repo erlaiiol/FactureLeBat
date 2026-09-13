@@ -62,18 +62,22 @@
     </app-big-button>
   </form>
 
-  <!-- Google renders everywhere (web redirect, or the native Credential
-  Manager flow inside any Capacitor shell — Android AND iOS, since
-  isNativeApp() covers both). Apple only ever renders on iOS: it's the
+  <!-- Google renders on the web (browser redirect) and inside the native
+  Android shell (Credential Manager flow) — never on native iOS:
+  GoogleNativeLoginService's SocialLogin.initialize() only ever passes a
+  `webClientId`, which the plugin's iOS side ignores (it reads
+  `google.iOSClientId` instead, a distinct OAuth client type never
+  configured here), so a native call on iOS always rejects with "No
+  provider was initialized". Apple only ever renders on iOS: it's the
   guideline-4.8 counterpart to Google there (an app offering a third-party
   sign-in must also offer Sign in with Apple, at least as prominent — see
   docs/roadmap.md Phase 1.5), and this app has no browser/Android Apple
   flow to show elsewhere. -->
   <div class="flex flex-col gap-2">
-    @if (platformService.isNativeApp()) {
-      <!-- Native app: Credential Manager sign-in, not the browser redirect
-      below — Google blocks that redirect inside an embedded WebView. See
-      GoogleNativeLoginService. -->
+    @if (platformService.isNativeApp() && !platformService.isIosApp()) {
+      <!-- Native Android: Credential Manager sign-in, not the browser
+      redirect below — Google blocks that redirect inside an embedded
+      WebView. See GoogleNativeLoginService. -->
       <button
         type="button"
         (click)="googleLoginNative()"
@@ -83,7 +87,7 @@
         <app-icon-google />
         Continuer avec Google
       </button>
-    } @else {
+    } @else if (!platformService.isNativeApp()) {
       <a
         [href]="googleLoginUrl"
         class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle"

@@ -55,10 +55,11 @@ export class AuthController {
   @Post('register')
   async register(
     @Body() dto: RegisterDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.register(dto);
-    setAuthCookies(res, tokens, this.isProduction);
+    setAuthCookies(req, res, tokens, this.isProduction);
     return user;
   }
 
@@ -70,10 +71,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.login(dto);
-    setAuthCookies(res, tokens, this.isProduction);
+    setAuthCookies(req, res, tokens, this.isProduction);
     return user;
   }
 
@@ -97,10 +99,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async demoLogin(
     @Body() dto: DemoLoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.demoLogin(dto.key);
-    setAuthCookies(res, tokens, this.isProduction);
+    setAuthCookies(req, res, tokens, this.isProduction);
     return user;
   }
 
@@ -112,7 +115,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.refresh(readRefreshCookie(req));
-    setAuthCookies(res, tokens, this.isProduction);
+    setAuthCookies(req, res, tokens, this.isProduction);
     return user;
   }
 
@@ -126,7 +129,7 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
     await this.authService.logout(readRefreshCookie(req));
-    clearAuthCookies(res, this.isProduction);
+    clearAuthCookies(req, res, this.isProduction);
   }
 
   // Returned shape mirrors PublicUser (minus newsletterOptIn, which isn't
@@ -157,7 +160,7 @@ export class AuthController {
   async googleCallback(@Req() req: Request, @Res() res: Response): Promise<void> {
     const profile = req.user as GoogleProfile;
     const { tokens } = await this.authService.handleGoogleLogin(profile);
-    setAuthCookies(res, tokens, this.isProduction);
+    setAuthCookies(req, res, tokens, this.isProduction);
     res.redirect(this.frontendUrl);
   }
 
@@ -171,10 +174,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async googleTokenLogin(
     @Body() dto: GoogleTokenLoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.googleTokenLogin(dto.idToken);
-    setAuthCookies(res, tokens, this.isProduction);
+    setAuthCookies(req, res, tokens, this.isProduction);
     return user;
   }
 
@@ -188,13 +192,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async appleTokenLogin(
     @Body() dto: AppleTokenLoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PublicUser> {
     const { user, tokens } = await this.authService.appleTokenLogin(
       dto.identityToken,
       dto.authorizationCode,
     );
-    setAuthCookies(res, tokens, this.isProduction);
+    setAuthCookies(req, res, tokens, this.isProduction);
     return user;
   }
 
@@ -240,9 +245,10 @@ export class AuthController {
   async deleteAccount(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: DeleteAccountDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     await this.authService.deleteAccount(user.userId, user.companyId, dto);
-    clearAuthCookies(res, this.isProduction);
+    clearAuthCookies(req, res, this.isProduction);
   }
 }

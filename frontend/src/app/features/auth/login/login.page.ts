@@ -21,6 +21,29 @@ import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.com
 import { IconGoogleComponent } from '../../../shared/components/icon-google.component';
 import { ReferralCodePromptComponent } from '../../../shared/components/referral-code-prompt.component';
 
+// Native login failures (Google's/Apple's own plugins, and HttpErrorResponse
+// from the backend call that follows) are plain objects, not Error
+// instances — `String(error)` on those gives the useless "[object Object]"
+// instead of the code/message that actually explains the failure, which is
+// the one clue closed-beta testers without chrome://inspect can see.
+function describeLoginError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === 'object') {
+    const { message, code } = error as { message?: unknown; code?: unknown };
+    if (typeof message === 'string') {
+      return code ? `${message} (${code})` : message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      // Falls through to String(error) below — e.g. a circular structure.
+    }
+  }
+  return String(error);
+}
+
 @Component({
   selector: 'app-login-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -111,7 +134,7 @@ export class LoginPage {
         // section for the Android OAuth client / SHA-1 checklist this
         // usually turns out to be.
         console.error('Google native login failed:', error);
-        const detail = error instanceof Error ? error.message : String(error);
+        const detail = describeLoginError(error);
         this.errorMessage.set(`Connexion avec Google indisponible. (${detail})`);
       }
     } finally {
@@ -135,7 +158,7 @@ export class LoginPage {
     } catch (error) {
       if (!(error instanceof AppleNativeLoginCancelledError)) {
         console.error('Apple native login failed:', error);
-        const detail = error instanceof Error ? error.message : String(error);
+        const detail = describeLoginError(error);
         this.errorMessage.set(`Connexion avec Apple indisponible. (${detail})`);
       }
     } finally {

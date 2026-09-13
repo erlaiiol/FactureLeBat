@@ -1,0 +1,14 @@
+/* Capacitor's native iOS/Android shells render the WebView edge-to-edge —
+   the notch/Dynamic Island/status bar and the home-indicator area are part
+   of the WebView's own bounds, not reserved by the OS. Without this, every
+   page's top content (nav, landing header, login button) renders under the
+   status bar/camera cutout on notched phones. `env()` falls back to 0 on
+   plain web (no notch to account for), so this is safe unconditionally —
+   it only requires index.html's viewport-fit=cover to report a non-zero
+   value in the first place. Scoped to the App component's own root element
+   (:host > div, app.html's outer wrapper) since that single div already
+   wraps every route, authenticated or not. */
+:host > div {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
