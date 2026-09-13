@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { XSRF_COOKIE, XSRF_HEADER } from '../auth.constants';
+import { isNativeAppOrigin } from '../is-native-app-origin.util';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -18,14 +19,20 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // Only applies to authenticated (non-@Public), state-changing requests —
 // register/login/refresh are the entry points that establish the cookie in
 // the first place and have no existing session to forge a request against
-// yet.
+// yet. The native iOS app's origin is exempted the same way: its WKWebView
+// doesn't expose `document.cookie` for this cross-scheme cookie at all
+// (confirmed empirically — the double-submit mechanic literally can't work
+// there), and the classic CSRF vector — a malicious third-party *page*
+// riding a victim's already-authenticated browser tab — doesn't apply to a
+// native app's own isolated WebView, which only ever loads our bundled app.
+// See is-native-app-origin.util.ts for why trusting this Origin is safe.
 @Injectable()
 export class CsrfGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    if (SAFE_METHODS.has(request.method)) {
+    if (SAFE_METHODS.has(request.method) || isNativeAppOrigin(request.headers.origin)) {
       return true;
     }
 

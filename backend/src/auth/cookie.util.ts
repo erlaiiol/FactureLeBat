@@ -6,25 +6,16 @@ import {
   XSRF_COOKIE,
 } from './auth.constants';
 import { IssuedTokens } from './auth.service';
+import { isNativeAppOrigin } from './is-native-app-origin.util';
 
-// The iOS app's WKWebView can never actually run under an `https://` origin
-// — WKWebView reserves that scheme for its own native handling and silently
-// falls back to `capacitor://<hostname>` regardless of capacitor.config.ts's
-// iosScheme setting (see CAPInstanceDescriptor.swift's normalize(), and
-// frontend/src/environments/environment.prod.ts's resolveApiBaseUrl for the
-// matching frontend-side fix: the app calls the API by absolute URL instead
-// of relying on a same-origin relative path that doesn't actually hold on
-// iOS). That makes every request from the app genuinely cross-site, and a
-// cross-site fetch/XHR never attaches a `sameSite: 'lax'` cookie — only this
-// one case needs 'none' to get a session at all. The web app (and Android,
-// whose WebView CAN genuinely serve under `https://`, unlike iOS's) stay
-// 'lax', their real CSRF protection, since their requests are genuinely
-// same-site. A forged `Origin: capacitor://...` header can't come from a
-// real browser context — only a real Capacitor iOS WKWebView can present
-// one — so trusting the header here doesn't weaken anything: the request
-// still can't succeed at all unless CORS_ORIGIN also explicitly allows it.
+// See is-native-app-origin.util.ts. A cross-site fetch/XHR never attaches a
+// sameSite: 'lax' cookie (lax only protects top-level navigations) — only
+// the native app's origin needs 'none' to get a session at all. The web app
+// (and Android, whose WebView genuinely serves under `https://`, unlike
+// iOS's) stay 'lax', their real CSRF protection, since their requests are
+// genuinely same-site.
 function sameSiteFor(req: Request): 'lax' | 'none' {
-  return req.headers.origin?.startsWith('capacitor://') ? 'none' : 'lax';
+  return isNativeAppOrigin(req.headers.origin) ? 'none' : 'lax';
 }
 
 // Sets the three cookies a successful register/login/refresh/Google-callback
