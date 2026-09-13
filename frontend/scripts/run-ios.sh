@@ -6,8 +6,12 @@
 #
 # Needs a full Xcode install active, not just the Command Line Tools:
 # `xcode-select -p` must point at an Xcode.app. Simulator builds don't need
-# a real Apple signing identity — CODE_SIGNING_ALLOWED=NO below is standard
-# for simulator-only builds, no distribution credentials involved.
+# a real Apple signing identity, but they DO need to actually go through
+# codesign — entitlements (com.apple.developer.applesignin included) are
+# embedded by the codesign step itself, and Sign In with Apple's
+# ASAuthorizationController rejects with the opaque "error 1000" against a
+# fully unsigned binary. Ad-hoc signing (CODE_SIGN_IDENTITY=-) below embeds
+# them without needing any real distribution credentials.
 #
 # dev mode temporarily enables a cleartext-HTTP ATS exception for your LAN
 # IP (Info.plist, normally shipped commented-out — see the warning inline
@@ -99,12 +103,14 @@ xcodebuild \
 	-sdk iphonesimulator \
 	-derivedDataPath "$BUILD_DIR" \
 	-destination "id=$DEVICE_UDID" \
-	CODE_SIGNING_ALLOWED=NO \
+	CODE_SIGN_IDENTITY=- \
+	CODE_SIGNING_REQUIRED=NO \
+	CODE_SIGNING_ALLOWED=YES \
 	build
 
-APP_PATH=$(find "$BUILD_DIR/Build/Products" -maxdepth 2 -name "App.app" | head -n1)
+APP_PATH=$(find "$BUILD_DIR/Build/Products" -maxdepth 2 -name "*.app" | head -n1)
 if [ -z "$APP_PATH" ]; then
-	echo "==> App.app introuvable après le build." >&2
+	echo "==> Le .app est introuvable après le build." >&2
 	rm -rf "$BUILD_DIR"
 	exit 1
 fi

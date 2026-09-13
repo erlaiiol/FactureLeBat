@@ -205,6 +205,19 @@ else
 	case "$cors" in
 	*'*'*) warn "CORS_ORIGIN contient '*' dans $INFRA_ENV — probablement une erreur de config plutôt qu'un vrai wildcard voulu" ;;
 	esac
+	# Not remotely exploitable on its own — a real attacker's site can't
+	# forge an `Origin: http://localhost:...` header, only a page actually
+	# running on the victim's own machine can send one — but it's dev cruft
+	# with no reason to still be allow-listed once there's a real domain,
+	# same "smells like a leftover dev default" reasoning as the DOMAIN/
+	# POSTGRES_PASSWORD checks above.
+	case "$cors" in
+	*localhost*)
+		if [ -n "$domain" ] && [ "$domain" != ':80' ]; then
+			warn "CORS_ORIGIN contient encore 'localhost' dans $INFRA_ENV alors que DOMAIN ($domain) a l'air d'être un vrai domaine — à retirer maintenant que l'app est publiée (dev cruft, pas une faille exploitable à distance, mais une entrée allow-list qui n'a plus de raison d'être là)"
+		fi
+		;;
+	esac
 
 	appkey=$(env_var "$INFRA_ENV" APP_ENCRYPTION_KEY)
 	[ -n "$appkey" ] && check_secret_strength APP_ENCRYPTION_KEY "$appkey"

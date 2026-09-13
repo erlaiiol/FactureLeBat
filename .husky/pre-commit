@@ -1,3 +1,9 @@
+# GUI git clients (VS Code's Source Control panel, GitHub Desktop, ...)
+# launch this hook with a bare PATH that skips nvm's shell-rc PATH
+# additions — node/npx resolve fine from a terminal but 127 here otherwise.
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
 npx lint-staged
 
 cd backend 
