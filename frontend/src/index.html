@@ -68,15 +68,21 @@
     This file is also the base for index.dev.html (angular.json's
     `development` build configuration swaps to it — see that file's own
     comment): frontend and backend are same-origin everywhere this file
-    actually ships (prod via Caddy/nginx, mobile via capacitor.config.ts's
-    server.hostname trick), so connect-src 'self' is correct here — it's
-    only plain `ng serve` (:4200 vs :3000) that needs the relaxed copy.
-    connect-src also needs `blob:`: WebKit (unlike Chromium) enforces
-    connect-src on fetch() against a same-page-created blob: URL, which is
-    exactly how pdf-canvas-viewer.component.ts reads the PDF bytes back out
-    to hand them to pdf.js — without it, Safari/iOS/Capacitor block the
-    fetch outright ("Refused to connect to blob:..."), even though the PDF
-    request itself succeeded. -->
+    actually ships on the web (prod via Caddy/nginx) and on Android
+    (capacitor.config.ts's server.hostname trick genuinely works there), so
+    connect-src 'self' alone covers both. iOS is the one exception: its
+    WKWebView can't actually serve content under an `https://` origin (see
+    that same capacitor.config.ts comment), so its real origin is
+    `capacitor://facturele.net` while environment.prod.ts's
+    resolveApiBaseUrl calls the API by the real absolute
+    `https://facturele.net` URL instead — 'self' doesn't cover that
+    (different scheme), hence the explicit host below. connect-src also
+    needs `blob:`: WebKit (unlike Chromium) enforces connect-src on fetch()
+    against a same-page-created blob: URL, which is exactly how
+    pdf-canvas-viewer.component.ts reads the PDF bytes back out to hand them
+    to pdf.js — without it, Safari/iOS/Capacitor block the fetch outright
+    ("Refused to connect to blob:..."), even though the PDF request itself
+    succeeded. -->
     <!-- script-src's hash below allow-lists the exact bytes of the JSON-LD
     block near the end of <head> (its whitespace is part of the hash input —
     if that script tag's content ever changes, regenerate with:
@@ -87,7 +93,7 @@
     above already asks for the rest of the policy.) -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'sha256-hfyn496X7xHhGggIoWQrolBO3W5kI3GzyuMP0SRyPBE='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self' 'sha256-hfyn496X7xHhGggIoWQrolBO3W5kI3GzyuMP0SRyPBE='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://facturele.net blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
