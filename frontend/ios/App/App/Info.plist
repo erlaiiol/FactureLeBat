@@ -47,11 +47,38 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- social-login-parity: native Google Sign-In's browser-based callback
+	needs this reversed-client-id URL scheme registered so iOS can hand
+	control back to the app after the consent screen. Value is the
+	REVERSED_CLIENT_ID from ios/App/App/GoogleService-Info.plist (its
+	CLIENT_ID's segments in reverse: com.googleusercontent.apps.<numeric>-<hash>) —
+	update this if that plist is ever regenerated with a different client. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+	<string>com.googleusercontent.apps.211973026193-kkifvinno7u9ojc1jfkeg33khvsdt3ss</string>
+			</array>
+		</dict>
+	</array>
 	<!-- Phase 22: this app only uses standard HTTPS/TLS (exempt encryption)
 	— never a custom cryptographic implementation — so this is answered
 	once here instead of App Store Connect asking on every single build
 	upload ("Does your app use encryption?"). -->
 	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- @capgo/capacitor-social-login's Package.swift declares FacebookCore/
+	FacebookLogin unconditionally (SocialLoginPlugin's own dependency list),
+	so the Facebook SDK ships inside the binary even though
+	capacitor.config.ts's providers.facebook stays false and no Facebook
+	login is ever offered — these two keys stop that unused SDK from
+	auto-logging app events/collecting the advertising identifier on its
+	own, which would otherwise contradict the App Privacy answers (this app
+	does no tracking) without any code of ours ever calling into it. -->
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<false/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
 	<false/>
 	<!-- Phase 1.4-3: required by @capgo/capacitor-speech-recognition
 	(SFSpeechRecognizer/SpeechAnalyzer + AVAudioSession) — shown once by

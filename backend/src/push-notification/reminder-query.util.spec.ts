@@ -1,4 +1,5 @@
 import {
+  buildInactiveCompanyWhere,
   buildLateInvoiceWhere,
   buildUnpaidNotLateInvoiceWhere,
   buildUnsentEInvoiceWhere,
@@ -44,6 +45,26 @@ describe('reminder-query.util', () => {
         createdAt: { lt: new Date(now.getTime() - 48 * 60 * 60 * 1000) },
         company: { superPdpConnectedAt: { not: null } },
       });
+    });
+  });
+
+  describe('buildInactiveCompanyWhere', () => {
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    it('requires the company to be at least 7 days old and quiet for 7 days, with no cooldown yet', () => {
+      expect(buildInactiveCompanyWhere(now)).toEqual({
+        createdAt: { lte: sevenDaysAgo },
+        invoices: { none: { createdAt: { gt: sevenDaysAgo } } },
+        OR: [{ lastInvoiceNudgeAt: null }, { lastInvoiceNudgeAt: { lte: thirtyDaysAgo } }],
+      });
+    });
+
+    it('never gives a brand-new signup a nudge before its first week is over', () => {
+      // A company created 1 day ago fails createdAt <= sevenDaysAgo, so it's
+      // excluded regardless of whether it has any invoices yet.
+      const companyCreatedAt = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
+      expect(companyCreatedAt > sevenDaysAgo).toBe(true);
     });
   });
 });

@@ -579,6 +579,16 @@ model Company {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Bumped by ReminderCronService's invoice-creation nudge (Phase 22) — the
+  // "come back and make an invoice" push, distinct from Invoice.
+  // lastPushReminderAt below (that one only ever stamps existing invoices,
+  // and a company with zero recent activity has none to stamp). Null until
+  // the first nudge ever fires; used both to find eligible companies (see
+  // reminder-query.util.ts's buildInactiveCompanyWhere) and, once stamped,
+  // to hold off the next one for the cooldown window rather than re-nudging
+  // every day the inactivity persists.
+  lastInvoiceNudgeAt DateTime?
 }
 
 // Phase 1.2-5 (2026 e-invoicing reform): a minimal, read-only record of one
@@ -1017,7 +1027,7 @@ model Invoice {
   // Paying companies still get this set (for a consistent historical
   // record — see BillingRepository.countFacturXUsedThisMonth), it just
   // never blocks them.
-  facturXFirstUsedAt          DateTime?
+  facturXFirstUsedAt DateTime?
 
   // Phase 1.3-3 (2026 e-invoicing reform, workflow automation): set at
   // creation only when Company.autoTransmitViaPa was on and SUPER PDP was

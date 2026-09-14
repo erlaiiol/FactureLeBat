@@ -32,6 +32,13 @@ export function buildDigestBody(
   return parts.join(', ');
 }
 
+// Static copy for the invoice-creation nudge — unlike buildDigestBody, there
+// are no per-company counts to interpolate here (the trigger is an absence
+// of activity, not a number worth reporting), so this is just a constant
+// rather than a builder function.
+export const INVOICE_NUDGE_BODY =
+  'Ça fait une semaine sans facture ni devis. FactureLe reste là dès que vous en avez besoin !';
+
 // First scheduled job in this codebase — runs in-process in the existing
 // single backend container (today's deploy is one replica; a distributed
 // lock or dedicated scheduler would only be needed if that ever changes,
@@ -86,5 +93,46 @@ export class ReminderCronService {
     }
 
     await this.repository.markReminded(remindedCompanyIds, now);
+  }
+
+  // Separate cron (own timeslot, 15 minutes after the digest above) rather
+  // than folded into sendDailyReminders: this fires on an entirely different
+  // condition (inactivity, not outstanding invoices) and a company can match
+  // both independently — e.g. an artisan who still has an old late invoice
+  // sitting unpaid but hasn't made a new one in over a week gets both pushes,
+  // not one conflated message.
+  @Cron('15 9 * * *', { timeZone: 'Europe/Paris' })
+  async sendInvoiceCreationNudges(): Promise<void> {
+    if (!this.sender.isConfigured()) {
+      return;
+    }
+
+    const now = new Date();
+    const companyIds = await this.repository.findInactiveCompanyIds(now);
+    if (companyIds.length === 0) {
+      return;
+    }
+
+    const tokensByCompany = await this.repository.findDeviceTokensByCompanyIds(companyIds);
+
+    const nudgedCompanyIds: string[] = [];
+    for (const companyId of companyIds) {
+      const tokens = tokensByCompany.get(companyId);
+      if (!tokens || tokens.length === 0) {
+        continue;
+      }
+      try {
+        await this.sender.send(tokens, { title: 'FactureLe', body: INVOICE_NUDGE_BODY });
+        nudgedCompanyIds.push(companyId);
+      } catch (error) {
+        if (error instanceof PushUnavailableError) {
+          this.logger.warn(`Invoice nudge push failed for company ${companyId}: ${error.message}`);
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    await this.repository.markInvoiceNudged(nudgedCompanyIds, now);
   }
 }

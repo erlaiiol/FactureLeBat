@@ -40,3 +40,23 @@ export function buildUnsentEInvoiceWhere(now: Date): Prisma.InvoiceWhereInput {
     company: { superPdpConnectedAt: { not: null } },
   };
 }
+
+// "Come back and make an invoice/devis" nudge: fires once a company has gone
+// a full week without creating any document (of either DocumentType — this
+// is about the artisan using the app at all, not specifically billing), then
+// backs off for a month before nudging again if the silence continues. The
+// 7-day inactivity window is also checked against the company's own
+// createdAt, so a brand-new signup gets a full week to make their first
+// invoice before ever being told they're "inactive."
+const INVOICE_NUDGE_INACTIVITY_MS = 7 * 24 * 60 * 60 * 1000;
+const INVOICE_NUDGE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function buildInactiveCompanyWhere(now: Date): Prisma.CompanyWhereInput {
+  const inactivitySince = new Date(now.getTime() - INVOICE_NUDGE_INACTIVITY_MS);
+  const cooldownSince = new Date(now.getTime() - INVOICE_NUDGE_COOLDOWN_MS);
+  return {
+    createdAt: { lte: inactivitySince },
+    invoices: { none: { createdAt: { gt: inactivitySince } } },
+    OR: [{ lastInvoiceNudgeAt: null }, { lastInvoiceNudgeAt: { lte: cooldownSince } }],
+  };
+}

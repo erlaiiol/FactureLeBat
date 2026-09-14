@@ -13,10 +13,12 @@ export class GoogleNativeLoginCancelledError extends Error {}
 // blocks that redirect from completing inside an embedded WebView (the
 // app's own Capacitor WebView), so this instead gets a Google-signed ID
 // token straight from the OS and hands it to AuthService.googleTokenLogin
-// for the backend to verify. iOS never calls this — see login.page.html's
-// platformService.isIosApp() guard (Apple 4.8 requires Sign in with Apple
-// alongside any other third-party sign-in, so Google is hidden entirely on
-// iOS rather than built there too).
+// for the backend to verify. Also used on iOS since Apple 4.8's "offer Sign
+// in with Apple alongside any other third-party sign-in" requirement is
+// satisfied by AppleNativeLoginService rendering next to this one (see
+// login.page.html) rather than by hiding Google there — the plugin routes
+// to the right native SDK per platform on its own, given both client IDs
+// below.
 @Injectable({ providedIn: 'root' })
 export class GoogleNativeLoginService {
   private initialized: Promise<void> | null = null;
@@ -24,7 +26,10 @@ export class GoogleNativeLoginService {
   private initialize(): Promise<void> {
     if (!this.initialized) {
       this.initialized = SocialLogin.initialize({
-        google: { webClientId: environment.googleWebClientId },
+        google: {
+          webClientId: environment.googleWebClientId,
+          iOSClientId: environment.googleIosClientId,
+        },
       });
     }
     return this.initialized;

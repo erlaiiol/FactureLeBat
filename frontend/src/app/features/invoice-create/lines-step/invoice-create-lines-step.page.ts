@@ -506,7 +506,7 @@ export class InvoiceCreateLinesStepPage {
     // Only the first line for a given catalog Product stays "linked" to it
     // (catalogProductId set) — a second pick of the same product prefills
     // an independent line instead, since only one line can ever be the
-    // thing "Mettre à jour ce produit dans le catalogue" updates in place
+    // thing the "Se mettra à jour dans votre catalogue" toggle updates in place
     // (see persistFreeEntities in InvoiceDraftStore, which fires one update
     // request per distinct catalogProductId). Leaving it unlinked here means
     // InvoiceLineFormComponent.isCatalogLinked() is false on it, so it reads

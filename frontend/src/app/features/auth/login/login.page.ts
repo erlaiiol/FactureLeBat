@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DemoProfile } from '../../../core/models/auth.model';
+import { AppleAndroidLoginService } from '../../../core/services/apple-android-login.service';
 import {
   AppleNativeLoginCancelledError,
   AppleNativeLoginService,
@@ -14,35 +15,13 @@ import {
   GoogleNativeLoginService,
 } from '../../../core/services/google-native-login.service';
 import { PlatformService } from '../../../core/services/platform.service';
+import { describeLoginError } from '../../../core/utils/describe-login-error.util';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconAppleComponent } from '../../../shared/components/icon-apple.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
 import { IconGoogleComponent } from '../../../shared/components/icon-google.component';
 import { ReferralCodePromptComponent } from '../../../shared/components/referral-code-prompt.component';
-
-// Native login failures (Google's/Apple's own plugins, and HttpErrorResponse
-// from the backend call that follows) are plain objects, not Error
-// instances — `String(error)` on those gives the useless "[object Object]"
-// instead of the code/message that actually explains the failure, which is
-// the one clue closed-beta testers without chrome://inspect can see.
-function describeLoginError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (error && typeof error === 'object') {
-    const { message, code } = error as { message?: unknown; code?: unknown };
-    if (typeof message === 'string') {
-      return code ? `${message} (${code})` : message;
-    }
-    try {
-      return JSON.stringify(error);
-    } catch {
-      // Falls through to String(error) below — e.g. a circular structure.
-    }
-  }
-  return String(error);
-}
 
 @Component({
   selector: 'app-login-page',
@@ -63,6 +42,7 @@ export class LoginPage {
   private readonly authService = inject(AuthService);
   private readonly googleNativeLoginService = inject(GoogleNativeLoginService);
   private readonly appleNativeLoginService = inject(AppleNativeLoginService);
+  private readonly appleAndroidLoginService = inject(AppleAndroidLoginService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -71,6 +51,7 @@ export class LoginPage {
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly googleLoginUrl = this.authService.googleLoginUrl();
+  protected readonly appleLoginUrl = this.authService.appleLoginUrl();
   protected readonly passwordVisible = signal(false);
 
   // Empty on every real deployment (DEMO_MODE unset server-side, see
@@ -142,8 +123,11 @@ export class LoginPage {
     }
   }
 
-  // iOS-only counterpart to googleLoginNative above — see
-  // AppleNativeLoginService for why there's no web/Android equivalent.
+  // iOS-only counterpart to googleLoginNative above (see
+  // AppleNativeLoginService) — Android's Apple button below takes a
+  // completely different path (system browser + deep link, no promise this
+  // method-shaped handler could resolve), and web uses [href]="appleLoginUrl"
+  // directly in the template, same as Google's web link.
   protected async appleLoginNative(): Promise<void> {
     if (this.saving()) {
       return;
@@ -161,6 +145,27 @@ export class LoginPage {
         const detail = describeLoginError(error);
         this.errorMessage.set(`Connexion avec Apple indisponible. (${detail})`);
       }
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  // Android counterpart to appleLoginNative above — opens Apple's authorize
+  // page in the system browser (AppleAndroidLoginService) and returns here
+  // via DeepLinkService's appUrlOpen listener, not via this method's own
+  // promise resolving a login result the way the native flows above do.
+  protected async appleLoginAndroid(): Promise<void> {
+    if (this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.errorMessage.set(null);
+    try {
+      await this.appleAndroidLoginService.start();
+    } catch (error) {
+      console.error('Apple Android login failed to start:', error);
+      const detail = describeLoginError(error);
+      this.errorMessage.set(`Connexion avec Apple indisponible. (${detail})`);
     } finally {
       this.saving.set(false);
     }

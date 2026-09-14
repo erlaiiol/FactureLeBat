@@ -1366,7 +1366,7 @@ Phase 14's premium gate is billed through Stripe on the web. This is a real cons
 
 - Apple's guideline 3.1.1 requires digital subscriptions *purchased from within the app* to go through Apple's own In-App Purchase (≈30% commission), **unless** the app follows the "external subscription, used as a business tool" pattern already used by apps like Slack/Basecamp/Dropbox: the app may let an already-subscribed user use the paid features, but must not present a "Subscribe"/"Pay" button or any link that starts a Stripe checkout *from inside the iOS app*. The subscription flow (`/abonnement`, Phase 14) stays a web-only action the artisan completes outside the app (browser, desktop) before or alongside using the iOS app.
 - Google Play is materially more permissive here (external billing links are commonly tolerated for this kind of business-tool app), so the constraint is effectively iOS-only, but the safest approach is one consistent behavior on both platforms: never surface the Stripe checkout/paywall CTA inside the native app shell.
-- Concretely: `PaywallModalComponent`/the `PremiumRequiredException` (402) handling (Phase 14) needs a mobile-specific variant on iOS — inform the artisan they're past the free trial and must subscribe via the FactureLe website, without a tappable link that opens a payment flow in-app.
+- Concretely: `PaywallModalComponent`/the `PremiumRequiredException` (402) handling (Phase 14) needs a mobile-specific variant on iOS — inform the artisan they're past the free trial and must subscribe via the FactureLe website, without a tappable link that opens a payment flow in-app. That variant is a button, not just text: `platformService.openWebSubscriptionPage()` calls `@capacitor/browser`'s `Browser.open()`, which hands off to the system browser (`SFSafariViewController` on iOS) rather than the app's own WebView — a pure link-out, so it never itself starts a payment flow and stays inside the same 3.1.1 allowance. See Implementation notes below.
 
 ## Architecture
 
@@ -1390,8 +1390,9 @@ The board's 5 columns + drag-and-drop (`invoice-board.page.html`, `interactjs`-b
 - [x] Manual pass over every other multi-step/wide screen (invoice creation steps, catalog picker, Phase 17's reports/analytics charts) to catch any other desktop-assumption UI, not just the board
 - [x] App icons/splash screens for both platforms generated (store *metadata* — listings, screenshots, descriptions — stays out of scope per this phase's own Non-goals below, not conflated with the icon/splash asset pipeline)
 - [x] Push notification capability — not just evaluated, fully implemented (FCM both platforms, a real scheduled "en retard"/"non payée" digest, admin visibility) per an explicit decision with the user to go beyond the roadmap draft's "deferred/stubbed if out of scope" allowance
+- [x] "Come back and make an invoice" nudge — a second, independent `ReminderCronService` job pushes a company that's gone 7 days with zero invoice/devis activity, then holds off for a 30-day cooldown per company rather than nagging daily — see the 2026-09-13 Implementation note below
 - [x] Build pipeline for producing installable iOS/Android artifacts documented (`make ios`/`make android`, see docs/deployment.md) — store submission itself stays a separate, later step
-- [x] iOS build never exposes a Stripe checkout/payment CTA from inside the app (see billing constraint above) — a mobile-appropriate "subscribe on the website" message replaces `PaywallModalComponent`'s normal in-app link on that platform only
+- [x] iOS build never exposes a Stripe checkout/payment CTA from inside the app (see billing constraint above) — a mobile-appropriate "subscribe on the website" message replaces `PaywallModalComponent`'s normal in-app link on that platform only, with a button that opens the equivalent web page in the system browser (`Browser.open()`, `@capacitor/browser`) rather than just naming the domain as text
 
 ## Non-goals
 
@@ -1429,6 +1430,8 @@ The board's 5 columns + drag-and-drop (`invoice-board.page.html`, `interactjs`-b
   - Android: `POST_NOTIFICATIONS` permission (API 33+) and default notification-channel/icon metadata added to `AndroidManifest.xml`; `compileSdk`/`targetSdk` 36 (Capacitor 8's own template default) already satisfies Play's rolling target-API-level policy with no change needed.
   - **Left as operational checklist items, not code** (same split Phase 20 used for its own audit): `SiteLegalInfo` must be filled in with FactureLe's real legal identity before submission (it defaults to empty strings, never fabricated placeholder text); the iOS Privacy Manifest (`PrivacyInfo.xcprivacy`, scaffolded with a baseline `UserDefaults` declaration) needs re-review against whatever exact SDK versions ship; both stores' privacy/data-safety questionnaires need answering (this app collects email, invoicing data, and a push token — used for app functionality only, never shared/sold); an Android release needs a signed `.aab` (Play requires App Bundle, not APK) via `cd frontend/android && ./gradlew bundleRelease` once a signing key exists.
 - **`make ios`/`make android`** (Makefile) build the production Angular bundle, `cap sync` (copying it plus every installed plugin into `ios/`/`android/`), then open the native IDE — `LOCAL_HOST=<lan-ip>` routes at a local backend instead of the real domain for simulator/emulator testing. Neither target installs Xcode/Android Studio/the Android SDK themselves, only invokes them.
+- **2026-09-13: `ReminderCronService` gained a second, independent nudge — "come back and make an invoice."** The existing daily digest (line above) only ever fires for a company that already has late/unpaid/unsent invoices; a company that's gone quiet with zero activity at all matched none of those buckets and got no push ever. `sendInvoiceCreationNudges()` runs as its own `@Cron('15 9 * * *')` job (offset 15 minutes from the digest, deliberately not folded into it — the two fire on unrelated conditions, and a company can match both at once) and pushes a static French copy ("Ça fait une semaine sans facture ni devis…") to any company with no `Invoice` (either `DocumentType`) created in the last 7 days. New `Company.lastInvoiceNudgeAt` field enforces a 30-day cooldown once nudged, so a genuinely inactive artisan gets reminded the app still exists every month rather than daily — cadence and both thresholds (7 days to first nudge, 30-day cooldown) confirmed explicitly with the user. `buildInactiveCompanyWhere` (`reminder-query.util.ts`) also requires `Company.createdAt` to be at least 7 days in the past, so a brand-new signup's onboarding week is never mistaken for inactivity. Deliberately did **not** add an equivalent periodic "rate the app" push: the user explicitly chose to keep that ask exactly where Phase 31 already put it (triggered after a real invoice share, throttled client-side) rather than adding a second, server-driven solicitation — see Phase 31's own reasoning about not gating `SKStoreReviewController` behind a happy-path filter, which a recurring "please rate us" push would edge back toward.
+- **2026-09-13: "Rendez-vous sur facturele.net…" iOS messages became buttons.** The three iOS-only blocks (`subscribe.page.html`, `PaywallModalComponent`, `TrialOfferModalComponent`) used to just tell the artisan the domain name in plain text, with no tappable element — safest possible reading of 3.1.1, but poor UX (typing a URL by hand). Added `@capacitor/browser` (already on Capacitor 8.x, matching every other first-party plugin here) and `PlatformService.openWebSubscriptionPage()`, which calls `Browser.open({ url: 'https://facturele.net/abonnement' })` — opens the system browser (`SFSafariViewController`), never navigates the app's own WKWebView (`window.location.href`/`window.open` would both do the latter, defeating the point: the app's WebView is still "inside the app" as far as 3.1.1 is concerned). The target URL is a plain hardcoded constant, same convention as the domain name that used to be in the message text — not derived from `window.location.hostname` like `environment.prod.ts`'s `resolveApiBaseUrl`, since this button only makes sense pointed at the real production site regardless of which backend the current build talks to. Synced into the iOS native project via `npx cap sync ios` (adds `CapacitorBrowser` to `CapApp-SPM/Package.swift`, resolved via Swift Package Manager — no CocoaPods step needed). Android was left alone: its `@else` branch already shows the normal in-app Stripe checkout CTA, since Google Play tolerates it (see billing constraint above).
 
 ---
 
@@ -2663,18 +2666,21 @@ decisions.
 ## Objective
 
 Offer a second third-party login option, "Continuer avec Apple", next to
-the existing Google button on `/connexion`. **Status (2026-09-02): code
-complete, native-only scope, not yet runnable end-to-end.** Backend and
-frontend both implemented and unit-tested; still blocked on the user
-completing Apple Developer Program enrollment (Sole Proprietor/Individual
-— Organization was attempted first but Apple/D&B's lookup of the existing
-D-U-N-S number, already on hand from the Play Store listing, classifies
-this business as a sole proprietorship with no legal personality distinct
-from the individual, which the Organization enrollment type requires and
-Sole Proprietor doesn't) and creating the App ID capability/Sign in with
-Apple key this needs — see Current state below. Enrollment type has no
-effect on anything built in this phase: Team ID/App ID/Services ID/keys
-work identically either way.
+the existing Google button on `/connexion`. **Status (2026-09-13):
+verified working end-to-end** — Apple Developer Program enrollment
+(Sole Proprietor/Individual — Organization was attempted first but
+Apple/D&B's lookup of the existing D-U-N-S number, already on hand from
+the Play Store listing, classifies this business as a sole
+proprietorship with no legal personality distinct from the individual,
+which the Organization enrollment type requires and Sole Proprietor
+doesn't) is complete, the "Sign In with Apple" capability + a Sign in
+with Apple key (`.p8`) are in place, and `APPLE_CLIENT_ID`/
+`APPLE_TEAM_ID`/`APPLE_KEY_ID`/`APPLE_PRIVATE_KEY` are all set in both
+`backend/.env` and `infra/.env` (`sh infra/audit-config.sh` confirms all
+four, without printing values) — see Current state below for the real
+device/native-build issues this exposed and fixed along the way (entitlements
+not embedded by an unsigned simulator build, the CSP/cookie/CSRF chain
+needed for the app's own `capacitor://` origin).
 
 ## Scope narrowed from the original plan: native-iOS-only, no Services ID
 
@@ -2746,26 +2752,67 @@ value created in Apple's portal.
 
 ## Current state / blocker
 
-Everything above is written and unit-tested, but cannot run end-to-end
-yet: it needs `APPLE_CLIENT_ID` (the bundle ID, no portal action needed)
-plus the "Sign In with Apple" capability actually enabled on the
-`fr.facturele.app` App ID in Apple's developer portal, and — for the
-revocation feature only — a Sign in with Apple key (`.p8` +
-`APPLE_TEAM_ID`/`APPLE_KEY_ID`). The user is completing Apple Developer
-Program enrollment now as Sole Proprietor/Individual — Organization was
-rejected by Apple/D&B's lookup of the existing D-U-N-S number (already on
-hand from the Play Store listing) as a sole proprietorship, which doesn't
-qualify for Organization (no legal personality distinct from the
-individual), so no separate D-U-N-S wait is expected here either. Sole
-Proprietor enrollment still uses the D-U-N-S number and, per Apple's own
-docs, can carry a business/trading name ("FactureLe") as the seller
-rather than only the personal legal name — worth confirming during that
-flow. Once the capability/key exist: set
-`APPLE_CLIENT_ID`/`APPLE_TEAM_ID`/`APPLE_KEY_ID`/`APPLE_PRIVATE_KEY` (see
-`backend/.env.example`), add the "Sign In with Apple" capability to the
-Xcode target's Signing & Capabilities (a manual step, same class as Phase
-22's Firebase SPM dependency — `git grep APPLE_CLIENT_ID` finds every spot
-this touches), then exercise the real flow on a device/simulator.
+**Resolved (2026-09-13).** Apple Developer Program enrollment completed
+(Sole Proprietor/Individual, D-U-N-S from the existing Play Store listing),
+the "Sign In with Apple" capability + `.p8` key obtained, and
+`APPLE_CLIENT_ID`/`APPLE_TEAM_ID`/`APPLE_KEY_ID`/`APPLE_PRIVATE_KEY` are set
+in both `backend/.env` and `infra/.env`. Exercising the real flow on the iOS
+Simulator (`make ios-prod`) surfaced three unrelated, previously-unhit bugs
+in the native-app plumbing itself, all fixed along the way — worth recording
+since none of them are Apple-specific, they'd have hit *any* authenticated
+POST from the iOS app:
+- `frontend/scripts/run-ios.sh` built with `CODE_SIGNING_ALLOWED=NO` — a
+  fully unsigned simulator binary never gets its entitlements embedded
+  (that happens during the codesign step itself), so
+  `com.apple.developer.applesignin` wasn't actually present at runtime
+  despite being in `App.entitlements`, and `ASAuthorizationController`
+  rejected with the opaque "error 1000". Fixed: ad-hoc signing
+  (`CODE_SIGN_IDENTITY=-`) instead of no signing at all.
+- WKWebView can't register a URL scheme handler on `https`/`http` (reserved,
+  natively handled) — so despite `capacitor.config.ts`'s `iosScheme:
+  'https'` + matching `hostname`, the app's real origin is
+  `capacitor://facturele.net`, not `https://facturele.net`. A relative
+  `/api/...` call resolved against that fake-same-origin and got served the
+  bundled `index.html` locally instead of ever reaching the network.
+  Fixed: `environment.prod.ts`'s `resolveApiBaseUrl` calls the API by
+  absolute URL on iOS specifically; `index.html`'s CSP `connect-src` had to
+  explicitly allow `https://facturele.net` too (`'self'` only covers the
+  page's own `capacitor://` origin).
+- That absolute-URL call is now genuinely cross-site, which breaks the
+  existing cookie/CSRF model two ways: `sameSite: 'lax'` cookies never
+  attach to a cross-site fetch (fixed: `cookie.util.ts`'s `sameSiteFor`
+  relaxes to `'none'` only for a `capacitor://` origin, unchanged
+  everywhere else), and the double-submit CSRF check can't work at all
+  since this WKWebView doesn't expose `document.cookie` for a cookie set by
+  the cross-scheme API response (confirmed empirically — an authenticated
+  POST returned 403 "Jeton CSRF invalide ou manquant.", and
+  `document.cookie` was verified empty in Safari's Web Inspector on the
+  running Simulator). Fixed: `CsrfGuard` exempts the same `capacitor://`
+  origin — see `is-native-app-origin.util.ts` for why trusting that header
+  doesn't weaken anything (no website can forge it, and `CORS_ORIGIN` must
+  separately allow it).
+
+Also fixed while investigating, unrelated to any of the above but hit in
+the same session: `login.page.html`'s Google button used `isNativeApp()`
+(true on both platforms) instead of excluding iOS — the native Google flow
+has never had an iOS-side `iOSClientId` configured, so tapping it on iOS
+always failed with "No provider was initialized"; now hidden on iOS,
+Android-only as originally intended. And `Info.plist` now sets
+`FacebookAutoLogAppEventsEnabled`/`FacebookAdvertiserIDCollectionEnabled` to
+`false` — `@capgo/capacitor-social-login`'s `Package.swift` bundles the
+Facebook SDK unconditionally (`FacebookCore`/`FacebookLogin`) even with
+`providers.facebook: false`, and without these keys it can auto-collect
+data the app's App Privacy answers say it doesn't.
+
+**Not yet verified**: the Simulator doesn't enforce entitlement/capability
+registration the way a real device or an App Store distribution build
+does, so this pass doesn't yet prove the portal-side "Sign In with Apple"
+capability is correctly wired into a real signed provisioning profile — only
+that ad-hoc simulator signing embeds the entitlement from
+`App.entitlements` correctly. Confirm on a physical device (or a TestFlight
+build) before treating this as fully store-ready. There is also no
+archive/export pipeline yet for producing a signed `.ipa` at all — every
+`make ios*` target here builds for the Simulator only.
 
 ## Original plan (superseded by the native-only scope above, kept for context)
 
@@ -2791,15 +2838,16 @@ marked superseded.
       (`IconAppleComponent`), rendered only on iOS
       (`platformService.isIosApp()`), same visual weight as Google's — see
       "What shipped" above.
-- [ ] Apple Developer Program membership obtained — blocking, outside this
-      track's engineering scope, precondition for exercising any of the
-      below on a real device. In progress (Sole Proprietor/Individual —
-      see "Current state / blocker" above for why Organization wasn't
-      eligible; D-U-N-S already on hand).
-- [ ] "Sign In with Apple" capability enabled on the `fr.facturele.app` App
+- [x] Apple Developer Program membership obtained (Sole Proprietor/
+      Individual — see "Current state / blocker" above for why
+      Organization wasn't eligible; D-U-N-S already on hand from the Play
+      Store listing).
+- [x] "Sign In with Apple" capability enabled on the `fr.facturele.app` App
       ID in Apple's developer portal (no Services ID — native-only scope,
       see above), plus a Sign in with Apple key (`.p8`) for the
-      revocation-on-delete feature. Blocked on the item above.
+      revocation-on-delete feature — verified working end-to-end on the
+      Simulator (2026-09-13), not yet confirmed on a real device/signed
+      distribution build (see "Current state / blocker" above).
 - [x] Backend identity-token verification (`AuthService.appleTokenLogin`,
       mirrors `handleGoogleLogin`'s create-or-link logic): verifies via
       `apple-signin-auth`'s JWKS check, creates or links an account — a new

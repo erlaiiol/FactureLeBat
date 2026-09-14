@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, PushPlatform } from '../../generated/prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import {
+  buildInactiveCompanyWhere,
   buildLateInvoiceWhere,
   buildUnpaidNotLateInvoiceWhere,
   buildUnsentEInvoiceWhere,
@@ -182,6 +183,29 @@ export class PushNotificationRepository {
         ],
       },
       data: { lastPushReminderAt: now },
+    });
+  }
+
+  // Companies eligible for the "come back and make an invoice" nudge — see
+  // buildInactiveCompanyWhere's own comment for the exact 7-day/30-day rule.
+  async findInactiveCompanyIds(now: Date): Promise<string[]> {
+    const companies = await this.prisma.company.findMany({
+      where: buildInactiveCompanyWhere(now),
+      select: { id: true },
+    });
+    return companies.map((company) => company.id);
+  }
+
+  // Stamped after a successful invoice-nudge push so the same company isn't
+  // re-nudged again before INVOICE_NUDGE_COOLDOWN_MS has passed, mirroring
+  // markReminded's role for the late/unpaid/unsent-e-invoice digest above.
+  async markInvoiceNudged(companyIds: string[], now: Date): Promise<void> {
+    if (companyIds.length === 0) {
+      return;
+    }
+    await this.prisma.company.updateMany({
+      where: { id: { in: companyIds } },
+      data: { lastInvoiceNudgeAt: now },
     });
   }
 }

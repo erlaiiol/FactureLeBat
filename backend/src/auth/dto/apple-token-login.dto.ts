@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class AppleTokenLoginDto {
   // The Apple-signed identity token from the native ASAuthorizationController
@@ -16,4 +16,13 @@ export class AppleTokenLoginDto {
   @IsOptional()
   @IsString()
   authorizationCode?: string;
+
+  // Defaults to 'ios' (this route's original, only caller) when omitted —
+  // 'android' is the browser+deep-link bridge flow (see
+  // DeepLinkService/AuthController.appleMobileCallback), whose identityToken
+  // has `aud` = APPLE_SERVICES_ID rather than the native bundle ID, so
+  // AuthService.appleTokenLogin needs to know which audience to check.
+  @IsOptional()
+  @IsIn(['ios', 'android'])
+  platform?: 'ios' | 'android';
 }

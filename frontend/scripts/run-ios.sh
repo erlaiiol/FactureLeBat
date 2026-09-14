@@ -53,7 +53,7 @@ if [ "$MODE" = "dev" ]; then
 		exit 1
 	fi
 
-	echo "==> Build dev — API sur http://$LOCAL_HOST:3000 (backend/.env doit avoir CORS_ORIGIN incluant cette IP)"
+	echo "==> Build dev — API sur http://$LOCAL_HOST:3000 (CORS_ORIGIN du backend doit inclure capacitor://$LOCAL_HOST — PAS http://$LOCAL_HOST:3000, ce n'est jamais l'Origin qu'envoie la WebView iOS; infra/docker-compose.yml inclut déjà capacitor://127.0.0.1 pour le Simulateur par défaut)"
 
 	restore_plist() {
 		git checkout -- "$PLIST"
@@ -75,6 +75,25 @@ if [ "$MODE" = "dev" ]; then
 	sed -i '' "s#REPLACE_WITH_CAPACITOR_LOCAL_HOST#$LOCAL_HOST#" "$PLIST"
 
 	npx ng build --configuration production
+
+	# index.html's CSP (see that file's own comment) only allow-lists
+	# 'self' + https://facturele.net — in prod that covers everything,
+	# since resolveApiBaseUrl (environment.prod.ts) calls the API by that
+	# exact absolute URL. In dev mode it doesn't: resolveApiBaseUrl instead
+	# builds an absolute http://$LOCAL_HOST:3000 URL (this script's own
+	# "API sur http://$LOCAL_HOST:3000" line above), a different origin
+	# 'self' can't cover — every fetch/XHR to it gets silently blocked
+	# ("Refused to connect to ... it does not appear in the connect-src
+	# directive"). img-src needs the same carve-out: CompanyService.logoUrl/
+	# InvoiceService.signatureUrl bind an <img [src]> straight to
+	# environment.apiBaseUrl. Same fix run-android.sh already has via its
+	# own index.capacitor-dev.html — done here as a direct sed on the built
+	# output instead, since iOS (unlike Android) doesn't need a whole
+	# environment-file swap (resolveApiBaseUrl already computes the right
+	# dev URL on its own), and patching dist/ needs no restore-on-exit like
+	# Info.plist above (dist/ is a regenerated build artifact, not tracked).
+	sed -i '' "s#connect-src 'self' https://facturele.net blob:#connect-src 'self' https://facturele.net blob: http://$LOCAL_HOST:3000#; s#img-src 'self' data:#img-src 'self' data: http://$LOCAL_HOST:3000#" dist/frontend/browser/index.html
+
 	CAPACITOR_LOCAL_HOST="$LOCAL_HOST" npx cap sync ios
 else
 	echo "==> Build prod — API sur https://facturele.net (voir capacitor.config.ts)"
@@ -82,16 +101,36 @@ else
 	npx cap sync ios
 fi
 
-DEVICE_UDID=$(xcrun simctl list devices booted | grep -Eo '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' | head -n1 || true)
-if [ -z "$DEVICE_UDID" ]; then
-	DEVICE_UDID=$(xcrun simctl list devices available | grep -m1 'iPhone' | grep -Eo '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' || true)
+# DEVICE (env var, e.g. `DEVICE="iPhone 17 Pro Max" make ios-prod`) picks a
+# specific simulator by exact name — needed for App Store screenshots, which
+# must come from a specific device size/class. Without it, falls back to the
+# old behavior: whatever's already booted (any model), else the first
+# available iPhone in simctl's own listing order — neither lets you target a
+# particular model once a different one is already booted.
+if [ -n "${DEVICE:-}" ]; then
+	DEVICE_UDID=$(xcrun simctl list devices available | grep -F "$DEVICE (" | grep -Eo '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' | head -n1 || true)
 	if [ -z "$DEVICE_UDID" ]; then
-		echo "==> Aucun simulateur iPhone disponible. Crée-en un dans Xcode > Window > Devices and Simulators." >&2
+		echo "==> Aucun simulateur nommé exactement \"$DEVICE\" (Xcode > Window > Devices and Simulators pour en créer un, ou choisis parmi ceux-ci) :" >&2
+		xcrun simctl list devices available | grep -E '^\s+iPhone' >&2
 		exit 1
 	fi
-	echo "==> Aucun simulateur démarré, démarrage de $DEVICE_UDID"
-	xcrun simctl boot "$DEVICE_UDID"
-	open -a Simulator
+	if ! xcrun simctl list devices booted | grep -q "$DEVICE_UDID"; then
+		echo "==> Démarrage de \"$DEVICE\" ($DEVICE_UDID)"
+		xcrun simctl boot "$DEVICE_UDID"
+		open -a Simulator
+	fi
+else
+	DEVICE_UDID=$(xcrun simctl list devices booted | grep -Eo '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' | head -n1 || true)
+	if [ -z "$DEVICE_UDID" ]; then
+		DEVICE_UDID=$(xcrun simctl list devices available | grep -m1 'iPhone' | grep -Eo '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' || true)
+		if [ -z "$DEVICE_UDID" ]; then
+			echo "==> Aucun simulateur iPhone disponible. Crée-en un dans Xcode > Window > Devices and Simulators." >&2
+			exit 1
+		fi
+		echo "==> Aucun simulateur démarré, démarrage de $DEVICE_UDID"
+		xcrun simctl boot "$DEVICE_UDID"
+		open -a Simulator
+	fi
 fi
 
 echo "==> Compilation (configuration Release, simulateur)"

@@ -9,13 +9,25 @@ import {
   Validators,
 } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, firstValueFrom } from 'rxjs';
+import { AppleAndroidLoginService } from '../../../core/services/apple-android-login.service';
+import {
+  AppleNativeLoginCancelledError,
+  AppleNativeLoginService,
+} from '../../../core/services/apple-native-login.service';
 import { AuthService } from '../../../core/services/auth.service';
+import {
+  GoogleNativeLoginCancelledError,
+  GoogleNativeLoginService,
+} from '../../../core/services/google-native-login.service';
 import { PlatformService } from '../../../core/services/platform.service';
 import { ReferralService } from '../../../core/services/referral.service';
+import { describeLoginError } from '../../../core/utils/describe-login-error.util';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
+import { IconAppleComponent } from '../../../shared/components/icon-apple.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
 import { IconEyeOffComponent } from '../../../shared/components/icon-eye-off.component';
+import { IconGoogleComponent } from '../../../shared/components/icon-google.component';
 import { ReferralCodePromptComponent } from '../../../shared/components/referral-code-prompt.component';
 
 function passwordsMatchValidator(group: AbstractControl): ValidationErrors | null {
@@ -34,12 +46,17 @@ function passwordsMatchValidator(group: AbstractControl): ValidationErrors | nul
     ReferralCodePromptComponent,
     IconEyeComponent,
     IconEyeOffComponent,
+    IconGoogleComponent,
+    IconAppleComponent,
   ],
   templateUrl: './register.page.html',
 })
 export class RegisterPage {
   private readonly authService = inject(AuthService);
   private readonly referralService = inject(ReferralService);
+  private readonly googleNativeLoginService = inject(GoogleNativeLoginService);
+  private readonly appleNativeLoginService = inject(AppleNativeLoginService);
+  private readonly appleAndroidLoginService = inject(AppleAndroidLoginService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
@@ -49,6 +66,7 @@ export class RegisterPage {
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly googleLoginUrl = this.authService.googleLoginUrl();
+  protected readonly appleLoginUrl = this.authService.appleLoginUrl();
   protected readonly passwordVisible = signal(false);
   protected readonly confirmPasswordVisible = signal(false);
 
@@ -109,6 +127,72 @@ export class RegisterPage {
 
   protected onReferralCodeConfirmed(code: string): void {
     this.form.controls.referralCode.setValue(code);
+  }
+
+  // Mirrors LoginPage's identical method — see there for why each of the
+  // three platforms takes a different path (native SDK on Android/iOS,
+  // browser redirect on web).
+  protected async googleLoginNative(): Promise<void> {
+    if (this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const idToken = await this.googleNativeLoginService.login();
+      await firstValueFrom(this.authService.googleTokenLogin(idToken));
+      void this.router.navigateByUrl('/');
+    } catch (error) {
+      if (!(error instanceof GoogleNativeLoginCancelledError)) {
+        console.error('Google native login failed:', error);
+        const detail = describeLoginError(error);
+        this.errorMessage.set(`Connexion avec Google indisponible. (${detail})`);
+      }
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  // Mirrors LoginPage's identical method — see there.
+  protected async appleLoginNative(): Promise<void> {
+    if (this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const { identityToken, authorizationCode } = await this.appleNativeLoginService.login();
+      await firstValueFrom(this.authService.appleTokenLogin(identityToken, authorizationCode));
+      void this.router.navigateByUrl('/');
+    } catch (error) {
+      if (!(error instanceof AppleNativeLoginCancelledError)) {
+        console.error('Apple native login failed:', error);
+        const detail = describeLoginError(error);
+        this.errorMessage.set(`Connexion avec Apple indisponible. (${detail})`);
+      }
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  // Mirrors LoginPage's identical method — see there.
+  protected async appleLoginAndroid(): Promise<void> {
+    if (this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.errorMessage.set(null);
+    try {
+      await this.appleAndroidLoginService.start();
+    } catch (error) {
+      console.error('Apple Android login failed to start:', error);
+      const detail = describeLoginError(error);
+      this.errorMessage.set(`Connexion avec Apple indisponible. (${detail})`);
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   protected submit(): void {

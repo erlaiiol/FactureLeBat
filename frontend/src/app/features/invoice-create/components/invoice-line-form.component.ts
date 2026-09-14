@@ -119,12 +119,12 @@ export class InvoiceLineFormComponent {
     const willSave = this.group().controls.saveAsNewProduct.value;
     if (this.isCatalogLinked()) {
       return willSave
-        ? 'Mettre à jour ce produit dans le catalogue'
-        : 'Ne pas mettre à jour dans le catalogue';
+        ? 'Se mettra à jour dans votre catalogue'
+        : 'Cliquer pour mettre à jour dans le catalogue';
     }
     return willSave
-      ? 'Enregistrer ce produit dans mon catalogue'
-      : 'Ne pas enregistrer dans mon catalogue';
+      ? "S'enregistrera dans votre catalogue"
+      : 'Cliquer pour enregistrer dans le catalogue';
   }
 
   protected toggleSaveToCatalog(): void {

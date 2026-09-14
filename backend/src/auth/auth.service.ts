@@ -116,6 +116,12 @@ export class AuthService {
   private readonly applePrivateKey?: string;
   private readonly appEncryptionKey?: string;
 
+  // Web/Android counterpart to appleClientId above — the expected `aud` for
+  // an identity token minted by Apple's Services ID browser-redirect flow
+  // (see appleWebLogin, and appleTokenLogin's `platform: 'android'` branch)
+  // rather than the native ASAuthorizationController flow.
+  private readonly appleServicesId?: string;
+
   constructor(
     private readonly userRepository: UserRepository,
     private readonly refreshTokenRepository: RefreshTokenRepository,
@@ -170,6 +176,7 @@ export class AuthService {
     const rawApplePrivateKey = config.get<string>('APPLE_PRIVATE_KEY');
     this.applePrivateKey = rawApplePrivateKey?.replace(/\\n/g, '\n');
     this.appEncryptionKey = config.get<string>('APP_ENCRYPTION_KEY');
+    this.appleServicesId = config.get<string>('APPLE_SERVICES_ID');
   }
 
   async register(dto: RegisterDto): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
@@ -353,15 +360,21 @@ export class AuthService {
   // (present on every native Apple sign-in, unlike name/email) is optional
   // and only used, best-effort, to capture a token this app can later
   // revoke on account deletion.
+  //
+  // `platform` also covers Android's browser+deep-link bridge (see
+  // DeepLinkService and AuthController.appleMobileCallback): that flow ends
+  // up calling this exact same route/method with an identityToken whose
+  // `aud` is APPLE_SERVICES_ID (a Services ID), not the native bundle ID —
+  // defaults to 'ios' so the original native caller needs no change.
   async appleTokenLogin(
     identityToken: string,
     authorizationCode?: string,
+    platform: 'ios' | 'android' = 'ios',
   ): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
+    const audience = platform === 'android' ? this.appleServicesId : this.appleClientId;
     let payload: Awaited<ReturnType<typeof appleSignin.verifyIdToken>>;
     try {
-      payload = await appleSignin.verifyIdToken(identityToken, {
-        audience: this.appleClientId,
-      });
+      payload = await appleSignin.verifyIdToken(identityToken, { audience });
     } catch (error) {
       this.logger.warn(`Vérification du jeton Apple échouée : ${String(error)}`);
       throw new UnauthorizedException('Jeton Apple invalide.');
@@ -372,7 +385,14 @@ export class AuthService {
 
     const result = await this.handleAppleLogin({ appleId: payload.sub, email: payload.email });
 
+    // Refresh-token capture stays iOS-only for now: the exchange below is
+    // hardcoded to the native bundle-ID clientID/empty redirectUri pair (see
+    // captureAppleRefreshToken) — an Android-originated authorizationCode
+    // would need the Services-ID/APPLE_ANDROID_CALLBACK_URL pair instead,
+    // which this app doesn't build in v1. Only affects revoke-on-delete for
+    // an Android-linked account, never login itself.
     if (
+      platform === 'ios' &&
       authorizationCode &&
       this.appleTeamId &&
       this.appleKeyId &&
@@ -387,6 +407,29 @@ export class AuthService {
     }
 
     return result;
+  }
+
+  // Web browser-redirect counterpart to appleTokenLogin's native path (see
+  // AuthController.appleCallback) — the identityToken here always comes from
+  // Apple's Services ID form_post flow, so its `aud` is always
+  // APPLE_SERVICES_ID, never ambiguous the way appleTokenLogin's platform
+  // param is. No refresh-token capture in v1 for the same reason as the
+  // Android branch above (see that comment) — a web-linked account's Apple
+  // grant just won't be revoked on account deletion until that's built.
+  async appleWebLogin(identityToken: string): Promise<{ user: PublicUser; tokens: IssuedTokens }> {
+    let payload: Awaited<ReturnType<typeof appleSignin.verifyIdToken>>;
+    try {
+      payload = await appleSignin.verifyIdToken(identityToken, {
+        audience: this.appleServicesId,
+      });
+    } catch (error) {
+      this.logger.warn(`Vérification du jeton Apple (web) échouée : ${String(error)}`);
+      throw new UnauthorizedException('Jeton Apple invalide.');
+    }
+    if (!payload?.sub || !payload.email) {
+      throw new UnauthorizedException('Jeton Apple invalide.');
+    }
+    return this.handleAppleLogin({ appleId: payload.sub, email: payload.email });
   }
 
   private async captureAppleRefreshToken(userId: string, authorizationCode: string): Promise<void> {
