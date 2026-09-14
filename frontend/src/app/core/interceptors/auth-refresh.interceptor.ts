@@ -6,7 +6,22 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from '../services/auth.service';
 import { ToastService } from '../services/toast.service';
 
-const EXEMPT_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+const EXEMPT_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/logout',
+  // A failed native Google/Apple sign-in (bad/expired token, audience
+  // mismatch, ...) is a login attempt exactly like /auth/login above — not
+  // in this list, its 401 used to be misread as "an existing session just
+  // expired", triggering a doomed silent /auth/refresh (no session exists
+  // yet) whose own 401 masked the real error entirely. Found via a
+  // TestFlight report: Google sign-in looked like it failed instantly with
+  // a confusing "Http failure response for .../auth/refresh: 401" — the
+  // refresh 401 was a symptom, not the cause.
+  '/auth/google/token-login',
+  '/auth/apple/token-login',
+];
 
 // Every route reachable without a session (see app.routes.ts's top-level
 // routes, outside the authGuard-wrapped protectedRoutes) — a failed refresh
