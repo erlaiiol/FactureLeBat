@@ -83,7 +83,16 @@ export class AuthController {
     res.cookie(APPLE_OAUTH_STATE_COOKIE, state, {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: 'lax',
+      // Apple's response_mode=form_post means the callback below always
+      // arrives as a cross-site POST (an auto-submitting form served from
+      // appleid.apple.com) — SameSite=Lax's top-level-navigation exception
+      // only covers safe methods (GET), never POST, so a 'lax' cookie here
+      // never actually reaches appleCallback/appleMobileCallback and every
+      // login fails with "État OAuth Apple invalide". Needs 'none' (which
+      // itself requires secure=true, already the case whenever this branch
+      // is taken — see cookie.util.ts's sameSiteFor for the same fix
+      // applied to the session cookies).
+      sameSite: this.isProduction ? 'none' : 'lax',
       maxAge: APPLE_OAUTH_STATE_TTL_MS,
       path: '/api/auth/apple',
     });
