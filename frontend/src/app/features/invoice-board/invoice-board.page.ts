@@ -31,6 +31,7 @@ import { InvoiceDueDateModalComponent } from './invoice-due-date-modal.component
 import { InvoiceListRowComponent } from './invoice-list-row.component';
 import { InvoicePreviewModalComponent } from './invoice-preview-modal.component';
 import { SendInvoiceEmailModalComponent } from '../../shared/components/send-invoice-email-modal.component';
+import { ScrollHintDirective } from '../../shared/directives/scroll-hint.directive';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 import { isOverdue, isUnsignedAtRisk } from './invoice-status.util';
 
@@ -131,6 +132,7 @@ function matchesStatusFilter(invoice: InvoiceWithTotals, filter: StatusFilter): 
     IconCalendarComponent,
     BadgeComponent,
     DeadlineBannerComponent,
+    ScrollHintDirective,
   ],
   templateUrl: './invoice-board.page.html',
 })

@@ -32,6 +32,7 @@ import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
 import { UnitLabelPipe } from '../../../shared/pipes/unit-label.pipe';
 import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
 import { SignatureModalComponent } from '../../../shared/components/signature-modal.component';
+import { ScrollHintDirective } from '../../../shared/directives/scroll-hint.directive';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { TypewriterTextComponent } from '../../../shared/components/typewriter-text.component';
 import { delayedSkeleton } from '../../../shared/utils/delayed-skeleton';
@@ -102,6 +103,7 @@ function shuffledHintOrder(): HintKey[] {
     SendInvoiceEmailModalComponent,
     SignatureModalComponent,
     TourAnchorDirective,
+    ScrollHintDirective,
     InvoiceDepositFieldComponent,
     SimplifiedDisplaySliderComponent,
     TypewriterTextComponent,

@@ -143,8 +143,12 @@
        button column at most viewport heights; `pointer-events-auto` on
        the inner column is what makes the buttons (and everything they
        open) clickable again. -->
+<!-- fixed-add-buttons-column: pure CSS hook, no styling of its own — see
+     styles.css's html.mobile-nav-open rule (app.ts toggles that class) for
+     why the mobile hamburger menu hides these instead of them floating on
+     top of it. -->
 <div
-  class="pointer-events-none fixed inset-y-0 left-4 z-50 flex flex-col justify-center sm:inset-y-auto sm:top-[calc(var(--nav-height,8rem)_+_1rem)]"
+  class="fixed-add-buttons-column pointer-events-none fixed inset-y-0 left-4 z-50 flex flex-col justify-center sm:inset-y-auto sm:top-[calc(var(--nav-height,8rem)_+_1rem)]"
 >
   <div class="pointer-events-auto flex flex-col gap-5">
     <div class="relative">

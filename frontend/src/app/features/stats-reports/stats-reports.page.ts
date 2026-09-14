@@ -23,6 +23,7 @@ import { BigButtonComponent } from '../../shared/components/big-button.component
 import { MarginDonutChartComponent } from '../../shared/components/margin-donut-chart.component';
 import { RevenueBarChartComponent } from '../../shared/components/revenue-bar-chart.component';
 import { CentsToEurosPipe } from '../../shared/pipes/cents-to-euros.pipe';
+import { ScrollHintDirective } from '../../shared/directives/scroll-hint.directive';
 import { TourAnchorDirective } from '../../shared/tour/tour-anchor.directive';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 import {
@@ -60,6 +61,7 @@ type MarginBreakdown = 'product' | 'service' | 'client';
     RevenueBarChartComponent,
     MarginDonutChartComponent,
     TourAnchorDirective,
+    ScrollHintDirective,
     BigButtonComponent,
     RouterLink,
   ],

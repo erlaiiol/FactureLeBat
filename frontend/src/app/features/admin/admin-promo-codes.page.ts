@@ -11,6 +11,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { SkeletonTableComponent } from '../../shared/components/skeleton-table.component';
+import { ScrollHintDirective } from '../../shared/directives/scroll-hint.directive';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 @Component({
@@ -22,6 +23,7 @@ import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
     BadgeComponent,
     BigButtonComponent,
     SkeletonTableComponent,
+    ScrollHintDirective,
     DatePipe,
   ],
   templateUrl: './admin-promo-codes.page.html',
