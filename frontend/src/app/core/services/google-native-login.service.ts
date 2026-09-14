@@ -29,6 +29,23 @@ export class GoogleNativeLoginService {
         google: {
           webClientId: environment.googleWebClientId,
           iOSClientId: environment.googleIosClientId,
+          // On Android, the plugin's GoogleProvider hands `webClientId`
+          // straight to Credential Manager's `setServerClientId`, so the ID
+          // token's `aud` is already the web client there — no third value
+          // needed. iOS has no such reuse: GoogleProvider.swift only ever
+          // reads `iOSClientId`/`iOSServerClientId` out of this object (it
+          // never looks at `webClientId` at all), and passes
+          // `iOSServerClientId` straight through as GIDConfiguration's
+          // `serverClientID`. Leaving it unset (as this used to) means
+          // GIDSignIn has no serverClientID configured at all, so the
+          // resulting ID token's `aud` defaults to iOSClientId instead of
+          // the web client — which is exactly what made
+          // AuthService.googleTokenLogin's verifyIdToken reject every iOS
+          // sign-in with "Wrong recipient, payload audience !=
+          // requiredAudience" (found via a TestFlight report, confirmed
+          // against this plugin's own iOS source, not guessed). Same value
+          // as webClientId by design — see the type's own doc comment.
+          iOSServerClientId: environment.googleWebClientId,
         },
       });
     }
