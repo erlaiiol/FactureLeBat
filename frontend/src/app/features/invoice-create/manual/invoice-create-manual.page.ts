@@ -33,6 +33,7 @@ import { PdfPreviewModalComponent } from '../../../shared/components/pdf-preview
 import { SendInvoiceEmailModalComponent } from '../../../shared/components/send-invoice-email-modal.component';
 import { SignatureModalComponent } from '../../../shared/components/signature-modal.component';
 import { CentsToEurosPipe } from '../../../shared/pipes/cents-to-euros.pipe';
+import { ScrollHintDirective } from '../../../shared/directives/scroll-hint.directive';
 import { TourAnchorDirective } from '../../../shared/tour/tour-anchor.directive';
 import { facturXLockedFor } from '../../../shared/utils/facturx-quota.util';
 import { showTrialOfferAfterFirstInvoice } from '../../../shared/utils/trial-offer-trigger';
@@ -73,6 +74,7 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
     InvoiceTotalsSummaryComponent,
     InvoiceDepositFieldComponent,
     ManualResizeHandleDirective,
+    ScrollHintDirective,
     CentsToEurosPipe,
   ],
   templateUrl: './invoice-create-manual.page.html',

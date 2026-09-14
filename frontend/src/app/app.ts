@@ -353,6 +353,26 @@ export class App {
       });
     });
 
+    // Invoice creation "mode rapide" (invoice-create-lines-step.page.html)
+    // pins its "+" buttons at a fixed position, vertically centered across
+    // the *full* viewport height below `sm` (see that page's own comment on
+    // why — deliberately unaware of this nav's own height so it doesn't
+    // need a ResizeObserver of its own). When the hamburger panel expands
+    // tall enough to spatially reach that button column, the buttons — no
+    // stacking context of their own above this nav — float visibly over the
+    // open menu instead of disappearing behind it. Bumping this nav's own
+    // z-index above the buttons would "fix" that, but toasts/modals/the
+    // tour overlay all share this app's flat z-50 ceiling too, and
+    // out-ranking them just for this one page's buttons would then wrongly
+    // cover a toast that happens to land while the menu is open. A
+    // `mobile-nav-open` class on <html> instead lets that one page's own
+    // CSS hide its own buttons for the duration — see
+    // .fixed-add-buttons-column in styles.css — with zero effect on any
+    // other z-50 layer.
+    effect(() => {
+      document.documentElement.classList.toggle('mobile-nav-open', this.mobileMenuOpen());
+    });
+
     this.destroyRef.onDestroy(() => this.navHeightObserver?.disconnect());
   }
 

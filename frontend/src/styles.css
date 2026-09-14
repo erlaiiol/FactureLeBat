@@ -490,6 +490,20 @@ button:not(:disabled) {
   transition: transform var(--duration-entrance) var(--ease-out-sharp);
 }
 
+/* See app.ts's mobile-nav-open effect: invoice-create-lines-step.page.html's
+   fixed "+" buttons hide while the mobile hamburger panel is open, instead
+   of floating over it — a plain visibility toggle rather than raising the
+   nav above this app's shared z-50 ceiling (which toasts/modals/the tour
+   overlay all sit at too, and would then get wrongly covered by the nav on
+   top of the actual bug this fixes). Only ever matters below `sm` in
+   practice, since that's the one range where the buttons' own inset-y-0
+   vertical-centering (see that page's own comment) can spatially reach the
+   nav at all — no media query needed to scope it, since the hamburger that
+   sets mobile-nav-open in the first place is itself `lg:hidden`. */
+html.mobile-nav-open .fixed-add-buttons-column {
+  visibility: hidden;
+}
+
 /* docs/design-system.md's `modalMorph` (ModalMorphComponent,
    shared/utils/flip-morph.ts): the panel's transform is driven entirely by
    the Web Animations API (`el.animate()`), not this class — CSS here only

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Phase 22: Apple's mandatory app-target privacy manifest (distinct from each
+SDK's own manifest — Firebase ships its own, this one covers the App
+target itself). This is a starting point, not a final audit: review against
+the actual Firebase/Capacitor plugin versions in use before any store
+submission — this file must be added to the App target in Xcode (drag into
+the project navigator, check "App" under Target Membership) since it isn't
+picked up automatically just by existing on disk.
+
+NSPrivacyAccessedAPICategoryUserDefaults / reason CA92.1 ("access info the
+app itself stores") covers Capacitor's own WebView/Preferences use of
+UserDefaults — the one required-reason API this app's own code plausibly
+touches. Neither this app nor any first-party code here reads device
+signals for tracking, fingerprinting, or third-party data sharing.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -11,6 +11,7 @@ import { BadgeComponent } from '../../shared/components/badge.component';
 import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { IconCloseComponent } from '../../shared/components/icon-close.component';
 import { SkeletonTableComponent } from '../../shared/components/skeleton-table.component';
+import { ScrollHintDirective } from '../../shared/directives/scroll-hint.directive';
 import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
 
 // Phase 14 admin dashboard, first screen: search/list every artisan account
@@ -28,6 +29,7 @@ import { delayedSkeleton } from '../../shared/utils/delayed-skeleton';
     BigButtonComponent,
     IconCloseComponent,
     SkeletonTableComponent,
+    ScrollHintDirective,
     DatePipe,
   ],
   templateUrl: './admin-users.page.html',

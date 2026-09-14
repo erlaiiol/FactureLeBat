@@ -17,6 +17,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		556675EF30543FD9000283E8 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 556675EE30543FD9000283E8 /* GoogleService-Info.plist */; };
 		556675F330571E62000283E8 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 556675F230571E62000283E8 /* FirebaseMessaging */; };
+		55F7C13A305826EC00FED8DB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 55F7C139305826EC00FED8DB /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +32,7 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		556675ED30543EE2000283E8 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		556675EE30543FD9000283E8 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		55F7C139305826EC00FED8DB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -50,6 +52,7 @@
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
+				55F7C139305826EC00FED8DB /* PrivacyInfo.xcprivacy */,
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				556675F03056FD72000283E8 /* Frameworks */,
@@ -161,6 +164,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				55F7C13A305826EC00FED8DB /* PrivacyInfo.xcprivacy in Resources */,
 				556675EF30543FD9000283E8 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
