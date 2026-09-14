@@ -402,6 +402,97 @@ describe('AuthService.appleTokenLogin', () => {
       service.appleTokenLogin('raw-identity-token', 'raw-authorization-code'),
     ).resolves.toBeDefined();
   });
+
+  it("verifies against APPLE_SERVICES_ID, not APPLE_CLIENT_ID, for platform: 'android'", async () => {
+    const { service, findByAppleId } = buildService({
+      APPLE_CLIENT_ID: 'fr.facturele.app',
+      APPLE_SERVICES_ID: 'fr.facturele.app.web',
+    });
+    const user = buildUser({ appleId: 'apple-123', emailVerifiedAt: new Date() });
+    findByAppleId.mockResolvedValue(user);
+    const verifyIdToken = jest
+      .spyOn(appleSignin, 'verifyIdToken')
+      .mockResolvedValue({ sub: 'apple-123', email: user.email } as Awaited<
+        ReturnType<typeof appleSignin.verifyIdToken>
+      >);
+
+    await service.appleTokenLogin('raw-identity-token', undefined, 'android');
+
+    expect(verifyIdToken).toHaveBeenCalledWith('raw-identity-token', {
+      audience: 'fr.facturele.app.web',
+    });
+  });
+
+  it("never attempts refresh-token capture for platform: 'android', even fully configured", async () => {
+    const { service, findByAppleId } = buildService({
+      APPLE_CLIENT_ID: 'fr.facturele.app',
+      APPLE_SERVICES_ID: 'fr.facturele.app.web',
+      APPLE_TEAM_ID: 'team-1',
+      APPLE_KEY_ID: 'key-1',
+      APPLE_PRIVATE_KEY: 'fake-key',
+      APP_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    });
+    const user = buildUser({ appleId: 'apple-123', emailVerifiedAt: new Date() });
+    findByAppleId.mockResolvedValue(user);
+    jest
+      .spyOn(appleSignin, 'verifyIdToken')
+      .mockResolvedValue({ sub: 'apple-123', email: user.email } as Awaited<
+        ReturnType<typeof appleSignin.verifyIdToken>
+      >);
+    const getClientSecret = jest.spyOn(appleSignin, 'getClientSecret');
+
+    await service.appleTokenLogin('raw-identity-token', 'raw-authorization-code', 'android');
+
+    expect(getClientSecret).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.appleWebLogin', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('verifies against APPLE_SERVICES_ID then logs into the linked account', async () => {
+    const { service, findByAppleId } = buildService({
+      APPLE_SERVICES_ID: 'fr.facturele.app.web',
+    });
+    const user = buildUser({ appleId: 'apple-123', emailVerifiedAt: new Date() });
+    findByAppleId.mockResolvedValue(user);
+    const verifyIdToken = jest
+      .spyOn(appleSignin, 'verifyIdToken')
+      .mockResolvedValue({ sub: 'apple-123', email: user.email } as Awaited<
+        ReturnType<typeof appleSignin.verifyIdToken>
+      >);
+
+    const result = await service.appleWebLogin('raw-identity-token');
+
+    expect(result.user.email).toBe(user.email);
+    expect(verifyIdToken).toHaveBeenCalledWith('raw-identity-token', {
+      audience: 'fr.facturele.app.web',
+    });
+  });
+
+  it('rejects a token that fails signature/audience verification', async () => {
+    const { service } = buildService({ APPLE_SERVICES_ID: 'fr.facturele.app.web' });
+    jest.spyOn(appleSignin, 'verifyIdToken').mockRejectedValue(new Error('bad token'));
+
+    await expect(service.appleWebLogin('raw-identity-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects a verified token missing an email claim', async () => {
+    const { service } = buildService({ APPLE_SERVICES_ID: 'fr.facturele.app.web' });
+    jest
+      .spyOn(appleSignin, 'verifyIdToken')
+      .mockResolvedValue({ sub: 'apple-123' } as Awaited<
+        ReturnType<typeof appleSignin.verifyIdToken>
+      >);
+
+    await expect(service.appleWebLogin('raw-identity-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
 });
 
 describe('AuthService.refresh', () => {

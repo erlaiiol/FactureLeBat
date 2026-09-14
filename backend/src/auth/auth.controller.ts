@@ -8,6 +8,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +18,12 @@ import type { Request, Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import {
+  APPLE_OAUTH_STATE_COOKIE,
+  APPLE_OAUTH_STATE_TTL_MS,
+  buildAppleAuthorizeUrl,
+  generateAppleOAuthState,
+} from './apple-web-oauth.util';
 import { REFRESH_TOKEN_COOKIE } from './auth.constants';
 import { AuthService, GoogleProfile } from './auth.service';
 import { clearAuthCookies, setAuthCookies } from './cookie.util';
@@ -31,6 +38,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { PublicUser } from './entities/public-user.entity';
 import { AppleOAuthEnabledGuard } from './guards/apple-oauth-enabled.guard';
+import { AppleWebOAuthEnabledGuard } from './guards/apple-web-oauth-enabled.guard';
 import { DemoModeEnabledGuard } from './guards/demo-mode-enabled.guard';
 import { GoogleOAuthEnabledGuard } from './guards/google-oauth-enabled.guard';
 
@@ -38,10 +46,17 @@ function readRefreshCookie(req: Request): string | undefined {
   return (req.cookies as Record<string, string> | undefined)?.[REFRESH_TOKEN_COOKIE];
 }
 
+function readAppleOAuthStateCookie(req: Request): string | undefined {
+  return (req.cookies as Record<string, string> | undefined)?.[APPLE_OAUTH_STATE_COOKIE];
+}
+
 @Controller('auth')
 export class AuthController {
   private readonly isProduction: boolean;
   private readonly frontendUrl: string;
+  private readonly appleServicesId?: string;
+  private readonly appleWebCallbackUrl: string;
+  private readonly appleAndroidCallbackUrl: string;
 
   constructor(
     private readonly authService: AuthService,
@@ -49,6 +64,30 @@ export class AuthController {
   ) {
     this.isProduction = config.get<string>('NODE_ENV') === 'production';
     this.frontendUrl = config.get<string>('FRONTEND_URL', 'http://localhost:4200');
+    this.appleServicesId = config.get<string>('APPLE_SERVICES_ID');
+    this.appleWebCallbackUrl = config.get<string>(
+      'APPLE_WEB_CALLBACK_URL',
+      'http://localhost:3000/api/auth/apple/callback',
+    );
+    this.appleAndroidCallbackUrl = config.get<string>(
+      'APPLE_ANDROID_CALLBACK_URL',
+      'http://localhost:3000/api/auth/apple/mobile-callback',
+    );
+  }
+
+  // Sets the short-lived state cookie shared by apple/apple-mobile-start
+  // below — factored out since both authorize hops are otherwise identical
+  // apart from which redirect_uri they send Apple.
+  private startAppleAuthorize(res: Response, redirectUri: string): void {
+    const state = generateAppleOAuthState();
+    res.cookie(APPLE_OAUTH_STATE_COOKIE, state, {
+      httpOnly: true,
+      secure: this.isProduction,
+      sameSite: 'lax',
+      maxAge: APPLE_OAUTH_STATE_TTL_MS,
+      path: '/api/auth/apple',
+    });
+    res.redirect(buildAppleAuthorizeUrl({ clientId: this.appleServicesId!, redirectUri, state }));
   }
 
   @Public()
@@ -198,9 +237,75 @@ export class AuthController {
     const { user, tokens } = await this.authService.appleTokenLogin(
       dto.identityToken,
       dto.authorizationCode,
+      dto.platform,
     );
     setAuthCookies(req, res, tokens, this.isProduction);
     return user;
+  }
+
+  // Web browser-redirect counterpart to googleAuth/googleCallback above —
+  // hand-rolled rather than a Passport strategy since Apple's Services ID
+  // flow requires response_mode=form_post (a POST callback, not GET), which
+  // AuthGuard('google')'s pattern doesn't fit. See apple-web-oauth.util.ts.
+  @Public()
+  @UseGuards(AppleWebOAuthEnabledGuard)
+  @Get('apple')
+  appleAuth(@Res() res: Response): void {
+    this.startAppleAuthorize(res, this.appleWebCallbackUrl);
+  }
+
+  @Public()
+  @UseGuards(AppleWebOAuthEnabledGuard)
+  @Post('apple/callback')
+  @HttpCode(HttpStatus.OK)
+  async appleCallback(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const cookieState = readAppleOAuthStateCookie(req);
+    res.clearCookie(APPLE_OAUTH_STATE_COOKIE, { path: '/api/auth/apple' });
+    const body = req.body as { state?: string; id_token?: string };
+    if (!cookieState || cookieState !== body.state || !body.id_token) {
+      throw new UnauthorizedException('État OAuth Apple invalide.');
+    }
+    const { tokens } = await this.authService.appleWebLogin(body.id_token);
+    setAuthCookies(req, res, tokens, this.isProduction);
+    res.redirect(this.frontendUrl);
+  }
+
+  // Android counterpart to appleAuth above — Android has no native Sign in
+  // with Apple SDK, so the app opens this in the system browser
+  // (@capacitor/browser, never the app's own WebView) instead of calling a
+  // native plugin. redirect_uri differs from the web flow so Apple's own
+  // callback can tell the two apart.
+  @Public()
+  @UseGuards(AppleWebOAuthEnabledGuard)
+  @Get('apple/mobile-start')
+  appleMobileStart(@Res() res: Response): void {
+    this.startAppleAuthorize(res, this.appleAndroidCallbackUrl);
+  }
+
+  // Bridges the system-browser flow back into the Android app: rather than
+  // set cookies here (this response is loaded in Safari/Chrome, not the
+  // app's own WebView — a session cookie set here would land in the wrong
+  // cookie jar), this redirects to an HTTPS URL matched by the Android App
+  // Link already declared for facturele.net, which the OS hands to the app
+  // instead of a browser tab (see DeepLinkService's appUrlOpen listener).
+  // The app then POSTs code/id_token to the existing native
+  // apple/token-login route with platform: 'android' — no id_token
+  // verification happens here, only there, so it isn't duplicated.
+  @Public()
+  @UseGuards(AppleWebOAuthEnabledGuard)
+  @Post('apple/mobile-callback')
+  @HttpCode(HttpStatus.OK)
+  appleMobileCallback(@Req() req: Request, @Res() res: Response): void {
+    const cookieState = readAppleOAuthStateCookie(req);
+    res.clearCookie(APPLE_OAUTH_STATE_COOKIE, { path: '/api/auth/apple' });
+    const body = req.body as { state?: string; code?: string; id_token?: string };
+    if (!cookieState || cookieState !== body.state || !body.code || !body.id_token) {
+      throw new UnauthorizedException('État OAuth Apple invalide.');
+    }
+    const bridgeUrl = new URL(`${this.frontendUrl}/auth/apple-mobile-return`);
+    bridgeUrl.searchParams.set('code', body.code);
+    bridgeUrl.searchParams.set('id_token', body.id_token);
+    res.redirect(bridgeUrl.toString());
   }
 
   @Public()

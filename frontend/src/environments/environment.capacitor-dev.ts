@@ -31,4 +31,7 @@ export const environment = {
   // native Google Sign-In works against a local backend — leave blank to
   // just not test that one flow locally.
   googleWebClientId: '',
+  // See environment.prod.ts's own comment on this field — same "leave blank
+  // to not test that flow locally" posture as googleWebClientId above.
+  googleIosClientId: '',
 };

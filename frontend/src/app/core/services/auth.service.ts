@@ -164,14 +164,32 @@ export class AuthService {
       .pipe(tap((user) => this.currentUser.set(user)));
   }
 
-  // Native-only counterpart for Apple — see AppleNativeLoginService for why
-  // there's no browser-redirect equivalent to mirror here, unlike Google's
-  // googleLoginUrl/googleTokenLogin pair above.
-  appleTokenLogin(identityToken: string, authorizationCode?: string): Observable<PublicUser> {
+  // Browser-redirect counterpart to appleTokenLogin below, mirroring
+  // googleLoginUrl — used on web directly, and by
+  // AppleAndroidLoginService's system-browser bridge indirectly (that one
+  // hits /auth/apple/mobile-start instead, a variant of this same flow with
+  // a different redirect_uri — see AuthController).
+  appleLoginUrl(): string {
+    return `${this.baseUrl}/apple`;
+  }
+
+  // Native counterpart to appleLoginUrl above — used directly by
+  // AppleNativeLoginService's iOS ASAuthorizationController flow, and
+  // indirectly by Android's browser+deep-link bridge (DeepLinkService),
+  // which POSTs here with platform: 'android' once it recovers
+  // code/id_token from the app's own facturele.net/auth/apple-mobile-return
+  // App Link — see AuthController.appleTokenLogin for why the backend needs
+  // to know which of the two to distinguish (different expected token
+  // audience).
+  appleTokenLogin(
+    identityToken: string,
+    authorizationCode?: string,
+    platform?: 'ios' | 'android',
+  ): Observable<PublicUser> {
     return this.http
       .post<PublicUser>(
         `${this.baseUrl}/apple/token-login`,
-        { identityToken, authorizationCode },
+        { identityToken, authorizationCode, platform },
         { withCredentials: true },
       )
       .pipe(tap((user) => this.currentUser.set(user)));

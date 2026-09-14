@@ -194,6 +194,25 @@ class EnvironmentVariables {
   @IsString()
   APPLE_PRIVATE_KEY?: string;
 
+  // Web + Android counterpart to APPLE_CLIENT_ID above — a Services ID (a
+  // distinct Apple identifier type from the native bundle ID), needed
+  // because neither the web app nor the Android app can use
+  // ASAuthorizationController's native flow (see AuthService.appleWebLogin
+  // and AuthController's apple/apple-mobile-* routes). Optional:
+  // AppleWebOAuthEnabledGuard 503s those routes when unset, same "boots fine
+  // without it" posture as APPLE_CLIENT_ID.
+  @IsOptional()
+  @IsString()
+  APPLE_SERVICES_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  APPLE_WEB_CALLBACK_URL = 'http://localhost:3000/api/auth/apple/callback';
+
+  @IsOptional()
+  @IsString()
+  APPLE_ANDROID_CALLBACK_URL = 'http://localhost:3000/api/auth/apple/mobile-callback';
+
   // Where /auth/google/callback and email-verification/password-reset links
   // send the browser once the backend is done — the frontend's own origin.
   @IsOptional()

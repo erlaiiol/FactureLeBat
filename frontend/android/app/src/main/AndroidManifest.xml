@@ -46,6 +46,16 @@
                     android:scheme="https"
                     android:host="facturele.net"
                     android:pathPrefix="/connexion" />
+                <!-- Apple Sign-In's Android bridge (no native Apple SDK
+                exists) — see AppleAndroidLoginService/DeepLinkService: the
+                backend's POST /auth/apple/mobile-callback redirects here
+                with code/id_token in the query string once the system
+                browser completes Apple's own authorize flow, and this App
+                Link hands that back to the app instead of a browser tab. -->
+                <data
+                    android:scheme="https"
+                    android:host="facturele.net"
+                    android:pathPrefix="/auth/apple-mobile-return" />
             </intent-filter>
         </activity>
 

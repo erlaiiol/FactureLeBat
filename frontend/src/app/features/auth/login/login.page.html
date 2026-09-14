@@ -62,22 +62,19 @@
     </app-big-button>
   </form>
 
-  <!-- Google renders on the web (browser redirect) and inside the native
-  Android shell (Credential Manager flow) — never on native iOS:
-  GoogleNativeLoginService's SocialLogin.initialize() only ever passes a
-  `webClientId`, which the plugin's iOS side ignores (it reads
-  `google.iOSClientId` instead, a distinct OAuth client type never
-  configured here), so a native call on iOS always rejects with "No
-  provider was initialized". Apple only ever renders on iOS: it's the
-  guideline-4.8 counterpart to Google there (an app offering a third-party
-  sign-in must also offer Sign in with Apple, at least as prominent — see
-  docs/roadmap.md Phase 1.5), and this app has no browser/Android Apple
-  flow to show elsewhere. -->
+  <!-- Google renders on the web (browser redirect), inside the native
+  Android shell (Credential Manager flow), and natively on iOS
+  (ASAuthorizationController-adjacent Google SDK flow, configured via
+  environment.googleIosClientId — see GoogleNativeLoginService). Apple
+  renders everywhere too: natively on iOS, via a system-browser + deep-link
+  bridge on Android (no native Apple SDK exists there — see
+  AppleAndroidLoginService/DeepLinkService), and via the same browser
+  redirect as Google on web. -->
   <div class="flex flex-col gap-2">
-    @if (platformService.isNativeApp() && !platformService.isIosApp()) {
-      <!-- Native Android: Credential Manager sign-in, not the browser
-      redirect below — Google blocks that redirect inside an embedded
-      WebView. See GoogleNativeLoginService. -->
+    @if (platformService.isNativeApp()) {
+      <!-- Native (Android Credential Manager / iOS Google SDK), not the
+      browser redirect below — Google blocks that redirect inside an
+      embedded WebView. See GoogleNativeLoginService. -->
       <button
         type="button"
         (click)="googleLoginNative()"
@@ -87,7 +84,7 @@
         <app-icon-google />
         Continuer avec Google
       </button>
-    } @else if (!platformService.isNativeApp()) {
+    } @else {
       <a
         [href]="googleLoginUrl"
         class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle"
@@ -107,6 +104,27 @@
         <app-icon-apple />
         Continuer avec Apple
       </button>
+    } @else if (platformService.isNativeApp()) {
+      <!-- Android: no native Apple SDK exists, so this opens Apple's
+      authorize page in the system browser and comes back via deep link —
+      see AppleAndroidLoginService. -->
+      <button
+        type="button"
+        (click)="appleLoginAndroid()"
+        [disabled]="saving()"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle disabled:opacity-50"
+      >
+        <app-icon-apple />
+        Continuer avec Apple
+      </button>
+    } @else {
+      <a
+        [href]="appleLoginUrl"
+        class="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm hover:bg-secondary-subtle"
+      >
+        <app-icon-apple />
+        Continuer avec Apple
+      </a>
     }
   </div>
 

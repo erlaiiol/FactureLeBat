@@ -50,4 +50,17 @@ export const environment = {
   // Sign-In SDK as `webClientId`, which is what makes the ID token's `aud`
   // claim match what AuthService.googleTokenLogin verifies server-side.
   googleWebClientId: '211973026193-40naqvlso1khcl3gtofs4et50lhi6htq.apps.googleusercontent.com',
+  // Same idea as googleWebClientId above, but Google Cloud's "iOS" OAuth
+  // client type instead of "Web application" — a distinct client ID Google
+  // requires for the native flow on iOS specifically (Android reuses the web
+  // one, iOS never can). TODO: still a placeholder — create this client at
+  // console.cloud.google.com (iOS application type, bundle ID
+  // fr.facturele.app), then fill in both this value and the real
+  // CLIENT_ID/REVERSED_CLIENT_ID pair in
+  // ios/App/App/GoogleService-Info.plist (today it only has an
+  // ANDROID_CLIENT_ID — copied from the Android config, not a real iOS
+  // Sign-In client) before this actually works on a device; until then,
+  // native Google sign-in on iOS fails client-side with the same
+  // "No provider was initialized" error it always has.
+  googleIosClientId: '211973026193-kkifvinno7u9ojc1jfkeg33khvsdt3ss.apps.googleusercontent.com',
 };

@@ -8,4 +8,5 @@ export const environment = {
   // existing browser-redirect Google flow (see environment.prod.ts's own
   // comment on this field for what it's actually for).
   googleWebClientId: '',
+  googleIosClientId: '',
 };

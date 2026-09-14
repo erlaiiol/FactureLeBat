@@ -68,15 +68,16 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: debugWebContents,
   },
   plugins: {
-    // Only Google sign-in is wired up (see GoogleNativeLoginService) —
-    // disabling the other providers keeps their SDKs (and Facebook's
-    // AD_ID-permission baggage, see the plugin's own README troubleshooting
-    // section) out of the shipped APK entirely rather than bundled unused.
+    // Google and Apple are both wired up (see GoogleNativeLoginService /
+    // AppleNativeLoginService) — the other two stay disabled to keep their
+    // SDKs (and Facebook's AD_ID-permission baggage, see the plugin's own
+    // README troubleshooting section) out of the shipped app entirely rather
+    // than bundled unused.
     SocialLogin: {
       providers: {
         google: true,
         facebook: false,
-        apple: false,
+        apple: true,
         twitter: false,
       },
     },

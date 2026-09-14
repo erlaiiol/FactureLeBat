@@ -47,6 +47,21 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- social-login-parity: native Google Sign-In's browser-based callback
+	needs this reversed-client-id URL scheme registered so iOS can hand
+	control back to the app after the consent screen. Value is the
+	REVERSED_CLIENT_ID from ios/App/App/GoogleService-Info.plist (its
+	CLIENT_ID's segments in reverse: com.googleusercontent.apps.<numeric>-<hash>) —
+	update this if that plist is ever regenerated with a different client. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+	<string>com.googleusercontent.apps.211973026193-kkifvinno7u9ojc1jfkeg33khvsdt3ss</string>
+			</array>
+		</dict>
+	</array>
 	<!-- Phase 22: this app only uses standard HTTPS/TLS (exempt encryption)
 	— never a custom cryptographic implementation — so this is answered
 	once here instead of App Store Connect asking on every single build

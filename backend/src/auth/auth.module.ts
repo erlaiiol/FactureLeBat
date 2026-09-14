@@ -7,6 +7,7 @@ import { ReferralModule } from '../referral/referral.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AppleOAuthEnabledGuard } from './guards/apple-oauth-enabled.guard';
+import { AppleWebOAuthEnabledGuard } from './guards/apple-web-oauth-enabled.guard';
 import { DemoModeEnabledGuard } from './guards/demo-mode-enabled.guard';
 import { GoogleOAuthEnabledGuard } from './guards/google-oauth-enabled.guard';
 import { AuthTokenRepository } from './repositories/auth-token.repository';
@@ -47,6 +48,7 @@ const googleProviders: Provider[] =
     JwtStrategy,
     GoogleOAuthEnabledGuard,
     AppleOAuthEnabledGuard,
+    AppleWebOAuthEnabledGuard,
     DemoModeEnabledGuard,
     ...googleProviders,
   ],
