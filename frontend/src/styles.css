@@ -101,6 +101,9 @@
   --color-atelier-ink-soft: #746a5d;
   --color-atelier-walnut: #6b4a34;
   --color-atelier-moss: #5c6b4f;
+  /* "Mon activité" field-tier legend only (.field-tier-*), between walnut
+     and moss — the "depends on your situation" middle tier. */
+  --color-atelier-ochre: #b07d2a;
 
   --ease-out-sharp: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-touch: 120ms;
@@ -802,4 +805,28 @@ html.mobile-nav-open .fixed-add-buttons-column {
    to hide the same way, but doesn't render a competing icon either. */
 input[type='date']::-webkit-calendar-picker-indicator {
   opacity: 0;
+}
+
+/* "Mon activité" field tiers (company-settings.page.html legend): a 4px
+   left bar on each input — required to issue invoices/quotes, depends on
+   the artisan's situation, or optional bonus. Unlayered on purpose so it
+   beats the inputs' own `border border-[...]/25` utilities; an invalid field
+   (border-danger) keeps its red left edge. */
+.field-tier-required,
+.field-tier-conditional,
+.field-tier-optional {
+  border-left-width: 4px;
+  border-left-style: solid;
+}
+.field-tier-required {
+  border-left-color: var(--color-atelier-walnut);
+}
+.field-tier-conditional {
+  border-left-color: var(--color-atelier-ochre);
+}
+.field-tier-optional {
+  border-left-color: color-mix(in srgb, var(--color-atelier-moss) 45%, transparent);
+}
+:is(.field-tier-required, .field-tier-conditional, .field-tier-optional).border-danger {
+  border-left-color: var(--color-danger);
 }

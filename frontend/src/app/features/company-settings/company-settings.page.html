@@ -8,6 +8,25 @@
     <h1 class="font-atelier-heading text-3xl font-semibold">Mon activité</h1>
   </div>
 
+  <!-- Legend for the field-tier-* left bars on each input below (styles.css).
+       "Requis" = name/SIRET/address (what CompanyEssentialsGateService blocks
+       a first send on) plus legal status; "Selon votre situation" = legally
+       required only for some artisans (VAT-registered, BTP, B2B clients). -->
+  <ul
+    class="mb-6 flex flex-col gap-2 text-sm text-atelier-ink-soft sm:flex-row sm:flex-wrap sm:gap-x-6"
+  >
+    <li class="field-tier-required pl-2">
+      <span class="font-medium text-atelier-ink">Requis</span> — pour éditer factures et devis
+    </li>
+    <li class="field-tier-conditional pl-2">
+      <span class="font-medium text-atelier-ink">Selon votre situation</span> — TVA, BTP, clients
+      pros
+    </li>
+    <li class="field-tier-optional pl-2">
+      <span class="font-medium text-atelier-ink">Optionnel</span> — bonus, à compléter plus tard
+    </li>
+  </ul>
+
   @if (missingEssentials().length > 0) {
     <div
       class="mb-6 flex flex-col gap-1 rounded-lg bg-warning-subtle px-4 py-3 text-sm text-warning-subtle-fg"
@@ -39,7 +58,7 @@
       <input
         formControlName="name"
         type="text"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="form.controls.name.invalid && form.controls.name.touched"
       />
       <app-field-hint text="Le nom affiché en haut de chaque facture." />
@@ -52,7 +71,7 @@
         type="text"
         inputmode="numeric"
         maxlength="14"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="form.controls.siret.invalid && form.controls.siret.touched"
       />
       <app-field-hint text="Votre numéro d'identification légal — obligatoire sur toute facture." />
@@ -64,7 +83,7 @@
         formControlName="vatNumber"
         type="text"
         maxlength="13"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-conditional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="form.controls.vatNumber.invalid && form.controls.vatNumber.touched"
       />
       <app-field-hint
@@ -77,7 +96,7 @@
       <input
         formControlName="addressLine1"
         type="text"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="
           form.controls.addressLine1.invalid && form.controls.addressLine1.touched
         "
@@ -90,7 +109,7 @@
       <input
         formControlName="addressLine2"
         type="text"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-optional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint text="Facultatif — bâtiment, étage, zone d'activité…" />
     </label>
@@ -101,7 +120,7 @@
         <input
           formControlName="postalCode"
           type="text"
-          class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+          class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
           [class.border-danger]="
             form.controls.postalCode.invalid && form.controls.postalCode.touched
           "
@@ -113,7 +132,7 @@
         <input
           formControlName="city"
           type="text"
-          class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+          class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
           [class.border-danger]="form.controls.city.invalid && form.controls.city.touched"
         />
         <app-field-hint text="La ville de votre entreprise." />
@@ -125,7 +144,7 @@
       <input
         formControlName="email"
         type="email"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-optional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint text="Facultatif — affiché sur vos factures pour vous contacter." />
     </label>
@@ -136,7 +155,7 @@
         formControlName="phone"
         type="tel"
         autocomplete="off"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-optional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint text="Facultatif — affiché sur vos factures pour vous contacter." />
     </label>
@@ -150,7 +169,7 @@
         rows="3"
         maxlength="500"
         placeholder="Ex : Merci pour votre confiance, n'hésitez pas à me contacter pour toute question !"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-base text-atelier-ink"
+        class="field-tier-optional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-base text-atelier-ink"
       ></textarea>
       <app-field-hint
         text="Ajouté automatiquement au message qui accompagne vos factures/devis, que vous utilisiez le bouton « Partager » ou l'envoi par email — modifiable ici à tout moment, sur mobile comme sur ordinateur."
@@ -161,7 +180,7 @@
       <span class="text-sm font-medium text-atelier-ink-soft">Statut</span>
       <select
         formControlName="legalStatus"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="
           form.controls.legalStatus.invalid && form.controls.legalStatus.touched
         "
@@ -174,7 +193,9 @@
       />
     </label>
 
-    <div class="flex flex-col gap-3 rounded-lg border border-[var(--color-atelier-walnut)]/25 p-4">
+    <div
+      class="flex flex-col gap-3 rounded-lg border border-[var(--color-atelier-walnut)]/25 field-tier-conditional p-4"
+    >
       <label class="flex items-center gap-2">
         <input type="checkbox" class="h-5 w-5" formControlName="decennialInsuranceApplicable" />
         <span class="text-sm font-medium text-atelier-ink">
@@ -233,7 +254,9 @@
       }
     </div>
 
-    <div class="flex flex-col gap-3 rounded-lg border border-[var(--color-atelier-walnut)]/25 p-4">
+    <div
+      class="flex flex-col gap-3 rounded-lg border border-[var(--color-atelier-walnut)]/25 field-tier-optional p-4"
+    >
       <span class="text-sm font-medium text-atelier-ink">Mention personnalisée en bas de page</span>
       <app-field-hint
         text="Un texte libre imprimé centré en bas de vos documents — vos propres mentions obligatoires, une clause commerciale, ou toute autre information que l'application ne gère pas déjà par un champ dédié."
@@ -261,14 +284,14 @@
         formControlName="earlyPaymentDiscountMention"
         rows="2"
         maxlength="500"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-base text-atelier-ink"
+        class="field-tier-conditional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-base text-atelier-ink"
       ></textarea>
       <app-field-hint
         text="Obligatoire sur une facture à un client professionnel (art. L441-9 du Code de commerce) : la loi impose d'indiquer votre politique d'escompte, même pour dire qu'il n'y en a pas — pré-rempli avec la formule standard, modifiable si vous proposez réellement un escompte."
       />
     </label>
 
-    <label class="flex items-center gap-2">
+    <label class="field-tier-conditional flex items-center gap-2 pl-3">
       <input type="checkbox" class="h-5 w-5" formControlName="vatOnDebitsOption" />
       <span class="text-sm font-medium text-atelier-ink">
         Option pour le paiement de la TVA d'après les débits
@@ -284,7 +307,7 @@
         formControlName="vatRatePercent"
         type="number"
         step="0.1"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-conditional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint text="Utilisé uniquement si votre statut applique la TVA." />
     </label>
@@ -293,7 +316,7 @@
       <span class="text-sm font-medium text-atelier-ink-soft">Fréquence de déclaration URSSAF</span>
       <select
         formControlName="declarationFrequency"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-optional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       >
         <option value="TRIMESTRIELLE">Trimestrielle</option>
         <option value="MENSUELLE">Mensuelle</option>
@@ -313,7 +336,7 @@
         step="1"
         min="0"
         placeholder="Ex : 77700"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-optional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint
         text="Facultatif — laissez vide pour ne pas afficher d'avertissement. Ce plafond dépend de votre activité et évolue dans le temps : vérifiez-le vous-même auprès de l'URSSAF."
@@ -331,7 +354,7 @@
         min="0"
         max="100"
         placeholder="Ex : 30"
-        class="rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
+        class="field-tier-optional rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
       />
       <app-field-hint
         text="Facultatif — laissez vide pour ne rien pré-remplir. Ce taux pré-remplit automatiquement le toggle « Demander un acompte » sur chaque nouvelle facture, toujours modifiable document par document."
