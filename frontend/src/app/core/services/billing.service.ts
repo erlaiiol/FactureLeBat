@@ -49,4 +49,15 @@ export class BillingService {
       { code },
     );
   }
+
+  // Phase 1.7: posts a StoreKit2 transaction's raw signed JWS (see
+  // IosPurchaseService) for the backend to independently re-verify against
+  // Apple's own certificates and credit the resolved tier — never trusted
+  // client-side, same posture createCheckoutSession has for Stripe's price
+  // id.
+  verifyApplePurchase(signedTransactionInfo: string): Observable<{ tier: PlanTier | null }> {
+    return this.http.post<{ tier: PlanTier | null }>(`${this.baseUrl}/apple/verify-purchase`, {
+      signedTransactionInfo,
+    });
+  }
 }

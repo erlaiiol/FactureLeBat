@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AppleServerClientService } from './apple/apple-server-client.service';
 import { BillingController } from './billing.controller';
 import { BillingRepository } from './billing.repository';
 import { BillingService } from './billing.service';
@@ -21,6 +22,7 @@ import { StripeClientService } from './stripe/stripe-client.service';
     BillingRepository,
     PlanGateService,
     StripeClientService,
+    AppleServerClientService,
     PromoCodeRepository,
     PromoCodeService,
   ],

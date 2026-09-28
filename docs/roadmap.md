@@ -1362,6 +1362,15 @@ Weighed against two alternatives before settling on this phase's approach:
 
 ## App Store Billing Constraint (Stripe vs. Apple/Google In-App Purchase)
 
+**Superseded on iOS by Phase 1.7 (2026-09-23).** The "external
+subscription, business tool" approach below — no in-app Stripe CTA,
+only a link out to the website — turned out not to be enough to get
+past App Store review a second time; Phase 1.7 replaces it with real
+native StoreKit2 In-App Purchase on iOS specifically (`subscribe.page.ts`'s
+pricing cards now purchase natively there instead of linking out; web and
+Android are untouched, still Stripe-only). Kept below for the historical
+reasoning and because Android's own behavior is unchanged.
+
 Phase 14's premium gate is billed through Stripe on the web. This is a real constraint on the iOS build specifically, independent of Capacitor vs. any other wrapper choice — it would apply just as much to a fully native app:
 
 - Apple's guideline 3.1.1 requires digital subscriptions *purchased from within the app* to go through Apple's own In-App Purchase (≈30% commission), **unless** the app follows the "external subscription, used as a business tool" pattern already used by apps like Slack/Basecamp/Dropbox: the app may let an already-subscribed user use the paid features, but must not present a "Subscribe"/"Pay" button or any link that starts a Stripe checkout *from inside the iOS app*. The subscription flow (`/abonnement`, Phase 14) stays a web-only action the artisan completes outside the app (browser, desktop) before or alongside using the iOS app.
@@ -2937,3 +2946,52 @@ colliding with the Phase 1.5 Sign in with Apple track above. See
 [docs/1.6/README.md](./1.6/README.md) for the full scope decisions,
 including how the existing "Marge 30%" `REDISTRIBUTED`-service convention
 (Phase 5) coexists with this rather than being replaced by it.
+
+---
+
+# Phase 1.7 — Native iOS In-App Purchase (StoreKit2)
+
+Full detail in [docs/1.7/](./1.7/README.md). **Status (2026-09-23): Track B
+(code) implemented and unit-tested; Track A (Apple account/App Store
+Connect) and all live/Xcode verification are still open, and are the
+user's own next step.** Triggered by a failed App Store submission: a
+separate crash (missing `Info.plist` camera/photo-library usage
+descriptions for Phase 1.1-1's signature-photo modal) has already been
+fixed and just needs a fresh build/upload, but the submission also
+surfaced that Phase 22's iOS billing approach — no in-app purchase
+button, only a link out to Stripe checkout on the website, reasoned
+through at the time as the guideline-3.1.1 "external subscription,
+business tool" allowance — isn't sufficient to move forward this time,
+and real native StoreKit2 in-app purchases are needed. Two genuinely
+separate tracks: (1) App Store Connect account prerequisites — DSA
+compliance, legal entity, signing the "Apps payantes" contract, banking/
+tax info — which only the account holder can complete, blocking product
+creation and all real-Apple-infrastructure verification
+([1.7-1](./1.7/1.7-1-app-store-connect-prerequisites.md), untouched, the
+user's own track); and (2) the actual implementation — backend purchase
+verification + App Store Server Notifications V2
+([1.7-2](./1.7/1.7-2-backend-apple-purchase-verification.md), done, 649
+backend tests passing) and a native purchase flow (a hand-written local
+Capacitor/StoreKit2 Swift plugin, this repo's first) + mandatory
+"Restaurer mes achats" replacing Phase 22's link-out on iOS only
+([1.7-3](./1.7/1.7-3-frontend-storekit-purchase-flow.md), done, `ng build`
+clean). The open build-vs-buy decision was resolved directly with the
+user: **build it against Apple's own `app-store-server-library`, not
+RevenueCat** — no new third-party billing dependency at all. **Not yet
+done, and can't be from this environment: any live verification** —
+a StoreKit purchase sheet needs a human tap in Xcode/on a real device/
+Simulator with a sandbox Apple ID, which no automation here can drive.
+Web and Android are unaffected — both keep the existing Stripe flow
+unchanged.
+
+**Update (2026-09-28)**: 1.7-1 is now done (the user's own App Store
+Connect work) except a sandbox tester account and the app's numeric App
+Store ID — both real blockers, not busywork: the sandbox tester needs a
+hand-created Apple ID/password, and the numeric App Store ID turned out
+to be a hard requirement of Apple's own library, not the "optional, extra
+validation only" its docs implied (caught by actually running
+`AppleServerClientService` against the now-real credentials, not just
+reading the docs — see [1.7-2](./1.7/1.7-2-backend-apple-purchase-verification.md)'s
+own update note for the bug and its fix). The real Key ID/Issuer ID/`.p8`/
+product ids from App Store Connect are already wired into both
+`backend/.env` and `infra/.env`.

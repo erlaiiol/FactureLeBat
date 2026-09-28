@@ -19,6 +19,10 @@ export interface TrialOffer {
 // Mirrors the backend's BillingStatus (billing/entities/billing-status.entity.ts).
 export interface BillingStatus {
   subscriptionStatus: SubscriptionStatus;
+  // Phase 1.7: the Apple IAP counterpart to subscriptionStatus above —
+  // managed through iOS Settings, not the Stripe portal, so subscribe.page
+  // branches on this separately rather than folding it into subscriptionStatus.
+  appleSubscriptionStatus: SubscriptionStatus;
   hasPremiumAccess: boolean;
   planTier: PlanTier | null;
   currentPeriodEnd: string | null;
@@ -39,6 +43,11 @@ export interface BillingStatus {
   facturXUsedThisMonth: number;
   facturXFreeLimit: number | null;
   trialOffer: TrialOffer | null;
+  // Phase 1.7: mirrors stripeConfigured — whether this deployment can
+  // accept native iOS purchases at all. subscribe.page.ts's iOS purchase
+  // buttons fall back to "indisponible pour le moment" when false, same
+  // posture the Stripe cards already have via stripeConfigured.
+  appleConfigured: boolean;
 }
 
 // Mirrors the backend's PlanCatalog (billing/entities/plan-catalog.entity.ts).
@@ -54,6 +63,10 @@ export interface PlanOption {
   highlight: boolean;
   removesWatermark: boolean;
   available: boolean;
+  // Phase 1.7: this tier's App Store product id, or null if Apple IAP isn't
+  // configured for it on this deployment — subscribe.page.ts's iOS purchase
+  // buttons read this instead of hardcoding a product id.
+  appleProductId: string | null;
 }
 
 export interface LaunchOffer {

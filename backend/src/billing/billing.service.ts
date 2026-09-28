@@ -1,8 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { NotificationTypeV2 } from '@apple/app-store-server-library';
 import Stripe from 'stripe';
 import { InvoiceEntryMode, PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
+import { AppleServerClientService } from './apple/apple-server-client.service';
+import {
+  mapAppleSubscriptionStatus,
+  statusFromVerifiedTransaction,
+} from './apple/apple-subscription-status.util';
 import { BillingRepository } from './billing.repository';
 import { BillingStatus, TrialOffer } from './entities/billing-status.entity';
 import { PlanCatalog } from './entities/plan-catalog.entity';
@@ -45,6 +51,7 @@ export class BillingService {
   constructor(
     private readonly repository: BillingRepository,
     private readonly stripeClient: StripeClientService,
+    private readonly appleClient: AppleServerClientService,
     config: ConfigService,
   ) {
     this.frontendUrl = config.get<string>('FRONTEND_URL', 'http://localhost:4200');
@@ -75,6 +82,7 @@ export class BillingService {
       : null;
     return {
       subscriptionStatus: fields.subscriptionStatus,
+      appleSubscriptionStatus: fields.appleSubscriptionStatus,
       hasPremiumAccess: planTier !== null,
       planTier,
       currentPeriodEnd: fields.currentPeriodEnd,
@@ -90,6 +98,7 @@ export class BillingService {
       facturXUsedThisMonth,
       facturXFreeLimit: planTier === null ? FACTURX_FREE_MONTHLY_LIMIT : null,
       trialOffer,
+      appleConfigured: this.appleClient.isConfigured(),
     };
   }
 
@@ -113,6 +122,7 @@ export class BillingService {
         highlight: definition.highlight,
         removesWatermark: definition.removesWatermark,
         available: availableTiers.has(tier),
+        appleProductId: this.appleClient.productIdForTier(tier),
       };
     });
 
@@ -243,6 +253,92 @@ export class BillingService {
 
   isStripeConfigured(): boolean {
     return this.stripeClient.isConfigured();
+  }
+
+  isAppleConfigured(): boolean {
+    return this.appleClient.isConfigured();
+  }
+
+  // Phase 1.7: called right after a StoreKit2 purchase completes on the
+  // client — companyId comes from the authenticated request (CurrentUser),
+  // never from the client payload itself, same "the caller's identity is
+  // never taken from an unverified field" posture the rest of this
+  // controller already has. This is the one and only place
+  // appleOriginalTransactionId gets *linked* to a company: every later
+  // Server Notification for the same subscription resolves back to this
+  // company via that id (see handleAppleNotification below), which is why
+  // it's an error, not a silent no-op, if the verified transaction is
+  // missing one.
+  async verifyApplePurchase(
+    companyId: string,
+    signedTransactionInfo: string,
+  ): Promise<{ tier: PlanTier | null }> {
+    const transaction = await this.appleClient.verifyTransaction(signedTransactionInfo);
+    const originalTransactionId = transaction.originalTransactionId;
+    if (!originalTransactionId) {
+      throw new Error('Verified Apple transaction is missing originalTransactionId');
+    }
+    const tier = this.appleClient.resolveTierFromProductId(transaction.productId);
+    if (!tier) {
+      this.logger.warn(
+        `Apple purchase product id ${transaction.productId ?? '(none)'} does not match any configured tier (company ${companyId}) — appleSubscriptionPlanTier left unresolved.`,
+      );
+    }
+    await this.repository.applyAppleSubscriptionUpdate(companyId, {
+      appleOriginalTransactionId: originalTransactionId,
+      appleSubscriptionStatus: statusFromVerifiedTransaction(transaction),
+      appleSubscriptionPlanTier: tier,
+    });
+    return { tier };
+  }
+
+  // App Store Server Notifications V2 — Apple posts here on every
+  // subscription lifecycle event (renewal, expiry, billing retry/grace
+  // period, refund…), same role as handleWebhook below but for the Apple
+  // side. Unlike Stripe's webhook, the payload identifies the subscriber
+  // only by originalTransactionId, never a companyId — resolved via
+  // BillingRepository.findCompanyIdByAppleOriginalTransactionId, which only
+  // ever has an entry once verifyApplePurchase has linked it (the normal
+  // order of events: the client verifies its own purchase immediately,
+  // Apple's notification for that same purchase follows afterward).
+  async handleAppleNotification(signedPayload: string): Promise<void> {
+    const notification = await this.appleClient.verifyNotification(signedPayload);
+    if (notification.notificationType === NotificationTypeV2.TEST) {
+      this.logger.debug('Received Apple Server Notification TEST ping — nothing to apply.');
+      return;
+    }
+    const data = notification.data;
+    if (!data?.signedTransactionInfo || data.status === undefined) {
+      this.logger.debug(
+        `Ignoring Apple notification ${notification.notificationType ?? '(unknown)'} — no data.signedTransactionInfo/status to apply (e.g. a one-time-charge or external-purchase-token event, not a subscription state change).`,
+      );
+      return;
+    }
+    const transaction = await this.appleClient.verifyTransaction(data.signedTransactionInfo);
+    const originalTransactionId = transaction.originalTransactionId;
+    if (!originalTransactionId) {
+      this.logger.warn('Apple notification transaction payload is missing originalTransactionId.');
+      return;
+    }
+    const companyId =
+      await this.repository.findCompanyIdByAppleOriginalTransactionId(originalTransactionId);
+    if (!companyId) {
+      this.logger.warn(
+        `Apple notification for unknown originalTransactionId ${originalTransactionId} — no company has verified a purchase for it yet.`,
+      );
+      return;
+    }
+    const tier = this.appleClient.resolveTierFromProductId(transaction.productId);
+    if (!tier) {
+      this.logger.warn(
+        `Apple notification product id ${transaction.productId ?? '(none)'} does not match any configured tier (company ${companyId}) — appleSubscriptionPlanTier left unresolved.`,
+      );
+    }
+    await this.repository.applyAppleSubscriptionUpdate(companyId, {
+      appleOriginalTransactionId: originalTransactionId,
+      appleSubscriptionStatus: mapAppleSubscriptionStatus(data.status),
+      appleSubscriptionPlanTier: tier,
+    });
   }
 
   // Phase 29/30: the filleul side of the referral reward — -30% off their

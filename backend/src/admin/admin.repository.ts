@@ -18,6 +18,11 @@ const ADMIN_USER_ROW_SELECT = {
       name: true,
       subscriptionStatus: true,
       subscriptionPlanTier: true,
+      // Phase 1.7: needed for getEffectivePlanTier's 3-way resolution below
+      // — an admin viewing this list must see a company's real effective
+      // tier even when it comes from an iOS IAP subscription, not Stripe.
+      appleSubscriptionStatus: true,
+      appleSubscriptionPlanTier: true,
       premiumGrantedUntil: true,
       grantedPlanTier: true,
       _count: { select: { invoices: true } },

@@ -21,6 +21,11 @@ export interface TrialOffer {
 // show "18/20 clients" without a second round trip.
 export interface BillingStatus {
   subscriptionStatus: SubscriptionStatus;
+  // Phase 1.7: the Apple IAP counterpart to subscriptionStatus above — kept
+  // separate rather than folded together since the two are billed/managed
+  // through entirely different surfaces (Stripe portal vs. iOS Settings),
+  // even though both feed the same 3-way getEffectivePlanTier below.
+  appleSubscriptionStatus: SubscriptionStatus;
   hasPremiumAccess: boolean;
   planTier: PlanTier | null;
   currentPeriodEnd: Date | null;
@@ -45,4 +50,10 @@ export interface BillingStatus {
   facturXUsedThisMonth: number;
   facturXFreeLimit: number | null;
   trialOffer: TrialOffer | null;
+  // Phase 1.7: mirrors stripeConfigured — whether this deployment can accept
+  // native iOS purchases at all (App Store Server API key + at least one
+  // product id configured). subscribe.page.ts uses this to decide whether
+  // its iOS purchase buttons render or fall back to "indisponible pour le
+  // moment", same posture the Stripe cards already have via stripeConfigured.
+  appleConfigured: boolean;
 }

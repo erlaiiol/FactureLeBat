@@ -979,6 +979,94 @@
   </form>
 </section>
 
+<section class="mt-8 flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+  <h2 class="font-heading uppercase tracking-wide text-lg font-semibold text-ink">Mot de passe</h2>
+
+  @if (!changePasswordRevealed()) {
+    <p class="text-sm text-ink-soft">
+      Modifiez le mot de passe utilisé pour vous connecter avec votre email.
+    </p>
+    <app-big-button variant="secondary" tone="subtle" (click)="changePasswordRevealed.set(true)">
+      Changer mon mot de passe
+    </app-big-button>
+  } @else {
+    <form
+      [formGroup]="changePasswordForm"
+      (ngSubmit)="submitChangePassword()"
+      class="flex flex-col gap-3"
+    >
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Mot de passe actuel</span>
+        <input
+          formControlName="currentPassword"
+          type="password"
+          autocomplete="current-password"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        <span class="text-xs text-ink-soft">
+          Laissez vide si vous vous connectez uniquement avec Google ou Apple : vous définirez alors
+          votre premier mot de passe.
+        </span>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Nouveau mot de passe</span>
+        <input
+          formControlName="newPassword"
+          type="password"
+          autocomplete="new-password"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        <span
+          class="text-xs"
+          [class.text-danger]="
+            changePasswordForm.controls.newPassword.touched &&
+            changePasswordForm.controls.newPassword.invalid
+          "
+          [class.text-ink-soft]="
+            !(
+              changePasswordForm.controls.newPassword.touched &&
+              changePasswordForm.controls.newPassword.invalid
+            )
+          "
+        >
+          8 caractères minimum, dont une majuscule et un chiffre.
+        </span>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-ink">Confirmez le nouveau mot de passe</span>
+        <input
+          formControlName="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          class="rounded-lg border border-line px-4 py-3 text-lg"
+        />
+        @if (
+          changePasswordForm.controls.confirmPassword.touched &&
+          changePasswordForm.hasError('passwordMismatch')
+        ) {
+          <span class="text-xs text-danger">Les mots de passe ne correspondent pas.</span>
+        }
+      </label>
+      @if (changePasswordError(); as message) {
+        <p class="text-center font-medium text-danger">{{ message }}</p>
+      }
+      <div class="flex gap-3">
+        <app-big-button
+          type="button"
+          variant="secondary"
+          tone="subtle"
+          (click)="cancelChangePassword()"
+        >
+          Annuler
+        </app-big-button>
+        <app-big-button type="submit" [disabled]="changePasswordSaving()">
+          {{ changePasswordSaving() ? 'Mise à jour…' : 'Mettre à jour' }}
+        </app-big-button>
+      </div>
+    </form>
+  }
+</section>
+
 <section class="mt-10 flex flex-col gap-4 rounded-xl border border-danger-subtle-border p-4">
   <h2 class="font-heading text-lg font-bold uppercase tracking-wide text-danger">
     Zone dangereuse

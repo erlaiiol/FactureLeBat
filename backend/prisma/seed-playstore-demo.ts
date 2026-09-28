@@ -19,6 +19,19 @@
 // human reviewer clicking around) when a redeploy happens. If the account
 // already exists, this is a no-op; it only ever creates once, the first time
 // `make prod` seeds a fresh database.
+//
+// Also seeds a second, App Store-specific account (APPSTORE_SANDBOX_EMAIL)
+// for Apple's review of the native In-App Purchase flow (docs/1.7/). Two
+// deliberate differences from the Play Store one:
+// - NO Premium grant: the reviewer must reach the paywall and complete a
+//   sandbox purchase — an account that's already Premium hides the very
+//   IAP Apple is reviewing (Guideline 2.1 "unable to locate the IAP").
+// - Its password is never committed (this repo is public): it's read from
+//   APPSTORE_SANDBOX_PASSWORD in infra/.env (reaches this container via
+//   docker-compose.prod.yml's env_file). Unset → that account is skipped
+//   with a warning, never a failed `make prod`. Changing the env value
+//   re-syncs the stored hash on the next run, so rotating it is just
+//   "edit infra/.env, make prod, update App Store Connect".
 import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { generateReferralCode } from '../src/referral/referral-code-generator.util';
@@ -45,6 +58,8 @@ const CURRENT_TERMS_VERSION = '1.0';
 const PLAYSTORE_DEMO_EMAIL = 'store-review@facturele.app';
 const PLAYSTORE_DEMO_PASSWORD = 'StoreReview2026!';
 
+const APPSTORE_SANDBOX_EMAIL = 'appstore-sandbox@facturele.app';
+
 // Same "outside Stripe, never hits the paywall" mechanism as seed-demo.ts —
 // see PlanGateService.getEffectivePlanTier. A reviewer must see every
 // Premium-only screen (AI assistant, analytics) without hitting a paywall.
@@ -62,32 +77,54 @@ function mustGetEnv(name: string): string {
   return value;
 }
 
-async function main(): Promise<void> {
-  const existing = await prisma.user.findUnique({ where: { email: PLAYSTORE_DEMO_EMAIL } });
+interface ReviewerAccount {
+  email: string;
+  password: string;
+  companyName: string;
+  grantPremium: boolean;
+  // Only the env-sourced App Store password re-syncs an existing account's
+  // hash — the Play Store one keeps its original create-once behavior.
+  syncPasswordIfExists: boolean;
+}
+
+async function seedReviewerAccount(account: ReviewerAccount): Promise<void> {
+  const existing = await prisma.user.findUnique({ where: { email: account.email } });
   if (existing) {
-    console.log(`seed-playstore-demo: ${PLAYSTORE_DEMO_EMAIL} already exists, nothing to do.`);
+    if (
+      account.syncPasswordIfExists &&
+      !(existing.passwordHash && (await bcrypt.compare(account.password, existing.passwordHash)))
+    ) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { passwordHash: await bcrypt.hash(account.password, BCRYPT_SALT_ROUNDS) },
+      });
+      console.log(`seed-playstore-demo: ${account.email} already exists, password re-synced.`);
+      return;
+    }
+    console.log(`seed-playstore-demo: ${account.email} already exists, nothing to do.`);
     return;
   }
 
   const company = await prisma.company.create({
     data: {
-      name: 'Compte de démonstration',
+      name: account.companyName,
       siret: '90000000000018',
       addressLine1: '1 rue de la Démonstration',
       postalCode: '75001',
       city: 'Paris',
       legalStatus: LegalStatus.MICRO_ENTREPRENEUR,
       vatRateBasisPoints: 2000,
-      premiumGrantedUntil: PREMIUM_GRANTED_UNTIL,
-      grantedPlanTier: PlanTier.PREMIUM,
+      ...(account.grantPremium
+        ? { premiumGrantedUntil: PREMIUM_GRANTED_UNTIL, grantedPlanTier: PlanTier.PREMIUM }
+        : {}),
       referralCode: generateReferralCode(),
     },
   });
 
   await prisma.user.create({
     data: {
-      email: PLAYSTORE_DEMO_EMAIL,
-      passwordHash: await bcrypt.hash(PLAYSTORE_DEMO_PASSWORD, BCRYPT_SALT_ROUNDS),
+      email: account.email,
+      passwordHash: await bcrypt.hash(account.password, BCRYPT_SALT_ROUNDS),
       role: UserRole.ARTISAN,
       companyId: company.id,
       newsletterOptIn: false,
@@ -197,9 +234,32 @@ async function main(): Promise<void> {
     },
   });
 
-  console.log('');
-  console.log('Play Store / App Store reviewer account seeded:');
-  console.log(`  ${PLAYSTORE_DEMO_EMAIL} / ${PLAYSTORE_DEMO_PASSWORD}`);
+  console.log(`seed-playstore-demo: reviewer account seeded: ${account.email}`);
+}
+
+async function main(): Promise<void> {
+  await seedReviewerAccount({
+    email: PLAYSTORE_DEMO_EMAIL,
+    password: PLAYSTORE_DEMO_PASSWORD,
+    companyName: 'Compte de démonstration',
+    grantPremium: true,
+    syncPasswordIfExists: false,
+  });
+
+  const appStoreSandboxPassword = process.env.APPSTORE_SANDBOX_PASSWORD;
+  if (!appStoreSandboxPassword) {
+    console.warn(
+      `seed-playstore-demo: APPSTORE_SANDBOX_PASSWORD not set, skipping ${APPSTORE_SANDBOX_EMAIL}.`,
+    );
+    return;
+  }
+  await seedReviewerAccount({
+    email: APPSTORE_SANDBOX_EMAIL,
+    password: appStoreSandboxPassword,
+    companyName: 'Compte de démonstration (App Store)',
+    grantPremium: false,
+    syncPasswordIfExists: true,
+  });
 }
 
 main()

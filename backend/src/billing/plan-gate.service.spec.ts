@@ -3,7 +3,7 @@ import { BillingFields, BillingRepository } from './billing.repository';
 import { CatalogLimitExceededException } from './catalog-limit-exceeded.exception';
 import { FacturXQuotaExceededException } from './facturx-quota-exceeded.exception';
 import { PlanFeatureLockedException } from './plan-feature-locked.exception';
-import { PlanGateService, isTrialOfferActive } from './plan-gate.service';
+import { PlanGateService, getEffectivePlanTier, isTrialOfferActive } from './plan-gate.service';
 import { PremiumRequiredException } from './premium-required.exception';
 
 function buildService(options: {
@@ -21,6 +21,9 @@ function buildService(options: {
     subscriptionPlanTier: null,
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
+    appleOriginalTransactionId: null,
+    appleSubscriptionStatus: SubscriptionStatus.NONE,
+    appleSubscriptionPlanTier: null,
     premiumGrantedUntil: null,
     grantedPlanTier: null,
     pendingReferralDiscount: false,
@@ -255,6 +258,8 @@ describe('isTrialOfferActive', () => {
   const base = {
     subscriptionStatus: SubscriptionStatus.NONE,
     subscriptionPlanTier: null,
+    appleSubscriptionStatus: SubscriptionStatus.NONE,
+    appleSubscriptionPlanTier: null,
     premiumGrantedUntil: null,
     grantedPlanTier: null,
   };
@@ -329,5 +334,78 @@ describe('PlanGateService.recordFacturXUsed', () => {
     const { service, markInvoiceFacturXUsed } = buildService({ fields: {} });
     await service.recordFacturXUsed('company-1', 'inv-1');
     expect(markInvoiceFacturXUsed).toHaveBeenCalledWith('company-1', 'inv-1');
+  });
+});
+
+// Phase 1.7: getEffectivePlanTier now takes the higher of THREE sources
+// (Stripe, Apple, grant), not two — these cases exist specifically to prove
+// none of the pre-existing 2-source behavior regressed and that Apple slots
+// in as a genuine equal, not a bolted-on afterthought.
+describe('getEffectivePlanTier (Phase 1.7: Stripe + Apple + grant)', () => {
+  const noPlan = {
+    subscriptionStatus: SubscriptionStatus.NONE,
+    subscriptionPlanTier: null,
+    appleSubscriptionStatus: SubscriptionStatus.NONE,
+    appleSubscriptionPlanTier: null,
+    premiumGrantedUntil: null,
+    grantedPlanTier: null,
+  };
+
+  it('resolves an active Apple subscription alone, same as an active Stripe one', () => {
+    expect(
+      getEffectivePlanTier({
+        ...noPlan,
+        appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+        appleSubscriptionPlanTier: PlanTier.PRO,
+      }),
+    ).toBe(PlanTier.PRO);
+  });
+
+  it('ignores a non-ACTIVE Apple subscription status, even with a tier on file', () => {
+    expect(
+      getEffectivePlanTier({
+        ...noPlan,
+        appleSubscriptionStatus: SubscriptionStatus.CANCELED,
+        appleSubscriptionPlanTier: PlanTier.PREMIUM,
+      }),
+    ).toBeNull();
+  });
+
+  it('takes the higher of an active Stripe tier and a lower active Apple tier', () => {
+    expect(
+      getEffectivePlanTier({
+        ...noPlan,
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
+        subscriptionPlanTier: PlanTier.PREMIUM,
+        appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+        appleSubscriptionPlanTier: PlanTier.ESSENTIEL,
+      }),
+    ).toBe(PlanTier.PREMIUM);
+  });
+
+  it('takes the higher of an active Apple tier over a lower active Stripe tier', () => {
+    expect(
+      getEffectivePlanTier({
+        ...noPlan,
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
+        subscriptionPlanTier: PlanTier.ESSENTIEL,
+        appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+        appleSubscriptionPlanTier: PlanTier.PREMIUM,
+      }),
+    ).toBe(PlanTier.PREMIUM);
+  });
+
+  it('a live grant still beats both an active Stripe and an active Apple tier', () => {
+    expect(
+      getEffectivePlanTier({
+        ...noPlan,
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
+        subscriptionPlanTier: PlanTier.ESSENTIEL,
+        appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+        appleSubscriptionPlanTier: PlanTier.PRO,
+        premiumGrantedUntil: new Date(Date.now() + 60_000),
+        grantedPlanTier: PlanTier.PREMIUM,
+      }),
+    ).toBe(PlanTier.PREMIUM);
   });
 });

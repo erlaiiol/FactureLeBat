@@ -8,7 +8,13 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { BillingService } from '../../core/services/billing.service';
@@ -31,6 +37,12 @@ import {
   E_INVOICING_EMISSION_DEADLINE,
   E_INVOICING_RECEPTION_DEADLINE,
 } from '../../core/utils/e-invoicing-deadlines.util';
+
+function newPasswordsMatchValidator(group: AbstractControl): ValidationErrors | null {
+  return group.get('newPassword')?.value === group.get('confirmPassword')?.value
+    ? null
+    : { passwordMismatch: true };
+}
 
 @Component({
   selector: 'app-company-settings-page',
@@ -69,6 +81,25 @@ export class CompanySettingsPage {
     'decennialInsurancePolicyNumber',
     'decennialInsuranceCoverageArea',
   ] as const;
+
+  // Same two-step reveal as the deletion form below. currentPassword is
+  // deliberately not required: a Google/Apple-only account has none and
+  // sets its first password here (the backend enforces it whenever one
+  // exists). newPassword mirrors RegisterDto.password's rules.
+  protected readonly changePasswordRevealed = signal(false);
+  protected readonly changePasswordSaving = signal(false);
+  protected readonly changePasswordError = signal<string | null>(null);
+  protected readonly changePasswordForm = this.fb.nonNullable.group(
+    {
+      currentPassword: [''],
+      newPassword: [
+        '',
+        [Validators.required, Validators.minLength(8), Validators.pattern(/(?=.*[A-Z])(?=.*\d)/)],
+      ],
+      confirmPassword: ['', Validators.required],
+    },
+    { validators: newPasswordsMatchValidator },
+  );
 
   // Phase 13 RGPD self-service deletion — a two-step reveal (button ->
   // inline confirm form) rather than a native confirm() dialog, matching
@@ -660,6 +691,48 @@ export class CompanySettingsPage {
       .subscribe({
         next: () => this.toursReplayed.set(true),
         error: () => this.toastService.error('Impossible de réinitialiser les visites guidées.'),
+      });
+  }
+
+  protected cancelChangePassword(): void {
+    this.changePasswordRevealed.set(false);
+    this.changePasswordError.set(null);
+    this.changePasswordForm.reset();
+  }
+
+  protected submitChangePassword(): void {
+    if (this.changePasswordSaving()) {
+      return;
+    }
+    if (this.changePasswordForm.invalid) {
+      this.changePasswordForm.markAllAsTouched();
+      return;
+    }
+    this.changePasswordSaving.set(true);
+    this.changePasswordError.set(null);
+
+    const { currentPassword, newPassword } = this.changePasswordForm.getRawValue();
+    this.authService
+      .changePassword(newPassword, currentPassword || undefined)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.changePasswordSaving.set(false);
+          this.cancelChangePassword();
+          this.toastService.success(
+            'Mot de passe mis à jour. Vos autres appareils ont été déconnectés.',
+          );
+        },
+        error: (error: HttpErrorResponse) => {
+          this.changePasswordSaving.set(false);
+          this.changePasswordError.set(
+            error.status === 403
+              ? 'Mot de passe actuel incorrect.'
+              : error.status === 429
+                ? 'Trop de tentatives. Réessayez dans une minute.'
+                : 'Erreur lors de la mise à jour. Veuillez réessayer.',
+          );
+        },
       });
   }
 

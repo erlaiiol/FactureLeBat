@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { of, switchMap } from 'rxjs';
+import { catchError, of, switchMap } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
 // Phase 13.3: the inverse of authGuard — guards the public landing page at
@@ -21,7 +21,12 @@ export const guestGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  return authService
-    .ensureLoaded()
-    .pipe(switchMap((user) => of(user === null ? true : router.parseUrl('/factures/nouvelle'))));
+  return authService.ensureLoaded().pipe(
+    switchMap((user) => of(user === null ? true : router.parseUrl('/factures/nouvelle'))),
+    // ensureLoaded only ever throws for a genuine network failure — see
+    // authGuard's own comment. '/' is also OfflinePage's own "Réessayer"
+    // target, so this is what makes tapping it while still offline land
+    // right back on OfflinePage instead of an unhandled guard error.
+    catchError(() => of(router.parseUrl('/hors-ligne'))),
+  );
 };

@@ -1,0 +1,15 @@
+<div class="mx-auto flex max-w-sm flex-col items-center gap-6 py-16 text-center">
+  <app-icon-warning [size]="40" class="text-warning" />
+
+  <div class="flex flex-col gap-2">
+    <h1 class="font-heading text-2xl font-bold uppercase tracking-wide text-ink">
+      Pas de connexion
+    </h1>
+    <p class="text-ink-soft">
+      FactureLe n'arrive pas à joindre le serveur. Vérifiez votre Wi-Fi ou vos données mobiles, puis
+      réessayez.
+    </p>
+  </div>
+
+  <app-big-button type="button" (click)="retry()">Réessayer</app-big-button>
+</div>

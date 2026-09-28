@@ -90,6 +90,20 @@
 	<string>Utilisé pour transcrire ce que vous dictez lors de la création d’une facture ou d’un devis par commande vocale.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Le micro est utilisé pour dicter le contenu d’une facture ou d’un devis.</string>
+	<!-- App Review rejection (Sept. 2026, Guideline 2.1(a)): signature-modal
+	component's "Importer une photo" tab uses a plain
+	<input type="file" capture="environment"> to open the native camera —
+	no Capacitor Camera plugin involved, but iOS still requires these two
+	usage-description keys before it will present that native picker at
+	all. Missing either one doesn't show a permission-denied error: iOS
+	kills the app outright the moment the picker would open, which is
+	exactly the "tap on take photo" crash Apple's reviewer hit. Both are
+	needed — camera for capture="environment" itself, photo library for
+	the same input's fallback "choose existing photo" option. -->
+	<key>NSCameraUsageDescription</key>
+	<string>L’appareil photo est utilisé pour photographier la signature du client sur un document imprimé.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Utilisé pour importer une photo existante de la signature du client depuis votre pellicule.</string>
 	<!-- Phase 22: lets a push notification wake the app in the background
 	to update local state before the user taps it — required alongside the
 	"Background Modes" capability toggle in Xcode's Signing & Capabilities
