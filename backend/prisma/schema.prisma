@@ -409,6 +409,27 @@ model Company {
   // downgraded/guessed in that case — see PlanGateService).
   subscriptionPlanTier PlanTier?
 
+  // Phase 1.7: native iOS In-App Purchase, a second and independent
+  // purchase path alongside Stripe above — a company can hold both at once
+  // (see PlanGateService.getEffectivePlanTier's 3-way higherTier), which is
+  // why this isn't a variant of the Stripe fields above rather than its own
+  // parallel set. appleOriginalTransactionId is Apple's durable per-
+  // subscription identity (stable across renewals, unlike transactionId),
+  // directly analogous to stripeSubscriptionId. Written exclusively from a
+  // verified JWS — either the client's post-purchase
+  // POST /billing/apple/verify-purchase call or a verified App Store Server
+  // Notifications V2 payload (see BillingService.verifyApplePurchase/
+  // handleAppleNotification) — never trusted from an unsigned client field,
+  // same posture subscriptionStatus already has for Stripe.
+  appleOriginalTransactionId String?            @unique
+  appleSubscriptionStatus    SubscriptionStatus @default(NONE)
+  // Which of the 3 tiers the Apple subscription above is for, resolved from
+  // its product id against APPLE_PRODUCT_ID_ESSENTIEL/_PRO/_PREMIUM (see
+  // AppleServerClientService.resolveTierFromProductId) — same "null if the
+  // product id doesn't match any configured tier, never guessed" rule
+  // subscriptionPlanTier already has for Stripe price ids.
+  appleSubscriptionPlanTier PlanTier?
+
   // Premium access granted outside Stripe — an admin's manual grant or a
   // redeemed PromoCode, both funnel through these two fields together (see
   // BillingRepository.grantPlanDays). Independent of subscriptionStatus: an

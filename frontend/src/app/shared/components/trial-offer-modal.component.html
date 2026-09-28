@@ -48,12 +48,15 @@
       </div>
 
       @if (platformService.isIosApp()) {
-        <!-- Apple 3.1.1 "external subscription, business tool" pattern: no
-        tappable element here may start a payment flow, not even a link to
-        /abonnement, from inside the app itself — same constraint as
-        PaywallModalComponent, see docs/roadmap.md Phase 22. The button below
-        only opens the system browser (Browser.open), so it's a link-out
-        rather than an in-app payment flow. -->
+        <!-- Phase 1.7: unlike PaywallModalComponent (which now routes into
+        /abonnement's real StoreKit2 purchase on iOS too), this modal's
+        specific offer — Premium at a Stripe coupon's discounted price — has
+        no Apple IAP equivalent: Apple has its own separate "offer codes"
+        mechanism, deliberately not built here (see docs/1.7/
+        1.7-3-frontend-storekit-purchase-flow.md's non-goals). The discount
+        genuinely only exists on the Stripe/web checkout, so this keeps the
+        Phase 22 external-link-out rather than routing to a StoreKit
+        purchase that couldn't honor the price shown above. -->
         <div class="flex flex-col gap-2 rounded-lg bg-secondary-subtle p-3 text-center">
           <p class="text-sm text-ink-soft">Profitez de l'offre depuis un navigateur.</p>
           <app-big-button

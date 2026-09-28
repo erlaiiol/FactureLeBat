@@ -185,24 +185,37 @@ export class PlanGateService {
 
 type EffectiveTierFields = Pick<
   BillingFields,
-  'subscriptionStatus' | 'subscriptionPlanTier' | 'premiumGrantedUntil' | 'grantedPlanTier'
+  | 'subscriptionStatus'
+  | 'subscriptionPlanTier'
+  | 'appleSubscriptionStatus'
+  | 'appleSubscriptionPlanTier'
+  | 'premiumGrantedUntil'
+  | 'grantedPlanTier'
 >;
 
-// The higher of an active Stripe subscription's tier and a still-valid
-// grant's tier — an artisan can be a paying Pro subscriber *and* have a
-// Premium referral grant layered on top, and must get the better of the
-// two, never lose it to whichever happens to be checked first. Narrowed to
-// just the fields it reads (not the full BillingFields shape) so
-// AdminService can reuse it directly off its own User/Company join row
-// without assembling a fake full BillingFields object.
+// The higher of an active Stripe subscription's tier, an active Apple IAP
+// subscription's tier (Phase 1.7), and a still-valid grant's tier — an
+// artisan can in principle be a paying Pro subscriber on the web *and* have
+// a Premium referral grant layered on top, and must get the best of every
+// source, never lose it to whichever happens to be checked first.
+// Deliberately not exclusive between Stripe and Apple either: nothing
+// prevents (or needs to prevent) a company from holding both at once — see
+// docs/1.7/README.md's Open Decision 2. Narrowed to just the fields it
+// reads (not the full BillingFields shape) so AdminService can reuse it
+// directly off its own User/Company join row without assembling a fake
+// full BillingFields object.
 export function getEffectivePlanTier(fields: EffectiveTierFields): PlanTier | null {
   const stripeTier =
     fields.subscriptionStatus === SubscriptionStatus.ACTIVE ? fields.subscriptionPlanTier : null;
+  const appleTier =
+    fields.appleSubscriptionStatus === SubscriptionStatus.ACTIVE
+      ? fields.appleSubscriptionPlanTier
+      : null;
   const grantTier =
     fields.premiumGrantedUntil && fields.premiumGrantedUntil > new Date()
       ? fields.grantedPlanTier
       : null;
-  return higherTier(stripeTier, grantTier);
+  return higherTier(higherTier(stripeTier, appleTier), grantTier);
 }
 
 // Kept for admin.service.ts/billing.service.ts's boolean-only call sites —

@@ -1,8 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { Observable, catchError, finalize, of, shareReplay, tap } from 'rxjs';
+import { Observable, catchError, finalize, of, shareReplay, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { DemoProfile, LoginRequest, PublicUser, RegisterRequest } from '../models/auth.model';
+import { isNetworkError } from '../utils/is-network-error.util';
 
 // Auth session state, providedIn: 'root' — same "shared, constructed-once"
 // pattern as ThemeService/TourService/InvoiceDraftStore. Tokens themselves
@@ -67,9 +68,15 @@ export class AuthService {
     );
   }
 
-  // Called by authGuard on every top-level navigation. Resolves to null
-  // (not an error) on a 401 — "not logged in" is an expected outcome, not a
-  // failure the console should scream about.
+  // Called by authGuard/guestGuard on every top-level navigation. Resolves
+  // to null (not an error) on a 401 — "not logged in" is an expected
+  // outcome, not a failure the console should scream about. A genuine
+  // network failure (no wifi/4G on a cold app launch, or a request that
+  // never resolves at all — see isNetworkError) is a different situation
+  // entirely: the artisan might have a perfectly valid session, they just
+  // have no signal, so this rethrows instead of collapsing it into the same
+  // "not logged in" outcome — both guards catch it and route to
+  // OfflinePage rather than showing a misleading login form.
   //
   // Checks the signal first: register()/login() set currentUser directly
   // without going through this method, so a guard check right after either
@@ -87,8 +94,16 @@ export class AuthService {
         .get<PublicUser>(`${this.baseUrl}/me`, { withCredentials: true })
         .pipe(
           tap((user) => this.currentUser.set(user)),
-          catchError(() => {
+          catchError((error: unknown) => {
             this.currentUser.set(null);
+            if (isNetworkError(error)) {
+              // Never cache a network failure via the shareReplay below —
+              // the artisan's very next attempt (tapping "Réessayer" on
+              // OfflinePage once they're back online) must hit the server
+              // again, not replay this same rejection forever.
+              this.meRequest = null;
+              return throwError(() => error);
+            }
             return of(null);
           }),
           shareReplay(1),
@@ -121,6 +136,17 @@ export class AuthService {
       token,
       newPassword,
     });
+  }
+
+  // currentPassword omitted = a Google/Apple-only account setting its first
+  // password (see the backend's AuthService.changePassword). The current
+  // session survives; every other one is logged out server-side.
+  changePassword(newPassword: string, currentPassword?: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(
+      `${this.baseUrl}/change-password`,
+      { currentPassword, newPassword },
+      { withCredentials: true },
+    );
   }
 
   verifyEmail(token: string): Observable<{ message: string }> {

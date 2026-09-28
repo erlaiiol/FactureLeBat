@@ -24,4 +24,15 @@ export class PlatformService {
   openWebSubscriptionPage(): void {
     void Browser.open({ url: 'https://facturele.net/abonnement' });
   }
+
+  // Phase 1.7: an Apple IAP subscription is managed/canceled through iOS's
+  // own Settings app, never through this app (there is no Stripe-portal
+  // equivalent for it) — itms-apps:// is a system URL scheme, not http(s),
+  // so it can't go through Browser.open (SFSafariViewController only
+  // handles http(s)); a direct navigation is what the WKWebView correctly
+  // hands off to the OS instead, same pattern InvoiceShareService already
+  // uses for mailto: links.
+  openIosManageSubscriptionsSettings(): void {
+    window.location.href = 'itms-apps://apps.apple.com/account/subscriptions';
+  }
 }

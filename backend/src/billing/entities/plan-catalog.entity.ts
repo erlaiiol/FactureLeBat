@@ -18,6 +18,12 @@ export interface PlanOption {
   highlight: boolean;
   removesWatermark: boolean;
   available: boolean;
+  // Phase 1.7: this tier's App Store product id (APPLE_PRODUCT_ID_*), or
+  // null if not configured on this deployment — the frontend's iOS purchase
+  // buttons read this instead of hardcoding a product id, same "backend is
+  // the single source of truth for pricing" reasoning `available` already
+  // has for Stripe.
+  appleProductId: string | null;
 }
 
 export interface LaunchOffer {

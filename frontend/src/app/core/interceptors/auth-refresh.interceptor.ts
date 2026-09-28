@@ -38,16 +38,31 @@ const PUBLIC_ROUTES = [
   '/verifier-email',
   '/cgu',
   '/confidentialite',
+  '/hors-ligne',
 ];
 
-function isOnPublicRoute(url: string): boolean {
+function isOnPublicRoute(url: string, router: Router): boolean {
   const path = url.split('?')[0];
   // /partage/:token (InvoiceShareViewPage) isn't a fixed path like the rest
   // of this list — a recipient with no account whatsoever lands here, and
   // TourService's own unconditional onboarding fetch (see its own comment)
   // still runs on this route and still 401s for them exactly like it does
   // on every other public route.
-  return PUBLIC_ROUTES.includes(path) || path.startsWith('/partage/');
+  if (PUBLIC_ROUTES.includes(path) || path.startsWith('/partage/')) {
+    return true;
+  }
+  // app.routes.ts's trailing `**` (NotFoundPage) can't be listed above by
+  // exact path — it matches whatever mistyped/stale URL the visitor
+  // actually typed, which is unbounded. Its own `data: { public: true }`
+  // is the escape hatch: without this, an anonymous visitor on a bad link
+  // got bounced from "page introuvable" straight to "session expired"
+  // (same collateral 401 as everywhere else in this file), which defeats
+  // the whole point of that page — found while building it, not guessed.
+  let snapshot = router.routerState.snapshot.root;
+  while (snapshot.firstChild) {
+    snapshot = snapshot.firstChild;
+  }
+  return snapshot.data['public'] === true;
 }
 
 // On a 401 from any authenticated API call, attempt one silent
@@ -87,7 +102,7 @@ export const authRefreshInterceptor: HttpInterceptorFn = (req, next) => {
         switchMap(() => next(req)),
         catchError((refreshError: unknown) => {
           const supersededByNewerAuth = authService.currentUser() !== userBeforeRefresh;
-          if (!supersededByNewerAuth && !isOnPublicRoute(router.url)) {
+          if (!supersededByNewerAuth && !isOnPublicRoute(router.url, router)) {
             // Without this, a component mid-request (e.g. subscribe.page.ts
             // awaiting a Stripe checkout URL) gets torn down by the
             // navigation and its own error handler never runs — the artisan

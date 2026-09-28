@@ -4,8 +4,14 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { BillingStatus, PlanCatalog, PlanTier } from '../../core/models/billing.model';
 import { BillingService } from '../../core/services/billing.service';
+import {
+  IosPurchaseCancelledError,
+  IosPurchasePendingError,
+  IosPurchaseService,
+} from '../../core/services/ios-purchase.service';
 import { ReferralStatus } from '../../core/models/referral.model';
 import { PlatformService } from '../../core/services/platform.service';
 import { ReferralService } from '../../core/services/referral.service';
@@ -95,6 +101,7 @@ export class SubscribePage {
 
   private readonly billingService = inject(BillingService);
   private readonly referralService = inject(ReferralService);
+  private readonly iosPurchaseService = inject(IosPurchaseService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
@@ -110,6 +117,16 @@ export class SubscribePage {
   protected readonly checkoutError = signal<string | null>(null);
   protected readonly portalLoading = signal(false);
   protected readonly portalError = signal<string | null>(null);
+  // Phase 1.7: the iOS-only StoreKit2 purchase counterpart to
+  // checkoutLoading/checkoutError above — a separate pair rather than
+  // reusing the Stripe ones since the two flows never run at once (this
+  // page only ever shows one or the other for a given platform) but do
+  // report genuinely different failure modes (cancellation, Ask to Buy
+  // pending, App Store product lookup).
+  protected readonly iosPurchaseLoading = signal<PlanTier | null>(null);
+  protected readonly iosPurchaseError = signal<string | null>(null);
+  protected readonly restoreLoading = signal(false);
+  protected readonly restoreError = signal<string | null>(null);
   protected readonly redeemLoading = signal(false);
   protected readonly redeemError = signal<string | null>(null);
   protected readonly redeemSuccess = signal(false);
@@ -189,6 +206,67 @@ export class SubscribePage {
           );
         },
       });
+  }
+
+  // Phase 1.7: the iOS-only StoreKit2 counterpart to subscribe() above —
+  // triggers Apple's native purchase sheet (IosPurchaseService.purchase),
+  // then hands the resulting signed transaction to the backend for
+  // independent re-verification (BillingService.verifyApplePurchase) before
+  // refreshing status, same "refresh from the server, never assume success
+  // locally" posture subscribe()'s redirect-back flow already has.
+  protected async purchaseNative(tier: PlanTier, appleProductId: string | null): Promise<void> {
+    if (!appleProductId) {
+      this.iosPurchaseError.set(
+        "Cette offre n'est pas encore disponible sur l'App Store — réessayez plus tard.",
+      );
+      return;
+    }
+    this.iosPurchaseLoading.set(tier);
+    this.iosPurchaseError.set(null);
+    try {
+      const transactionJWS = await this.iosPurchaseService.purchase(appleProductId);
+      await firstValueFrom(this.billingService.verifyApplePurchase(transactionJWS));
+      this.loadStatus();
+    } catch (error) {
+      if (error instanceof IosPurchaseCancelledError) {
+        // The artisan simply dismissed the purchase sheet — not an error.
+        return;
+      }
+      this.iosPurchaseError.set(
+        error instanceof IosPurchasePendingError
+          ? "Achat en attente d'approbation (contrôle parental / Ask to Buy) — vous serez notifié une fois validé."
+          : this.extractIosPurchaseErrorMessage(error),
+      );
+    } finally {
+      this.iosPurchaseLoading.set(null);
+    }
+  }
+
+  // Apple guideline 3.1.2's mandatory "Restore Purchases" action — reads
+  // every currently active StoreKit entitlement on this device and
+  // re-verifies each one against the backend, so a reinstall or a new
+  // device picks its existing subscription back up without paying again.
+  protected async restorePurchases(): Promise<void> {
+    this.restoreLoading.set(true);
+    this.restoreError.set(null);
+    try {
+      const transactions = await this.iosPurchaseService.restorePurchases();
+      for (const transactionJWS of transactions) {
+        await firstValueFrom(this.billingService.verifyApplePurchase(transactionJWS));
+      }
+      this.loadStatus();
+    } catch (error) {
+      this.restoreError.set(this.extractIosPurchaseErrorMessage(error));
+    } finally {
+      this.restoreLoading.set(false);
+    }
+  }
+
+  private extractIosPurchaseErrorMessage(error: unknown): string {
+    if (error instanceof HttpErrorResponse) {
+      return extractErrorMessage(error, "Impossible de vérifier l'achat auprès du serveur.");
+    }
+    return "Une erreur est survenue pendant l'achat — réessayez plus tard.";
   }
 
   protected manageBilling(): void {

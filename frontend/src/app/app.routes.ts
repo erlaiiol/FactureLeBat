@@ -334,5 +334,26 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/share/invoice-share-view.page').then((m) => m.InvoiceShareViewPage),
   },
+  // authGuard/guestGuard's own catchError target on a genuine network
+  // failure (see AuthService.ensureLoaded/isNetworkError) — no session
+  // required or expected, same "flat, ungated" placement as the routes
+  // above.
+  {
+    path: 'hors-ligne',
+    data: { public: true },
+    loadComponent: () => import('./features/offline/offline.page').then((m) => m.OfflinePage),
+  },
   { path: '', canActivate: [authGuard], children: protectedRoutes },
+  // Must stay last — Angular matches routes in array order, and a wildcard
+  // matches everything. Outside authGuard on purpose: see NotFoundPage's
+  // own comment. `data: { public: true }` is read by
+  // auth-refresh.interceptor.ts's isOnPublicRoute — this path can't be
+  // listed there by exact string like every other public route (it matches
+  // whatever arbitrary URL the visitor typed), so the interceptor checks
+  // this flag on the router's currently activated route instead.
+  {
+    path: '**',
+    data: { public: true },
+    loadComponent: () => import('./features/not-found/not-found.page').then((m) => m.NotFoundPage),
+  },
 ];

@@ -28,6 +28,7 @@ import { REFRESH_TOKEN_COOKIE } from './auth.constants';
 import { AuthService, GoogleProfile } from './auth.service';
 import { clearAuthCookies, setAuthCookies } from './cookie.util';
 import { AppleTokenLoginDto } from './dto/apple-token-login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { DemoLoginDto } from './dto/demo-login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -335,6 +336,20 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ message: string }> {
     await this.authService.resetPassword(dto);
+    return { message: 'Mot de passe mis à jour.' };
+  }
+
+  // Same brute-force throttle as `login` — this also checks a password
+  // against a stored hash.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+  ): Promise<{ message: string }> {
+    await this.authService.changePassword(user.userId, dto, readRefreshCookie(req));
     return { message: 'Mot de passe mis à jour.' };
   }
 

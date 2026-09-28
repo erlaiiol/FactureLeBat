@@ -48,4 +48,14 @@ export class RefreshTokenRepository {
       data: { revokedAt: new Date() },
     });
   }
+
+  // Change-password hygiene: every other session is logged out, but the one
+  // that just proved the current password stays alive — see
+  // AuthService.changePassword.
+  async revokeAllForUserExcept(userId: string, keepTokenHash: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null, tokenHash: { not: keepTokenHash } },
+      data: { revokedAt: new Date() },
+    });
+  }
 }

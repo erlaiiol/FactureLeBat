@@ -99,23 +99,40 @@
         }
 
         @if (platformService.isIosApp()) {
-          <!-- Apple 3.1.1 "external subscription, business tool" pattern: no
-          tappable element here may start a payment flow (checkout, portal,
-          or promo redemption) from inside the iOS app — see
-          docs/roadmap.md Phase 22. The button below only opens the system
-          browser (Browser.open, never the app's own WebView), so it's a
-          link-out rather than an in-app payment flow. Status above stays
-          visible; only the in-app initiation paths are hidden.
-          -->
+          <!-- Phase 1.7: real native StoreKit2 purchase now happens directly
+          on this page (the pricing cards below) — this block only covers
+          Apple guideline 3.1.2's mandatory "Restore Purchases" action and a
+          link to iOS's own subscription-management settings, since an
+          Apple-billed subscription is managed there, not through anything
+          this app renders (there is no Stripe-portal equivalent for it).
+          Supersedes Phase 22's original iOS-only link-out to
+          facturele.net — see docs/roadmap.md Phase 22's own updated note. -->
           <div class="flex flex-col gap-2 rounded-lg bg-secondary-subtle p-3">
-            <p class="text-sm text-ink-soft">Gérez votre abonnement depuis un navigateur.</p>
-            <app-big-button
-              variant="secondary"
-              tone="subtle"
-              (click)="platformService.openWebSubscriptionPage()"
-            >
-              Ouvrir facturele.net
-            </app-big-button>
+            <p class="text-sm text-ink-soft">
+              Les achats intégrés sont gérés par votre identifiant Apple.
+            </p>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <app-big-button
+                variant="secondary"
+                tone="subtle"
+                [disabled]="restoreLoading()"
+                (click)="restorePurchases()"
+              >
+                {{ restoreLoading() ? 'Restauration…' : 'Restaurer mes achats' }}
+              </app-big-button>
+              @if (s.hasPremiumAccess) {
+                <app-big-button
+                  variant="secondary"
+                  tone="subtle"
+                  (click)="platformService.openIosManageSubscriptionsSettings()"
+                >
+                  Gérer dans Réglages iOS
+                </app-big-button>
+              }
+            </div>
+            @if (restoreError(); as message) {
+              <p class="text-sm font-medium text-danger">{{ message }}</p>
+            }
           </div>
         } @else if (s.subscriptionStatus === 'ACTIVE' || s.subscriptionStatus === 'PAST_DUE') {
           <!-- PAST_DUE already has a Stripe subscription (payment just
@@ -144,10 +161,9 @@
       </section>
 
       @if (
-        !platformService.isIosApp() &&
-          s.subscriptionStatus !== 'ACTIVE' &&
-          s.subscriptionStatus !== 'PAST_DUE' &&
-          plans();
+        (platformService.isIosApp()
+          ? s.appleSubscriptionStatus !== 'ACTIVE' && s.appleSubscriptionStatus !== 'PAST_DUE'
+          : s.subscriptionStatus !== 'ACTIVE' && s.subscriptionStatus !== 'PAST_DUE') && plans();
         as catalog
       ) {
         <section class="flex flex-col gap-4">
@@ -232,7 +248,26 @@
                   </li>
                 </ul>
 
-                @if (!s.stripeConfigured || !plan.available) {
+                @if (platformService.isIosApp()) {
+                  @if (!s.appleConfigured || !plan.appleProductId) {
+                    <p class="rounded-lg bg-secondary-subtle p-3 text-xs text-ink-soft">
+                      Bientôt disponible sur l'App Store.
+                    </p>
+                  } @else {
+                    <app-big-button
+                      [variant]="plan.highlight ? 'primary' : 'secondary'"
+                      [tone]="plan.highlight ? 'solid' : 'subtle'"
+                      [disabled]="iosPurchaseLoading() !== null"
+                      (click)="purchaseNative(plan.tier, plan.appleProductId)"
+                    >
+                      {{
+                        iosPurchaseLoading() === plan.tier
+                          ? 'Achat en cours…'
+                          : 'Choisir ' + plan.name
+                      }}
+                    </app-big-button>
+                  }
+                } @else if (!s.stripeConfigured || !plan.available) {
                   <p class="rounded-lg bg-secondary-subtle p-3 text-xs text-ink-soft">
                     Bientôt disponible — utilisez un code promo ci-dessous, ou contactez le support.
                   </p>
@@ -250,14 +285,25 @@
             }
           </div>
 
-          @if (checkoutLoading()) {
-            <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
-              Redirection vers l'espace de paiement sécurisé Stripe… Merci de patienter quelques
-              secondes et de ne pas recharger la page.
-            </p>
-          }
-          @if (checkoutError(); as message) {
-            <p class="text-sm font-medium text-danger">{{ message }}</p>
+          @if (platformService.isIosApp()) {
+            @if (iosPurchaseLoading()) {
+              <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
+                Ouverture du paiement Apple… Merci de patienter quelques secondes.
+              </p>
+            }
+            @if (iosPurchaseError(); as message) {
+              <p class="text-sm font-medium text-danger">{{ message }}</p>
+            }
+          } @else {
+            @if (checkoutLoading()) {
+              <p class="rounded-xl bg-info-subtle p-4 text-sm text-info-subtle-fg">
+                Redirection vers l'espace de paiement sécurisé Stripe… Merci de patienter quelques
+                secondes et de ne pas recharger la page.
+              </p>
+            }
+            @if (checkoutError(); as message) {
+              <p class="text-sm font-medium text-danger">{{ message }}</p>
+            }
           }
         </section>
       }

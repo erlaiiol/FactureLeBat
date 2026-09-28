@@ -86,12 +86,14 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
   const refreshRevoke = jest.fn();
   const refreshRevokeIfActiveWithReplacement = jest.fn().mockResolvedValue(1);
   const refreshRevokeAllForUser = jest.fn();
+  const refreshRevokeAllForUserExcept = jest.fn();
   const refreshTokenRepository = {
     create: refreshCreate,
     findByHash: refreshFindByHash,
     revoke: refreshRevoke,
     revokeIfActiveWithReplacement: refreshRevokeIfActiveWithReplacement,
     revokeAllForUser: refreshRevokeAllForUser,
+    revokeAllForUserExcept: refreshRevokeAllForUserExcept,
   } as unknown as RefreshTokenRepository;
 
   const authTokenCreate = jest.fn();
@@ -149,6 +151,7 @@ function buildService(configOverrides: Record<string, unknown> = {}) {
     refreshRevoke,
     refreshRevokeIfActiveWithReplacement,
     refreshRevokeAllForUser,
+    refreshRevokeAllForUserExcept,
     authTokenCreate,
     authTokenFindByHash,
     authTokenConsume,
@@ -652,6 +655,65 @@ describe('AuthService.resetPassword', () => {
     await expect(
       service.resetPassword({ token: 'reset-token', newPassword: 'new-password-123' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  const dto = { currentPassword: 'correct-password', newPassword: 'NewPassword123' };
+
+  it('updates the password, keeps the current session and revokes the others', async () => {
+    const passwordHash = await bcrypt.hash('correct-password', 4);
+    const {
+      service,
+      findById,
+      updatePasswordHash,
+      refreshRevokeAllForUserExcept,
+      refreshRevokeAllForUser,
+    } = buildService();
+    findById.mockResolvedValue(buildUser({ passwordHash }));
+
+    await service.changePassword('user-1', dto, 'current-refresh');
+
+    const [, newHash] = updatePasswordHash.mock.calls[0] as [string, string];
+    expect(await bcrypt.compare('NewPassword123', newHash)).toBe(true);
+    expect(refreshRevokeAllForUserExcept).toHaveBeenCalledWith(
+      'user-1',
+      hashToken('current-refresh'),
+    );
+    expect(refreshRevokeAllForUser).not.toHaveBeenCalled();
+  });
+
+  it('revokes every session when no refresh cookie was sent', async () => {
+    const passwordHash = await bcrypt.hash('correct-password', 4);
+    const { service, findById, refreshRevokeAllForUser } = buildService();
+    findById.mockResolvedValue(buildUser({ passwordHash }));
+
+    await service.changePassword('user-1', dto, undefined);
+
+    expect(refreshRevokeAllForUser).toHaveBeenCalledWith('user-1');
+  });
+
+  it('rejects a wrong or missing current password', async () => {
+    const passwordHash = await bcrypt.hash('correct-password', 4);
+    const { service, findById, updatePasswordHash } = buildService();
+    findById.mockResolvedValue(buildUser({ passwordHash }));
+
+    await expect(
+      service.changePassword('user-1', { ...dto, currentPassword: 'wrong' }, 'r'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.changePassword('user-1', { newPassword: 'NewPassword123' }, 'r'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(updatePasswordHash).not.toHaveBeenCalled();
+  });
+
+  it('lets a Google/Apple-only account set a first password without a current one', async () => {
+    const { service, findById, updatePasswordHash } = buildService();
+    findById.mockResolvedValue(buildUser({ passwordHash: null, googleId: 'g-1' }));
+
+    await service.changePassword('user-1', { newPassword: 'NewPassword123' }, 'r');
+
+    expect(updatePasswordHash).toHaveBeenCalledWith('user-1', expect.any(String));
   });
 });
 

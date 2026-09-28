@@ -15,11 +15,13 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import type { PlanTier } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
+import { AppleUnavailableError } from './apple/apple-unavailable.error';
 import { BillingService } from './billing.service';
 import { BillingStatus } from './entities/billing-status.entity';
 import type { PlanCatalog } from './entities/plan-catalog.entity';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { RedeemPromoCodeDto } from './dto/redeem-promo-code.dto';
+import { VerifyApplePurchaseDto } from './dto/verify-apple-purchase.dto';
 import { NoBillingCustomerError } from './no-billing-customer.error';
 import { PromoCodeService } from './promo-code/promo-code.service';
 import { StripeUnavailableError } from './stripe/stripe-unavailable.error';
@@ -74,6 +76,51 @@ export class BillingController {
     return { premiumGrantedUntil: until, grantedPlanTier: tier };
   }
 
+  // Phase 1.7: posted by the frontend right after a native StoreKit2
+  // purchase completes, on iOS only. No raw-body/signature-header dance like
+  // the Stripe webhook below needs — the proof of authenticity here is the
+  // JWS string itself (verified by AppleServerClientService against
+  // Apple's public certs), not an HMAC over the exact request bytes, so a
+  // normal parsed JSON body is fine.
+  @Post('apple/verify-purchase')
+  async verifyApplePurchase(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VerifyApplePurchaseDto,
+  ): Promise<{ tier: PlanTier | null }> {
+    try {
+      return await this.billingService.verifyApplePurchase(
+        user.companyId,
+        dto.signedTransactionInfo,
+      );
+    } catch (error) {
+      throw mapAppleError(error);
+    }
+  }
+
+  // App Store Server Notifications V2 — Apple posts here on every Apple IAP
+  // subscription lifecycle event, the Apple-side counterpart to the Stripe
+  // webhook below. Public because, like Stripe's, its caller isn't an
+  // authenticated user of this app — authenticity comes entirely from the
+  // signedPayload JWS itself.
+  @Public()
+  @Post('apple/notifications')
+  async appleNotifications(@Body() body: { signedPayload?: string }): Promise<{ received: true }> {
+    if (!body.signedPayload) {
+      throw new BadRequestException('Missing Apple notification payload');
+    }
+    try {
+      await this.billingService.handleAppleNotification(body.signedPayload);
+    } catch (error) {
+      if (error instanceof AppleUnavailableError) {
+        throw new ServiceUnavailableException('Apple IAP is not configured on this deployment.');
+      }
+      throw new BadRequestException(
+        `Apple notification verification failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return { received: true };
+  }
+
   // Stripe posts here on every subscription lifecycle event. Signature
   // verification (StripeClientService.constructWebhookEvent) needs the
   // exact raw request body bytes — main.ts enables Nest's `rawBody: true`
@@ -120,4 +167,13 @@ function mapStripeError(error: unknown): unknown {
     );
   }
   return error;
+}
+
+function mapAppleError(error: unknown): unknown {
+  if (error instanceof AppleUnavailableError) {
+    return new ServiceUnavailableException("L'achat intégré n'est pas configuré pour le moment.");
+  }
+  return new BadRequestException(
+    `Vérification de l'achat Apple échouée : ${error instanceof Error ? error.message : String(error)}`,
+  );
 }

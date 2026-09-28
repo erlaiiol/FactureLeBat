@@ -30,6 +30,7 @@ import {
   REFRESH_REUSE_GRACE_PERIOD_MS,
 } from './auth.constants';
 import { DEMO_PROFILES } from './demo.constants';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -561,6 +562,45 @@ export class AuthService {
     await this.refreshTokenRepository.revokeAllForUser(authToken.userId);
   }
 
+  // Authenticated counterpart to resetPassword above. An account with no
+  // passwordHash yet (Google/Apple-only) sets its first password here with
+  // no current password to check — the authenticated session + CSRF check
+  // already on this route establish intent, same reasoning as
+  // deleteAccount. Every other session is revoked; the caller's own (if its
+  // refresh cookie was sent) survives, so changing a password never logs
+  // the artisan out of the device they're using.
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+    rawRefreshToken: string | undefined,
+  ): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException();
+    }
+    if (user.passwordHash) {
+      const valid = dto.currentPassword
+        ? await bcrypt.compare(dto.currentPassword, user.passwordHash)
+        : false;
+      if (!valid) {
+        throw new ForbiddenException('Mot de passe actuel incorrect.');
+      }
+    }
+    const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_SALT_ROUNDS);
+    await this.userRepository.updatePasswordHash(user.id, passwordHash);
+    if (rawRefreshToken) {
+      await this.refreshTokenRepository.revokeAllForUserExcept(user.id, hashToken(rawRefreshToken));
+    } else {
+      await this.refreshTokenRepository.revokeAllForUser(user.id);
+    }
+    // Best-effort security notice — the change itself already succeeded.
+    await this.sendPasswordChangedEmail(user).catch((error: unknown) =>
+      this.logger.warn(
+        `Échec de l'envoi de l'email de changement de mot de passe : ${String(error)}`,
+      ),
+    );
+  }
+
   async verifyEmail(token: string): Promise<void> {
     const authToken = await this.consumeValidToken(token, AuthTokenPurpose.EMAIL_VERIFICATION);
     const user = await this.userRepository.markEmailVerified(authToken.userId);
@@ -733,6 +773,19 @@ export class AuthService {
       to: user.email,
       subject: 'Réinitialisation de votre mot de passe — FactureLe',
       text: `Une réinitialisation de mot de passe a été demandée pour ce compte.\n\nSuivez ce lien pour choisir un nouveau mot de passe :\n${link}\n\nCe lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.`,
+    });
+  }
+
+  private async sendPasswordChangedEmail(user: User): Promise<void> {
+    if (!this.systemSmtp || !this.systemMailFromAddress) {
+      return;
+    }
+    await this.mailerService.send({
+      smtp: this.systemSmtp,
+      from: { name: this.systemMailFromName, address: this.systemMailFromAddress },
+      to: user.email,
+      subject: 'Votre mot de passe a été modifié — FactureLe',
+      text: `Le mot de passe de votre compte FactureLe vient d'être modifié. Vos autres sessions ont été déconnectées.\n\nSi vous n'êtes pas à l'origine de ce changement, réinitialisez immédiatement votre mot de passe :\n${this.frontendUrl}/mot-de-passe-oublie`,
     });
   }
 }

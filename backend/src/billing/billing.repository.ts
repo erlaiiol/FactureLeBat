@@ -14,6 +14,12 @@ export interface BillingFields {
   subscriptionPlanTier: PlanTier | null;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  // Phase 1.7: the Apple IAP counterpart to the 3 Stripe fields above — see
+  // schema.prisma's comment on these columns and
+  // PlanGateService.getEffectivePlanTier's 3-way higherTier resolution.
+  appleOriginalTransactionId: string | null;
+  appleSubscriptionStatus: SubscriptionStatus;
+  appleSubscriptionPlanTier: PlanTier | null;
   premiumGrantedUntil: Date | null;
   grantedPlanTier: PlanTier | null;
   pendingReferralDiscount: boolean;
@@ -27,6 +33,9 @@ const BILLING_FIELDS_SELECT = {
   subscriptionPlanTier: true,
   currentPeriodEnd: true,
   cancelAtPeriodEnd: true,
+  appleOriginalTransactionId: true,
+  appleSubscriptionStatus: true,
+  appleSubscriptionPlanTier: true,
   premiumGrantedUntil: true,
   grantedPlanTier: true,
   pendingReferralDiscount: true,
@@ -96,6 +105,42 @@ export class BillingRepository {
     return this.prisma.invoice.count({
       where: { companyId, facturXFirstUsedAt: { gte: startOfMonth } },
     });
+  }
+
+  // Phase 1.7: resolves a verified Apple originalTransactionId back to the
+  // company that purchased it — used by handleAppleNotification, since a
+  // Server Notifications V2 payload identifies the subscriber only by that
+  // id, never by companyId (there is no equivalent of Stripe's
+  // subscription_data.metadata to carry one). Null on the very first
+  // notification for a company that hasn't called verify-purchase yet
+  // (shouldn't normally happen — the client verifies immediately after a
+  // successful purchase — logged as a warning by the caller, never guessed).
+  findCompanyIdByAppleOriginalTransactionId(
+    appleOriginalTransactionId: string,
+  ): Promise<string | null> {
+    return this.prisma.company
+      .findUnique({ where: { appleOriginalTransactionId }, select: { id: true } })
+      .then((row) => row?.id ?? null);
+  }
+
+  // Written from either a verified client purchase (BillingService.
+  // verifyApplePurchase) or a verified App Store Server Notification
+  // (BillingService.handleAppleNotification) — never from an unverified
+  // client field, same posture applySubscriptionUpdate already has for
+  // Stripe. appleOriginalTransactionId is only ever set, never cleared —
+  // Apple's id for a given subscription is durable for its whole lifetime,
+  // including past cancellation (a CANCELED appleSubscriptionStatus with the
+  // id still on file is what lets a later resubscribe/renewal notification
+  // for the *same* subscription still resolve back to this company).
+  applyAppleSubscriptionUpdate(
+    companyId: string,
+    data: {
+      appleOriginalTransactionId: string;
+      appleSubscriptionStatus: SubscriptionStatus;
+      appleSubscriptionPlanTier: PlanTier | null;
+    },
+  ): Promise<void> {
+    return this.prisma.company.update({ where: { id: companyId }, data }).then(() => undefined);
   }
 
   // Phase 30: catalog-capacity checks (PlanGateService.assertCatalogCapacity)
