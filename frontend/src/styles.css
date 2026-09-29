@@ -101,9 +101,11 @@
   --color-atelier-ink-soft: #746a5d;
   --color-atelier-walnut: #6b4a34;
   --color-atelier-moss: #5c6b4f;
-  /* "Mon activité" field-tier legend only (.field-tier-*), between walnut
-     and moss — the "depends on your situation" middle tier. */
-  --color-atelier-ochre: #b07d2a;
+  /* "Mon activité" field-tier legend only (.field-tier-*): a classic
+     red/orange/green traffic light, readable at a glance on atelier-bg. */
+  --color-tier-required: #d6432c;
+  --color-tier-conditional: #ec7a0c;
+  --color-tier-optional: #2f8a4e;
 
   --ease-out-sharp: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-touch: 120ms;
@@ -819,13 +821,13 @@ input[type='date']::-webkit-calendar-picker-indicator {
   border-left-style: solid;
 }
 .field-tier-required {
-  border-left-color: var(--color-atelier-walnut);
+  border-left-color: var(--color-tier-required);
 }
 .field-tier-conditional {
-  border-left-color: var(--color-atelier-ochre);
+  border-left-color: var(--color-tier-conditional);
 }
 .field-tier-optional {
-  border-left-color: color-mix(in srgb, var(--color-atelier-moss) 45%, transparent);
+  border-left-color: var(--color-tier-optional);
 }
 :is(.field-tier-required, .field-tier-conditional, .field-tier-optional).border-danger {
   border-left-color: var(--color-danger);
