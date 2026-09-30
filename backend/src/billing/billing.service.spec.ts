@@ -1,5 +1,6 @@
 import { NotificationTypeV2, Status } from '@apple/app-store-server-library';
 import { PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
+import { AppleTransactionAlreadyLinkedError } from './apple/apple-transaction-already-linked.error';
 import { BillingFields, BillingRepository } from './billing.repository';
 import { BillingService } from './billing.service';
 import { StripeClientService } from './stripe/stripe-client.service';
@@ -285,6 +286,46 @@ describe('BillingService.verifyApplePurchase', () => {
       appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
       appleSubscriptionPlanTier: PlanTier.PRO,
     });
+  });
+
+  it('throws a clear error rather than a raw DB conflict when the transaction is already linked to a different company', async () => {
+    const {
+      service,
+      verifyTransaction,
+      findCompanyIdByAppleOriginalTransactionId,
+      applyAppleSubscriptionUpdate,
+    } = buildService({});
+    verifyTransaction.mockResolvedValue({
+      originalTransactionId: 'apple-orig-1',
+      productId: 'fr.facturele.app.subscription.pro',
+    });
+    findCompanyIdByAppleOriginalTransactionId.mockResolvedValue('some-other-company');
+
+    await expect(service.verifyApplePurchase('company-1', 'signed-jws')).rejects.toBeInstanceOf(
+      AppleTransactionAlreadyLinkedError,
+    );
+    expect(applyAppleSubscriptionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows re-verifying a transaction already linked to the SAME company (idempotent)', async () => {
+    const {
+      service,
+      verifyTransaction,
+      resolveTierFromProductId,
+      findCompanyIdByAppleOriginalTransactionId,
+      applyAppleSubscriptionUpdate,
+    } = buildService({});
+    verifyTransaction.mockResolvedValue({
+      originalTransactionId: 'apple-orig-1',
+      productId: 'fr.facturele.app.subscription.pro',
+    });
+    resolveTierFromProductId.mockReturnValue(PlanTier.PRO);
+    findCompanyIdByAppleOriginalTransactionId.mockResolvedValue('company-1');
+
+    await expect(service.verifyApplePurchase('company-1', 'signed-jws')).resolves.toEqual({
+      tier: PlanTier.PRO,
+    });
+    expect(applyAppleSubscriptionUpdate).toHaveBeenCalled();
   });
 
   it('marks the subscription CANCELED rather than ACTIVE when the verified transaction is already revoked (e.g. a stale/replayed JWS)', async () => {

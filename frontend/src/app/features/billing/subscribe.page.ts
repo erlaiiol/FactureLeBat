@@ -158,6 +158,30 @@ export class SubscribePage {
       .getStatus()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (status) => this.referralStatus.set(status) });
+
+    // Phase 1.7: a transaction can arrive outside any explicit purchase()/
+    // restorePurchases() call on this page — an Ask to Buy approval, or a
+    // renewal completing in the background (see StoreKitPurchasePlugin.
+    // swift's Transaction.updates listener, which runs for the app's whole
+    // lifetime). Without this, the only way to pick up such a transaction
+    // would be the artisan manually tapping "Restaurer mes achats" — this
+    // makes it automatic instead, same verify-then-refresh flow as a
+    // direct purchase.
+    if (this.platformService.isIosApp()) {
+      const listenerHandle = this.iosPurchaseService.onTransactionUpdated((transactionJWS) => {
+        firstValueFrom(this.billingService.verifyApplePurchase(transactionJWS))
+          .then(() => this.loadStatus())
+          .catch(() => {
+            // Best-effort: a transaction that fails verification here isn't
+            // shown as a page-level error (the artisan didn't just tap
+            // anything) — "Restaurer mes achats" remains available if this
+            // silently didn't work.
+          });
+      });
+      this.destroyRef.onDestroy(() => {
+        void listenerHandle.then((handle) => handle.remove());
+      });
+    }
   }
 
   protected referralLink(status: ReferralStatus): string {

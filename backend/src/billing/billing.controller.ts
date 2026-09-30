@@ -10,11 +10,13 @@ import {
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
+import { VerificationException, VerificationStatus } from '@apple/app-store-server-library';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import type { PlanTier } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
+import { AppleTransactionAlreadyLinkedError } from './apple/apple-transaction-already-linked.error';
 import { AppleUnavailableError } from './apple/apple-unavailable.error';
 import { BillingService } from './billing.service';
 import { BillingStatus } from './entities/billing-status.entity';
@@ -173,7 +175,32 @@ function mapAppleError(error: unknown): unknown {
   if (error instanceof AppleUnavailableError) {
     return new ServiceUnavailableException("L'achat intégré n'est pas configuré pour le moment.");
   }
+  if (error instanceof AppleTransactionAlreadyLinkedError) {
+    return new BadRequestException(
+      'Cet achat Apple est déjà associé à un autre compte FactureLe — connectez-vous avec ce compte, ou utilisez "Restaurer mes achats" depuis celui-ci.',
+    );
+  }
   return new BadRequestException(
-    `Vérification de l'achat Apple échouée : ${error instanceof Error ? error.message : String(error)}`,
+    `Vérification de l'achat Apple échouée : ${describeAppleVerificationError(error)}`,
   );
+}
+
+// @apple/app-store-server-library's VerificationException never populates
+// the inherited Error.message field — the real diagnostic lives in .status
+// (a VerificationStatus enum: OK/VERIFICATION_FAILURE/INVALID_APP_IDENTIFIER/
+// INVALID_ENVIRONMENT/INVALID_CHAIN_LENGTH/INVALID_CERTIFICATE/FAILURE/
+// RETRYABLE_VERIFICATION_FAILURE) and optionally .cause (the underlying
+// JS error, e.g. from certificate parsing). Reading error.message alone
+// (the previous version of this function) silently produced "Vérification
+// de l'achat Apple échouée : " with nothing after the colon for every real
+// VerificationException — caught live, 2026-09-30, testing against a local
+// StoreKit Configuration file build.
+function describeAppleVerificationError(error: unknown): string {
+  if (error instanceof VerificationException) {
+    const statusName =
+      Object.entries(VerificationStatus).find(([, value]) => value === error.status)?.[0] ??
+      String(error.status);
+    return error.cause ? `${statusName} (${error.cause.message})` : statusName;
+  }
+  return error instanceof Error ? error.message : String(error);
 }

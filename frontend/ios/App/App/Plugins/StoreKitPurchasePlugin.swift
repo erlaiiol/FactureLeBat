@@ -45,11 +45,18 @@ public class StoreKitPurchasePlugin: CAPPlugin, CAPBridgedPlugin {
     // and re-verifies it against the backend the same way a fresh purchase
     // would be.
     override public func load() {
+        NSLog("🍎 StoreKitPurchasePlugin.load() — plugin registered and loaded")
         transactionListenerTask = Task.detached { [weak self] in
             for await update in Transaction.updates {
                 guard let self else { return }
-                if case .verified = update {
-                    await update.payload.finish()
+                // VerificationResult is an enum (.verified(T) / .unverified(T,
+                // Error)) with no `.payload` accessor — the underlying
+                // Transaction has to come from pattern-matching the case, not
+                // a property read. (First real compile error this file hit,
+                // caught only once actually built in Xcode — this environment
+                // has no Swift compiler to catch it earlier.)
+                if case .verified(let transaction) = update {
+                    await transaction.finish()
                 }
                 self.notifyListeners("transactionsUpdated", data: [
                     "transactionJWS": update.jwsRepresentation,
@@ -64,12 +71,15 @@ public class StoreKitPurchasePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func purchase(_ call: CAPPluginCall) {
         guard let productId = call.getString("productId") else {
+            NSLog("🍎 StoreKitPurchasePlugin.purchase — missing productId in call")
             call.reject("productId is required")
             return
         }
+        NSLog("🍎 StoreKitPurchasePlugin.purchase — called with productId=\(productId)")
         Task {
             do {
                 let products = try await Product.products(for: [productId])
+                NSLog("🍎 StoreKitPurchasePlugin.purchase — Product.products(for:) returned \(products.count) product(s)")
                 guard let product = products.first else {
                     call.reject("PRODUCT_NOT_FOUND", "No App Store product found for id \(productId)")
                     return
@@ -77,22 +87,27 @@ public class StoreKitPurchasePlugin: CAPPlugin, CAPBridgedPlugin {
                 let result = try await product.purchase()
                 switch result {
                 case .success(let verification):
+                    NSLog("🍎 StoreKitPurchasePlugin.purchase — success")
                     if case .verified(let transaction) = verification {
                         await transaction.finish()
                     }
                     call.resolve(["transactionJWS": verification.jwsRepresentation])
                 case .userCancelled:
+                    NSLog("🍎 StoreKitPurchasePlugin.purchase — userCancelled")
                     call.reject("USER_CANCELLED", "The artisan dismissed the purchase sheet.")
                 case .pending:
                     // Ask to Buy (family sharing) or another pending payment
                     // state — no transaction to hand back yet, a later
                     // Transaction.updates event (above) delivers it once
                     // resolved.
+                    NSLog("🍎 StoreKitPurchasePlugin.purchase — pending")
                     call.reject("PENDING", "Purchase is pending approval.")
                 @unknown default:
+                    NSLog("🍎 StoreKitPurchasePlugin.purchase — unknown result")
                     call.reject("UNKNOWN", "Unknown StoreKit purchase result.")
                 }
             } catch {
+                NSLog("🍎 StoreKitPurchasePlugin.purchase — threw error: \(error)")
                 call.reject("PURCHASE_FAILED", error.localizedDescription, error)
             }
         }
@@ -104,12 +119,15 @@ public class StoreKitPurchasePlugin: CAPPlugin, CAPBridgedPlugin {
     // currently active entitlement's JWS is handed back for the backend to
     // re-verify and re-link, same shape as a fresh purchase.
     @objc func restorePurchases(_ call: CAPPluginCall) {
+        NSLog("🍎 StoreKitPurchasePlugin.restorePurchases — called")
         Task {
             do {
                 try await AppStore.sync()
                 let jwsList = await currentEntitlementJWSList()
+                NSLog("🍎 StoreKitPurchasePlugin.restorePurchases — success, \(jwsList.count) entitlement(s)")
                 call.resolve(["transactions": jwsList.map { ["transactionJWS": $0] }])
             } catch {
+                NSLog("🍎 StoreKitPurchasePlugin.restorePurchases — threw error: \(error)")
                 call.reject("RESTORE_FAILED", error.localizedDescription, error)
             }
         }
