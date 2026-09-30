@@ -5,6 +5,7 @@ import Stripe from 'stripe';
 import { InvoiceEntryMode, PlanTier, SubscriptionStatus } from '../../generated/prisma/enums';
 import { AlreadySubscribedError } from './already-subscribed.error';
 import { AppleServerClientService } from './apple/apple-server-client.service';
+import { AppleTransactionAlreadyLinkedError } from './apple/apple-transaction-already-linked.error';
 import {
   mapAppleSubscriptionStatus,
   statusFromVerifiedTransaction,
@@ -277,6 +278,11 @@ export class BillingService {
     const originalTransactionId = transaction.originalTransactionId;
     if (!originalTransactionId) {
       throw new Error('Verified Apple transaction is missing originalTransactionId');
+    }
+    const existingCompanyId =
+      await this.repository.findCompanyIdByAppleOriginalTransactionId(originalTransactionId);
+    if (existingCompanyId && existingCompanyId !== companyId) {
+      throw new AppleTransactionAlreadyLinkedError();
     }
     const tier = this.appleClient.resolveTierFromProductId(transaction.productId);
     if (!tier) {

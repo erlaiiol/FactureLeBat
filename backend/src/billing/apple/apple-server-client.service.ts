@@ -46,6 +46,14 @@ export class AppleServerClientService {
   private readonly tierByProductId = new Map<string, PlanTier>();
   private readonly prodVerifier?: SignedDataVerifier;
   private readonly sandboxVerifier?: SignedDataVerifier;
+  // A transaction produced by a local StoreKit Configuration file (Xcode's
+  // offline purchase-sheet testing, no real Apple servers involved) is
+  // signed with a local test certificate chain, distinct from both
+  // Production's and Sandbox's real Apple-issued ones — Environment.XCODE
+  // is a third, separate verifier for exactly that case. Without it, every
+  // purchase made against a `.storekit` Configuration file would fail
+  // verify-purchase even though the native purchase itself succeeded.
+  private readonly xcodeVerifier?: SignedDataVerifier;
   private readonly prodApiClient?: AppStoreServerAPIClient;
   private readonly sandboxApiClient?: AppStoreServerAPIClient;
 
@@ -106,6 +114,13 @@ export class AppleServerClientService {
         bundleId,
         appAppleId,
       );
+      this.xcodeVerifier = new SignedDataVerifier(
+        APPLE_ROOT_CERTIFICATES,
+        true,
+        Environment.XCODE,
+        bundleId,
+        appAppleId,
+      );
       this.prodApiClient = new AppStoreServerAPIClient(
         privateKey,
         keyId,
@@ -162,26 +177,31 @@ export class AppleServerClientService {
   }
 
   // Tries Production first (the common case once this app is live on the
-  // App Store), falls back to Sandbox only on the specific "this JWS wasn't
-  // signed for the environment I asked about" failure — never on any other
-  // verification error, which must still surface as a real failure.
+  // App Store), then Sandbox, then Xcode (local StoreKit Configuration file
+  // testing) — each step only on the specific "this JWS wasn't signed for
+  // the environment I asked about" failure, never on any other verification
+  // error, which must still surface as a real failure. Xcode tried last
+  // since it only ever applies during local development, never to a real
+  // user's transaction.
   private async verifyWithFallback<T>(
     run: (verifier: SignedDataVerifier) => Promise<T>,
   ): Promise<T> {
-    if (!this.prodVerifier || !this.sandboxVerifier) {
+    if (!this.prodVerifier || !this.sandboxVerifier || !this.xcodeVerifier) {
       throw new AppleUnavailableError('Apple IAP is not configured on this deployment');
     }
-    try {
-      return await run(this.prodVerifier);
-    } catch (error) {
-      if (
-        error instanceof VerificationException &&
-        error.status === VerificationStatus.INVALID_ENVIRONMENT
-      ) {
-        return run(this.sandboxVerifier);
+    for (const verifier of [this.prodVerifier, this.sandboxVerifier]) {
+      try {
+        return await run(verifier);
+      } catch (error) {
+        if (
+          !(error instanceof VerificationException) ||
+          error.status !== VerificationStatus.INVALID_ENVIRONMENT
+        ) {
+          throw error;
+        }
       }
-      throw error;
     }
+    return run(this.xcodeVerifier);
   }
 
   // Lets an admin/ops action (not built here, see docs/1.7's non-goals)

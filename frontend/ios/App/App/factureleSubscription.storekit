@@ -1,0 +1,172 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "19124896",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6811579848",
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_developerTeamID" : "A899CGSWX8",
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 812402162.28082299,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "22420996",
+      "localizations" : [
+        {
+          "description" : "",
+          "displayName" : "FactureLe Abonnement",
+          "locale" : "fr"
+        }
+      ],
+      "name" : "FactureLe Abonnement",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "billingPlans" : [
+            {
+              "billingPlanType" : "BILLED_UPFRONT",
+              "commitmentDisplayPrice" : "5.99",
+              "displayPrice" : "5.99",
+              "internalID" : "6816994686_BILLED_UPFRONT",
+              "isEnabled" : true
+            }
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "5.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6816994686",
+          "introductoryOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "Facturation et devis, niveau Essentiel",
+              "displayName" : "FactureLe Essentiel",
+              "locale" : "fr"
+            }
+          ],
+          "productID" : "fr.facturele.app.subscription.essentiel",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "FactureLe Essentiel",
+          "subscriptionGroupID" : "22420996",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "billingPlans" : [
+            {
+              "billingPlanType" : "BILLED_UPFRONT",
+              "commitmentDisplayPrice" : "12.99",
+              "displayPrice" : "12.99",
+              "internalID" : "6816998210_BILLED_UPFRONT",
+              "isEnabled" : true
+            }
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "12.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "6816998210",
+          "introductoryOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "Facturation et devis, niveau Premium",
+              "displayName" : "FactureLe Premium",
+              "locale" : "fr"
+            }
+          ],
+          "productID" : "fr.facturele.app.subscription.premium",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "FactureLe Premium",
+          "subscriptionGroupID" : "22420996",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "billingPlans" : [
+            {
+              "billingPlanType" : "BILLED_UPFRONT",
+              "commitmentDisplayPrice" : "11.99",
+              "displayPrice" : "11.99",
+              "internalID" : "6816996982_BILLED_UPFRONT",
+              "isEnabled" : true
+            }
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "11.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "6816996982",
+          "introductoryOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "Facturation et devis, niveau Pro",
+              "displayName" : "FactureLe Pro",
+              "locale" : "fr"
+            }
+          ],
+          "productID" : "fr.facturele.app.subscription.pro",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "FactureLe Pro",
+          "subscriptionGroupID" : "22420996",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 5,
+    "minor" : 0
+  }
+}
