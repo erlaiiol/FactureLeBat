@@ -28,7 +28,7 @@ export async function registerTestUser(app: INestApplication<App>): Promise<Test
   const email = `e2e-${Date.now()}-${counter}@example.com`;
   const response = await request(app.getHttpServer())
     .post('/api/auth/register')
-    .send({ email, password: 'motdepasse123', acceptTerms: true })
+    .send({ email, password: 'Motdepasse123', acceptTerms: true })
     .expect(201);
 
   // superagent types response.headers loosely (Record<string, string>), but

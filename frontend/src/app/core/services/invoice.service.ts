@@ -125,12 +125,19 @@ export class InvoiceService {
     return this.http.delete<void>(`${this.baseUrl}/${id}/share-link`);
   }
 
+  // Public counterpart of pdfUrl — the share page's own "Télécharger" link
+  // points straight at it (Content-Disposition: attachment, with the real
+  // filename), which every recipient browser handles natively.
+  sharedPdfUrl(token: string): string {
+    return `${this.baseUrl}/share/${encodeURIComponent(token)}/pdf`;
+  }
+
   // Public counterpart of getPdfBlob, for InvoiceShareViewPage — no cookie
   // sent that would matter (the token itself is the credential), reachable
   // by anyone holding the link.
   getSharedPdfBlob(token: string): Observable<Blob> {
     return this.http
-      .get(`${this.baseUrl}/share/${token}/pdf`, { responseType: 'blob' })
+      .get(this.sharedPdfUrl(token), { responseType: 'blob' })
       .pipe(timeout(PDF_FETCH_TIMEOUT_MS));
   }
 

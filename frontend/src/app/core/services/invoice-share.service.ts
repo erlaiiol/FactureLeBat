@@ -2,6 +2,9 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { InvoiceWithTotals } from '../models/invoice.model';
+import { FileDownloadService } from './file-download.service';
+import { NativeFileShareService } from './native-file-share.service';
+import { PlatformService } from './platform.service';
 import { InvoiceService } from './invoice.service';
 import { MailSettingsService } from './mail-settings.service';
 import { RatingPromptService } from './rating-prompt.service';
@@ -44,6 +47,9 @@ export type ShareOutcome = 'shared' | 'compose-email' | 'mailto-fallback';
 export class InvoiceShareService {
   private readonly http = inject(HttpClient);
   private readonly invoiceService = inject(InvoiceService);
+  private readonly fileDownloadService = inject(FileDownloadService);
+  private readonly nativeFileShare = inject(NativeFileShareService);
+  private readonly platformService = inject(PlatformService);
   private readonly mailSettingsService = inject(MailSettingsService);
   private readonly ratingPromptService = inject(RatingPromptService);
   private readonly toastService = inject(ToastService);
@@ -76,7 +82,21 @@ export class InvoiceShareService {
     ]);
     const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-    if ('canShare' in navigator && navigator.canShare({ files: [file] })) {
+    // Native shells: the Capacitor share sheet stands in for navigator.share
+    // (which the Android WebView doesn't implement at all) — see
+    // NativeFileShareService.
+    if (this.platformService.isNativeApp()) {
+      try {
+        await this.nativeFileShare.share(pdfBlob, fileName, template.text);
+        this.toastService.success(
+          'Partage lancé — vérifiez dans l’application choisie que l’envoi a bien abouti.',
+        );
+        void this.ratingPromptService.notifyInvoiceShared();
+        return 'shared';
+      } catch {
+        // Falls through to the SMTP/mailto tiers below.
+      }
+    } else if ('canShare' in navigator && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: fileName, text: template.text });
         // navigator.share() only resolves once the OS has handed the PDF to
@@ -104,7 +124,7 @@ export class InvoiceShareService {
       return 'compose-email';
     }
 
-    this.downloadBlob(pdfBlob, fileName);
+    void this.fileDownloadService.saveBlob(pdfBlob, fileName);
     const to = invoice.customerEmail ?? '';
     const mailto =
       `mailto:${encodeURIComponent(to)}` +
@@ -114,15 +134,6 @@ export class InvoiceShareService {
     this.toastService.success('PDF téléchargé — joignez-le à l’email qui vient de s’ouvrir.');
     void this.ratingPromptService.notifyInvoiceShared();
     return 'mailto-fallback';
-  }
-
-  private downloadBlob(blob: Blob, fileName: string): void {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   private fileName(invoice: InvoiceWithTotals, format: 'pdf' | 'facturx'): string {

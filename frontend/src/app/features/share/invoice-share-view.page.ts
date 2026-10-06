@@ -10,6 +10,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { BigButtonComponent } from '../../shared/components/big-button.component';
 import { PdfCanvasViewerComponent } from '../../shared/components/pdf-canvas-viewer.component';
 
 // Phase 1.3-7 ("Partager"): the @Public() landing spot for a share link —
@@ -25,7 +26,7 @@ import { PdfCanvasViewerComponent } from '../../shared/components/pdf-canvas-vie
 @Component({
   selector: 'app-invoice-share-view-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PdfCanvasViewerComponent],
+  imports: [PdfCanvasViewerComponent, BigButtonComponent],
   templateUrl: './invoice-share-view.page.html',
 })
 export class InvoiceShareViewPage implements OnInit {
@@ -36,6 +37,7 @@ export class InvoiceShareViewPage implements OnInit {
   protected readonly loading = signal(true);
   protected readonly pdfBlobUrl = signal<string | null>(null);
   protected readonly notFound = signal(false);
+  protected readonly downloadUrl = signal<string | null>(null);
 
   ngOnInit(): void {
     const token = this.route.snapshot.paramMap.get('token');
@@ -44,6 +46,7 @@ export class InvoiceShareViewPage implements OnInit {
       this.notFound.set(true);
       return;
     }
+    this.downloadUrl.set(this.invoiceService.sharedPdfUrl(token));
     this.invoiceService
       .getSharedPdfBlob(token)
       .pipe(takeUntilDestroyed(this.destroyRef))

@@ -63,19 +63,19 @@ logs-errors:
 	tail -f backend/logs/error-*.log
 
 logs-files-prod:
-	docker compose -f infra/docker-compose.prod.yml exec backend tail -f logs/combined-*.log
+	docker compose -f infra/docker-compose.prod.yml exec backend sh -c 'tail -f logs/combined-*.log'
 
 logs-errors-prod:
-	docker compose -f infra/docker-compose.prod.yml exec backend tail -f logs/error-*.log
+	docker compose -f infra/docker-compose.prod.yml exec backend sh -c 'tail -f logs/error-*.log'
 
 # One-shot (no -f) bounded dumps of the two targets above — last $(TAIL)
 # lines then exit, instead of an open `tail -f` session. Meant for pasting a
 # snapshot somewhere (a chat, an issue) rather than watching live.
 logs-files-prod-tail:
-	docker compose -f infra/docker-compose.prod.yml exec backend tail -n $(TAIL) logs/combined-*.log
+	docker compose -f infra/docker-compose.prod.yml exec backend sh -c 'tail -n $(TAIL) logs/combined-*.log'
 
 logs-errors-prod-tail:
-	docker compose -f infra/docker-compose.prod.yml exec backend tail -n $(TAIL) logs/error-*.log
+	docker compose -f infra/docker-compose.prod.yml exec backend sh -c 'tail -n $(TAIL) logs/error-*.log'
 
 # Docker's own log driver for the prod stack (same idea as `logs` above,
 # just pointed at docker-compose.prod.yml) — only goes back as far as
