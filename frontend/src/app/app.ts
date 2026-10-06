@@ -26,6 +26,7 @@ import { AuthService } from './core/services/auth.service';
 import { BillingService } from './core/services/billing.service';
 import { CompanyService } from './core/services/company.service';
 import { DeepLinkService } from './core/services/deep-link.service';
+import { FileDownloadService } from './core/services/file-download.service';
 import { PlatformService } from './core/services/platform.service';
 import { PushRegistrationService } from './core/services/push-registration.service';
 import { ThemeService } from './core/services/theme.service';
@@ -129,6 +130,7 @@ export class App {
   protected readonly platformService = inject(PlatformService);
   private readonly pushRegistrationService = inject(PushRegistrationService);
   private readonly deepLinkService = inject(DeepLinkService);
+  private readonly fileDownloadService = inject(FileDownloadService);
   // Side-effect-only: registers modalMorph's app-wide click-origin listener
   // (docs/front/front-1-global-shell-and-overlays.md) — never read directly
   // here, ModalMorphComponent injects the same singleton.
@@ -219,6 +221,8 @@ export class App {
     // Registered once, regardless of auth state — a referral link can be
     // tapped whether or not the artisan is currently logged in.
     this.deepLinkService.listen();
+    // Native shells only — see FileDownloadService's own comment.
+    this.fileDownloadService.interceptApiLinks();
 
     // `pageSlideTransition` (docs/design-system.md): captured on every
     // NavigationStart, consumed by the very next NavigationEnd below —

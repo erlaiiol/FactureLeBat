@@ -28,6 +28,14 @@
       </p>
     </div>
   } @else if (pdfBlobUrl(); as url) {
+    @if (downloadUrl(); as href) {
+      <!-- The recipient has no FactureLe account: a plain link to the
+           public, token-keyed route is enough — its Content-Disposition
+           makes Safari/Chrome save the file under its real name. -->
+      <a [href]="href" download class="w-full sm:max-w-xs sm:self-end">
+        <app-big-button>Télécharger le PDF</app-big-button>
+      </a>
+    }
     <app-pdf-canvas-viewer
       [blobUrl]="url"
       class="flex min-h-[70vh] flex-1 flex-col rounded-2xl border border-line"

@@ -16,6 +16,7 @@ import { getMissingCompanyEssentials } from '../../../core/models/company-essent
 import { InvoiceWithTotals } from '../../../core/models/invoice.model';
 import { BillingService } from '../../../core/services/billing.service';
 import { CompanyEssentialsGateService } from '../../../core/services/company-essentials-gate.service';
+import { FileDownloadService } from '../../../core/services/file-download.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
@@ -114,6 +115,7 @@ export class InvoiceCreatePreviewStepPage {
   private readonly invoiceService = inject(InvoiceService);
   private readonly invoiceShareService = inject(InvoiceShareService);
   private readonly companyEssentialsGate = inject(CompanyEssentialsGateService);
+  private readonly fileDownloadService = inject(FileDownloadService);
   protected readonly companyService = inject(CompanyService);
   protected readonly billingService = inject(BillingService);
   private readonly paywallService = inject(PaywallService);
@@ -385,7 +387,7 @@ export class InvoiceCreatePreviewStepPage {
     if (
       !this.companyEssentialsGate.ensureComplete(this.companyProfile(), (profile) => {
         this.companyProfile.set(profile);
-        window.open(href, '_blank');
+        this.fileDownloadService.open(href);
       })
     ) {
       event.preventDefault();

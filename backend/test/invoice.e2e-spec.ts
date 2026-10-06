@@ -621,7 +621,12 @@ describe('Invoice pipeline (e2e)', () => {
 
       await prisma.company.update({
         where: { id: freeSession.companyId },
-        data: { premiumGrantedUntil: new Date(Date.now() + 60_000) },
+        // A grant needs its tier too since plan tiers exist — a bare
+        // premiumGrantedUntil resolves to no plan at all (getEffectivePlanTier).
+        data: {
+          premiumGrantedUntil: new Date(Date.now() + 60_000),
+          grantedPlanTier: PlanTier.PREMIUM,
+        },
       });
       await authedRequest(app, freeSession).post('/api/invoices').send(body).expect(201);
     });

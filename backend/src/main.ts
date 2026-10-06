@@ -90,6 +90,11 @@ async function bootstrap() {
     // without this, the browser silently drops Set-Cookie on the response
     // and every login appears to succeed but never actually persists.
     credentials: true,
+    // The iOS shell (capacitor://facturele.net) is cross-origin to the API,
+    // and fetches PDF/CSV downloads through HttpClient (see the frontend's
+    // FileDownloadService) — without this it can't read the server's own
+    // filename and falls back to a generic one.
+    exposedHeaders: ['Content-Disposition'],
   });
 
   await app.listen(config.get<number>('PORT', 3000));

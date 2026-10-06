@@ -42,6 +42,7 @@ const companyFixture: CompanyProfile = {
   autoTransmitViaPa: false,
   autoSyncReceivedInvoices: false,
   hasLogo: false,
+  preferKeyboardQuantityInput: false,
 };
 
 describe('ManualInvoiceDraftStore', () => {
