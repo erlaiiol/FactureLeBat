@@ -1,5 +1,5 @@
 {
-  "originHash" : "6a0b4700dd05f4abbdaaa498c3dd837ab84e39bf44d61e69bd47dc354b1e94bb",
+  "originHash" : "bfc84dd1e3b1e32ee67184c6bfad0e0141e5e64185c54be1475c8345116afbbc",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -143,6 +143,15 @@
       "state" : {
         "revision" : "040d087ac2267d2ddd4cca36c757d1c6a05fdbfe",
         "version" : "101.0.0"
+      }
+    },
+    {
+      "identity" : "ion-ios-filesystem",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ionic-team/ion-ios-filesystem.git",
+      "state" : {
+        "revision" : "13848aab4f3447ff98dfdbe72ff8ef31bf333db0",
+        "version" : "2.0.0"
       }
     },
     {
