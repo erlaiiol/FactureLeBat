@@ -29,28 +29,44 @@ export class FileDownloadService {
   private readonly isNative = inject(PlatformService).isNativeApp();
   private readonly destroyRef = inject(DestroyRef);
 
-  // Registered once from App's constructor. A bubble-phase document listener
-  // runs after every anchor's own (click) handler, so a handler that already
-  // called preventDefault() (company-essentials gate, Factur-X quota
-  // paywall) is respected and the download is simply skipped.
+  // Registered once from App's constructor. Two steps, because of two
+  // constraints:
+  // - Capture phase on document: plenty of containers stop click
+  //   propagation (the board row's actions <td>, ModalMorphComponent's
+  //   panel…) — a plain bubble-phase document listener never saw clicks on
+  //   the links inside them, so the WebView followed the link itself and an
+  //   `attachment` PDF there does nothing at all (2026-10-07, "Télécharger"
+  //   with no effect on Android).
+  // - The decision itself is deferred to a listener on the anchor, which
+  //   runs after the anchor's own (click) handlers: one that already called
+  //   preventDefault() (company-essentials gate, Factur-X quota paywall) is
+  //   respected and the download is simply skipped. Ancestors' stopPropagation
+  //   can't reach it — the anchor comes before them on the bubble path.
   interceptApiLinks(): void {
     if (!this.isNative) {
       return;
     }
-    const listener = (event: MouseEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
+    const capture = (event: MouseEvent) => {
       const anchor = (event.target as Element | null)?.closest?.('a');
-      if (!anchor || !this.isApiUrl(anchor.href)) {
-        return;
+      if (anchor && this.isApiUrl(anchor.href)) {
+        // Same function reference every time, so repeated registrations on
+        // the same anchor are deduplicated by the DOM itself.
+        anchor.addEventListener('click', this.onApiLinkClick, { once: true });
       }
-      event.preventDefault();
-      void this.download(anchor.href);
     };
-    this.document.addEventListener('click', listener);
-    this.destroyRef.onDestroy(() => this.document.removeEventListener('click', listener));
+    this.document.addEventListener('click', capture, { capture: true });
+    this.destroyRef.onDestroy(() =>
+      this.document.removeEventListener('click', capture, { capture: true }),
+    );
   }
+
+  private readonly onApiLinkClick = (event: MouseEvent): void => {
+    if (event.defaultPrevented) {
+      return;
+    }
+    event.preventDefault();
+    void this.download((event.currentTarget as HTMLAnchorElement).href);
+  };
 
   // For callers that used to window.open() an API URL themselves (the
   // company-essentials gate's "continue" callback).

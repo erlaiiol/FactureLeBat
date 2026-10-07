@@ -85,6 +85,43 @@ describe('FileDownloadService', () => {
       http.expectNone(PDF_URL);
     });
 
+    it('still intercepts a link inside a container that stops click propagation', async () => {
+      // e.g. the board row's actions <td (click)="$event.stopPropagation()">
+      // or ModalMorphComponent's panel — the 2026-10-07 "Télécharger does
+      // nothing on Android" bug.
+      const { nativeShare, http } = setup(true);
+      const container = document.createElement('div');
+      container.addEventListener('click', (event) => event.stopPropagation());
+      document.body.appendChild(container);
+      const anchor = document.createElement('a');
+      anchor.href = PDF_URL;
+      anchor.target = '_blank';
+      container.appendChild(anchor);
+
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      anchor.dispatchEvent(event);
+      container.remove();
+
+      expect(event.defaultPrevented).toBe(true);
+      http.expectOne(PDF_URL).flush(new Blob(['%PDF-1.3'], { type: 'application/pdf' }));
+      await flushAsync();
+      expect(nativeShare.share).toHaveBeenCalledTimes(1);
+    });
+
+    it('downloads once per tap, even when the same link is tapped repeatedly', () => {
+      const { http } = setup(true);
+      const anchor = document.createElement('a');
+      anchor.href = PDF_URL;
+      document.body.appendChild(anchor);
+      anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      anchor.remove();
+
+      const requests = http.match(PDF_URL);
+      expect(requests).toHaveLength(2);
+      requests.forEach((request) => request.flush(new Blob()));
+    });
+
     it('does not intercept non-API links', () => {
       const { http } = setup(true);
       const event = clickLink('https://example.com/cgu');

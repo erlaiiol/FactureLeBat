@@ -13,6 +13,8 @@ import {
 // see that file's comment for why.
 import '../utils/pdfjs-baseline-polyfills';
 import * as pdfjsLib from 'pdfjs-dist';
+import { FileDownloadService } from '../../core/services/file-download.service';
+import { PlatformService } from '../../core/services/platform.service';
 
 // Unlike Vite/webpack 5, Angular's esbuild-based `application` builder does
 // NOT resolve `new URL('pdfjs-dist/...', import.meta.url)` into a copied,
@@ -89,6 +91,7 @@ async function createMainThreadWorker(): Promise<pdfjsLib.PDFWorker> {
         <a
           [href]="blobUrl()"
           download="apercu-facture.pdf"
+          (click)="downloadFallback($event)"
           class="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-secondary-subtle"
         >
           Télécharger le PDF
@@ -102,6 +105,8 @@ export class PdfCanvasViewerComponent {
 
   private readonly containerRef = viewChild.required<ElementRef<HTMLDivElement>>('container');
   protected readonly error = signal<string | null>(null);
+  private readonly fileDownloadService = inject(FileDownloadService);
+  private readonly isNativeApp = inject(PlatformService).isNativeApp();
 
   // Bumped on every new render pass (including this component's own
   // destruction) — an in-flight page loop checks it after each `await` and
@@ -118,6 +123,17 @@ export class PdfCanvasViewerComponent {
     inject(DestroyRef).onDestroy(() => {
       this.renderToken++;
     });
+  }
+
+  // The Android WebView silently ignores `<a download>` on a blob: URL — in
+  // the native shells, hand the same blob to the OS share sheet instead.
+  protected async downloadFallback(event: MouseEvent): Promise<void> {
+    if (!this.isNativeApp) {
+      return;
+    }
+    event.preventDefault();
+    const blob = await (await fetch(this.blobUrl())).blob();
+    await this.fileDownloadService.saveBlob(blob, 'apercu-facture.pdf');
   }
 
   private async render(url: string): Promise<void> {
