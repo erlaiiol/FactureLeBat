@@ -6,7 +6,9 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 import { environment } from '../../../environments/environment';
+import { PublicUser } from '../../core/models/auth.model';
 import { OnboardingState } from '../../core/models/onboarding.model';
+import { AuthService } from '../../core/services/auth.service';
 import { CatalogFolderService } from '../../core/services/catalog-folder.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { DiscountService } from '../../core/services/discount.service';
@@ -47,7 +49,20 @@ async function flushAsync(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-const FRESH_STATE: OnboardingState = { tourEnabled: true, completedTours: [] };
+const FRESH_STATE: OnboardingState = {
+  tourEnabled: true,
+  completedTours: [],
+  tourPreferenceChosen: true,
+};
+// A brand-new account that hasn't answered "Activer les tutoriels ?" yet.
+const NEW_ACCOUNT_STATE: OnboardingState = { ...FRESH_STATE, tourPreferenceChosen: false };
+const TEST_USER: PublicUser = {
+  id: 'user-1',
+  email: 'artisan@example.com',
+  role: 'ARTISAN',
+  companyId: 'company-1',
+  emailVerified: true,
+};
 
 describe('TourService', () => {
   let httpMock: HttpTestingController;
@@ -66,11 +81,13 @@ describe('TourService', () => {
     vi.useRealTimers();
   });
 
-  // Constructing the service (providedIn: 'root') fires the best-effort
-  // onboarding-state load from its constructor — flush it the same way for
-  // every test, matching InvoiceDraftStore's test pattern.
+  // The service (providedIn: 'root') loads the onboarding state as soon as
+  // a user is signed in — sign one in, run that effect, and flush the load
+  // the same way for every test, matching InvoiceDraftStore's test pattern.
   function createService(initialState: OnboardingState = FRESH_STATE): TourService {
+    TestBed.inject(AuthService).currentUser.set(TEST_USER);
     const service = TestBed.inject(TourService);
+    TestBed.tick();
     httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`).flush(initialState);
     return service;
   }
@@ -112,7 +129,7 @@ describe('TourService', () => {
   });
 
   it('does not auto-start a tour already in completedTours', async () => {
-    const service = createService({ tourEnabled: true, completedTours: ['customers'] });
+    const service = createService({ ...FRESH_STATE, completedTours: ['customers'] });
 
     await harness.navigateByUrl('/clients');
 
@@ -120,11 +137,87 @@ describe('TourService', () => {
   });
 
   it('does not auto-start anything when tourEnabled is false', async () => {
-    const service = createService({ tourEnabled: false, completedTours: [] });
+    const service = createService({ ...FRESH_STATE, tourEnabled: false });
 
     await harness.navigateByUrl('/clients');
 
     expect(service.activeTourId()).toBeNull();
+  });
+
+  it('loads nothing and auto-starts nothing while signed out', async () => {
+    const service = TestBed.inject(TourService);
+    TestBed.tick();
+    httpMock.expectNone(`${environment.apiBaseUrl}/onboarding`);
+
+    await harness.navigateByUrl('/clients');
+
+    expect(service.activeTourId()).toBeNull();
+    expect(service.optInPromptVisible()).toBe(false);
+  });
+
+  it('loads the state once the visitor signs up, then auto-starts the tour of the page they already landed on', async () => {
+    const service = TestBed.inject(TourService);
+    TestBed.tick();
+    await harness.navigateByUrl('/clients');
+
+    TestBed.inject(AuthService).currentUser.set(TEST_USER);
+    TestBed.tick();
+    httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`).flush(FRESH_STATE);
+    await flushAsync();
+
+    expect(service.activeTourId()).toBe('customers');
+  });
+
+  describe('sign-up "Activer les tutoriels ?" prompt', () => {
+    it('asks first, instead of auto-starting the first-invoice tour, for an account that never answered', async () => {
+      const service = createService(NEW_ACCOUNT_STATE);
+
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      expect(service.optInPromptVisible()).toBe(true);
+      expect(service.activeTourId()).toBeNull();
+    });
+
+    it('"Oui" persists the choice and starts the pending tour right away', async () => {
+      const service = createService(NEW_ACCOUNT_STATE);
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      service.answerOptInPrompt(true);
+      const request = httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`);
+      expect(request.request.method).toBe('PATCH');
+      expect(request.request.body).toEqual({ tourEnabled: true });
+      request.flush(FRESH_STATE);
+      await flushAsync();
+
+      expect(service.optInPromptVisible()).toBe(false);
+      expect(service.activeTourId()).toBe('invoice-creation');
+      expect(service.stepIndex()).toBe(0);
+    });
+
+    it('"Non" persists tourEnabled=false, and no tour auto-starts afterwards', async () => {
+      const service = createService(NEW_ACCOUNT_STATE);
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      service.answerOptInPrompt(false);
+      const request = httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`);
+      expect(request.request.body).toEqual({ tourEnabled: false });
+      request.flush({ ...FRESH_STATE, tourEnabled: false });
+
+      await harness.navigateByUrl('/clients');
+
+      expect(service.optInPromptVisible()).toBe(false);
+      expect(service.activeTourId()).toBeNull();
+      expect(service.tourEnabled()).toBe(false);
+    });
+
+    it('never asks an account that already answered', async () => {
+      const service = createService(FRESH_STATE);
+
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      expect(service.optInPromptVisible()).toBe(false);
+      expect(service.activeTourId()).toBe('invoice-creation');
+    });
   });
 
   it('advances to the next step once its anchor is registered', async () => {
@@ -146,7 +239,7 @@ describe('TourService', () => {
     service.skip();
     httpMock
       .expectOne(`${environment.apiBaseUrl}/onboarding/tours/customers/complete`)
-      .flush({ tourEnabled: true, completedTours: ['customers'] });
+      .flush({ ...FRESH_STATE, completedTours: ['customers'] });
 
     expect(service.activeTourId()).toBeNull();
   });

@@ -11,11 +11,13 @@
       (click)="$event.stopPropagation()"
     >
       <div class="flex items-start justify-between gap-2">
-        <app-badge variant="warning" tone="solid">Offre limitée</app-badge>
+        @if (!platformService.isIosApp()) {
+          <app-badge variant="warning" tone="solid">Offre limitée</app-badge>
+        }
         <button
           type="button"
           (click)="trialOfferService.dismiss()"
-          class="rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
+          class="ms-auto rounded-lg px-3 py-2 text-ink-soft hover:bg-secondary-subtle"
           aria-label="Fermer"
         >
           <app-icon-close [size]="18" />
@@ -27,47 +29,45 @@
           Bravo pour votre 1ère facture !
         </h2>
         <p class="text-sm text-ink-soft">
-          Passez à Premium et profitez de votre 1er mois à prix cassé.
+          @if (platformService.isIosApp()) {
+            Passez à un abonnement pour continuer à facturer sans limite.
+          } @else {
+            Passez à Premium et profitez de votre 1er mois à prix cassé.
+          }
         </p>
       </div>
 
-      <div class="flex items-baseline justify-center gap-2">
-        <span class="text-5xl font-bold text-ink">{{ offer.discountedPriceEuros }} €</span>
-        <span class="text-sm text-ink-soft">le 1er mois</span>
-      </div>
-      <p class="-mt-3 text-center text-sm text-ink-soft">
-        <span class="line-through">{{ offer.normalPriceEuros }} € / mois</span>
-        ensuite — sans engagement, résiliable à tout moment.
-      </p>
-
-      <div
-        class="flex flex-col items-center gap-1 rounded-xl bg-warning-subtle p-4 text-center text-warning-subtle-fg"
-      >
-        <p class="text-xs font-medium tracking-wide uppercase">Offre valable encore</p>
-        <p class="font-mono text-3xl font-bold tabular-nums">{{ countdownLabel() }}</p>
-      </div>
-
       @if (platformService.isIosApp()) {
-        <!-- Phase 1.7: unlike PaywallModalComponent (which now routes into
-        /abonnement's real StoreKit2 purchase on iOS too), this modal's
-        specific offer — Premium at a Stripe coupon's discounted price — has
-        no Apple IAP equivalent: Apple has its own separate "offer codes"
-        mechanism, deliberately not built here (see docs/1.7/
-        1.7-3-frontend-storekit-purchase-flow.md's non-goals). The discount
-        genuinely only exists on the Stripe/web checkout, so this keeps the
-        Phase 22 external-link-out rather than routing to a StoreKit
-        purchase that couldn't honor the price shown above. -->
-        <div class="flex flex-col gap-2 rounded-lg bg-secondary-subtle p-3 text-center">
-          <p class="text-sm text-ink-soft">Profitez de l'offre depuis un navigateur.</p>
-          <app-big-button
-            variant="secondary"
-            tone="subtle"
-            (click)="platformService.openWebSubscriptionPage()"
-          >
-            Ouvrir facturele.net
-          </app-big-button>
-        </div>
+        <!-- Phase 1.7 revision: this offer's discounted price only exists as
+        a Stripe coupon — Apple has its own separate "offer codes" mechanism,
+        deliberately not built (see docs/1.7/
+        1.7-3-frontend-storekit-purchase-flow.md's non-goals) — so on iOS
+        neither the price nor the countdown is shown, and the CTA routes to
+        /abonnement's real StoreKit2 purchase like PaywallModalComponent
+        does. The former "Ouvrir facturele.net" link-out is gone: next to a
+        working IAP, a button steering to a cheaper web price is exactly
+        what App Review 3.1.1 rejects, and it meant the iOS first-invoice
+        pipeline never reached an App Store purchase at all. -->
+        <app-big-button variant="primary" tone="solid" (click)="goToSubscribe()">
+          Voir les offres
+        </app-big-button>
       } @else {
+        <div class="flex items-baseline justify-center gap-2">
+          <span class="text-5xl font-bold text-ink">{{ offer.discountedPriceEuros }} €</span>
+          <span class="text-sm text-ink-soft">le 1er mois</span>
+        </div>
+        <p class="-mt-3 text-center text-sm text-ink-soft">
+          <span class="line-through">{{ offer.normalPriceEuros }} € / mois</span>
+          ensuite — sans engagement, résiliable à tout moment.
+        </p>
+
+        <div
+          class="flex flex-col items-center gap-1 rounded-xl bg-warning-subtle p-4 text-center text-warning-subtle-fg"
+        >
+          <p class="text-xs font-medium tracking-wide uppercase">Offre valable encore</p>
+          <p class="font-mono text-3xl font-bold tabular-nums">{{ countdownLabel() }}</p>
+        </div>
+
         <app-big-button
           variant="warning"
           tone="solid"

@@ -5,8 +5,18 @@ import { LegalStatusConfirmation } from './entities/legal-status-confirmation.en
 import { ConfirmLegalStatusDto } from './dto/confirm-legal-status.dto';
 import { TourId } from './onboarding.constants';
 
-function toState(row: { tourEnabled: boolean; completedTours: string[] }): OnboardingState {
-  return { tourEnabled: row.tourEnabled, completedTours: row.completedTours as TourId[] };
+const STATE_SELECT = { tourEnabled: true, completedTours: true, tourPreferenceChosenAt: true };
+
+function toState(row: {
+  tourEnabled: boolean;
+  completedTours: string[];
+  tourPreferenceChosenAt: Date | null;
+}): OnboardingState {
+  return {
+    tourEnabled: row.tourEnabled,
+    completedTours: row.completedTours as TourId[],
+    tourPreferenceChosen: row.tourPreferenceChosenAt !== null,
+  };
 }
 
 @Injectable()
@@ -19,7 +29,7 @@ export class OnboardingRepository {
   async getState(companyId: string): Promise<OnboardingState> {
     const row = await this.prisma.company.findUniqueOrThrow({
       where: { id: companyId },
-      select: { tourEnabled: true, completedTours: true },
+      select: STATE_SELECT,
     });
     return toState(row);
   }
@@ -27,8 +37,10 @@ export class OnboardingRepository {
   async setTourEnabled(companyId: string, tourEnabled: boolean): Promise<OnboardingState> {
     const row = await this.prisma.company.update({
       where: { id: companyId },
-      data: { tourEnabled },
-      select: { tourEnabled: true, completedTours: true },
+      // Any explicit choice (the sign-up prompt or the settings toggle)
+      // counts as having answered — the prompt never comes back after it.
+      data: { tourEnabled, tourPreferenceChosenAt: new Date() },
+      select: STATE_SELECT,
     });
     return toState(row);
   }
@@ -43,7 +55,7 @@ export class OnboardingRepository {
     const row = await this.prisma.company.update({
       where: { id: companyId },
       data: { completedTours: [...current.completedTours, tourId] },
-      select: { tourEnabled: true, completedTours: true },
+      select: STATE_SELECT,
     });
     return toState(row);
   }
@@ -52,7 +64,7 @@ export class OnboardingRepository {
     const row = await this.prisma.company.update({
       where: { id: companyId },
       data: { completedTours: [] },
-      select: { tourEnabled: true, completedTours: true },
+      select: STATE_SELECT,
     });
     return toState(row);
   }

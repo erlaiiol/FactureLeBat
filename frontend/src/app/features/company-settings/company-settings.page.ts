@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   effect,
   inject,
   signal,
@@ -71,7 +72,13 @@ export class CompanySettingsPage {
   private readonly essentialControlNames = Object.keys(
     ESSENTIAL_COMPANY_FIELD_LABELS,
   ) as EssentialCompanyField[];
-  protected readonly missingEssentials = signal<string[]>([]);
+  // Control names, so the template can also flag each missing input itself
+  // (.field-missing) — empty until the profile has loaded, so nothing
+  // flashes red while the form is still blank.
+  private readonly missingEssentialFields = signal<EssentialCompanyField[]>([]);
+  protected readonly missingEssentials = computed(() =>
+    this.missingEssentialFields().map((name) => ESSENTIAL_COMPANY_FIELD_LABELS[name]),
+  );
 
   // BTP mandatory mention (art. L243-2 du Code des assurances): the three
   // detail fields below only become Validators.required while
@@ -319,7 +326,7 @@ export class CompanySettingsPage {
             autoTransmitViaPa: profile.autoTransmitViaPa,
             autoSyncReceivedInvoices: profile.autoSyncReceivedInvoices,
           });
-          this.missingEssentials.set(this.computeMissingEssentials());
+          this.missingEssentialFields.set(this.computeMissingEssentials());
         },
         error: () => {
           this.loading.set(false);
@@ -332,7 +339,7 @@ export class CompanySettingsPage {
     // gate, at PDF-send/download time rather than on this page).
     this.form.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.missingEssentials.set(this.computeMissingEssentials()));
+      .subscribe(() => this.missingEssentialFields.set(this.computeMissingEssentials()));
 
     // Same "only required while the box is checked" pattern as
     // microEntrepreneurCeilingEuros being optional — an artisan outside the
@@ -531,7 +538,7 @@ export class CompanySettingsPage {
         next: () => {
           this.saving.set(false);
           this.saved.set(true);
-          this.missingEssentials.set(this.computeMissingEssentials());
+          this.missingEssentialFields.set(this.computeMissingEssentials());
         },
         error: () => {
           this.saving.set(false);
@@ -645,10 +652,12 @@ export class CompanySettingsPage {
     return this.companyService.logoUrl(this.logoCacheBust());
   }
 
-  private computeMissingEssentials(): string[] {
-    return this.essentialControlNames
-      .filter((name) => this.form.controls[name].invalid)
-      .map((name) => ESSENTIAL_COMPANY_FIELD_LABELS[name]);
+  protected isEssentialMissing(name: EssentialCompanyField): boolean {
+    return this.missingEssentialFields().includes(name);
+  }
+
+  private computeMissingEssentials(): EssentialCompanyField[] {
+    return this.essentialControlNames.filter((name) => this.form.controls[name].invalid);
   }
 
   // Toggles Validators.required on the three decennial detail fields —

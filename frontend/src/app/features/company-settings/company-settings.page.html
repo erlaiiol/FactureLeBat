@@ -58,6 +58,7 @@
       <input
         formControlName="name"
         type="text"
+        [class.field-missing]="isEssentialMissing('name')"
         class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="form.controls.name.invalid && form.controls.name.touched"
       />
@@ -71,6 +72,7 @@
         type="text"
         inputmode="numeric"
         maxlength="14"
+        [class.field-missing]="isEssentialMissing('siret')"
         class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="form.controls.siret.invalid && form.controls.siret.touched"
       />
@@ -96,6 +98,7 @@
       <input
         formControlName="addressLine1"
         type="text"
+        [class.field-missing]="isEssentialMissing('addressLine1')"
         class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
         [class.border-danger]="
           form.controls.addressLine1.invalid && form.controls.addressLine1.touched
@@ -120,6 +123,7 @@
         <input
           formControlName="postalCode"
           type="text"
+          [class.field-missing]="isEssentialMissing('postalCode')"
           class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
           [class.border-danger]="
             form.controls.postalCode.invalid && form.controls.postalCode.touched
@@ -132,6 +136,7 @@
         <input
           formControlName="city"
           type="text"
+          [class.field-missing]="isEssentialMissing('city')"
           class="field-tier-required rounded-lg border border-[var(--color-atelier-walnut)]/25 bg-atelier-surface px-4 py-3 text-lg text-atelier-ink"
           [class.border-danger]="form.controls.city.invalid && form.controls.city.touched"
         />

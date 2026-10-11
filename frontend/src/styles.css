@@ -832,3 +832,11 @@ input[type='date']::-webkit-calendar-picker-indicator {
 :is(.field-tier-required, .field-tier-conditional, .field-tier-optional).border-danger {
   border-left-color: var(--color-danger);
 }
+/* An essential field (company-essentials.util.ts — printed on every
+   invoice) still empty/invalid: full red border plus a translucent red wash
+   over the input's own surface, kept until it's filled, not just once
+   touched. Mixed onto the theme's own surface token so dark mode follows. */
+.field-missing {
+  border-color: var(--color-danger);
+  background-color: color-mix(in srgb, var(--color-danger) 10%, var(--color-atelier-surface));
+}

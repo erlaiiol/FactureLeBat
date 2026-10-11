@@ -10,6 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { BillingService } from '../../core/services/billing.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { TrialOfferService } from '../../core/services/trial-offer.service';
@@ -41,6 +42,7 @@ export class TrialOfferModalComponent {
   protected readonly billingService = inject(BillingService);
   protected readonly platformService = inject(PlatformService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   protected readonly offer = computed(() => this.billingService.status()?.trialOffer ?? null);
 
@@ -113,6 +115,13 @@ export class TrialOfferModalComponent {
     if (this.trialOfferService.visible()) {
       this.trialOfferService.dismiss();
     }
+  }
+
+  // iOS only — see the template: /abonnement's StoreKit2 purchase, same
+  // destination as PaywallModalComponent.goToSubscribe.
+  protected goToSubscribe(): void {
+    this.trialOfferService.dismiss();
+    void this.router.navigateByUrl('/abonnement');
   }
 
   protected subscribeNow(): void {

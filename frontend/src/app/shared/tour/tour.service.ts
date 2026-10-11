@@ -1,8 +1,9 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { catchError, filter, firstValueFrom, Observable, of, tap } from 'rxjs';
 import { OnboardingState, TourId } from '../../core/models/onboarding.model';
+import { AuthService } from '../../core/services/auth.service';
 import { CatalogFolderService } from '../../core/services/catalog-folder.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { DiscountService } from '../../core/services/discount.service';
@@ -35,6 +36,7 @@ const ANCHOR_POLL_INTERVAL_MS = 50;
 @Injectable({ providedIn: 'root' })
 export class TourService {
   private readonly onboardingService = inject(OnboardingService);
+  private readonly authService = inject(AuthService);
   private readonly anchorRegistry = inject(TourAnchorRegistryService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -76,6 +78,14 @@ export class TourService {
   private selfNavigating = false;
 
   readonly tourEnabled = computed(() => this.state()?.tourEnabled ?? true);
+  // The sign-up "Activer les tutoriels ?" prompt (TourOptInModalComponent):
+  // shown instead of — and right before — the very first tour that would
+  // auto-launch for an account that has never answered it
+  // (OnboardingState.tourPreferenceChosen). Remembers which tour that was,
+  // so answering "Oui" starts it straight away rather than on the next
+  // navigation.
+  readonly optInPromptVisible = signal(false);
+  private optInPendingTourId: TourId | null = null;
   readonly activeTourId = signal<TourId | null>(null);
   readonly stepIndex = signal(0);
   // Which tour (if any) the CURRENT route owns, kept in sync on every
@@ -96,15 +106,18 @@ export class TourService {
   constructor() {
     // Best-effort load, same reasoning as InvoiceDraftStore's company/customers
     // loads: a failure here just means the tour never auto-launches, it never
-    // blocks the rest of the app. TourService is constructed app-wide (see
-    // App's root component), including on public routes where an anonymous
-    // visitor 401s on this call — an explicit no-op `error` handler is what
-    // keeps that a silent no-auto-launch rather than an unhandled rejection
-    // (see docs/roadmap.md Phase 14.7's bug #1).
-    this.onboardingService
-      .getState()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (state) => this.state.set(state), error: () => {} });
+    // blocks the rest of the app. Keyed on the signed-in user rather than
+    // fired once from this constructor: TourService is constructed app-wide
+    // (see App's root component), including on public routes, so a one-shot
+    // load used to 401 for an anonymous visitor (see docs/roadmap.md Phase
+    // 14.7's bug #1) and then never retry once that visitor registered or
+    // logged in — leaving a brand-new account with no state at all, which
+    // the sign-up "Activer les tutoriels ?" prompt needs to read. Also
+    // drops a previous account's state on logout/account switch.
+    effect(() => {
+      const userId = this.authService.currentUser()?.id ?? null;
+      untracked(() => this.loadStateFor(userId));
+    });
 
     this.router.events
       .pipe(
@@ -156,6 +169,27 @@ export class TourService {
     return this.onboardingService
       .setTourEnabled(tourEnabled)
       .pipe(tap((state) => this.state.set(state)));
+  }
+
+  // Answers the sign-up "Activer les tutoriels ?" prompt. Hidden right
+  // away (optimistically) so the tour — or nothing — follows immediately; a
+  // failed save just leaves the preference unanswered server-side, so the
+  // prompt comes back next session rather than silently picking for them.
+  answerOptInPrompt(enabled: boolean): void {
+    const pendingTourId = this.optInPendingTourId;
+    this.optInPendingTourId = null;
+    this.optInPromptVisible.set(false);
+    const current = this.state();
+    if (current) {
+      this.state.set({ ...current, tourEnabled: enabled, tourPreferenceChosen: true });
+    }
+    this.setTourEnabled(enabled)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ error: () => {} });
+    if (enabled && pendingTourId && pendingTourId === this.currentRouteTourId()) {
+      this.activeTourId.set(pendingTourId);
+      void this.advanceToStep(0);
+    }
   }
 
   // Backs the settings page's "Rejouer les visites guidées" button: clears
@@ -217,12 +251,44 @@ export class TourService {
     void this.advanceToStep(0);
   }
 
+  private loadStateFor(userId: string | null): void {
+    this.state.set(null);
+    this.optInPromptVisible.set(false);
+    this.optInPendingTourId = null;
+    if (!userId) {
+      return;
+    }
+    this.onboardingService
+      .getState()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (state) => {
+          this.state.set(state);
+          // The navigation that brought the artisan here (e.g. straight
+          // from sign-up into /factures/nouvelle) usually ends before this
+          // response does — re-check it now rather than waiting for the
+          // next one.
+          this.maybeAutoStart(this.router.url);
+        },
+        error: () => {},
+      });
+  }
+
   private maybeAutoStart(url: string, skipTourId: TourId | null = null): void {
-    if (this.activeTourId() || !this.tourEnabled()) {
+    // No state yet (still loading, or failed) means no auto-launch: without
+    // it there's no telling whether this account still has to answer the
+    // "Activer les tutoriels ?" prompt, or already finished this tour.
+    const state = this.state();
+    if (!state || this.activeTourId() || this.optInPromptVisible() || !state.tourEnabled) {
       return;
     }
     const tourId = ROUTE_TOUR_MAP.find((entry) => url.startsWith(entry.prefix))?.tourId ?? null;
-    if (!tourId || tourId === skipTourId || this.state()?.completedTours.includes(tourId)) {
+    if (!tourId || tourId === skipTourId || state.completedTours.includes(tourId)) {
+      return;
+    }
+    if (!state.tourPreferenceChosen) {
+      this.optInPendingTourId = tourId;
+      this.optInPromptVisible.set(true);
       return;
     }
     this.activeTourId.set(tourId);

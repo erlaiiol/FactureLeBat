@@ -29,6 +29,15 @@ describe('Onboarding tour state (e2e)', () => {
     await app.close();
   });
 
+  it('starts a brand-new account with the "Activer les tutoriels ?" choice still unanswered', async () => {
+    const response = await authedRequest(app, session).get('/api/onboarding').expect(200);
+    expect(response.body as OnboardingState).toEqual({
+      tourEnabled: true,
+      completedTours: [],
+      tourPreferenceChosen: false,
+    });
+  });
+
   it('resets, toggles, completes and re-reads onboarding state', async () => {
     await authedRequest(app, session).post('/api/onboarding/reset').expect(201);
 
@@ -40,9 +49,11 @@ describe('Onboarding tour state (e2e)', () => {
     expect((enabledResponse.body as OnboardingState).completedTours).toEqual([]);
 
     const getResponse = await authedRequest(app, session).get('/api/onboarding').expect(200);
+    // Any explicit tourEnabled write answers the sign-up prompt for good.
     expect(getResponse.body as OnboardingState).toEqual({
       tourEnabled: true,
       completedTours: [],
+      tourPreferenceChosen: true,
     });
 
     const completeResponse = await authedRequest(app, session)

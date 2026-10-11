@@ -311,8 +311,15 @@ model Company {
   // uninvited. Left on Company rather than moved to User in Phase 13 since
   // it's still meaningfully "per tenant" (1:1 with User today anyway) and
   // moving it would have been a gratuitous churn with no behavior change.
-  tourEnabled    Boolean  @default(true)
-  completedTours String[] @default([])
+  tourEnabled            Boolean   @default(true)
+  completedTours         String[]  @default([])
+  // Stamped the first time the artisan explicitly chooses tourEnabled
+  // (the sign-up "Activer les tutoriels ?" prompt, or the settings toggle)
+  // — null means they were never asked, which is what makes the frontend
+  // show that prompt before the very first auto-launched tour. Backfilled
+  // to the migration date for pre-existing companies, so only new
+  // accounts are ever asked.
+  tourPreferenceChosenAt DateTime?
 
   // Phase 12 invoice mailing: the artisan's own SMTP account, used to send
   // invoices literally from their address (no third-party "From" relay) —
