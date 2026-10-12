@@ -110,6 +110,38 @@
       <app-icon-check [size]="12" />
       Prêt pour la réforme de facturation électronique 2026-2027
     </span>
+
+    <!-- CTA proof strip: collapsed at rest (0fr row, invisible), opens once
+         with a slide-down + fade the moment the visitor starts scrolling —
+         the classic SaaS "why click" justification, revealed on intent
+         rather than competing with the litany on load. `inert` while
+         closed keeps the hidden copy out of tab order; the content stays in
+         the DOM for SEO/screen readers. -->
+    <div
+      class="anim-proof-reveal w-full"
+      [class.is-open]="proofOpen()"
+      [attr.inert]="proofOpen() ? null : ''"
+    >
+      <div class="anim-proof-reveal-inner">
+        <p class="text-atelier-walnut mt-2 mb-4 text-xs font-semibold tracking-widest uppercase">
+          Pourquoi cliquer&nbsp;?
+        </p>
+        <ul class="grid grid-cols-1 gap-3 text-left sm:grid-cols-3">
+          @for (p of proofs; track p.title; let i = $index) {
+            <li
+              class="anim-proof-card bg-atelier-surface rounded-2xl p-5"
+              [style.transition-delay.ms]="proofOpen() ? 150 + i * 120 : 0"
+            >
+              <span class="font-atelier-heading text-atelier-walnut block text-3xl font-semibold">{{
+                p.figure
+              }}</span>
+              <span class="font-atelier-heading mt-1 block font-semibold">{{ p.title }}</span>
+              <span class="text-atelier-ink-soft mt-1 block text-sm">{{ p.text }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    </div>
   </section>
 
   <!-- Messaging pillars, docs/positioning.md -->

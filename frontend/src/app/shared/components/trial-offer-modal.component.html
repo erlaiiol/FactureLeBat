@@ -1,4 +1,4 @@
-@if (trialOfferService.visible() && offer(); as offer) {
+@if (shown() && offer(); as offer) {
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4"
     role="dialog"
@@ -26,7 +26,11 @@
 
       <div class="flex flex-col items-center gap-1 text-center">
         <h2 class="font-heading text-lg font-bold tracking-wide text-ink uppercase">
-          Bravo pour votre 1ère facture !
+          {{
+            trialOfferService.documentType() === 'DEVIS'
+              ? 'Bravo pour votre 1er devis !'
+              : 'Bravo pour votre 1ère facture !'
+          }}
         </h2>
         <p class="text-sm text-ink-soft">
           @if (platformService.isIosApp()) {

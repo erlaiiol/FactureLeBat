@@ -103,6 +103,30 @@ export class TourService {
   );
   readonly isLastStep = computed(() => this.stepIndex() === this.stepCount() - 1);
 
+  // Indices of steps this run jumped over (showIf false, anchor that never
+  // mounted, a `next` jump past another branch). The "Étape X / Y" label
+  // counts only the steps actually in play: with raw indices an artisan who
+  // already has a client read "7 / 22" then "15 / 22" with nothing between.
+  private readonly skippedIndices = signal<ReadonlySet<number>>(new Set());
+  readonly displayStepNumber = computed(() => {
+    const index = this.stepIndex();
+    let skippedBefore = 0;
+    for (const skipped of this.skippedIndices()) {
+      if (skipped < index) {
+        skippedBefore++;
+      }
+    }
+    return index + 1 - skippedBefore;
+  });
+  readonly displayStepCount = computed(() => this.stepCount() - this.skippedIndices().size);
+
+  // Steps revealed before the current one, so "Retour" can walk back over
+  // exactly what the artisan saw (not the skipped ones).
+  private history: number[] = [];
+  readonly canGoBack = signal(false);
+  private anchorWatchTimer: ReturnType<typeof setInterval> | null = null;
+  private stepIsRevealed = false;
+
   constructor() {
     // Best-effort load, same reasoning as InvoiceDraftStore's company/customers
     // loads: a failure here just means the tour never auto-launches, it never
@@ -187,6 +211,7 @@ export class TourService {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ error: () => {} });
     if (enabled && pendingTourId && pendingTourId === this.currentRouteTourId()) {
+      this.resetProgress();
       this.activeTourId.set(pendingTourId);
       void this.advanceToStep(0);
     }
@@ -216,7 +241,28 @@ export class TourService {
       this.persistCompletion();
       return;
     }
+    const step = this.currentStep();
+    if (!firedAnchorId && step?.suivantClicksAnchor && step.anchorId) {
+      const element = this.anchorRegistry.get(step.anchorId)?.nativeElement;
+      if (element) {
+        // The overlay's advanceOn listener on this element calls back into
+        // next(anchorId), which picks the right branch.
+        element.click();
+        return;
+      }
+    }
     void this.advanceToStep(this.resolveNextIndex(firedAnchorId));
+  }
+
+  previous(): void {
+    if (!this.activeTourId() || this.advancing()) {
+      return;
+    }
+    const target = this.history.pop();
+    this.canGoBack.set(this.history.length > 0);
+    if (target !== undefined) {
+      void this.advanceToStep(target, -1);
+    }
   }
 
   private resolveNextIndex(firedAnchorId?: string): number {
@@ -247,6 +293,7 @@ export class TourService {
     if (!tourId) {
       return;
     }
+    this.resetProgress();
     this.activeTourId.set(tourId);
     void this.advanceToStep(0);
   }
@@ -291,6 +338,7 @@ export class TourService {
       this.optInPromptVisible.set(true);
       return;
     }
+    this.resetProgress();
     this.activeTourId.set(tourId);
     void this.advanceToStep(0);
   }
@@ -331,17 +379,20 @@ export class TourService {
   // Navigates first if the target step lives on a different route, then
   // waits for its anchor to mount before revealing it — if the anchor never
   // shows up (timeout), the step is skipped rather than spotlighting nothing.
-  private async advanceToStep(index: number): Promise<void> {
+  private async advanceToStep(index: number, direction: 1 | -1 = 1): Promise<void> {
     this.advancing.set(true);
     try {
       const steps = this.steps();
+      if (index < 0) {
+        return;
+      }
       if (index >= steps.length) {
         this.persistCompletion();
         return;
       }
       const step = steps[index];
       if (step.showIf && !(await this.evaluateShowIf(step.showIf))) {
-        await this.advanceToStep(index + 1);
+        await this.advanceToStep(index + direction, direction);
         return;
       }
       if (step.route && step.route !== this.router.url) {
@@ -355,14 +406,70 @@ export class TourService {
       if (step.anchorId) {
         const found = await this.waitForAnchor(step.anchorId);
         if (!found) {
-          await this.advanceToStep(index + 1);
+          await this.advanceToStep(index + direction, direction);
           return;
         }
       }
+      this.recordReveal(index, direction);
       this.stepIndex.set(index);
+      this.watchAdvanceAnchor(step);
     } finally {
       this.advancing.set(false);
     }
+  }
+
+  private recordReveal(index: number, direction: 1 | -1): void {
+    const previous = this.stepIndex();
+    if (direction === 1 && index > previous) {
+      if (this.stepIsRevealed) {
+        this.history.push(previous);
+        this.canGoBack.set(true);
+      }
+      if (index > previous + 1) {
+        const skipped = new Set(this.skippedIndices());
+        for (let skippedIndex = previous + 1; skippedIndex < index; skippedIndex++) {
+          skipped.add(skippedIndex);
+        }
+        this.skippedIndices.set(skipped);
+      }
+    }
+    this.stepIsRevealed = true;
+  }
+
+  // For a step that waits on something appearing (a picked product turning
+  // into a line with its quantity field) rather than a click on its own
+  // anchor — see TourStepDefinition.advanceWhenAnchor.
+  private watchAdvanceAnchor(step: TourStepDefinition): void {
+    this.stopAnchorWatch();
+    const watch = step.advanceWhenAnchor;
+    if (!watch) {
+      return;
+    }
+    this.anchorWatchTimer = setInterval(() => {
+      if (!this.anchorRegistry.get(watch.anchorId) || this.advancing()) {
+        return;
+      }
+      this.stopAnchorWatch();
+      const index = this.steps().findIndex((candidate) => candidate.id === watch.next);
+      if (index !== -1) {
+        void this.advanceToStep(index);
+      }
+    }, ANCHOR_POLL_INTERVAL_MS * 3);
+  }
+
+  private stopAnchorWatch(): void {
+    if (this.anchorWatchTimer !== null) {
+      clearInterval(this.anchorWatchTimer);
+      this.anchorWatchTimer = null;
+    }
+  }
+
+  private resetProgress(): void {
+    this.stopAnchorWatch();
+    this.history = [];
+    this.canGoBack.set(false);
+    this.skippedIndices.set(new Set());
+    this.stepIsRevealed = false;
   }
 
   // On a failed fetch, every condition resolves to false — both the
@@ -427,6 +534,7 @@ export class TourService {
   // through an unrelated navigation isn't a "seen it, don't show again"
   // signal, so the tour is still offered next time the artisan comes back.
   private abandonActiveTour(): void {
+    this.resetProgress();
     this.activeTourId.set(null);
     this.stepIndex.set(0);
   }
@@ -436,6 +544,7 @@ export class TourService {
     if (!tourId) {
       return;
     }
+    this.resetProgress();
     this.activeTourId.set(null);
     this.stepIndex.set(0);
     this.onboardingService

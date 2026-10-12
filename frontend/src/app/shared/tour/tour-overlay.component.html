@@ -1,14 +1,12 @@
+<!-- Announces each step once, on change — the visible card below is not a
+     live region itself, or a screen reader would re-read its buttons too. -->
+<p class="sr-only" role="status" aria-live="polite">{{ announcement() }}</p>
 @if (tourService.currentStep(); as step) {
   <!-- pointer-events-none here (and aria-modal="false") is deliberate: the
        spotlighted element underneath must stay fillable/clickable while its
        tour step is showing — only the dimmed backdrop path and the popover
        below opt back into pointer-events-auto. -->
-  <div
-    class="pointer-events-none fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="false"
-    aria-live="polite"
-  >
+  <div class="pointer-events-none fixed inset-0 z-50" [class.invisible]="foreignModalOpen()">
     <svg class="absolute inset-0 h-full w-full">
       <!-- pointer-events-none while advancing(): a step transition can open
            real UI (see 'product-pick' in tour-definitions.ts) before its own
@@ -31,7 +29,13 @@
          guiding the artisan through. -->
     <div
       #popoverCard
-      class="bg-atelier-surface text-atelier-ink font-atelier-sans pointer-events-auto absolute w-80 max-w-[calc(100vw-24px)] rounded-2xl p-5 shadow-2xl transition-[top,left] duration-200"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="tour-step-title"
+      aria-describedby="tour-step-body"
+      tabindex="-1"
+      (keydown.escape)="tourService.skip()"
+      class="bg-atelier-surface focus:outline-none text-atelier-ink font-atelier-sans pointer-events-auto absolute w-80 max-w-[calc(100vw-24px)] rounded-2xl p-5 shadow-2xl transition-[top,left] duration-200"
       [class.anim-tour-step-in]="stepAnimating()"
       [class.anim-tour-completion-glow]="isCelebrating()"
       [style.top.px]="popoverPosition().top"
@@ -53,7 +57,7 @@
       <p
         class="mb-1 text-xs font-semibold tracking-wide text-[var(--color-atelier-walnut)] uppercase"
       >
-        Étape {{ tourService.stepIndex() + 1 }} / {{ tourService.stepCount() }}
+        Étape {{ tourService.displayStepNumber() }} / {{ tourService.displayStepCount() }}
       </p>
       <div class="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-atelier-bg)]">
         <div
@@ -61,28 +65,48 @@
           [style.width.%]="progressPercent()"
         ></div>
       </div>
-      <h2 class="font-atelier-heading mb-1 text-lg font-semibold">{{ step.title }}</h2>
-      <p class="text-atelier-ink-soft mb-4 text-sm">{{ step.body }}</p>
+      <h2 id="tour-step-title" class="font-atelier-heading mb-1 text-lg font-semibold">
+        {{ step.title }}
+      </h2>
+      <p id="tour-step-body" class="text-atelier-ink-soft mb-4 text-sm">{{ step.body }}</p>
+      @if (step.requiresAction) {
+        <p class="mb-4 text-sm font-semibold text-[var(--color-atelier-walnut)]">
+          👆 Faites cette action pour continuer.
+        </p>
+      }
       <div class="flex items-center justify-end gap-2">
+        @if (tourService.canGoBack()) {
+          <button
+            type="button"
+            [disabled]="tourService.advancing()"
+            class="text-atelier-ink-soft mr-auto min-h-11 rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--color-atelier-bg)] disabled:cursor-not-allowed disabled:opacity-60"
+            (click)="tourService.previous()"
+          >
+            Retour
+          </button>
+        }
         @if (!tourService.isLastStep()) {
           <button
             type="button"
             [disabled]="tourService.advancing()"
-            class="text-atelier-ink-soft rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--color-atelier-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Quitter le tutoriel"
+            class="text-atelier-ink-soft min-h-11 rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--color-atelier-bg)] disabled:cursor-not-allowed disabled:opacity-60"
             (click)="tourService.skip()"
           >
-            Passer
+            Quitter
           </button>
         }
-        <button
-          type="button"
-          [disabled]="tourService.advancing()"
-          class="rounded-lg bg-[var(--color-atelier-walnut)] px-4 py-2 text-sm font-semibold text-[var(--color-atelier-surface)] transition hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
-          [class.animate-pulse]="tourService.isLastStep()"
-          (click)="tourService.next()"
-        >
-          {{ tourService.isLastStep() ? 'Terminer' : 'Suivant' }}
-        </button>
+        @if (!step.requiresAction) {
+          <button
+            type="button"
+            [disabled]="tourService.advancing()"
+            class="min-h-11 rounded-lg bg-[var(--color-atelier-walnut)] px-4 py-2 text-sm font-semibold text-[var(--color-atelier-surface)] transition hover:brightness-90 disabled:cursor-not-allowed disabled:opacity-60"
+            [class.animate-pulse]="tourService.isLastStep()"
+            (click)="tourService.next()"
+          >
+            {{ tourService.isLastStep() ? 'Terminer' : 'Suivant' }}
+          </button>
+        }
       </div>
     </div>
   </div>

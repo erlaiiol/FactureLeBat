@@ -487,8 +487,15 @@ describe('TourService', () => {
     expect(service.currentStep()?.id).toBe('service-margin');
   });
 
+  function seedFolders(folders: unknown[]): void {
+    const folderService = TestBed.inject(CatalogFolderService);
+    folderService.getAllCached().subscribe();
+    httpMock.expectOne(`${environment.apiBaseUrl}/catalog-folders`).flush(folders);
+  }
+
   it('branches the add-line step to product-pick, not straight to product-quantity, when the product button is the one clicked', async () => {
     const service = createService();
+    seedFolders([]);
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
@@ -498,76 +505,124 @@ describe('TourService', () => {
     registerAnchor('invoice-product-flyout');
 
     service.next('invoice-add-product-button');
-    await Promise.resolve();
+    await flushAsync();
 
     expect(service.currentStep()?.id).toBe('product-pick');
   });
 
-  // Phase 1.1-10: the folder-aware alternative inserted right after
-  // 'product-pick'/'service-margin' — only ever shown to an artisan who's
-  // already created at least one dossier, and a no-op (straight through to
-  // 'product-quantity'/'service-card') otherwise.
-  it('shows the folders hint after product-pick when the artisan already has at least one folder', async () => {
+  // Phase 1.1-10: the folder-aware alternative sits BEFORE 'product-pick'
+  // (while the flyout is still open — once a product is picked the flyout
+  // closes, so a hint about it afterwards had nothing left to point at) —
+  // only ever shown to an artisan who's already created at least one dossier.
+  it('shows the folders hint before product-pick when the artisan already has at least one folder', async () => {
     const service = createService();
-    const folderService = TestBed.inject(CatalogFolderService);
+    seedFolders([{ id: 'f1', name: 'Plomberie' }]);
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
     service.stepIndex.set(6); // 'add-line'
     registerAnchor('invoice-product-flyout');
-    folderService.getAllCached().subscribe();
-    httpMock
-      .expectOne(`${environment.apiBaseUrl}/catalog-folders`)
-      .flush([{ id: 'f1', name: 'Plomberie' }]);
 
-    service.next('invoice-add-product-button'); // -> product-pick
+    service.next('invoice-add-product-button');
     await flushAsync();
-    expect(service.currentStep()?.id).toBe('product-pick');
-
-    service.next(); // "Suivant" -> should land on product-folders-hint, not product-quantity
-    await flushAsync();
-
     expect(service.currentStep()?.id).toBe('product-folders-hint');
+
+    service.next();
+    await flushAsync();
+    expect(service.currentStep()?.id).toBe('product-pick');
   });
 
-  it('skips straight to product-quantity, with no folders hint, for an artisan with zero dossiers', async () => {
+  it('moves from product-pick to product-quantity by itself once the picked product becomes a line', async () => {
     const service = createService();
-    const folderService = TestBed.inject(CatalogFolderService);
+    seedFolders([]);
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
     service.stepIndex.set(6); // 'add-line'
     registerAnchor('invoice-product-flyout');
-    folderService.getAllCached().subscribe();
-    httpMock.expectOne(`${environment.apiBaseUrl}/catalog-folders`).flush([]);
-    registerAnchor('invoice-line-quantity');
 
-    service.next('invoice-add-product-button'); // -> product-pick
+    service.next('invoice-add-product-button');
     await flushAsync();
     expect(service.currentStep()?.id).toBe('product-pick');
+    expect(service.currentStep()?.requiresAction).toBe(true);
 
-    service.next(); // no folders -> product-folders-hint is skipped entirely
-    await flushAsync();
+    registerAnchor('invoice-line-quantity'); // the line's quantity field mounts
+    await new Promise<void>((resolve) => setTimeout(resolve, 400));
 
     expect(service.currentStep()?.id).toBe('product-quantity');
+  });
+
+  it('"Suivant" on add-line presses the product button instead of skipping ahead', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    service.stepIndex.set(6); // 'add-line'
+    const button = document.createElement('button');
+    const clicked = vi.fn();
+    button.addEventListener('click', clicked);
+    TestBed.inject(TourAnchorRegistryService).register(
+      'invoice-add-product-button',
+      new ElementRef(button),
+    );
+
+    service.next();
+
+    expect(clicked).toHaveBeenCalledTimes(1);
+    expect(service.stepIndex()).toBe(6);
+  });
+
+  it('counts only the steps in play: skipped steps drop out of the displayed number and total', async () => {
+    const service = createService();
+    seedCustomers([{ id: 'c1', name: 'Client Test' }]);
+    await harness.navigateByUrl('/factures/nouvelle/rapide/client');
+    service.activeTourId.set('invoice-creation');
+    service.stepIndex.set(2);
+    registerAnchor('invoice-customer-picker');
+
+    service.next();
+    await flushAsync();
+
+    // Raw index 5 (two noCustomers steps skipped) reads as step 4.
+    expect(service.stepIndex()).toBe(5);
+    expect(service.displayStepNumber()).toBe(4);
+    expect(service.displayStepCount()).toBe(service.stepCount() - 2);
+  });
+
+  it('"Retour" goes back to the previous revealed step', async () => {
+    const service = createService();
+    registerAnchor('invoice-devis-facture-toggle');
+    registerAnchor('invoice-mode-choice');
+    await harness.navigateByUrl('/factures/nouvelle'); // auto-starts at step 0
+    expect(service.stepIndex()).toBe(0);
+    expect(service.canGoBack()).toBe(false);
+
+    service.next();
+    await flushAsync();
+    service.next();
+    await flushAsync();
+    expect(service.stepIndex()).toBe(2);
+    expect(service.canGoBack()).toBe(true);
+
+    service.previous();
+    await flushAsync();
+    expect(service.stepIndex()).toBe(1);
   });
 
   // Phase 1.1-10: the acompte step's anchor only mounts on a FACTURE (see
   // invoice-create-preview-step.page.html's own @if) — on a DEVIS it's
   // skipped exactly like any other missing anchor, no showIf needed.
   it('skips the deposit step when its anchor never mounts (e.g. a DEVIS, which has no deposit field)', async () => {
-    vi.useFakeTimers();
     const service = createService();
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
-    const totalIndex = service.steps().findIndex((step) => step.id === 'total');
-    service.stepIndex.set(totalIndex);
-    registerAnchor('invoice-preview');
+    const previewIndex = service.steps().findIndex((step) => step.id === 'preview');
+    service.stepIndex.set(previewIndex);
+    registerAnchor('invoice-submit-button');
 
     service.next(); // -> 'deposit', whose anchor is never registered here
-    await vi.advanceTimersByTimeAsync(2100);
+    await new Promise<void>((resolve) => setTimeout(resolve, 2300));
 
-    expect(service.currentStep()?.id).toBe('preview');
+    expect(service.currentStep()?.id).toBe('submit-cta');
   });
 
   // Regression test: 'deposit' declares its own `route` (the preview step's
@@ -580,8 +635,8 @@ describe('TourService', () => {
     const service = createService();
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
-    const totalIndex = service.steps().findIndex((step) => step.id === 'total');
-    service.stepIndex.set(totalIndex);
+    const previewIndex = service.steps().findIndex((step) => step.id === 'preview');
+    service.stepIndex.set(previewIndex);
     registerAnchor('invoice-deposit-toggle');
 
     service.next();

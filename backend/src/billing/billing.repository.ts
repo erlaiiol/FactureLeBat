@@ -139,8 +139,20 @@ export class BillingRepository {
       appleSubscriptionStatus: SubscriptionStatus;
       appleSubscriptionPlanTier: PlanTier | null;
     },
-  ): Promise<void> {
-    return this.prisma.company.update({ where: { id: companyId }, data }).then(() => undefined);
+    eventAt: Date,
+  ): Promise<boolean> {
+    // Conditional on the stored event time (ties accepted) so a late,
+    // older notification never overwrites a newer state. Returns whether
+    // the update was applied.
+    return this.prisma.company
+      .updateMany({
+        where: {
+          id: companyId,
+          OR: [{ appleEventAt: null }, { appleEventAt: { lte: eventAt } }],
+        },
+        data: { ...data, appleEventAt: eventAt },
+      })
+      .then((result) => result.count > 0);
   }
 
   // Phase 30: catalog-capacity checks (PlanGateService.assertCatalogCapacity)
@@ -188,15 +200,26 @@ export class BillingRepository {
       currentPeriodEnd: Date | null;
       cancelAtPeriodEnd: boolean;
     },
-  ): Promise<void> {
+    eventAt: Date,
+  ): Promise<boolean> {
     // A confirmed subscription event means any pending referral-discount
     // coupon (see setPendingReferralDiscount) either just got attached to
     // the Checkout Session that produced this subscription, or was never
     // relevant to begin with — either way there is nothing left "pending"
     // once a real subscription exists. Harmless no-op when already false.
+    //
+    // Conditional on the stored event time (ties accepted): Stripe doesn't
+    // guarantee webhook order, so an older event arriving late is dropped
+    // instead of rolling the company back. Returns whether it was applied.
     return this.prisma.company
-      .update({ where: { id: companyId }, data: { ...data, pendingReferralDiscount: false } })
-      .then(() => undefined);
+      .updateMany({
+        where: {
+          id: companyId,
+          OR: [{ stripeEventAt: null }, { stripeEventAt: { lte: eventAt } }],
+        },
+        data: { ...data, stripeEventAt: eventAt, pendingReferralDiscount: false },
+      })
+      .then((result) => result.count > 0);
   }
 
   // Phase 29: set when a filleul's Stripe discount coupon couldn't be

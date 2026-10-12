@@ -840,3 +840,43 @@ input[type='date']::-webkit-calendar-picker-indicator {
   border-color: var(--color-danger);
   background-color: color-mix(in srgb, var(--color-danger) 10%, var(--color-atelier-surface));
 }
+
+/* Landing CTA proof strip: closed = 0fr row + transparent + shifted up;
+   open = the row grows to content height while the cards fade/slide down
+   in a stagger (delays set inline). Opens once on first scroll, never
+   ambient. */
+.anim-proof-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-12px);
+  transition:
+    grid-template-rows 700ms var(--ease-out-sharp),
+    opacity 600ms var(--ease-out-sharp),
+    transform 700ms var(--ease-out-sharp);
+}
+.anim-proof-reveal.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: none;
+}
+.anim-proof-reveal-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.anim-proof-card {
+  opacity: 0;
+  transform: translateY(-16px);
+  transition:
+    opacity 500ms var(--ease-out-sharp),
+    transform 600ms var(--ease-out-sharp);
+}
+.is-open .anim-proof-card {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-proof-card {
+    transition-delay: 0ms !important;
+  }
+}

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { IconCheckComponent } from '../../shared/components/icon-check.component';
@@ -16,6 +16,35 @@ import { IconCheckComponent } from '../../shared/components/icon-check.component
 export class LandingPage {
   private readonly title = inject(Title);
   private readonly meta = inject(Meta);
+
+  // Proof strip under the hero CTA: hidden at rest, revealed once (never
+  // re-hidden) as soon as the visitor scrolls past the first few pixels.
+  protected readonly proofOpen = signal(false);
+
+  protected readonly proofs = [
+    {
+      figure: '3,7×',
+      title: 'Plus de devis signés',
+      text: 'Les devis transformés en factures, en moyenne, quand tout part en un clic devant le client.',
+    },
+    {
+      figure: '0',
+      title: 'Relance à écrire',
+      text: 'Vos clients sont relancés automatiquement. Vous, vous continuez à travailler.',
+    },
+    {
+      figure: '100\u00a0%',
+      title: 'Compta sur pilote automatique',
+      text: 'Chaque facture alimente votre comptabilité toute seule. Fini la ressaisie du dimanche soir.',
+    },
+  ];
+
+  @HostListener('window:scroll')
+  protected onScroll(): void {
+    if (!this.proofOpen() && window.scrollY > 24) {
+      this.proofOpen.set(true);
+    }
+  }
 
   constructor() {
     this.title.setTitle('FactureLe — Devis et factures en un clic, quoi que vous fassiez');

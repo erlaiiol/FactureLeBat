@@ -405,6 +405,11 @@ model Company {
   subscriptionStatus   SubscriptionStatus @default(NONE)
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean            @default(false)
+  // Stripe's `created` time of the last webhook event applied to the fields
+  // above. Stripe doesn't guarantee delivery order, so an older event
+  // arriving late must not overwrite a newer one (see
+  // BillingRepository.applySubscriptionUpdate). Null until the first event.
+  stripeEventAt        DateTime?
 
   // Phase 30: which of the 3 tiers the active Stripe subscription above is
   // for, resolved from the subscription's Stripe price id against
@@ -436,6 +441,9 @@ model Company {
   // product id doesn't match any configured tier, never guessed" rule
   // subscriptionPlanTier already has for Stripe price ids.
   appleSubscriptionPlanTier PlanTier?
+  // signedDate of the last Apple transaction/notification applied to the 3
+  // apple* fields above — same out-of-order protection as stripeEventAt.
+  appleEventAt              DateTime?
 
   // Premium access granted outside Stripe — an admin's manual grant or a
   // redeemed PromoCode, both funnel through these two fields together (see

@@ -11,7 +11,9 @@ test.describe('Sign-up tutorial opt-in', () => {
 
     await optInDialog(page).getByRole('button', { name: 'Oui', exact: true }).click();
 
-    await expect(page.getByText('Bienvenue sur FactureLe !')).toBeVisible();
+    // Heading, not getByText: the tour also mirrors each step into an
+    // sr-only live region, which getByText would match a second time.
+    await expect(page.getByRole('heading', { name: 'Bienvenue sur FactureLe !' })).toBeVisible();
     await expect(page.getByText(/Étape 1 \//)).toBeVisible();
   });
 

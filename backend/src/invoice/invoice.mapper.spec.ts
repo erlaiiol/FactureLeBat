@@ -71,6 +71,8 @@ function companyFixture(overrides: Partial<CompanyModel> = {}): CompanyModel {
     appleOriginalTransactionId: null,
     appleSubscriptionStatus: 'NONE',
     appleSubscriptionPlanTier: null,
+    stripeEventAt: null,
+    appleEventAt: null,
     lastInvoiceNudgeAt: null,
     createdAt: new Date('2026-01-15'),
     updatedAt: new Date('2026-01-15'),

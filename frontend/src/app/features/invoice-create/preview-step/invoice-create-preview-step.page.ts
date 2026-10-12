@@ -629,7 +629,11 @@ export class InvoiceCreatePreviewStepPage {
           this.creating.set(false);
           this.createdInvoice.set(invoice);
           this.draftStore.reset();
-          showTrialOfferAfterFirstInvoice(this.billingService, this.trialOfferService);
+          showTrialOfferAfterFirstInvoice(
+            this.billingService,
+            this.trialOfferService,
+            invoice.documentType,
+          );
         },
         error: (error: HttpErrorResponse) => {
           this.creating.set(false);
