@@ -38,6 +38,7 @@ import { ToastContainerComponent } from './shared/components/toast-container.com
 import { TrialOfferModalComponent } from './shared/components/trial-offer-modal.component';
 import { TourAnchorDirective } from './shared/tour/tour-anchor.directive';
 import { TourService } from './shared/tour/tour.service';
+import { TourOptInModalComponent } from './shared/tour/tour-opt-in-modal.component';
 import { TourOverlayComponent } from './shared/tour/tour-overlay.component';
 import { LastClickOriginService } from './shared/utils/last-click-origin.service';
 
@@ -111,6 +112,7 @@ const ENTER_TO_DISMISS_INPUT_TYPES = new Set([
     RouterLink,
     RouterLinkActive,
     TourOverlayComponent,
+    TourOptInModalComponent,
     PaywallModalComponent,
     CompanyEssentialsModalComponent,
     TrialOfferModalComponent,

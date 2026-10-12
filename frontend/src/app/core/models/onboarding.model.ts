@@ -16,6 +16,7 @@ export type TourId = (typeof TOUR_IDS)[number];
 export interface OnboardingState {
   tourEnabled: boolean;
   completedTours: TourId[];
+  tourPreferenceChosen: boolean;
 }
 
 // Mirrors backend/src/onboarding/entities/legal-status-confirmation.entity.ts

@@ -73,6 +73,18 @@
               "sourceMap": true,
               "index": "src/index.dev.html"
             },
+            "e2e": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "index": "src/index.dev.html",
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.e2e.ts"
+                }
+              ]
+            },
             "capacitor-dev": {
               "index": "src/index.capacitor-dev.html",
               "fileReplacements": [
@@ -93,6 +105,9 @@
             },
             "development": {
               "buildTarget": "frontend:build:development"
+            },
+            "e2e": {
+              "buildTarget": "frontend:build:e2e"
             }
           },
           "defaultConfiguration": "development"

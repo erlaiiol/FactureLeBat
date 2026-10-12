@@ -4,7 +4,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { EMPTY, catchError, firstValueFrom, switchMap, take, takeWhile, timer } from 'rxjs';
 import { BillingStatus, PlanCatalog, PlanTier } from '../../core/models/billing.model';
 import { BillingService } from '../../core/services/billing.service';
 import {
@@ -147,6 +147,9 @@ export class SubscribePage {
 
   constructor() {
     this.loadStatus();
+    if (this.redirectNotice === 'success') {
+      this.pollUntilPremium();
+    }
     this.billingService
       .getPlans()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -200,8 +203,13 @@ export class SubscribePage {
     }
   }
 
+  // Only blanks the page behind a skeleton on the very first load — a
+  // refresh after a purchase/promo/poll updates the cards in place instead
+  // of tearing the whole page down and rebuilding it.
   private loadStatus(): void {
-    this.loading.set(true);
+    if (this.status() === null) {
+      this.loading.set(true);
+    }
     this.billingService
       .refreshStatus()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -209,6 +217,22 @@ export class SubscribePage {
         next: () => this.loading.set(false),
         error: () => this.loading.set(false),
       });
+  }
+
+  // Back from Stripe Checkout, the subscription only exists once the
+  // webhook has landed — usually a second or two after the redirect, so a
+  // single fetch on arrival often still shows "no subscription". Poll
+  // until access appears (or give up quietly after ~30s; the visibility
+  // refresh in BillingService still catches a late webhook).
+  private pollUntilPremium(): void {
+    timer(2000, 2000)
+      .pipe(
+        take(15),
+        switchMap(() => this.billingService.refreshStatus().pipe(catchError(() => EMPTY))),
+        takeWhile((status) => !status.hasPremiumAccess, true),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe();
   }
 
   protected subscribe(tier: PlanTier): void {

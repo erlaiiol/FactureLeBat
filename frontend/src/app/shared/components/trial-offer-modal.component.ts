@@ -10,9 +10,11 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { BillingService } from '../../core/services/billing.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { TrialOfferService } from '../../core/services/trial-offer.service';
+import { TourService } from '../tour/tour.service';
 import { BadgeComponent } from './badge.component';
 import { BigButtonComponent } from './big-button.component';
 import { IconCloseComponent } from './icon-close.component';
@@ -40,7 +42,16 @@ export class TrialOfferModalComponent {
   protected readonly trialOfferService = inject(TrialOfferService);
   protected readonly billingService = inject(BillingService);
   protected readonly platformService = inject(PlatformService);
+  private readonly tourService = inject(TourService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
+
+  // See TrialOfferService.waitForTourEnd.
+  protected readonly shown = computed(
+    () =>
+      this.trialOfferService.visible() &&
+      !(this.trialOfferService.waitForTourEnd() && this.tourService.activeTourId()),
+  );
 
   protected readonly offer = computed(() => this.billingService.status()?.trialOffer ?? null);
 
@@ -54,7 +65,7 @@ export class TrialOfferModalComponent {
   // signal once a second for a countdown nobody is looking at, given this
   // component stays mounted for the entire app lifetime.
   private readonly tickEffect = effect(() => {
-    if (this.trialOfferService.visible() && this.offer()) {
+    if (this.shown() && this.offer()) {
       this.startTicking();
     } else {
       this.stopTicking();
@@ -113,6 +124,13 @@ export class TrialOfferModalComponent {
     if (this.trialOfferService.visible()) {
       this.trialOfferService.dismiss();
     }
+  }
+
+  // iOS only — see the template: /abonnement's StoreKit2 purchase, same
+  // destination as PaywallModalComponent.goToSubscribe.
+  protected goToSubscribe(): void {
+    this.trialOfferService.dismiss();
+    void this.router.navigateByUrl('/abonnement');
   }
 
   protected subscribeNow(): void {

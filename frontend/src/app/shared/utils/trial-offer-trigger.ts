@@ -17,11 +17,12 @@ import { TrialOfferService } from '../../core/services/trial-offer.service';
 export function showTrialOfferAfterFirstInvoice(
   billingService: BillingService,
   trialOfferService: TrialOfferService,
+  documentType: 'FACTURE' | 'DEVIS' = 'FACTURE',
 ): void {
   billingService.refreshStatus().subscribe({
     next: (status) => {
       if (status.trialOffer) {
-        trialOfferService.show();
+        trialOfferService.show({ documentType, waitForTourEnd: true });
       }
     },
     error: () => {

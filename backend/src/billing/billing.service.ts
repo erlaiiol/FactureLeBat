@@ -290,11 +290,15 @@ export class BillingService {
         `Apple purchase product id ${transaction.productId ?? '(none)'} does not match any configured tier (company ${companyId}) — appleSubscriptionPlanTier left unresolved.`,
       );
     }
-    await this.repository.applyAppleSubscriptionUpdate(companyId, {
-      appleOriginalTransactionId: originalTransactionId,
-      appleSubscriptionStatus: statusFromVerifiedTransaction(transaction),
-      appleSubscriptionPlanTier: tier,
-    });
+    await this.repository.applyAppleSubscriptionUpdate(
+      companyId,
+      {
+        appleOriginalTransactionId: originalTransactionId,
+        appleSubscriptionStatus: statusFromVerifiedTransaction(transaction),
+        appleSubscriptionPlanTier: tier,
+      },
+      new Date(transaction.signedDate ?? Date.now()),
+    );
     return { tier };
   }
 
@@ -340,11 +344,15 @@ export class BillingService {
         `Apple notification product id ${transaction.productId ?? '(none)'} does not match any configured tier (company ${companyId}) — appleSubscriptionPlanTier left unresolved.`,
       );
     }
-    await this.repository.applyAppleSubscriptionUpdate(companyId, {
-      appleOriginalTransactionId: originalTransactionId,
-      appleSubscriptionStatus: mapAppleSubscriptionStatus(data.status),
-      appleSubscriptionPlanTier: tier,
-    });
+    await this.repository.applyAppleSubscriptionUpdate(
+      companyId,
+      {
+        appleOriginalTransactionId: originalTransactionId,
+        appleSubscriptionStatus: mapAppleSubscriptionStatus(data.status),
+        appleSubscriptionPlanTier: tier,
+      },
+      new Date(notification.signedDate ?? Date.now()),
+    );
   }
 
   // Phase 29/30: the filleul side of the referral reward — -30% off their
@@ -382,7 +390,7 @@ export class BillingService {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
-        await this.applySubscriptionEvent(event.data.object);
+        await this.applySubscriptionEvent(event.data.object, new Date(event.created * 1000));
         break;
       default:
         // Every other event type is either irrelevant to this app's own
@@ -394,7 +402,10 @@ export class BillingService {
     }
   }
 
-  private async applySubscriptionEvent(subscription: Stripe.Subscription): Promise<void> {
+  private async applySubscriptionEvent(
+    subscription: Stripe.Subscription,
+    eventAt: Date,
+  ): Promise<void> {
     const customerId =
       typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
     const companyId =
@@ -417,12 +428,16 @@ export class BillingService {
         `Stripe subscription ${subscription.id} price id ${priceId ?? '(none)'} does not match any configured tier — subscriptionPlanTier left unresolved.`,
       );
     }
-    await this.repository.applySubscriptionUpdate(companyId, {
-      stripeSubscriptionId: subscription.id,
-      subscriptionStatus: mapStripeSubscriptionStatus(subscription.status),
-      subscriptionPlanTier,
-      currentPeriodEnd: currentPeriodEndUnix ? new Date(currentPeriodEndUnix * 1000) : null,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    });
+    await this.repository.applySubscriptionUpdate(
+      companyId,
+      {
+        stripeSubscriptionId: subscription.id,
+        subscriptionStatus: mapStripeSubscriptionStatus(subscription.status),
+        subscriptionPlanTier,
+        currentPeriodEnd: currentPeriodEndUnix ? new Date(currentPeriodEndUnix * 1000) : null,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      },
+      eventAt,
+    );
   }
 }

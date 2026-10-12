@@ -1,4 +1,12 @@
-<div class="mx-auto flex max-w-2xl flex-col gap-6 pb-44">
+<!-- Bottom padding matches the fixed panel below: the one-time VAT question
+     makes that panel ~250px tall instead of the usual ~170px, and with only
+     pb-44 the last fields (a line's quantity, the "Créer" button) could not
+     be scrolled out from under it. -->
+<div
+  class="mx-auto flex max-w-2xl flex-col gap-6"
+  [class.pb-44]="draftStore.vatRegimeConfirmed()"
+  [class.pb-80]="!draftStore.vatRegimeConfirmed()"
+>
   <nav class="flex items-center justify-between gap-2 text-sm font-medium">
     <div class="flex gap-2">
       @if (!cameFromDevis()) {

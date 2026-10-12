@@ -281,11 +281,15 @@ describe('BillingService.verifyApplePurchase', () => {
     const result = await service.verifyApplePurchase('company-1', 'signed-jws');
 
     expect(result).toEqual({ tier: PlanTier.PRO });
-    expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith('company-1', {
-      appleOriginalTransactionId: 'apple-orig-1',
-      appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
-      appleSubscriptionPlanTier: PlanTier.PRO,
-    });
+    expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith(
+      'company-1',
+      {
+        appleOriginalTransactionId: 'apple-orig-1',
+        appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+        appleSubscriptionPlanTier: PlanTier.PRO,
+      },
+      expect.any(Date),
+    );
   });
 
   it('throws a clear error rather than a raw DB conflict when the transaction is already linked to a different company', async () => {
@@ -343,6 +347,7 @@ describe('BillingService.verifyApplePurchase', () => {
     expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith(
       'company-1',
       expect.objectContaining({ appleSubscriptionStatus: SubscriptionStatus.CANCELED }),
+      expect.any(Date),
     );
   });
 
@@ -361,6 +366,7 @@ describe('BillingService.verifyApplePurchase', () => {
     expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith(
       'company-1',
       expect.objectContaining({ appleSubscriptionPlanTier: null }),
+      expect.any(Date),
     );
   });
 
@@ -397,11 +403,15 @@ describe('BillingService.handleAppleNotification', () => {
     await service.handleAppleNotification('signed-payload');
 
     expect(findCompanyIdByAppleOriginalTransactionId).toHaveBeenCalledWith('apple-orig-1');
-    expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith('company-1', {
-      appleOriginalTransactionId: 'apple-orig-1',
-      appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
-      appleSubscriptionPlanTier: PlanTier.PRO,
-    });
+    expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith(
+      'company-1',
+      {
+        appleOriginalTransactionId: 'apple-orig-1',
+        appleSubscriptionStatus: SubscriptionStatus.ACTIVE,
+        appleSubscriptionPlanTier: PlanTier.PRO,
+      },
+      expect.any(Date),
+    );
   });
 
   it('maps an EXPIRED notification down to CANCELED', async () => {
@@ -427,6 +437,7 @@ describe('BillingService.handleAppleNotification', () => {
     expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith(
       'company-1',
       expect.objectContaining({ appleSubscriptionStatus: SubscriptionStatus.CANCELED }),
+      expect.any(Date),
     );
   });
 
@@ -462,5 +473,32 @@ describe('BillingService.handleAppleNotification', () => {
     await service.handleAppleNotification('signed-payload');
 
     expect(applyAppleSubscriptionUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('BillingService out-of-order protection', () => {
+  it("passes the notification's signedDate to the repository so a late, older event can be dropped", async () => {
+    const {
+      service,
+      verifyNotification,
+      verifyTransaction,
+      findCompanyIdByAppleOriginalTransactionId,
+      applyAppleSubscriptionUpdate,
+    } = buildService({});
+    verifyNotification.mockResolvedValue({
+      notificationType: NotificationTypeV2.EXPIRED,
+      signedDate: 1_700_000_000_000,
+      data: { signedTransactionInfo: 'signed-transaction', status: Status.EXPIRED },
+    });
+    verifyTransaction.mockResolvedValue({ originalTransactionId: 'apple-orig-1' });
+    findCompanyIdByAppleOriginalTransactionId.mockResolvedValue('company-1');
+
+    await service.handleAppleNotification('signed-payload');
+
+    expect(applyAppleSubscriptionUpdate).toHaveBeenCalledWith(
+      'company-1',
+      expect.anything(),
+      new Date(1_700_000_000_000),
+    );
   });
 });

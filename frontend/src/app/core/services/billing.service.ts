@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { Observable, defer, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { BillingStatus, PlanCatalog, PlanTier } from '../models/billing.model';
 
@@ -13,6 +13,26 @@ export class BillingService {
   // reads this on every page to color itself, not just the subscribe page —
   // one shared signal instead of each consumer fetching its own copy.
   readonly status = signal<BillingStatus | null>(null);
+
+  // Latest-wins guard for refreshStatus(): purchase verification, the
+  // success-redirect poll and the visibility refresh below can overlap, and
+  // an older response landing after a newer one would otherwise roll the
+  // shared status back to a stale snapshot.
+  private statusRequestSeq = 0;
+
+  constructor() {
+    // Plans change outside this tab — an admin grant, a Stripe/Apple
+    // webhook landing after checkout — and the status is otherwise fetched
+    // once per login (app.ts). Re-sync whenever the app comes back to the
+    // foreground; only once a status was loaded (i.e. someone is logged in).
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.status() !== null) {
+          this.refreshStatus().subscribe({ error: () => undefined });
+        }
+      });
+    }
+  }
 
   // Phase 30: public, no auth — the 3 tier definitions the pricing UI
   // renders. Not cached in a signal like status() above: this rarely
@@ -27,7 +47,16 @@ export class BillingService {
   }
 
   refreshStatus(): Observable<BillingStatus> {
-    return this.getStatus().pipe(tap((status) => this.status.set(status)));
+    return defer(() => {
+      const seq = ++this.statusRequestSeq;
+      return this.getStatus().pipe(
+        tap((status) => {
+          if (seq === this.statusRequestSeq) {
+            this.status.set(status);
+          }
+        }),
+      );
+    });
   }
 
   // Backend returns a Stripe-hosted URL to redirect the browser to — the

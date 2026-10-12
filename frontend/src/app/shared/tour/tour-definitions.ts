@@ -69,6 +69,20 @@ export interface TourStepDefinition {
   // know about that bigger element and ends up placing the popover right on
   // top of the clicks the step is asking for.
   popoverPlacement?: 'auto' | 'corner';
+  // "Suivant" presses the step's own anchor instead of just moving on — for
+  // a step that asks for a click ('add-line'), so the button does what the
+  // text says rather than skipping past the very thing being explained
+  // (the steps after it need the catalog flyout that click opens).
+  suivantClicksAnchor?: boolean;
+  // Hides "Suivant": the step is waiting for a real action (picking a
+  // product), and "Suivant" would only skip past steps whose anchors don't
+  // exist yet — a multi-second dead wait, then the tour lands somewhere
+  // unrelated. Pair with `advanceWhenAnchor` so the action itself moves on.
+  requiresAction?: boolean;
+  // Moves to `next` as soon as `anchorId` mounts — for an action that
+  // makes something appear (a picked product becoming a line with a
+  // quantity field) rather than being a click/input on the step's own anchor.
+  advanceWhenAnchor?: { anchorId: string; next: string };
   title: string;
   body: string;
 }
@@ -97,7 +111,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
       {
         anchorId: 'invoice-mode-choice',
         title: 'Trois façons de facturer',
-        body: 'Le mode rapide (recommandé) vous guide pas à pas. Le mode manuel ouvre un tableau libre, à remplir comme sur la facture finale. « Décrire à voix haute » remplit le brouillon depuis ce que vous dites ou tapez, à vérifier ensuite. Cliquez sur celui que vous préférez, ou laissez-vous guider en mode rapide avec "Suivant".',
+        body: 'Rapide (recommandé) : vous êtes guidé pas à pas. Manuel : un tableau libre, comme sur le document final. Voix haute : le brouillon se remplit depuis ce que vous dites. Cliquez sur votre choix, ou « Suivant » pour continuer en mode rapide.',
       },
       // Two alternatives for the same moment — whichever matches the real
       // state of the customer list, the other is skipped automatically (see
@@ -131,7 +145,7 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         altAnchorIds: ['invoice-add-service-button'],
         advanceOn: 'click',
         nextByAnchor: {
-          'invoice-add-product-button': 'product-pick',
+          'invoice-add-product-button': 'product-folders-hint',
           'invoice-add-service-button': 'service-margin',
         },
         // The default anchor-relative placement only knows about the small
@@ -139,8 +153,25 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         // it — left on 'auto' it ends up sitting on top of the very
         // product/prestation rows the artisan needs to click next.
         popoverPlacement: 'corner',
+        suivantClicksAnchor: true,
         title: 'Ajoutez un matériau, un produit ou une prestation',
         body: 'Le bouton orange ouvre votre catalogue de produits, le bleu celui de vos prestations (main-d’œuvre, forfait, déplacement…). Cliquez sur celui qu’il vous faut : vous pourrez toujours utiliser l’autre juste après.',
+      },
+      {
+        // Only reached by an artisan who's already created at least one
+        // dossier (Phase 1.1-2) — an artisan with none is never told about a
+        // feature they haven't touched, same reasoning as every other
+        // showIf-gated step in this file. Skipped entirely otherwise,
+        // landing straight on 'product-quantity' just like before this
+        // phase existed.
+        id: 'product-folders-hint',
+        showIf: 'hasFolders',
+        anchorId: 'invoice-product-flyout',
+        next: 'product-pick',
+        advanceWhenAnchor: { anchorId: 'invoice-line-quantity', next: 'product-quantity' },
+        popoverPlacement: 'corner',
+        title: 'Vos produits, classés par dossier',
+        body: 'Vos dossiers apparaissent en premier dans cette liste — dépliez celui du chantier en cours pour retrouver vos produits plus vite. Ceux qui n’appartiennent à aucun dossier restent listés en dessous.',
       },
       {
         // Mirrors 'service-margin' below: the click that opens the flyout
@@ -155,25 +186,12 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         // reachable.
         id: 'product-pick',
         anchorId: 'invoice-product-flyout',
-        next: 'product-folders-hint',
+        next: 'product-quantity',
+        requiresAction: true,
+        advanceWhenAnchor: { anchorId: 'invoice-line-quantity', next: 'product-quantity' },
         popoverPlacement: 'corner',
         title: 'Choisissez un produit',
-        body: 'Cliquez sur un produit déjà enregistré pour l’ajouter à la facture, ou choisissez « + Nouveau produit » pour en créer un. Le catalogue reste ouvert : vous pouvez en ajouter plusieurs à la suite.',
-      },
-      {
-        // Only reached by an artisan who's already created at least one
-        // dossier (Phase 1.1-2) — an artisan with none is never told about a
-        // feature they haven't touched, same reasoning as every other
-        // showIf-gated step in this file. Skipped entirely otherwise,
-        // landing straight on 'product-quantity' just like before this
-        // phase existed.
-        id: 'product-folders-hint',
-        showIf: 'hasFolders',
-        anchorId: 'invoice-product-flyout',
-        next: 'product-quantity',
-        popoverPlacement: 'corner',
-        title: 'Vos produits, classés par dossier',
-        body: 'Vos dossiers apparaissent en premier dans cette liste — dépliez celui du chantier en cours pour retrouver vos produits plus vite. Ceux qui n’appartiennent à aucun dossier restent listés en dessous.',
+        body: 'Cliquez sur un produit déjà enregistré pour l’ajouter à la facture, ou choisissez « + Nouveau produit » pour en créer un. Le tutoriel continue dès que le produit est ajouté.',
       },
       {
         id: 'product-quantity',
@@ -226,6 +244,17 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         body: 'Le montant total se met à jour automatiquement au fur et à mesure de la saisie.',
       },
       {
+        id: 'preview',
+        anchorId: 'invoice-preview',
+        // Must come BEFORE 'deposit': this button only exists on the lines
+        // step (the shell hides it on /apercu), and 'deposit' navigates to
+        // /apercu — placed after it, this step's anchor never mounted and
+        // it was silently skipped on every run. No advanceOn: it opens the
+        // PDF modal, which is the artisan's call, not a step transition.
+        title: 'Prévisualisez à tout moment',
+        body: "Consultez l'aperçu PDF de la facture avant même de l'enregistrer.",
+      },
+      {
         // FACTURE-only (Phase 1.1-3's own scope) — on a DEVIS this anchor
         // never mounts (see the preview step's own @if), so this step times
         // out and is silently skipped, exactly like every other
@@ -243,16 +272,6 @@ export const TOUR_DEFINITIONS: Record<TourId, TourDefinition> = {
         anchorId: 'invoice-deposit-toggle',
         title: 'Demander un acompte (facultatif)',
         body: 'Souvent 30 ou 40 % du total, à recevoir avant de commencer le chantier. Une fois votre pourcentage habituel enregistré dans « Mon entreprise », il se propose automatiquement ici — toujours modifiable pour ce document précis.',
-      },
-      {
-        id: 'preview',
-        anchorId: 'invoice-preview',
-        // No advanceOn: this button is a real routerLink to the /apercu
-        // step (Phase 15's mandatory preview), not a same-page action — the
-        // real navigation it causes is what carries the tour forward (see
-        // 'submit-cta' below), same rule as the customer-picker step.
-        title: 'Prévisualisez à tout moment',
-        body: "Consultez l'aperçu PDF de la facture avant même de l'enregistrer.",
       },
       {
         id: 'submit-cta',

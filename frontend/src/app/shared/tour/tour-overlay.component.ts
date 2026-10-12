@@ -136,6 +136,21 @@ export class TourOverlayComponent {
   // every step change.
   protected readonly stepAnimating = signal(true);
 
+  // A real modal opened mid-step (the quantity bottom sheet on the native
+  // shells, a catalog form…) sits at the same z-index as this overlay but
+  // earlier in the DOM, so the dimmed backdrop and the card landed on top of
+  // it and its OK button was unreachable. The tour steps aside while one is
+  // open and comes back when it closes.
+  protected readonly foreignModalOpen = signal(false);
+  private modalObserver: MutationObserver | null = null;
+
+  protected readonly announcement = computed(() => {
+    const step = this.tourService.currentStep();
+    return step
+      ? `Étape ${this.tourService.displayStepNumber()} sur ${this.tourService.displayStepCount()} : ${step.title}. ${step.body}`
+      : '';
+  });
+
   constructor() {
     // Re-measure the target every time the current step changes — covers
     // both a new anchorId and the anchor-less centered steps (null rect).
@@ -148,6 +163,7 @@ export class TourOverlayComponent {
       this.bindAdvanceListener();
       this.stepAnimating.set(false);
       queueMicrotask(() => this.stepAnimating.set(true));
+      this.moveFocusIntoCard();
     });
 
     // Set up once the popover card first mounts (this effect only ever runs
@@ -183,6 +199,16 @@ export class TourOverlayComponent {
     // reports this. window.visualViewport is undefined on older WebViews;
     // the `?.` above and here just leaves the previous window-only behavior
     // in place for those.
+    const syncForeignModal = (): void =>
+      this.foreignModalOpen.set(!!document.querySelector('[role="dialog"][aria-modal="true"]'));
+    this.modalObserver = new MutationObserver(syncForeignModal);
+    this.modalObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['aria-modal', 'role'],
+    });
+
     const visualViewport = window.visualViewport;
     const onVisualViewportChange = (): void => this.recomputeTargetRect();
     visualViewport?.addEventListener('resize', onVisualViewportChange);
@@ -194,6 +220,7 @@ export class TourOverlayComponent {
         cancelAnimationFrame(this.settleRafHandle);
       }
       this.popoverResizeObserver?.disconnect();
+      this.modalObserver?.disconnect();
       visualViewport?.removeEventListener('resize', onVisualViewportChange);
       visualViewport?.removeEventListener('scroll', onVisualViewportChange);
     });
@@ -210,6 +237,18 @@ export class TourOverlayComponent {
   // window:scroll listener above fires throughout the animation and keeps
   // re-measuring, converging on the right rect by the time it settles. Same
   // "good enough without precise measurement" spirit as POPOVER_ESTIMATE.
+  // Keyboard/screen-reader users otherwise land nowhere near the card (it's
+  // the last thing in the DOM). Skipped on a step whose job is to have the
+  // artisan act on the page (advanceOn / requiresAction) — pulling focus
+  // away from the field they're about to type in would be worse.
+  private moveFocusIntoCard(): void {
+    const step = this.tourService.currentStep();
+    if (!step || step.advanceOn || step.requiresAction) {
+      return;
+    }
+    setTimeout(() => this.popoverCard()?.nativeElement.focus({ preventScroll: true }));
+  }
+
   private scrollToCurrentAnchorAndMeasure(): void {
     const anchorId = this.tourService.currentStep()?.anchorId;
     const element = anchorId ? this.anchorRegistry.get(anchorId)?.nativeElement : undefined;
@@ -224,6 +263,38 @@ export class TourOverlayComponent {
     // typing" bug this works around at the source instead.
     element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     this.recomputeTargetRect();
+    this.keepMeasuringWhileSettling();
+    if (element) {
+      // 'nearest' counts an anchor as visible while it still sits under a
+      // fixed bar (the invoice flow's totals/VAT panel) — checked once the
+      // smooth scroll above has settled.
+      setTimeout(() => this.clearFixedBottomBar(element), 450);
+    }
+  }
+
+  private clearFixedBottomBar(element: HTMLElement): void {
+    const anchorId = this.tourService.currentStep()?.anchorId;
+    if (!anchorId || this.anchorRegistry.get(anchorId)?.nativeElement !== element) {
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    const probeY = Math.min(rect.bottom - 2, window.innerHeight - 2);
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, probeY);
+    if (!hit || element.contains(hit) || hit.contains(element) || hit.closest('app-tour-overlay')) {
+      return;
+    }
+    let bar: HTMLElement | null = hit as HTMLElement;
+    while (bar && getComputedStyle(bar).position !== 'fixed') {
+      bar = bar.parentElement;
+    }
+    if (!bar) {
+      return;
+    }
+    const barTop = bar.getBoundingClientRect().top;
+    if (barTop <= 0 || barTop > rect.bottom) {
+      return;
+    }
+    window.scrollBy({ top: rect.bottom - barTop + 24, behavior: 'smooth' });
     this.keepMeasuringWhileSettling();
   }
 

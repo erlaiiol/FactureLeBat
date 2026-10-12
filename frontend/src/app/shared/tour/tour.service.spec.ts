@@ -6,7 +6,9 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 import { environment } from '../../../environments/environment';
+import { PublicUser } from '../../core/models/auth.model';
 import { OnboardingState } from '../../core/models/onboarding.model';
+import { AuthService } from '../../core/services/auth.service';
 import { CatalogFolderService } from '../../core/services/catalog-folder.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { DiscountService } from '../../core/services/discount.service';
@@ -47,7 +49,20 @@ async function flushAsync(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-const FRESH_STATE: OnboardingState = { tourEnabled: true, completedTours: [] };
+const FRESH_STATE: OnboardingState = {
+  tourEnabled: true,
+  completedTours: [],
+  tourPreferenceChosen: true,
+};
+// A brand-new account that hasn't answered "Activer les tutoriels ?" yet.
+const NEW_ACCOUNT_STATE: OnboardingState = { ...FRESH_STATE, tourPreferenceChosen: false };
+const TEST_USER: PublicUser = {
+  id: 'user-1',
+  email: 'artisan@example.com',
+  role: 'ARTISAN',
+  companyId: 'company-1',
+  emailVerified: true,
+};
 
 describe('TourService', () => {
   let httpMock: HttpTestingController;
@@ -66,11 +81,13 @@ describe('TourService', () => {
     vi.useRealTimers();
   });
 
-  // Constructing the service (providedIn: 'root') fires the best-effort
-  // onboarding-state load from its constructor — flush it the same way for
-  // every test, matching InvoiceDraftStore's test pattern.
+  // The service (providedIn: 'root') loads the onboarding state as soon as
+  // a user is signed in — sign one in, run that effect, and flush the load
+  // the same way for every test, matching InvoiceDraftStore's test pattern.
   function createService(initialState: OnboardingState = FRESH_STATE): TourService {
+    TestBed.inject(AuthService).currentUser.set(TEST_USER);
     const service = TestBed.inject(TourService);
+    TestBed.tick();
     httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`).flush(initialState);
     return service;
   }
@@ -112,7 +129,7 @@ describe('TourService', () => {
   });
 
   it('does not auto-start a tour already in completedTours', async () => {
-    const service = createService({ tourEnabled: true, completedTours: ['customers'] });
+    const service = createService({ ...FRESH_STATE, completedTours: ['customers'] });
 
     await harness.navigateByUrl('/clients');
 
@@ -120,11 +137,87 @@ describe('TourService', () => {
   });
 
   it('does not auto-start anything when tourEnabled is false', async () => {
-    const service = createService({ tourEnabled: false, completedTours: [] });
+    const service = createService({ ...FRESH_STATE, tourEnabled: false });
 
     await harness.navigateByUrl('/clients');
 
     expect(service.activeTourId()).toBeNull();
+  });
+
+  it('loads nothing and auto-starts nothing while signed out', async () => {
+    const service = TestBed.inject(TourService);
+    TestBed.tick();
+    httpMock.expectNone(`${environment.apiBaseUrl}/onboarding`);
+
+    await harness.navigateByUrl('/clients');
+
+    expect(service.activeTourId()).toBeNull();
+    expect(service.optInPromptVisible()).toBe(false);
+  });
+
+  it('loads the state once the visitor signs up, then auto-starts the tour of the page they already landed on', async () => {
+    const service = TestBed.inject(TourService);
+    TestBed.tick();
+    await harness.navigateByUrl('/clients');
+
+    TestBed.inject(AuthService).currentUser.set(TEST_USER);
+    TestBed.tick();
+    httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`).flush(FRESH_STATE);
+    await flushAsync();
+
+    expect(service.activeTourId()).toBe('customers');
+  });
+
+  describe('sign-up "Activer les tutoriels ?" prompt', () => {
+    it('asks first, instead of auto-starting the first-invoice tour, for an account that never answered', async () => {
+      const service = createService(NEW_ACCOUNT_STATE);
+
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      expect(service.optInPromptVisible()).toBe(true);
+      expect(service.activeTourId()).toBeNull();
+    });
+
+    it('"Oui" persists the choice and starts the pending tour right away', async () => {
+      const service = createService(NEW_ACCOUNT_STATE);
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      service.answerOptInPrompt(true);
+      const request = httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`);
+      expect(request.request.method).toBe('PATCH');
+      expect(request.request.body).toEqual({ tourEnabled: true });
+      request.flush(FRESH_STATE);
+      await flushAsync();
+
+      expect(service.optInPromptVisible()).toBe(false);
+      expect(service.activeTourId()).toBe('invoice-creation');
+      expect(service.stepIndex()).toBe(0);
+    });
+
+    it('"Non" persists tourEnabled=false, and no tour auto-starts afterwards', async () => {
+      const service = createService(NEW_ACCOUNT_STATE);
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      service.answerOptInPrompt(false);
+      const request = httpMock.expectOne(`${environment.apiBaseUrl}/onboarding`);
+      expect(request.request.body).toEqual({ tourEnabled: false });
+      request.flush({ ...FRESH_STATE, tourEnabled: false });
+
+      await harness.navigateByUrl('/clients');
+
+      expect(service.optInPromptVisible()).toBe(false);
+      expect(service.activeTourId()).toBeNull();
+      expect(service.tourEnabled()).toBe(false);
+    });
+
+    it('never asks an account that already answered', async () => {
+      const service = createService(FRESH_STATE);
+
+      await harness.navigateByUrl('/factures/nouvelle');
+
+      expect(service.optInPromptVisible()).toBe(false);
+      expect(service.activeTourId()).toBe('invoice-creation');
+    });
   });
 
   it('advances to the next step once its anchor is registered', async () => {
@@ -146,7 +239,7 @@ describe('TourService', () => {
     service.skip();
     httpMock
       .expectOne(`${environment.apiBaseUrl}/onboarding/tours/customers/complete`)
-      .flush({ tourEnabled: true, completedTours: ['customers'] });
+      .flush({ ...FRESH_STATE, completedTours: ['customers'] });
 
     expect(service.activeTourId()).toBeNull();
   });
@@ -394,8 +487,15 @@ describe('TourService', () => {
     expect(service.currentStep()?.id).toBe('service-margin');
   });
 
+  function seedFolders(folders: unknown[]): void {
+    const folderService = TestBed.inject(CatalogFolderService);
+    folderService.getAllCached().subscribe();
+    httpMock.expectOne(`${environment.apiBaseUrl}/catalog-folders`).flush(folders);
+  }
+
   it('branches the add-line step to product-pick, not straight to product-quantity, when the product button is the one clicked', async () => {
     const service = createService();
+    seedFolders([]);
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
@@ -405,76 +505,124 @@ describe('TourService', () => {
     registerAnchor('invoice-product-flyout');
 
     service.next('invoice-add-product-button');
-    await Promise.resolve();
+    await flushAsync();
 
     expect(service.currentStep()?.id).toBe('product-pick');
   });
 
-  // Phase 1.1-10: the folder-aware alternative inserted right after
-  // 'product-pick'/'service-margin' — only ever shown to an artisan who's
-  // already created at least one dossier, and a no-op (straight through to
-  // 'product-quantity'/'service-card') otherwise.
-  it('shows the folders hint after product-pick when the artisan already has at least one folder', async () => {
+  // Phase 1.1-10: the folder-aware alternative sits BEFORE 'product-pick'
+  // (while the flyout is still open — once a product is picked the flyout
+  // closes, so a hint about it afterwards had nothing left to point at) —
+  // only ever shown to an artisan who's already created at least one dossier.
+  it('shows the folders hint before product-pick when the artisan already has at least one folder', async () => {
     const service = createService();
-    const folderService = TestBed.inject(CatalogFolderService);
+    seedFolders([{ id: 'f1', name: 'Plomberie' }]);
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
     service.stepIndex.set(6); // 'add-line'
     registerAnchor('invoice-product-flyout');
-    folderService.getAllCached().subscribe();
-    httpMock
-      .expectOne(`${environment.apiBaseUrl}/catalog-folders`)
-      .flush([{ id: 'f1', name: 'Plomberie' }]);
 
-    service.next('invoice-add-product-button'); // -> product-pick
+    service.next('invoice-add-product-button');
     await flushAsync();
-    expect(service.currentStep()?.id).toBe('product-pick');
-
-    service.next(); // "Suivant" -> should land on product-folders-hint, not product-quantity
-    await flushAsync();
-
     expect(service.currentStep()?.id).toBe('product-folders-hint');
+
+    service.next();
+    await flushAsync();
+    expect(service.currentStep()?.id).toBe('product-pick');
   });
 
-  it('skips straight to product-quantity, with no folders hint, for an artisan with zero dossiers', async () => {
+  it('moves from product-pick to product-quantity by itself once the picked product becomes a line', async () => {
     const service = createService();
-    const folderService = TestBed.inject(CatalogFolderService);
+    seedFolders([]);
 
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
     service.stepIndex.set(6); // 'add-line'
     registerAnchor('invoice-product-flyout');
-    folderService.getAllCached().subscribe();
-    httpMock.expectOne(`${environment.apiBaseUrl}/catalog-folders`).flush([]);
-    registerAnchor('invoice-line-quantity');
 
-    service.next('invoice-add-product-button'); // -> product-pick
+    service.next('invoice-add-product-button');
     await flushAsync();
     expect(service.currentStep()?.id).toBe('product-pick');
+    expect(service.currentStep()?.requiresAction).toBe(true);
 
-    service.next(); // no folders -> product-folders-hint is skipped entirely
-    await flushAsync();
+    registerAnchor('invoice-line-quantity'); // the line's quantity field mounts
+    await new Promise<void>((resolve) => setTimeout(resolve, 400));
 
     expect(service.currentStep()?.id).toBe('product-quantity');
+  });
+
+  it('"Suivant" on add-line presses the product button instead of skipping ahead', async () => {
+    const service = createService();
+    await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
+    service.activeTourId.set('invoice-creation');
+    service.stepIndex.set(6); // 'add-line'
+    const button = document.createElement('button');
+    const clicked = vi.fn();
+    button.addEventListener('click', clicked);
+    TestBed.inject(TourAnchorRegistryService).register(
+      'invoice-add-product-button',
+      new ElementRef(button),
+    );
+
+    service.next();
+
+    expect(clicked).toHaveBeenCalledTimes(1);
+    expect(service.stepIndex()).toBe(6);
+  });
+
+  it('counts only the steps in play: skipped steps drop out of the displayed number and total', async () => {
+    const service = createService();
+    seedCustomers([{ id: 'c1', name: 'Client Test' }]);
+    await harness.navigateByUrl('/factures/nouvelle/rapide/client');
+    service.activeTourId.set('invoice-creation');
+    service.stepIndex.set(2);
+    registerAnchor('invoice-customer-picker');
+
+    service.next();
+    await flushAsync();
+
+    // Raw index 5 (two noCustomers steps skipped) reads as step 4.
+    expect(service.stepIndex()).toBe(5);
+    expect(service.displayStepNumber()).toBe(4);
+    expect(service.displayStepCount()).toBe(service.stepCount() - 2);
+  });
+
+  it('"Retour" goes back to the previous revealed step', async () => {
+    const service = createService();
+    registerAnchor('invoice-devis-facture-toggle');
+    registerAnchor('invoice-mode-choice');
+    await harness.navigateByUrl('/factures/nouvelle'); // auto-starts at step 0
+    expect(service.stepIndex()).toBe(0);
+    expect(service.canGoBack()).toBe(false);
+
+    service.next();
+    await flushAsync();
+    service.next();
+    await flushAsync();
+    expect(service.stepIndex()).toBe(2);
+    expect(service.canGoBack()).toBe(true);
+
+    service.previous();
+    await flushAsync();
+    expect(service.stepIndex()).toBe(1);
   });
 
   // Phase 1.1-10: the acompte step's anchor only mounts on a FACTURE (see
   // invoice-create-preview-step.page.html's own @if) — on a DEVIS it's
   // skipped exactly like any other missing anchor, no showIf needed.
   it('skips the deposit step when its anchor never mounts (e.g. a DEVIS, which has no deposit field)', async () => {
-    vi.useFakeTimers();
     const service = createService();
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
-    const totalIndex = service.steps().findIndex((step) => step.id === 'total');
-    service.stepIndex.set(totalIndex);
-    registerAnchor('invoice-preview');
+    const previewIndex = service.steps().findIndex((step) => step.id === 'preview');
+    service.stepIndex.set(previewIndex);
+    registerAnchor('invoice-submit-button');
 
     service.next(); // -> 'deposit', whose anchor is never registered here
-    await vi.advanceTimersByTimeAsync(2100);
+    await new Promise<void>((resolve) => setTimeout(resolve, 2300));
 
-    expect(service.currentStep()?.id).toBe('preview');
+    expect(service.currentStep()?.id).toBe('submit-cta');
   });
 
   // Regression test: 'deposit' declares its own `route` (the preview step's
@@ -487,8 +635,8 @@ describe('TourService', () => {
     const service = createService();
     await harness.navigateByUrl('/factures/nouvelle/rapide/lignes');
     service.activeTourId.set('invoice-creation');
-    const totalIndex = service.steps().findIndex((step) => step.id === 'total');
-    service.stepIndex.set(totalIndex);
+    const previewIndex = service.steps().findIndex((step) => step.id === 'preview');
+    service.stepIndex.set(previewIndex);
     registerAnchor('invoice-deposit-toggle');
 
     service.next();

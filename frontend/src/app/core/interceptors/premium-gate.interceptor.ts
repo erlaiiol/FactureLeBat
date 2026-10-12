@@ -4,6 +4,7 @@ import { catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { BillingService } from '../services/billing.service';
 import { PaywallService } from '../services/paywall.service';
+import { PlatformService } from '../services/platform.service';
 import { TrialOfferService } from '../services/trial-offer.service';
 
 // Phase 22: centralizes what was 7 duplicated `if (error.status === 402)
@@ -29,11 +30,14 @@ import { TrialOfferService } from '../services/trial-offer.service';
 // kept fresh app-wide by app.ts) — shows that CTA instead of the generic
 // paywall so the "1er mois à 2€" offer follows them from the first-invoice
 // moment all the way to the point they actually get blocked, rather than
-// only ever appearing once.
+// only ever appearing once. Not on iOS, where that offer can't be honored
+// (Stripe-coupon-only, see TrialOfferModalComponent's template): the plain
+// paywall routes straight to /abonnement's StoreKit purchase instead.
 export const premiumGateInterceptor: HttpInterceptorFn = (req, next) => {
   const paywallService = inject(PaywallService);
   const trialOfferService = inject(TrialOfferService);
   const billingService = inject(BillingService);
+  const platformService = inject(PlatformService);
 
   if (!req.url.startsWith(environment.apiBaseUrl)) {
     return next(req);
@@ -44,7 +48,7 @@ export const premiumGateInterceptor: HttpInterceptorFn = (req, next) => {
       if (error instanceof HttpErrorResponse && error.status === 402) {
         const body = error.error as { error?: string } | null;
         if (body?.error === 'PremiumRequired') {
-          if (billingService.status()?.trialOffer) {
+          if (billingService.status()?.trialOffer && !platformService.isIosApp()) {
             trialOfferService.show();
           } else {
             paywallService.show();

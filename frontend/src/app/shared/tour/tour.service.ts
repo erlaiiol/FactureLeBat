@@ -1,8 +1,9 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { catchError, filter, firstValueFrom, Observable, of, tap } from 'rxjs';
 import { OnboardingState, TourId } from '../../core/models/onboarding.model';
+import { AuthService } from '../../core/services/auth.service';
 import { CatalogFolderService } from '../../core/services/catalog-folder.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { DiscountService } from '../../core/services/discount.service';
@@ -35,6 +36,7 @@ const ANCHOR_POLL_INTERVAL_MS = 50;
 @Injectable({ providedIn: 'root' })
 export class TourService {
   private readonly onboardingService = inject(OnboardingService);
+  private readonly authService = inject(AuthService);
   private readonly anchorRegistry = inject(TourAnchorRegistryService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -76,6 +78,14 @@ export class TourService {
   private selfNavigating = false;
 
   readonly tourEnabled = computed(() => this.state()?.tourEnabled ?? true);
+  // The sign-up "Activer les tutoriels ?" prompt (TourOptInModalComponent):
+  // shown instead of — and right before — the very first tour that would
+  // auto-launch for an account that has never answered it
+  // (OnboardingState.tourPreferenceChosen). Remembers which tour that was,
+  // so answering "Oui" starts it straight away rather than on the next
+  // navigation.
+  readonly optInPromptVisible = signal(false);
+  private optInPendingTourId: TourId | null = null;
   readonly activeTourId = signal<TourId | null>(null);
   readonly stepIndex = signal(0);
   // Which tour (if any) the CURRENT route owns, kept in sync on every
@@ -93,18 +103,45 @@ export class TourService {
   );
   readonly isLastStep = computed(() => this.stepIndex() === this.stepCount() - 1);
 
+  // Indices of steps this run jumped over (showIf false, anchor that never
+  // mounted, a `next` jump past another branch). The "Étape X / Y" label
+  // counts only the steps actually in play: with raw indices an artisan who
+  // already has a client read "7 / 22" then "15 / 22" with nothing between.
+  private readonly skippedIndices = signal<ReadonlySet<number>>(new Set());
+  readonly displayStepNumber = computed(() => {
+    const index = this.stepIndex();
+    let skippedBefore = 0;
+    for (const skipped of this.skippedIndices()) {
+      if (skipped < index) {
+        skippedBefore++;
+      }
+    }
+    return index + 1 - skippedBefore;
+  });
+  readonly displayStepCount = computed(() => this.stepCount() - this.skippedIndices().size);
+
+  // Steps revealed before the current one, so "Retour" can walk back over
+  // exactly what the artisan saw (not the skipped ones).
+  private history: number[] = [];
+  readonly canGoBack = signal(false);
+  private anchorWatchTimer: ReturnType<typeof setInterval> | null = null;
+  private stepIsRevealed = false;
+
   constructor() {
     // Best-effort load, same reasoning as InvoiceDraftStore's company/customers
     // loads: a failure here just means the tour never auto-launches, it never
-    // blocks the rest of the app. TourService is constructed app-wide (see
-    // App's root component), including on public routes where an anonymous
-    // visitor 401s on this call — an explicit no-op `error` handler is what
-    // keeps that a silent no-auto-launch rather than an unhandled rejection
-    // (see docs/roadmap.md Phase 14.7's bug #1).
-    this.onboardingService
-      .getState()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (state) => this.state.set(state), error: () => {} });
+    // blocks the rest of the app. Keyed on the signed-in user rather than
+    // fired once from this constructor: TourService is constructed app-wide
+    // (see App's root component), including on public routes, so a one-shot
+    // load used to 401 for an anonymous visitor (see docs/roadmap.md Phase
+    // 14.7's bug #1) and then never retry once that visitor registered or
+    // logged in — leaving a brand-new account with no state at all, which
+    // the sign-up "Activer les tutoriels ?" prompt needs to read. Also
+    // drops a previous account's state on logout/account switch.
+    effect(() => {
+      const userId = this.authService.currentUser()?.id ?? null;
+      untracked(() => this.loadStateFor(userId));
+    });
 
     this.router.events
       .pipe(
@@ -158,6 +195,28 @@ export class TourService {
       .pipe(tap((state) => this.state.set(state)));
   }
 
+  // Answers the sign-up "Activer les tutoriels ?" prompt. Hidden right
+  // away (optimistically) so the tour — or nothing — follows immediately; a
+  // failed save just leaves the preference unanswered server-side, so the
+  // prompt comes back next session rather than silently picking for them.
+  answerOptInPrompt(enabled: boolean): void {
+    const pendingTourId = this.optInPendingTourId;
+    this.optInPendingTourId = null;
+    this.optInPromptVisible.set(false);
+    const current = this.state();
+    if (current) {
+      this.state.set({ ...current, tourEnabled: enabled, tourPreferenceChosen: true });
+    }
+    this.setTourEnabled(enabled)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ error: () => {} });
+    if (enabled && pendingTourId && pendingTourId === this.currentRouteTourId()) {
+      this.resetProgress();
+      this.activeTourId.set(pendingTourId);
+      void this.advanceToStep(0);
+    }
+  }
+
   // Backs the settings page's "Rejouer les visites guidées" button: clears
   // every tour's completed state so the next visit to each section
   // auto-launches it again, exactly like a brand new install. Same
@@ -182,7 +241,28 @@ export class TourService {
       this.persistCompletion();
       return;
     }
+    const step = this.currentStep();
+    if (!firedAnchorId && step?.suivantClicksAnchor && step.anchorId) {
+      const element = this.anchorRegistry.get(step.anchorId)?.nativeElement;
+      if (element) {
+        // The overlay's advanceOn listener on this element calls back into
+        // next(anchorId), which picks the right branch.
+        element.click();
+        return;
+      }
+    }
     void this.advanceToStep(this.resolveNextIndex(firedAnchorId));
+  }
+
+  previous(): void {
+    if (!this.activeTourId() || this.advancing()) {
+      return;
+    }
+    const target = this.history.pop();
+    this.canGoBack.set(this.history.length > 0);
+    if (target !== undefined) {
+      void this.advanceToStep(target, -1);
+    }
   }
 
   private resolveNextIndex(firedAnchorId?: string): number {
@@ -213,18 +293,52 @@ export class TourService {
     if (!tourId) {
       return;
     }
+    this.resetProgress();
     this.activeTourId.set(tourId);
     void this.advanceToStep(0);
   }
 
+  private loadStateFor(userId: string | null): void {
+    this.state.set(null);
+    this.optInPromptVisible.set(false);
+    this.optInPendingTourId = null;
+    if (!userId) {
+      return;
+    }
+    this.onboardingService
+      .getState()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (state) => {
+          this.state.set(state);
+          // The navigation that brought the artisan here (e.g. straight
+          // from sign-up into /factures/nouvelle) usually ends before this
+          // response does — re-check it now rather than waiting for the
+          // next one.
+          this.maybeAutoStart(this.router.url);
+        },
+        error: () => {},
+      });
+  }
+
   private maybeAutoStart(url: string, skipTourId: TourId | null = null): void {
-    if (this.activeTourId() || !this.tourEnabled()) {
+    // No state yet (still loading, or failed) means no auto-launch: without
+    // it there's no telling whether this account still has to answer the
+    // "Activer les tutoriels ?" prompt, or already finished this tour.
+    const state = this.state();
+    if (!state || this.activeTourId() || this.optInPromptVisible() || !state.tourEnabled) {
       return;
     }
     const tourId = ROUTE_TOUR_MAP.find((entry) => url.startsWith(entry.prefix))?.tourId ?? null;
-    if (!tourId || tourId === skipTourId || this.state()?.completedTours.includes(tourId)) {
+    if (!tourId || tourId === skipTourId || state.completedTours.includes(tourId)) {
       return;
     }
+    if (!state.tourPreferenceChosen) {
+      this.optInPendingTourId = tourId;
+      this.optInPromptVisible.set(true);
+      return;
+    }
+    this.resetProgress();
     this.activeTourId.set(tourId);
     void this.advanceToStep(0);
   }
@@ -265,17 +379,20 @@ export class TourService {
   // Navigates first if the target step lives on a different route, then
   // waits for its anchor to mount before revealing it — if the anchor never
   // shows up (timeout), the step is skipped rather than spotlighting nothing.
-  private async advanceToStep(index: number): Promise<void> {
+  private async advanceToStep(index: number, direction: 1 | -1 = 1): Promise<void> {
     this.advancing.set(true);
     try {
       const steps = this.steps();
+      if (index < 0) {
+        return;
+      }
       if (index >= steps.length) {
         this.persistCompletion();
         return;
       }
       const step = steps[index];
       if (step.showIf && !(await this.evaluateShowIf(step.showIf))) {
-        await this.advanceToStep(index + 1);
+        await this.advanceToStep(index + direction, direction);
         return;
       }
       if (step.route && step.route !== this.router.url) {
@@ -289,14 +406,70 @@ export class TourService {
       if (step.anchorId) {
         const found = await this.waitForAnchor(step.anchorId);
         if (!found) {
-          await this.advanceToStep(index + 1);
+          await this.advanceToStep(index + direction, direction);
           return;
         }
       }
+      this.recordReveal(index, direction);
       this.stepIndex.set(index);
+      this.watchAdvanceAnchor(step);
     } finally {
       this.advancing.set(false);
     }
+  }
+
+  private recordReveal(index: number, direction: 1 | -1): void {
+    const previous = this.stepIndex();
+    if (direction === 1 && index > previous) {
+      if (this.stepIsRevealed) {
+        this.history.push(previous);
+        this.canGoBack.set(true);
+      }
+      if (index > previous + 1) {
+        const skipped = new Set(this.skippedIndices());
+        for (let skippedIndex = previous + 1; skippedIndex < index; skippedIndex++) {
+          skipped.add(skippedIndex);
+        }
+        this.skippedIndices.set(skipped);
+      }
+    }
+    this.stepIsRevealed = true;
+  }
+
+  // For a step that waits on something appearing (a picked product turning
+  // into a line with its quantity field) rather than a click on its own
+  // anchor — see TourStepDefinition.advanceWhenAnchor.
+  private watchAdvanceAnchor(step: TourStepDefinition): void {
+    this.stopAnchorWatch();
+    const watch = step.advanceWhenAnchor;
+    if (!watch) {
+      return;
+    }
+    this.anchorWatchTimer = setInterval(() => {
+      if (!this.anchorRegistry.get(watch.anchorId) || this.advancing()) {
+        return;
+      }
+      this.stopAnchorWatch();
+      const index = this.steps().findIndex((candidate) => candidate.id === watch.next);
+      if (index !== -1) {
+        void this.advanceToStep(index);
+      }
+    }, ANCHOR_POLL_INTERVAL_MS * 3);
+  }
+
+  private stopAnchorWatch(): void {
+    if (this.anchorWatchTimer !== null) {
+      clearInterval(this.anchorWatchTimer);
+      this.anchorWatchTimer = null;
+    }
+  }
+
+  private resetProgress(): void {
+    this.stopAnchorWatch();
+    this.history = [];
+    this.canGoBack.set(false);
+    this.skippedIndices.set(new Set());
+    this.stepIsRevealed = false;
   }
 
   // On a failed fetch, every condition resolves to false — both the
@@ -361,6 +534,7 @@ export class TourService {
   // through an unrelated navigation isn't a "seen it, don't show again"
   // signal, so the tour is still offered next time the artisan comes back.
   private abandonActiveTour(): void {
+    this.resetProgress();
     this.activeTourId.set(null);
     this.stepIndex.set(0);
   }
@@ -370,6 +544,7 @@ export class TourService {
     if (!tourId) {
       return;
     }
+    this.resetProgress();
     this.activeTourId.set(null);
     this.stepIndex.set(0);
     this.onboardingService
