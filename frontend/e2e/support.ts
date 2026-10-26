@@ -168,14 +168,21 @@ let accountCounter = 0;
 export async function registerViaUi(
   page: Page,
   tutorials: 'Oui' | 'Non' | 'leave-open' = 'Non',
-): Promise<void> {
+  options: { referralCode?: string } = {},
+): Promise<Credentials> {
   accountCounter += 1;
-  await page.goto('/inscription');
-  await page
-    .locator('[formcontrolname=email]')
-    .fill(`pw-${Date.now()}-${accountCounter}@example.com`);
-  await page.locator('[formcontrolname=password]').fill('Motdepasse123');
-  await page.locator('[formcontrolname=confirmPassword]').fill('Motdepasse123');
+  const credentials = {
+    email: `pw-${Date.now()}-${accountCounter}@example.com`,
+    password: 'Motdepasse123',
+  };
+  // A referral link (?ref=CODE, what the "Parrainage" card hands out) rather
+  // than typing the code in: the field is prefilled from the query string.
+  await page.goto(
+    options.referralCode ? `/inscription?ref=${options.referralCode}` : '/inscription',
+  );
+  await page.locator('[formcontrolname=email]').fill(credentials.email);
+  await page.locator('[formcontrolname=password]').fill(credentials.password);
+  await page.locator('[formcontrolname=confirmPassword]').fill(credentials.password);
   await page.locator('[formcontrolname=acceptTerms]').check();
   await page.locator('button[type=submit]').click();
   await page.waitForURL('**/factures/nouvelle');
@@ -184,6 +191,31 @@ export async function registerViaUi(
     await optInDialog(page).getByRole('button', { name: tutorials, exact: true }).click();
     await expect(optInDialog(page)).toBeHidden();
   }
+  return credentials;
+}
+
+export interface Credentials {
+  email: string;
+  password: string;
+}
+
+// Signs out by dropping the session cookies, then signs back in through the
+// real login form — how a test hops between two accounts (parrain/filleul)
+// inside the one browser context the payment fakes are installed on.
+export async function loginViaUi(page: Page, credentials: Credentials): Promise<void> {
+  await page.context().clearCookies();
+  await page.goto('/connexion');
+  await page.locator('[formcontrolname=email]').fill(credentials.email);
+  await page.locator('[formcontrolname=password]').fill(credentials.password);
+  await page.locator('button[type=submit]').click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/connexion'));
+}
+
+// The signed-in account's own referral code (GET /referral/me).
+export async function myReferralCode(page: Page): Promise<string> {
+  const response = await page.context().request.get(`${API}/referral/me`);
+  expect(response.ok(), `GET /referral/me → ${response.status()}`).toBe(true);
+  return ((await response.json()) as { code: string }).code;
 }
 
 export function optInDialog(page: Page) {

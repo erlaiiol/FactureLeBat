@@ -11,6 +11,7 @@ export interface TestSession {
   cookies: string[];
   xsrfToken: string;
   companyId: string;
+  email: string;
 }
 
 let counter = 0;
@@ -23,12 +24,20 @@ let counter = 0;
 // prisma.company.delete(), which cascades through every table this whole
 // test's data could have touched (Customer/Product/Service/Invoice/...) —
 // same one-call cleanup AuthService.deleteAccount itself relies on.
-export async function registerTestUser(app: INestApplication<App>): Promise<TestSession> {
+export async function registerTestUser(
+  app: INestApplication<App>,
+  options: { referralCode?: string } = {},
+): Promise<TestSession> {
   counter += 1;
   const email = `e2e-${Date.now()}-${counter}@example.com`;
   const response = await request(app.getHttpServer())
     .post('/api/auth/register')
-    .send({ email, password: 'Motdepasse123', acceptTerms: true })
+    .send({
+      email,
+      password: 'Motdepasse123',
+      acceptTerms: true,
+      referralCode: options.referralCode,
+    })
     .expect(201);
 
   // superagent types response.headers loosely (Record<string, string>), but
@@ -44,7 +53,7 @@ export async function registerTestUser(app: INestApplication<App>): Promise<Test
   }
 
   const companyId = (response.body as { companyId: string }).companyId;
-  return { cookies, xsrfToken: xsrfCookie.split('=')[1], companyId };
+  return { cookies, xsrfToken: xsrfCookie.split('=')[1], companyId, email };
 }
 
 // Wraps supertest with the cookie/CSRF plumbing every authenticated e2e
