@@ -94,8 +94,15 @@ export class FileDownloadService {
 
   private async download(url: string): Promise<void> {
     try {
+      // anchor.href resolves /api to an absolute URL. Restore the configured
+      // API prefix before HttpClient: the session-refresh, credentials,
+      // paywall and timeout interceptors all match environment.apiBaseUrl.
+      // In Android production it is relative (/api), unlike dev and iOS.
+      const apiBase = new URL(environment.apiBaseUrl, window.location.href);
+      const target = new URL(url, window.location.href);
+      const requestUrl = `${environment.apiBaseUrl}${target.pathname.slice(apiBase.pathname.length)}${target.search}`;
       const response = await firstValueFrom(
-        this.http.get(url, { responseType: 'blob', observe: 'response' }),
+        this.http.get(requestUrl, { responseType: 'blob', observe: 'response' }),
       );
       const fileName =
         this.fileNameFromDisposition(response.headers.get('Content-Disposition')) ??

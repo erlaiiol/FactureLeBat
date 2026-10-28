@@ -1,6 +1,12 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpInterceptorFn, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { of } from 'rxjs';
+import { authRefreshInterceptor } from '../interceptors/auth-refresh.interceptor';
+import { credentialsInterceptor } from '../interceptors/credentials.interceptor';
+import { timeoutInterceptor } from '../interceptors/timeout.interceptor';
+import { AuthService } from './auth.service';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { environment } from '../../../environments/environment';
@@ -20,12 +26,12 @@ async function flushAsync(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-function setup(isNative: boolean) {
+function setup(isNative: boolean, interceptors: HttpInterceptorFn[] = []) {
   const nativeShare = { share: vi.fn().mockResolvedValue(undefined) };
   const toast = { error: vi.fn(), success: vi.fn(), info: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
-      provideHttpClient(),
+      provideHttpClient(withInterceptors(interceptors)),
       provideHttpClientTesting(),
       { provide: PlatformService, useValue: { isNativeApp: signal(isNative) } },
       { provide: NativeFileShareService, useValue: nativeShare },
@@ -56,12 +62,68 @@ function clickLink(href: string, ownHandler?: (event: MouseEvent) => void): Mous
 }
 
 describe('FileDownloadService', () => {
+  const originalApiBaseUrl = environment.apiBaseUrl;
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
-    TestBed.resetTestingModule();
+    try {
+      TestBed.inject(HttpTestingController).verify();
+    } finally {
+      TestBed.resetTestingModule();
+      environment.apiBaseUrl = originalApiBaseUrl;
+      vi.useRealTimers();
+    }
   });
 
   describe('in a native shell', () => {
+    it('refreshes an expired session when a production Android link resolves to an absolute URL', async () => {
+      environment.apiBaseUrl = '/api';
+      const refreshSession = vi.fn().mockReturnValue(of({}));
+      TestBed.configureTestingModule({
+        providers: [
+          { provide: AuthService, useValue: { currentUser: signal(null), refreshSession } },
+          { provide: Router, useValue: { url: '/documents', navigate: vi.fn() } },
+        ],
+      });
+      const { http, nativeShare, toast } = setup(true, [
+        credentialsInterceptor,
+        authRefreshInterceptor,
+      ]);
+      const url = '/api/invoices/abc/pdf';
+      clickLink(url);
+
+      const request = http.expectOne(url);
+      expect(request.request.withCredentials).toBe(true);
+      request.flush(new Blob(), { status: 401, statusText: 'Unauthorized' });
+      expect(refreshSession).toHaveBeenCalledTimes(1);
+      http.expectOne(url).flush(new Blob(['%PDF-1.3'], { type: 'application/pdf' }));
+      await flushAsync();
+
+      expect(nativeShare.share).toHaveBeenCalledTimes(1);
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('reports a stalled download in production instead of waiting indefinitely', async () => {
+      environment.apiBaseUrl = '/api';
+      vi.useFakeTimers();
+      const { http, toast } = setup(true, [timeoutInterceptor]);
+      const url = '/api/invoices/abc/pdf';
+      clickLink(url);
+      const request = http.expectOne(url);
+
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(request.cancelled).toBe(true);
+      expect(toast.error).toHaveBeenCalled();
+    });
+
+    it('keeps the query string when opening an absolute API URL in production', async () => {
+      environment.apiBaseUrl = '/api';
+      const { service, http, nativeShare } = setup(true);
+      service.open(new URL('/api/invoices/abc/pdf?download=1', window.location.href).href);
+      http.expectOne('/api/invoices/abc/pdf?download=1').flush(new Blob());
+      await flushAsync();
+      expect(nativeShare.share).toHaveBeenCalledTimes(1);
+    });
+
     it('downloads an API link through HttpClient instead of leaving the WebView', async () => {
       const { nativeShare, http } = setup(true);
 
