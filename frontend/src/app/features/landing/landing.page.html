@@ -1,5 +1,5 @@
 <div class="bg-atelier-bg text-atelier-ink font-atelier-sans">
-  <header class="flex items-center justify-between gap-4 px-4 py-4 sm:px-8">
+  <header class="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-8">
     <span class="flex items-center gap-2">
       <img src="/android-chrome-192x192.png" alt="" width="36" height="36" class="rounded-lg" />
       <span class="font-atelier-heading text-xl font-semibold tracking-tight">FactureLe</span>
@@ -93,6 +93,29 @@
     <p class="text-atelier-ink-soft text-sm">
       Sans carte bancaire. Configurez votre activité et créez votre première facture gratuitement.
     </p>
+    @if (!platform.isNativeApp()) {
+      <div class="flex flex-col items-center gap-3" aria-label="Télécharger l’application mobile">
+        <p class="text-atelier-ink-soft text-sm">Aussi disponible sur iPhone et Android</p>
+        <div class="flex flex-wrap justify-center gap-3">
+          <a
+            [href]="appStoreUrl"
+            aria-label="Télécharger FactureLe sur l’App Store"
+            class="flex min-w-40 flex-col rounded-xl bg-atelier-ink px-5 py-3 text-left text-atelier-bg transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+          >
+            <span class="text-xs">Télécharger dans l’</span>
+            <span class="text-lg font-semibold">App Store</span>
+          </a>
+          <a
+            [href]="playStoreUrl"
+            aria-label="Télécharger FactureLe sur Google Play"
+            class="flex min-w-40 flex-col rounded-xl bg-atelier-ink px-5 py-3 text-left text-atelier-bg transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+          >
+            <span class="text-xs">Disponible sur</span>
+            <span class="text-lg font-semibold">Google Play</span>
+          </a>
+        </div>
+      </div>
+    }
     <!-- Phase 13.6: a discreet trust signal, not a second competing CTA —
          "prêt pour", never "conforme à" (the reform isn't legally binding
          for this app's users yet, see docs/positioning.md). No live day-count
