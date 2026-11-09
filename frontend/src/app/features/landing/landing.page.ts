@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
+import { APP_STORE_URL, PLAY_STORE_URL } from '../../core/app-store-links';
+import { PlatformService } from '../../core/services/platform.service';
 import { IconCheckComponent } from '../../shared/components/icon-check.component';
 
 // Phase 13.3: the public, logged-out front door — see docs/positioning.md
@@ -14,6 +16,9 @@ import { IconCheckComponent } from '../../shared/components/icon-check.component
   templateUrl: './landing.page.html',
 })
 export class LandingPage {
+  protected readonly platform = inject(PlatformService);
+  protected readonly appStoreUrl = APP_STORE_URL;
+  protected readonly playStoreUrl = PLAY_STORE_URL;
   private readonly title = inject(Title);
   private readonly meta = inject(Meta);
 
