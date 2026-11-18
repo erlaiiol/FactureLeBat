@@ -1,4 +1,4 @@
-.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod logs-files-prod-tail logs-errors-prod-tail logs-prod logs-backend-prod logs-frontend-prod logs-caddy-prod logs-postgres-prod logs-prod-tail logs-backend-prod-tail logs-frontend-prod-tail logs-caddy-prod-tail logs-postgres-prod-tail mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod android-logcat
+.PHONY: dev prod demo demo-down down migrate logs deploy backup audit logs-files logs-errors logs-files-prod logs-errors-prod logs-files-prod-tail logs-errors-prod-tail logs-prod logs-backend-prod logs-frontend-prod logs-caddy-prod logs-postgres-prod logs-prod-tail logs-backend-prod-tail logs-frontend-prod-tail logs-caddy-prod-tail logs-postgres-prod-tail mobile-build ios android android-bundle android-dev android-prod android-demo ios-dev ios-prod ios-archive android-logcat
 
 # Overridable line count for every *-tail target below, e.g. `make logs-backend-prod-tail TAIL=300`.
 TAIL ?= 100
@@ -267,6 +267,19 @@ ios-dev:
 
 ios-prod:
 	sh frontend/scripts/run-ios.sh prod
+
+# iOS counterpart of android-bundle: prod web build + cap sync, bumps the
+# build number (CURRENT_PROJECT_VERSION in project.pbxproj — commit it with
+# the release), then xcodebuild archive + export for App Store Connect
+# (frontend/scripts/archive-ios.sh). Output lands in frontend/ios/releases/
+# (App.xcarchive + App.ipa) and the archive opens in Xcode's Organizer.
+# UPLOAD=1 sends it straight to App Store Connect instead (TestFlight, then
+# attach to the version and "Submit for Review"). Needs the Apple account of
+# team A899CGSWX8 signed in once in Xcode > Settings > Accounts.
+#   make ios-archive
+#   make ios-archive UPLOAD=1
+ios-archive:
+	UPLOAD=$(UPLOAD) sh frontend/scripts/archive-ios.sh
 
 # Native Google Sign-In debugging (see docs/deployment.md's "Native Google
 # Sign-In" section and node_modules/@capgo/capacitor-social-login/README.md's
