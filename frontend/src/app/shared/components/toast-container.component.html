@@ -1,14 +1,42 @@
-<!-- bottom reads the `--invoice-footer-height` CSS variable (published by
-     InvoiceCreateShellPage/InvoiceCreateManualPage) rather than a flat
-     bottom-4: those pages' own fixed totals/preview bar sits at the exact
-     same viewport edge, and a flat offset let toasts land inside that bar's
-     opaque footprint instead of above it, even though z-50 already painted
-     them on top — same `--nav-height` pattern as app.html's #topBar, just
-     for the bottom edge. Falls back to 0px on every other page. -->
+<!-- Center stack: small blocking errors (ToastPlacement 'center'), pinned to
+     the middle of the viewport so they're seen wherever the page is
+     scrolled. pointer-events-none on the wrapper so the page underneath
+     stays fully usable — only the toast card itself is clickable. -->
+<div
+  class="pointer-events-none fixed inset-0 z-[60] flex flex-col items-center justify-center gap-2 px-4"
+  aria-live="assertive"
+>
+  @for (toast of centerToasts(); track toast.id) {
+    <div
+      class="anim-line-in pointer-events-auto flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg"
+      [class]="variantClasses(toast.variant)"
+      role="alert"
+    >
+      <span>{{ toast.message }}</span>
+      <button
+        type="button"
+        (click)="toastService.dismiss(toast.id)"
+        class="shrink-0 text-lg leading-none opacity-70 hover:opacity-100"
+        aria-label="Fermer"
+      >
+        &times;
+      </button>
+    </div>
+  }
+</div>
+
+<!-- Bottom stack: confirmations. bottom reads the `--invoice-footer-height`
+     CSS variable (published by InvoiceCreateShellPage/InvoiceCreateManualPage)
+     rather than a flat bottom-4: those pages' own fixed totals/preview bar
+     sits at the exact same viewport edge, and a flat offset let toasts land
+     inside that bar's opaque footprint instead of above it, even though z-50
+     already painted them on top — same `--nav-height` pattern as app.html's
+     #topBar, just for the bottom edge. Falls back to 0px on every other page. -->
 <div
   class="pointer-events-none fixed inset-x-4 bottom-[calc(var(--invoice-footer-height,0px)_+_1rem)] z-50 flex flex-col items-center gap-2 sm:inset-x-auto sm:right-4 sm:items-end"
+  aria-live="polite"
 >
-  @for (toast of toastService.toasts(); track toast.id) {
+  @for (toast of bottomToasts(); track toast.id) {
     <div
       class="anim-line-in pointer-events-auto flex w-full max-w-sm items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium shadow-sm"
       [class]="variantClasses(toast.variant)"

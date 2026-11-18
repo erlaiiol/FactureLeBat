@@ -560,7 +560,7 @@ export class InvoiceMapper {
       : isVatApplicable(company.legalStatus);
     const vatRateBasisPoints = company.vatRateBasisPoints;
 
-    const lineCalculations = dto.lines!.map((line) =>
+    const lineCalculations = (dto.lines ?? []).map((line) =>
       this.calculationService.computeLineTotal({
         unit: line.unit,
         quantity: line.quantity,
@@ -594,7 +594,7 @@ export class InvoiceMapper {
         continue;
       }
 
-      const weights = expandServiceLineWeights(serviceLine, dto.lines!.length)!;
+      const weights = expandServiceLineWeights(serviceLine, dto.lines?.length ?? 0)!;
       const shares = this.calculationService.computeWeightedSplit({
         amountCents: serviceLine.amountCents,
         weights,
@@ -616,7 +616,7 @@ export class InvoiceMapper {
       });
     }
 
-    const lines: InvoiceLineWithTotal[] = dto.lines!.map((line, index) => {
+    const lines: InvoiceLineWithTotal[] = (dto.lines ?? []).map((line, index) => {
       const quantity = line.quantity.toString();
       const lineTotalExclVatCents = lineTotalsCents[index];
       const displayUnitPriceCents =

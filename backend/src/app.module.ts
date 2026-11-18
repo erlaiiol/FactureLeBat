@@ -1,3 +1,4 @@
+import { ClientLogModule } from './client-log/client-log.module';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
@@ -59,6 +60,7 @@ import { SourcingModule } from './sourcing/sourcing.module';
     ReportsModule,
     ReferralModule,
     ReceivedInvoiceModule,
+    ClientLogModule,
   ],
   controllers: [HealthController],
   providers: [

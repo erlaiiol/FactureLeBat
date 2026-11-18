@@ -47,7 +47,7 @@ import {
 } from './manual-invoice-draft.store';
 import {
   formatManualPrice,
-  parseManualNumber,
+  parseManualCellNumber,
   parseManualQuantityMagnitude,
 } from './manual-cell-format.util';
 import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
@@ -207,12 +207,18 @@ export class InvoiceCreateManualPage {
       return;
     }
     const magnitude = parseManualQuantityMagnitude(row.cells[quantityColumnId ?? ''] ?? '') ?? 1;
-    const unitPrice = parseManualNumber(row.cells[unitPriceColumnId ?? ''] ?? '') ?? 0;
+    const unitPrice = parseManualCellNumber(row.cells[unitPriceColumnId ?? ''] ?? '') ?? 0;
     this.store.setCellValue(
       row.id,
       lineTotalColumnId,
-      formatManualPrice(String(magnitude * unitPrice)),
+      formatManualPrice(String(magnitude * unitPrice), { forceNegative: row.deduction }),
     );
+  }
+
+  // Colors a negative amount (remise/acompte) so a deduction row reads as
+  // one at a glance — the sign itself is what actually gets billed.
+  protected isNegativeCell(raw: string | undefined): boolean {
+    return (parseManualCellNumber(raw ?? '') ?? 0) < 0;
   }
 
   protected onCellInput(rowId: string, columnId: string, event: Event): void {
@@ -232,7 +238,11 @@ export class InvoiceCreateManualPage {
     if (column.role !== 'UNIT_PRICE' && column.role !== 'LINE_TOTAL') {
       return;
     }
-    this.store.setCellValue(row.id, column.id, formatManualPrice(row.cells[column.id] ?? ''));
+    this.store.setCellValue(
+      row.id,
+      column.id,
+      formatManualPrice(row.cells[column.id] ?? '', { forceNegative: row.deduction }),
+    );
   }
 
   protected onLabelInput(column: ManualColumnDraft, event: Event): void {
@@ -561,8 +571,14 @@ export class InvoiceCreateManualPage {
       return;
     }
     if (!this.store.canPreview()) {
+      // A draft whose rows net out negative (remises/acomptes exceeding the
+      // billed amount) is blocked too — name that case explicitly rather
+      // than the generic "client + désignation" message, which would be
+      // wrong for it.
       this.errorMessage.set(
-        'Merci de renseigner un client et au moins une ligne avec une désignation avant de créer la facture.',
+        this.store.rowsNetNegative()
+          ? 'Le total des lignes est négatif : les remises/acomptes ne peuvent pas dépasser le montant facturé.'
+          : 'Merci de renseigner un client et au moins une ligne avec une désignation avant de créer la facture.',
       );
       return;
     }

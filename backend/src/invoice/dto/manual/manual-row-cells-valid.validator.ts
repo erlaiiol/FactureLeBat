@@ -19,7 +19,7 @@ export function ManualRowCellsValid(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'each manual row must supply exactly one cell per column, a non-empty description, and a valid non-negative unit price/line total (or a blank line total)',
+          'each manual row must supply exactly one cell per column, a non-empty description, and a valid unit price/line total (or a blank one) — negative amounts are allowed for remise/acompte lines',
         ...options,
       },
       validator: {

@@ -490,6 +490,17 @@ Manual mode's own principle ("nothing computed behind the artisan's back," alrea
 
 **Decided during implementation, after flagging the legal nuance to the user:** the company's own default regime (derived from `legalStatus`) is not itself editable anywhere — only a manual invoice's *effective* treatment for that one document can diverge from it. Because that means a VAT-registered company can mark one invoice "TVA non applicable" (or the reverse for a franchise-en-base micro-entrepreneur), `PdfService`'s legal mention had to stop assuming the two always match: `InvoiceMapper.issuerFields` now also carries `companyVatExempt` (the company's own real status, independent of the invoice's resolved `vatApplicable`), and only cites "art. 293 B du CGI" when that's true — a company that overrides one invoice away from its own regime gets the plain "TVA non applicable" mention instead, never a false legal citation. `InvoiceTotalsSummaryComponent`'s VAT line, editable-mode only, carries a small "ⓘ" (native `<details>/<summary>`, no extra state) showing the company's real legal status and default regime, so the override is always made with that context visible.
 
+
+## Later addition — negative rows (remise / acompte) in manual mode (2026-11-18)
+
+Manual mode had no way to deduct anything: `UNIT_PRICE`/`LINE_TOTAL` cells rejected a minus sign, so a remise or an acompte déjà versé couldn't be written on the invoice. Now:
+
+- [x] `UNIT_PRICE`/`LINE_TOTAL` cells accept a leading `-` (or typographic `−`) — backend `parseManualDecimalCell`, frontend `parseManualCellNumber`. The Sous-total/TVA/TTC override fields deliberately stay ≥ 0 (`parseManualNumber`'s strict default).
+- [x] A "+ Remise / acompte" button adds a row prefilled "Remise" whose amounts are forced negative on blur / "Mettre en forme" / "?" autofill (`ManualRowDraft.deduction`, draft-only state) — the artisan types `150` and gets `-150,00 €`. Negative amounts render in `text-danger`.
+- [x] Rows may be negative individually, but their sum may not (`ManualRowsTotalNonNegative` on the backend, `rowsNetNegative` → preview blocker on the frontend): a document netting below zero is an avoir, not a facture/devis — rejected rather than floored, so the printed total always matches the lines.
+- [x] Factur-X: a negative row becomes quantity `-1` × positive net price (EN16931 BR-27).
+- Not done: no structured "acompte déjà facturé, facture n° …" link back to the deposit invoice — the artisan writes that reference in the row's description.
+
 ---
 
 # Phase 10 — Sourcing Assistant (AI Supplier Search)

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { ToastService, ToastVariant } from '../../core/services/toast.service';
 
 // Mounted once at the app root (app.html), same "one shared overlay, read
@@ -11,6 +11,13 @@ import { ToastService, ToastVariant } from '../../core/services/toast.service';
 })
 export class ToastContainerComponent {
   protected readonly toastService = inject(ToastService);
+
+  protected readonly centerToasts = computed(() =>
+    this.toastService.toasts().filter((toast) => toast.placement === 'center'),
+  );
+  protected readonly bottomToasts = computed(() =>
+    this.toastService.toasts().filter((toast) => toast.placement === 'bottom'),
+  );
 
   protected variantClasses(variant: ToastVariant): string {
     return VARIANT_CLASSES[variant];

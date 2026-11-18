@@ -2,6 +2,7 @@ import {
   formatManualPrice,
   formatManualQuantity,
   formatManualText,
+  parseManualCellNumber,
   parseManualNumber,
 } from './manual-cell-format.util';
 
@@ -23,8 +24,23 @@ describe('parseManualNumber', () => {
     expect(parseManualNumber('')).toBeNull();
   });
 
-  it('returns null for a negative value', () => {
+  it('returns null for a negative value by default (the totals override fields stay ≥ 0)', () => {
     expect(parseManualNumber('-5')).toBeNull();
+  });
+
+  it('accepts a negative value when allowed — a remise/acompte table cell', () => {
+    expect(parseManualNumber('-5', { allowNegative: true })).toBe(-5);
+    expect(parseManualCellNumber('-150,00 €')).toBe(-150);
+  });
+
+  it('normalizes a typographic minus and a space after the sign', () => {
+    expect(parseManualCellNumber('−150')).toBe(-150);
+    expect(parseManualCellNumber('- 12,5')).toBe(-12.5);
+  });
+
+  it('rejects a sign anywhere but the front', () => {
+    expect(parseManualCellNumber('150-')).toBeNull();
+    expect(parseManualCellNumber('--150')).toBeNull();
   });
 
   it('strips a "€" sign — formatManualPrice adds one to every price cell automatically', () => {
@@ -60,6 +76,20 @@ describe('formatManualPrice', () => {
 
   it('leaves an unparseable cell untouched (trimmed)', () => {
     expect(formatManualPrice('gratuit')).toBe('gratuit');
+  });
+
+  it('keeps the sign of a negative amount', () => {
+    expect(formatManualPrice('-150')).toBe('-150,00 €');
+    expect(formatManualPrice('− 45,9 €')).toBe('-45,90 €');
+  });
+
+  it('forces a negative amount on a deduction row, whatever sign was typed', () => {
+    expect(formatManualPrice('150', { forceNegative: true })).toBe('-150,00 €');
+    expect(formatManualPrice('-150', { forceNegative: true })).toBe('-150,00 €');
+  });
+
+  it('never prints "-0,00 €"', () => {
+    expect(formatManualPrice('0', { forceNegative: true })).toBe('0,00 €');
   });
 });
 

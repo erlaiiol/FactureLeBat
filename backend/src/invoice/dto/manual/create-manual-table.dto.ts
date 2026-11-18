@@ -4,6 +4,7 @@ import { CreateManualColumnDto } from './create-manual-column.dto';
 import { CreateManualRowDto } from './create-manual-row.dto';
 import { ManualColumnsCoverRequiredRoles } from './manual-columns-cover-required-roles.validator';
 import { ManualRowCellsValid } from './manual-row-cells-valid.validator';
+import { ManualRowsTotalNonNegative } from './manual-rows-total-non-negative.validator';
 
 // At minimum DESCRIPTION + QUANTITY + UNIT_PRICE + LINE_TOTAL — see
 // ManualColumnsCoverRequiredRoles.
@@ -27,5 +28,6 @@ export class CreateManualTableDto {
   @ValidateNested({ each: true })
   @Type(() => CreateManualRowDto)
   @ManualRowCellsValid()
+  @ManualRowsTotalNonNegative()
   rows: CreateManualRowDto[];
 }

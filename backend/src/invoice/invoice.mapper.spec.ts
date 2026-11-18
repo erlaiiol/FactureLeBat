@@ -222,6 +222,21 @@ describe('InvoiceMapper', () => {
       expect(result.totalInclVatCents).toBe(54000);
     });
 
+    it('previews a services-only invoice (no product lines, VISIBLE service lines only)', () => {
+      const dto = createInvoiceDtoFixture({
+        lines: [],
+        serviceLines: [{ name: "Main-d'œuvre", amountCents: 10000, visibility: 'VISIBLE' }],
+      });
+      const preview = mapper.toPreviewPdfData(
+        dto,
+        companyFixture({ legalStatus: 'MICRO_ENTREPRENEUR' }),
+      );
+
+      expect(preview.lines).toHaveLength(0);
+      expect(preview.subtotalExclVatCents).toBe(10000);
+      expect(preview.totalInclVatCents).toBe(10000);
+    });
+
     it('adds a VISIBLE service line amount to the subtotal without touching any line total', () => {
       const invoice = invoiceWithLines({
         serviceLines: [

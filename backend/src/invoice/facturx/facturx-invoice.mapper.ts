@@ -238,14 +238,19 @@ export function buildCrossIndustryInvoice(
   // matching this app's existing "MANUAL mode is a free-form canvas, not a
   // structured table" precedent (compare Phase 17's "no per-line
   // categorization for MANUAL" decision).
+  //
+  // A negative row (a remise or an acompte déjà versé typed as its own line
+  // on the manual canvas) keeps its negative line net amount (BT-131 may be
+  // negative), but EN16931 BR-27 forbids a negative item net price (BT-146)
+  // — so the sign moves onto the billed quantity instead: -1 × 150 = -150.
   const manualLines = (data.manualTable?.rows ?? []).map((row, index) =>
     buildProductLine(
       m,
       String(data.lines.length + data.serviceLines.length + index + 1),
       row.cells.filter(Boolean).join(' — ') || 'Prestation',
       'C62', // no real unit to key off — see this function's own callers' comments
-      1,
-      toEuros(row.totalCents),
+      row.totalCents < 0 ? -1 : 1,
+      toEuros(Math.abs(row.totalCents)),
       toEuros(row.totalCents),
       vat,
     ),
@@ -307,6 +312,19 @@ export function buildCrossIndustryInvoice(
         chargeIndicator: new m.IndicatorType({ indicator: false }),
         actualAmount: new m.AmountType({ value: toEuros(discount.amountCents) }),
         reason: new m.TextType({ value: discount.name }),
+        // BR-32: every document-level allowance (BG-20) must carry its own
+        // VAT category (BT-95) — the invoice's single category, since this
+        // app never mixes categories within one document. It's also what
+        // lets the VAT breakdown's basis (BR-S-08/BR-O-08/BR-AE-08…) net
+        // this allowance out of the line sum.
+        categoryTradeTax: new m.TradeTaxType({
+          typeCode: new m.TaxTypeCodeType({ value: TAX_TYPE_VAT }),
+          categoryCode: new m.TaxCategoryCodeType({ value: vat.categoryCode }),
+          rateApplicablePercent:
+            vat.ratePercent !== undefined
+              ? new m.PercentType({ value: vat.ratePercent })
+              : undefined,
+        }),
       }),
   );
 

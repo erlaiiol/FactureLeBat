@@ -880,3 +880,16 @@ input[type='date']::-webkit-calendar-picker-indicator {
     transition-delay: 0ms !important;
   }
 }
+
+/* Mobile: no double-tap-to-zoom anywhere (keeps pinch-zoom on the web
+   build), and never let a stray too-wide element turn the whole page into
+   a sideways-pannable canvas — `clip`, not `hidden`, so no scroll container
+   is created and position: sticky keeps working. Native shells also lock
+   the scale entirely, see main.ts. */
+html {
+  touch-action: manipulation;
+}
+html,
+body {
+  overflow-x: clip;
+}

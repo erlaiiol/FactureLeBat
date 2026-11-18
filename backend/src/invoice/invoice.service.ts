@@ -214,11 +214,11 @@ export class InvoiceService {
         entryMode === InvoiceEntryMode.MANUAL
           ? (dto.manualNatureOfOperation ?? NatureOperation.PRESTATION_SERVICES)
           : undefined,
-      // ManualModeFieldsConsistency guarantees `lines` is a non-empty array
-      // whenever entryMode is GUIDED (the only branch that reads it below).
+      // GUIDED may legitimately have zero product lines (services-only
+      // invoice, see ManualModeFieldsConsistency) — hence `?? []`.
       lines:
         entryMode === InvoiceEntryMode.GUIDED
-          ? dto.lines!.map((line) => ({
+          ? (dto.lines ?? []).map((line) => ({
               description: line.description,
               unit: line.unit,
               quantity: line.quantity,
@@ -234,7 +234,7 @@ export class InvoiceService {
             }))
           : [],
       serviceLines: serviceLineDtos.map((serviceLine): CreateInvoiceServiceLineData => {
-        const weights = expandServiceLineWeights(serviceLine, dto.lines!.length);
+        const weights = expandServiceLineWeights(serviceLine, dto.lines?.length ?? 0);
         return {
           serviceId: serviceLine.serviceId,
           name: serviceLine.name,

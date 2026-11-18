@@ -5,6 +5,7 @@ import { catchError, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../services/auth.service';
 import { ToastService } from '../services/toast.service';
+import { isNetworkError } from '../utils/is-network-error.util';
 
 const EXEMPT_PATHS = [
   '/auth/login',
@@ -101,8 +102,23 @@ export const authRefreshInterceptor: HttpInterceptorFn = (req, next) => {
       return authService.refreshSession().pipe(
         switchMap(() => next(req)),
         catchError((refreshError: unknown) => {
+          // No signal (4G drop, app just woken from background) is not "your
+          // session is dead" — the refresh token is probably still valid.
+          // Logging the artisan out here used to turn every flaky-network
+          // moment into a forced re-login; let the caller's own error/
+          // offline handling deal with it instead.
+          if (isNetworkError(refreshError)) {
+            return throwError(() => refreshError);
+          }
           const supersededByNewerAuth = authService.currentUser() !== userBeforeRefresh;
-          if (!supersededByNewerAuth && !isOnPublicRoute(router.url, router)) {
+          if (supersededByNewerAuth) {
+            return throwError(() => refreshError);
+          }
+          // Must happen before the navigation below: guestGuard on
+          // /connexion reads currentUser, and a stale one sent the artisan
+          // right back into the app — where every call 401'd again.
+          authService.clearSession();
+          if (!isOnPublicRoute(router.url, router)) {
             // Without this, a component mid-request (e.g. subscribe.page.ts
             // awaiting a Stripe checkout URL) gets torn down by the
             // navigation and its own error handler never runs — the artisan

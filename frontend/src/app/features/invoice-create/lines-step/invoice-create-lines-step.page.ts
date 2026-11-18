@@ -24,6 +24,7 @@ import { ActivityCategory } from '../../../core/models/report.model';
 import { ServicePricingMode, ServiceProfile } from '../../../core/models/service.model';
 import { Unit } from '../../../core/models/unit.model';
 import { CatalogFolderService } from '../../../core/services/catalog-folder.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { BadgeComponent } from '../../../shared/components/badge.component';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconCheckComponent } from '../../../shared/components/icon-check.component';
@@ -99,6 +100,13 @@ function groupByFolder<T extends { folders: CatalogFolderRef[] }>(
 // Still seeded from, and continuously synced back into, the shared
 // InvoiceDraftStore so the shell's total and preview button reflect this
 // step's edits immediately.
+const SERVICES_ONLY_VISIBLE_MESSAGE =
+  'Sans ligne produit, une prestation reste visible : elle apparaît sur sa propre ligne de la facture.';
+// Mirrors the backend DTOs (CreateInvoiceServiceLineDto/DiscountLineDto.name,
+// CreateInvoiceLineDto.description).
+const LINE_NAME_MAX_LENGTH = 200;
+const LINE_DESCRIPTION_MAX_LENGTH = 300;
+
 @Component({
   selector: 'app-invoice-create-lines-step-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -133,8 +141,8 @@ export class InvoiceCreateLinesStepPage {
   protected readonly draftStore = inject(InvoiceDraftStore);
   private readonly tourService = inject(TourService);
   private readonly catalogFolderService = inject(CatalogFolderService);
+  private readonly toastService = inject(ToastService);
 
-  protected readonly errorMessage = signal<string | null>(null);
   // Phase 13.5 gallery redesign: which of the three fixed "+" flyouts is
   // open — mutually exclusive, opening one closes the other two.
   protected readonly productPanelOpen = signal(false);
@@ -380,11 +388,15 @@ export class InvoiceCreateLinesStepPage {
 
   constructor() {
     this.lines.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.keepServiceLinesVisibleWithoutProductLines();
       this.draftStore.setLines(this.lines.getRawValue());
     });
     this.serviceLines.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.keepServiceLinesVisibleWithoutProductLines();
       this.draftStore.setServiceLines(this.serviceLines.getRawValue());
     });
+    // A draft restored from storage may predate this rule.
+    this.keepServiceLinesVisibleWithoutProductLines();
     this.discountLines.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.draftStore.setDiscountLines(this.discountLines.getRawValue());
     });
@@ -435,7 +447,10 @@ export class InvoiceCreateLinesStepPage {
       // Phase 34: a stable identity for this line, independent of its
       // FormArray position — see InvoiceLineDraft.clientId.
       clientId: this.fb.nonNullable.control(initial?.clientId ?? crypto.randomUUID()),
-      description: this.fb.nonNullable.control(initial?.description ?? '', Validators.required),
+      description: this.fb.nonNullable.control(initial?.description ?? '', [
+        Validators.required,
+        Validators.maxLength(LINE_DESCRIPTION_MAX_LENGTH),
+      ]),
       unit: this.fb.nonNullable.control<Unit>(initial?.unit ?? 'SQUARE_METER', Validators.required),
       quantity: this.fb.nonNullable.control(initial?.quantity ?? 0, [
         Validators.required,
@@ -456,7 +471,9 @@ export class InvoiceCreateLinesStepPage {
       roundUpToPackaging: this.fb.nonNullable.control(initial?.roundUpToPackaging ?? true),
       // Freehand product reference (e.g. "UC204850"), same soft-snapshot
       // spirit as packagingQuantity above.
-      productCode: this.fb.control<string | null>(initial?.productCode ?? null),
+      productCode: this.fb.control<string | null>(initial?.productCode ?? null, [
+        Validators.maxLength(50),
+      ]),
       // Soft reference to the catalog Product this line was toggled on
       // from — see InvoiceLineDraft.productId.
       productId: this.fb.control<string | null>(initial?.productId ?? null),
@@ -628,7 +645,10 @@ export class InvoiceCreateLinesStepPage {
       // Phase 34: same stable-identity role as createLineGroup's clientId.
       clientId: this.fb.nonNullable.control(initial?.clientId ?? crypto.randomUUID()),
       serviceId: this.fb.control<string | null>(initial?.serviceId ?? null),
-      name: this.fb.nonNullable.control(initial?.name ?? '', Validators.required),
+      name: this.fb.nonNullable.control(initial?.name ?? '', [
+        Validators.required,
+        Validators.maxLength(LINE_NAME_MAX_LENGTH),
+      ]),
       description: this.fb.nonNullable.control(initial?.description ?? ''),
       amountEuros: this.fb.nonNullable.control(initial?.amountEuros ?? 0, [
         Validators.required,
@@ -752,7 +772,32 @@ export class InvoiceCreateLinesStepPage {
   // expanding the card, but most margin-hiding needs nothing more than this.
   protected toggleServiceLineVisibility(group: InvoiceServiceLineFormGroup): void {
     const control = group.controls.visibility;
+    if (control.value === 'VISIBLE' && this.lines.length === 0) {
+      this.toastService.info(SERVICES_ONLY_VISIBLE_MESSAGE, 'center');
+      return;
+    }
     control.setValue(control.value === 'VISIBLE' ? 'REDISTRIBUTED' : 'VISIBLE');
+  }
+
+  // A services-only invoice (no product line) is legitimate, but a
+  // REDISTRIBUTED service line would then have nothing to fold into — the
+  // backend rejects it (ManualModeFieldsConsistency). Rather than blocking
+  // the artisan at "Voir l'aperçu", flip such lines back to VISIBLE the
+  // moment the last product line disappears (or a REDISTRIBUTED catalog
+  // service is picked first), with a one-line explanation. Idempotent: the
+  // nested valueChanges this triggers finds nothing left to flip.
+  private keepServiceLinesVisibleWithoutProductLines(): void {
+    if (this.lines.length > 0) {
+      return;
+    }
+    const redistributed = this.serviceLines.controls.filter(
+      (group) => group.controls.visibility.value === 'REDISTRIBUTED',
+    );
+    if (redistributed.length === 0) {
+      return;
+    }
+    redistributed.forEach((group) => group.controls.visibility.setValue('VISIBLE'));
+    this.toastService.info(SERVICES_ONLY_VISIBLE_MESSAGE, 'center');
   }
 
   protected removeServiceLine(index: number): void {
@@ -800,7 +845,10 @@ export class InvoiceCreateLinesStepPage {
   }): InvoiceDiscountLineFormGroup {
     const group = this.fb.nonNullable.group({
       discountId: this.fb.control<string | null>(initial?.discountId ?? null),
-      name: this.fb.nonNullable.control(initial?.name ?? '', Validators.required),
+      name: this.fb.nonNullable.control(initial?.name ?? '', [
+        Validators.required,
+        Validators.maxLength(LINE_NAME_MAX_LENGTH),
+      ]),
       discountType: this.fb.nonNullable.control<DiscountType>(initial?.discountType ?? 'FIXED'),
       fixedAmountEuros: this.fb.nonNullable.control(initial?.fixedAmountEuros ?? 0, [
         Validators.required,
@@ -1265,19 +1313,12 @@ export class InvoiceCreateLinesStepPage {
   // what's here and hand off to it, same checks submit() used to run
   // before persisting.
   protected goToPreview(): void {
-    if (
-      !this.draftStore.canPreview() ||
-      this.lines.invalid ||
-      this.serviceLines.invalid ||
-      this.discountLines.invalid ||
-      this.draftStore.customer().customerName.trim().length === 0
-    ) {
+    const blockingReason = this.previewBlockingReason();
+    if (blockingReason) {
       this.lines.markAllAsTouched();
       this.serviceLines.markAllAsTouched();
       this.discountLines.markAllAsTouched();
-      this.errorMessage.set(
-        'Merci de renseigner un client et au moins une ligne complète avant de voir l’aperçu.',
-      );
+      this.toastService.error(blockingReason);
       return;
     }
 
@@ -1288,7 +1329,40 @@ export class InvoiceCreateLinesStepPage {
     this.draftStore.setLines(this.lines.getRawValue());
     this.draftStore.setServiceLines(this.serviceLines.getRawValue());
     this.draftStore.setDiscountLines(this.discountLines.getRawValue());
-    this.errorMessage.set(null);
     this.router.navigate(['/factures/nouvelle/rapide/apercu']);
+  }
+
+  // The most specific thing standing between the artisan and the preview,
+  // in the order they'd fix it — one precise sentence beats a catch-all
+  // "something is incomplete" on a long form.
+  private previewBlockingReason(): string | null {
+    if (this.draftStore.customer().customerName.trim().length === 0) {
+      return 'Ajoutez le nom du client avant de voir l’aperçu.';
+    }
+    const tooLongLine = this.lines.controls.findIndex((group) =>
+      group.controls.description.hasError('maxlength'),
+    );
+    if (tooLongLine !== -1) {
+      return `La description de la ligne ${tooLongLine + 1} est trop longue (${LINE_DESCRIPTION_MAX_LENGTH} caractères max).`;
+    }
+    const tooLongService = this.serviceLines.controls.findIndex((group) =>
+      group.controls.name.hasError('maxlength'),
+    );
+    if (tooLongService !== -1) {
+      return `Le nom de la prestation ${tooLongService + 1} est trop long (${LINE_NAME_MAX_LENGTH} caractères max).`;
+    }
+    const tooLongDiscount = this.discountLines.controls.findIndex((group) =>
+      group.controls.name.hasError('maxlength'),
+    );
+    if (tooLongDiscount !== -1) {
+      return `Le nom de la remise ${tooLongDiscount + 1} est trop long (${LINE_NAME_MAX_LENGTH} caractères max).`;
+    }
+    if (this.lines.invalid || this.serviceLines.invalid || this.discountLines.invalid) {
+      return 'Complétez ou supprimez les lignes incomplètes avant de voir l’aperçu.';
+    }
+    if (!this.draftStore.canPreview()) {
+      return 'Ajoutez au moins une ligne ou une prestation visible avant de voir l’aperçu.';
+    }
+    return null;
   }
 }

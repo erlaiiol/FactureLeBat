@@ -58,6 +58,22 @@ export class InvoiceServiceLineFormComponent {
   readonly lineLabels = input.required<string[]>();
   readonly remove = output<void>();
 
+  protected readonly nameMaxLength = 200;
+  // Only show the counter once it's actually useful — a short name
+  // ("Main-d'œuvre") shouldn't carry visual noise.
+  protected readonly nameCounterThreshold = 150;
+
+  protected nameLength(): number {
+    return this.group().controls.name.value.length;
+  }
+
+  // lineLabels mirrors the invoice's product lines one-to-one — empty means
+  // a services-only invoice, where REDISTRIBUTED has nothing to fold into
+  // (see InvoiceCreateLinesStepPage.keepServiceLinesVisibleWithoutProductLines).
+  protected hasProductLines(): boolean {
+    return this.lineLabels().length > 0;
+  }
+
   protected isRedistributed(): boolean {
     return this.group().controls.visibility.value === 'REDISTRIBUTED';
   }

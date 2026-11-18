@@ -585,6 +585,34 @@ describe('InvoiceDraftStore', () => {
       expect(store.canPreview()).toBe(false);
     });
 
+    it('is false when a VISIBLE service line sits next to a REDISTRIBUTED one with no product lines', () => {
+      const store = createStore();
+      store.setCustomer(customerFixture);
+      const base = {
+        serviceId: null,
+        description: '',
+        amountEuros: 100,
+        redistributionStrategy: 'EQUAL' as const,
+        weights: [],
+        pricingMode: 'FIXED' as const,
+        percentageBasisPoints: null,
+        catalogServiceId: null,
+        saveAsNewService: false,
+        activityCategory: null,
+      };
+      store.setServiceLines([
+        { ...base, clientId: 'service-client-1', name: "Main-d'œuvre", visibility: 'VISIBLE' },
+        {
+          ...base,
+          clientId: 'service-client-2',
+          name: 'Savoir-faire',
+          visibility: 'REDISTRIBUTED',
+        },
+      ]);
+
+      expect(store.canPreview()).toBe(false);
+    });
+
     it('is false when the only service line has no name and no resolved amount', () => {
       const store = createStore();
       store.setCustomer(customerFixture);

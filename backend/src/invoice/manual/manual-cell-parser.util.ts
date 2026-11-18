@@ -12,14 +12,27 @@ import { Prisma } from '../../../generated/prisma/client';
 // guessed at. The same generous-but-finite bound as CreateInvoiceLineDto's
 // quantity/price fields — exists to reject an obviously-wrong value, not to
 // model a real business limit.
-const MAX_CELL_VALUE = 1_000_000;
-const DECIMAL_PATTERN = /^\d{1,9}(?:\.\d{1,3})?$/;
+//
+// A leading minus sign is accepted (ASCII "-" or the typographic "−" a
+// French keyboard/autocorrect may produce, optionally followed by a space):
+// a negative UNIT_PRICE/LINE_TOTAL is how an artisan writes a remise or an
+// acompte déjà versé on the manual canvas, as its own line ("Remise
+// fidélité … -150,00 €"). The bound applies to the magnitude. Whether the
+// table as a whole may go negative is a separate, table-level rule — see
+// ManualRowsTotalNonNegative.
+const MAX_CELL_MAGNITUDE = 1_000_000;
+const DECIMAL_PATTERN = /^-?\d{1,9}(?:\.\d{1,3})?$/;
 
 export function parseManualDecimalCell(raw: string): Prisma.Decimal | null {
-  const normalized = raw.trim().replace(/€/g, '').trim().replace(',', '.');
+  const normalized = raw
+    .trim()
+    .replace(/€/g, '')
+    .trim()
+    .replace(/^[-−]\s*/, '-')
+    .replace(',', '.');
   if (!DECIMAL_PATTERN.test(normalized)) {
     return null;
   }
   const value = new Prisma.Decimal(normalized);
-  return value.lessThanOrEqualTo(MAX_CELL_VALUE) ? value : null;
+  return value.abs().lessThanOrEqualTo(MAX_CELL_MAGNITUDE) ? value : null;
 }

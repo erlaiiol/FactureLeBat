@@ -64,6 +64,12 @@ make deploy
 
 This wraps `infra/deploy.sh`: `git pull --ff-only`, rebuild images, recreate containers. No separate migration step — the backend's own entrypoint applies pending migrations before it starts serving traffic (see [architecture.md](architecture.md#entrypoint-scripts-backend)). There is a brief backend restart window (single container, no blue/green) — acceptable for this app's scale per the priority order above; revisit only if that ever becomes a real problem.
 
+### A release that requires everyone to log in again
+
+Bump `SESSION_EPOCH` in `frontend/src/app/core/services/session-epoch.ts` (e.g. `1` → `2`) in that release — only for changes that break existing sessions (cookie names/paths/`sameSite`, what the session must carry, the native shell's origin). On the first launch of the new build (store update on iOS/Android, next page load on web), a user still logged in from the previous epoch is logged out server-side and lands on `/connexion` with « L'application a été mise à jour : merci de vous reconnecter. ». Users on an old native build are only affected once they install the update.
+
+To invalidate every session immediately on the **server** side instead (e.g. a leaked secret), rotate `JWT_ACCESS_SECRET` in `infra/.env`, redeploy, and revoke every refresh token (they're opaque DB rows, not JWTs): `UPDATE "RefreshToken" SET "revokedAt" = now() WHERE "revokedAt" IS NULL;`. Every call then 401s, the silent refresh fails, and the app routes to `/connexion` (session cleared first, see `auth-refresh.interceptor.ts`).
+
 ## Rolling back
 
 ```bash

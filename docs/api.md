@@ -420,7 +420,7 @@ The body above is for the default `entryMode: "GUIDED"`. Setting `entryMode: "MA
 | `manualTable.columns[].widthPx`   | integer, 40-800, optional      | persisted column width from the canvas's drag-resize handle           |
 | `manualTable.rows`                | array, 1-200 items              |                                                                     |
 | `manualTable.rows[].heightPx`     | integer, 24-400, optional       | persisted row height from the canvas's drag-resize handle             |
-| `manualTable.rows[].cells`        | string[], ≤2000 chars each      | **Positional**, aligned with `manualTable.columns` (`cells[i]` targets `columns[i]`) — same convention as `serviceLines[].weights`. The `DESCRIPTION` cell must be non-empty; the `QUANTITY`/`UNIT_PRICE` cells must parse as a non-negative decimal (comma or dot separator accepted) |
+| `manualTable.rows[].cells`        | string[], ≤2000 chars each      | **Positional**, aligned with `manualTable.columns` (`cells[i]` targets `columns[i]`) — same convention as `serviceLines[].weights`. The `DESCRIPTION` cell must be non-empty; `UNIT_PRICE`/`LINE_TOTAL` must be blank or parse as a decimal (comma or dot separator, optional `€`, optional leading `-`/`−`). A **negative** `LINE_TOTAL` is a remise or an acompte déjà versé written as its own row; the sum of all rows' `LINE_TOTAL` must stay ≥ 0 (`ManualRowsTotalNonNegative` — a document netting below zero is an avoir, which this app doesn't produce) |
 | `subtotalOverrideCents`          | integer ≥ 0, optional          | manual mode's own aggregate figures, freely overridable — same "nothing computed behind the artisan's back" principle as a `LINE_TOTAL` cell, extended to the whole invoice. Forbidden for `GUIDED`, where this stays purely derived |
 | `vatOverrideCents`               | integer ≥ 0, optional          | same as `subtotalOverrideCents`, for the VAT figure |
 | `totalOverrideCents`             | integer ≥ 0, optional          | same as `subtotalOverrideCents`, for the grand total |
@@ -429,6 +429,8 @@ The body above is for the default `entryMode: "GUIDED"`. Setting `entryMode: "MA
 | `manualNatureOfOperation`        | `"LIVRAISON_BIENS"` \| `"PRESTATION_SERVICES"` \| `"BIENS_ET_SERVICES"`, optional | Phase 1.1-8 — explicit "nature de l'opération" (`GUIDED` derives this instead); omitted here defaults to `"PRESTATION_SERVICES"` |
 
 A manual row is priced exactly like a `GUIDED` line whose `unit` is `"UNIT"` — plain `quantity × unitPriceCents`, no waste surcharge, no packaging (neither concept exists on the manual canvas). A `CUSTOM` column's cells are informational text only, never summed into any total.
+
+**Remises / acomptes in manual mode**: there is no `discountLines` equivalent for `MANUAL` — a deduction is simply a row with a negative `LINE_TOTAL` (e.g. `["Acompte versé le 02/11", "", "", "-400,00 €"]`), summed into the subtotal like any other row, so VAT is computed on the net amount. The three `*OverrideCents` fields stay ≥ 0. In the Factur-X XML a negative row is emitted as billed quantity `-1` × a positive net price (EN16931 BR-27 forbids a negative item net price; the line total itself may be negative).
 
 ### `GET /invoices`
 
