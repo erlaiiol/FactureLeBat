@@ -29,6 +29,7 @@
     <span class="text-sm font-medium text-ink">Nom</span>
     <input
       formControlName="name"
+      [maxlength]="nameMaxLength"
       type="text"
       [readonly]="isCatalogLinked()"
       placeholder="Ex : Main-d’œuvre"
@@ -36,6 +37,16 @@
       [class.bg-bg]="isCatalogLinked()"
       [class.text-ink-soft]="isCatalogLinked()"
     />
+    @if (nameLength() >= nameCounterThreshold) {
+      <span
+        class="self-end text-xs font-medium"
+        [class.text-danger]="nameLength() >= nameMaxLength"
+        [class.text-ink-soft]="nameLength() < nameMaxLength"
+        aria-live="polite"
+      >
+        {{ nameLength() }} / {{ nameMaxLength }}
+      </span>
+    }
     @if (isCatalogLinked()) {
       <app-field-hint
         text="Cette prestation vient de votre catalogue — renommez-la depuis « Mes prestations » si besoin."
@@ -56,9 +67,12 @@
     />
   </label>
 
-  <div class="flex gap-3">
+  <!-- Stacked on phones: a number input and a select side by side have
+       intrinsic minimum widths that overflowed a 390px viewport, which made
+       mobile browsers zoom the whole page out (and mis-target taps). -->
+  <div class="flex flex-col gap-3 sm:flex-row">
     @if (isPercentageMode()) {
-      <div class="flex flex-1 flex-col gap-1">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
         <span class="text-sm font-medium text-ink">Pourcentage (%)</span>
         <input
           type="number"
@@ -76,7 +90,7 @@
         />
       </div>
     } @else {
-      <label class="flex flex-1 flex-col gap-1">
+      <label class="flex min-w-0 flex-1 flex-col gap-1">
         <span class="text-sm font-medium text-ink">Montant (€)</span>
         <input
           formControlName="amountEuros"
@@ -89,15 +103,21 @@
       </label>
     }
 
-    <label class="flex flex-1 flex-col gap-1">
+    <label class="flex min-w-0 flex-1 flex-col gap-1">
       <span class="text-sm font-medium text-ink">Visibilité</span>
       <select formControlName="visibility" class="rounded-lg border border-line px-4 py-3 text-lg">
         <option value="VISIBLE">Visible</option>
-        <option value="REDISTRIBUTED">Répartie</option>
+        <option value="REDISTRIBUTED" [disabled]="!hasProductLines()">Répartie</option>
       </select>
-      <app-field-hint
-        text="Visible : sa propre ligne sur la facture. Répartie : le montant est ajouté aux autres lignes, sans apparaître seul."
-      />
+      @if (hasProductLines()) {
+        <app-field-hint
+          text="Visible : sa propre ligne sur la facture. Répartie : le montant est ajouté aux autres lignes, sans apparaître seul."
+        />
+      } @else {
+        <app-field-hint
+          text="Sans ligne produit, la prestation reste visible : elle apparaît sur sa propre ligne de la facture. Ajoutez un produit pour pouvoir la répartir."
+        />
+      }
     </label>
   </div>
 

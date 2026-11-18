@@ -118,6 +118,61 @@ describe('FacturXService', () => {
     expect(hybrid.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
+  // BR-32 / BR-x-08: a document-level discount must carry the invoice's VAT
+  // category, under each category this app emits. Lines sum to 650 €; a
+  // 50 € remise brings the taxable basis down to 600 €.
+  describe('with a document-level discount (remise)', () => {
+    const discounted = {
+      discountLines: [{ name: 'Remise fidélité', amountCents: 5000 }],
+      subtotalExclVatCents: 60000,
+    };
+
+    it('validates under the standard rate (S)', async () => {
+      const data = sampleFactureData({
+        ...discounted,
+        vatAmountCents: 12000,
+        totalInclVatCents: 72000,
+      });
+      const hybrid = await facturXService.generateHybridPdf(
+        await pdfService.generateInvoicePdf(data),
+        data,
+      );
+      expect(hybrid.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    });
+
+    it('validates under franchise en base (not subject to VAT, O)', async () => {
+      const data = sampleFactureData({
+        ...discounted,
+        issuerVatNumber: null,
+        companyVatExempt: true,
+        vatApplicable: false,
+        vatAmountCents: 0,
+        totalInclVatCents: 60000,
+      });
+      const hybrid = await facturXService.generateHybridPdf(
+        await pdfService.generateInvoicePdf(data),
+        data,
+      );
+      expect(hybrid.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    });
+
+    it('validates under reverse charge (AE)', async () => {
+      const data = sampleFactureData({
+        ...discounted,
+        vatApplicable: false,
+        reverseChargeApplicable: true,
+        vatAmountCents: 0,
+        totalInclVatCents: 60000,
+        customerSiret: '98765432100099',
+      });
+      const hybrid = await facturXService.generateHybridPdf(
+        await pdfService.generateInvoicePdf(data),
+        data,
+      );
+      expect(hybrid.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    });
+  });
+
   it('generates a valid hybrid PDF for a MANUAL-mode invoice (degenerate line-per-row mapping)', async () => {
     const data = sampleFactureData({
       entryMode: 'MANUAL',
@@ -133,6 +188,35 @@ describe('FacturXService', () => {
     const hybrid = await facturXService.generateHybridPdf(pdfBuffer, data);
 
     expect(hybrid.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  // A negative manual row (remise / acompte déjà versé) keeps its negative
+  // line amount, but EN16931 BR-27 forbids a negative item net price — the
+  // sign must ride on the billed quantity instead.
+  it('maps a negative MANUAL row to quantity -1 × a positive net price', async () => {
+    const data = sampleFactureData({
+      entryMode: 'MANUAL',
+      lines: [],
+      serviceLines: [],
+      manualTable: {
+        columns: [{ label: 'Description' }, { label: 'Montant' }],
+        rows: [
+          { cells: ['Fourniture et pose', '650,00 €'], totalCents: 65000 },
+          { cells: ['Remise', '-150,00 €'], totalCents: -15000 },
+        ],
+      },
+      subtotalExclVatCents: 50000,
+      vatAmountCents: 10000,
+      totalInclVatCents: 60000,
+    });
+    const pdfBuffer = await pdfService.generateInvoicePdf(data);
+    const hybrid = await facturXService.generateHybridPdf(pdfBuffer, data);
+
+    const { extract } = await import('@stafyniaksacha/facturx');
+    const { xml } = await extract({ pdf: hybrid });
+    expect(xml).toMatch(/<ram:BilledQuantity[^>]*>-1<\/ram:BilledQuantity>/);
+    expect(xml).toMatch(/<ram:LineTotalAmount>-150(\.00)?<\/ram:LineTotalAmount>/);
+    expect(xml).not.toMatch(/<ram:ChargeAmount>-/);
   });
 
   // Regression (found 2026-08-23): unitCode must stay MTK even when the

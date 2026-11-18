@@ -1,5 +1,5 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
-import { InvoiceEntryMode } from '../../../generated/prisma/enums';
+import { InvoiceEntryMode, ServiceVisibility } from '../../../generated/prisma/enums';
 import { CreateInvoiceDto } from './create-invoice.dto';
 
 // Manual mode (Phase 9.5) is an alternate input surface for the same
@@ -15,7 +15,7 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
       propertyName,
       options: {
         message:
-          'entryMode GUIDED requires at least one line, no manualTable, and no totals/VAT/nature-of-operation override; entryMode MANUAL requires a manualTable and no lines/serviceLines/discountLines',
+          'entryMode GUIDED requires at least one line (or only VISIBLE service lines), no manualTable, and no totals/VAT/nature-of-operation override; entryMode MANUAL requires a manualTable and no lines/serviceLines/discountLines',
         ...options,
       },
       validator: {
@@ -24,8 +24,18 @@ export function ManualModeFieldsConsistency(options?: ValidationOptions) {
           const entryMode = (value as InvoiceEntryMode | undefined) ?? InvoiceEntryMode.GUIDED;
 
           if (entryMode === InvoiceEntryMode.GUIDED) {
+            const serviceLines = dto.serviceLines ?? [];
+            // A services-only invoice (e.g. pure main-d'œuvre) is legitimate
+            // as long as every service line stands as its own VISIBLE line —
+            // a REDISTRIBUTED one needs product lines to fold into (EQUAL
+            // would otherwise expand to zero weights and crash
+            // computeWeightedSplit).
+            const hasBillableContent =
+              (dto.lines?.length ?? 0) > 0 ||
+              (serviceLines.length > 0 &&
+                serviceLines.every((line) => line.visibility === ServiceVisibility.VISIBLE));
             return (
-              (dto.lines?.length ?? 0) > 0 &&
+              hasBillableContent &&
               !dto.manualTable &&
               dto.subtotalOverrideCents === undefined &&
               dto.vatOverrideCents === undefined &&

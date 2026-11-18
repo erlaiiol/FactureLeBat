@@ -263,6 +263,78 @@ describe('ManualInvoiceDraftStore', () => {
     });
   });
 
+  describe('remise / acompte (negative rows)', () => {
+    it('subtracts a negative LINE_TOTAL row from the subtotal', () => {
+      const store = createStore();
+      store.setCellValue(store.rows()[0].id, lineTotalColumnId(store), '1000,00 €');
+      store.addRow();
+      store.setCellValue(store.rows()[1].id, lineTotalColumnId(store), '-150,00 €');
+
+      expect(store.totalsPreview().subtotalExclVatCents).toBe(85000);
+    });
+
+    it('addDeductionRow appends a "Remise" row whose amounts format negative whatever was typed', () => {
+      const store = createStore();
+      store.addDeductionRow();
+      const deduction = store.rows()[1];
+      expect(deduction.deduction).toBe(true);
+      expect(deduction.cells[descriptionColumnId(store)]).toBe('Remise');
+
+      store.setCellValue(deduction.id, lineTotalColumnId(store), '150');
+      store.format();
+
+      expect(store.rows()[1].cells[lineTotalColumnId(store)]).toBe('-150,00 €');
+    });
+
+    it('format() never flips the sign of an ordinary row', () => {
+      const store = createStore();
+      store.setCellValue(store.rows()[0].id, lineTotalColumnId(store), '150');
+      store.format();
+      expect(store.rows()[0].cells[lineTotalColumnId(store)]).toBe('150,00 €');
+    });
+
+    it('blocks preview when the rows net out below zero (that would be an avoir)', () => {
+      const store = createStore();
+      store.setCustomer({
+        customerName: 'M. Dupont',
+        customerAddress: '',
+        customerEmail: '',
+        customerPhone: '',
+        deliveryAddress: '',
+        customFields: [],
+      });
+      store.setCellValue(store.rows()[0].id, descriptionColumnId(store), 'Parquet');
+      store.setCellValue(store.rows()[0].id, lineTotalColumnId(store), '100');
+      store.addDeductionRow();
+      store.setCellValue(store.rows()[1].id, lineTotalColumnId(store), '-200');
+
+      expect(store.canPreview()).toBe(false);
+      expect(store.previewBlockers()).toHaveLength(1);
+
+      store.setCellValue(store.rows()[1].id, lineTotalColumnId(store), '-100');
+      expect(store.canPreview()).toBe(true);
+    });
+
+    it('sends negative cells to the API exactly as typed', () => {
+      const store = createStore();
+      store.setCustomer({
+        customerName: 'M. Dupont',
+        customerAddress: '',
+        customerEmail: '',
+        customerPhone: '',
+        deliveryAddress: '',
+        customFields: [],
+      });
+      store.setCellValue(store.rows()[0].id, descriptionColumnId(store), 'Parquet');
+      store.setCellValue(store.rows()[0].id, lineTotalColumnId(store), '500,00 €');
+      store.addDeductionRow();
+      store.setCellValue(store.rows()[1].id, lineTotalColumnId(store), '-150,00 €');
+
+      const request = store.buildInvoiceRequest();
+      expect(request.manualTable!.rows[1].cells).toContain('-150,00 €');
+    });
+  });
+
   describe('totalsPreview overrides (Phase 9.5 bis)', () => {
     function withOneRowTotal(store: ManualInvoiceDraftStore, euros: string): void {
       store.setCellValue(store.rows()[0].id, lineTotalColumnId(store), euros);

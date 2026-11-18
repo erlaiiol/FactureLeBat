@@ -18,6 +18,7 @@ import {
   formatManualPrice,
   formatManualQuantity,
   formatManualText,
+  parseManualCellNumber,
   parseManualNumber,
 } from './manual-cell-format.util';
 
@@ -62,6 +63,12 @@ export interface ManualRowDraft {
   // Keyed by ManualColumnDraft.id — resilient to columns being added/
   // removed/reordered, unlike a positional array would be while editing.
   cells: Record<string, string>;
+  // Added through "+ Remise / acompte": its UNIT_PRICE/LINE_TOTAL are
+  // forced negative on blur/"Mettre en forme"/"?" autofill, so the artisan
+  // never has to remember the minus sign. Draft-only UX state — the backend
+  // only ever sees the (already negative) cell text, and an ordinary row
+  // can still be made negative by typing "-" by hand.
+  deduction?: boolean;
 }
 
 const MIN_COLUMN_WIDTH_PX = 40;
@@ -246,7 +253,7 @@ export class ManualInvoiceDraftStore {
       unit: 'UNIT' as const,
       quantity: 1,
       unitPriceCents: Math.round(
-        (parseManualNumber(row.cells[lineTotalColumnId ?? ''] ?? '') ?? 0) * 100,
+        (parseManualCellNumber(row.cells[lineTotalColumnId ?? ''] ?? '') ?? 0) * 100,
       ),
       wasteSurcharge: 'NONE' as const,
     }));
@@ -299,7 +306,23 @@ export class ManualInvoiceDraftStore {
     const hasUsableRow = this.rows().some(
       (row) => (row.cells[DESCRIPTION_COLUMN_ID] ?? '').trim().length > 0,
     );
-    return hasCustomerName && hasUsableRow;
+    return hasCustomerName && hasUsableRow && !this.rowsNetNegative();
+  });
+
+  // Individual rows may be negative (remise, acompte déjà versé), but their
+  // sum may not — mirrors the backend's ManualRowsTotalNonNegative (a
+  // document netting below zero is an avoir, not a facture/devis). Read off
+  // the raw row sum, not totalsPreview's possibly-overridden subtotal, since
+  // that's what the backend checks too.
+  readonly rowsNetNegative = computed(() => {
+    const lineTotalColumnId = this.columns().find((column) => column.role === 'LINE_TOTAL')?.id;
+    const sumCents = this.rows().reduce(
+      (sum, row) =>
+        sum +
+        Math.round((parseManualCellNumber(row.cells[lineTotalColumnId ?? ''] ?? '') ?? 0) * 100),
+      0,
+    );
+    return sumCents < 0;
   });
 
   // Same two checks as canPreview above, itemized — InvoiceCreateManualPage
@@ -317,6 +340,11 @@ export class ManualInvoiceDraftStore {
     );
     if (!hasUsableRow) {
       blockers.push('Aucune ligne avec une désignation renseignée');
+    }
+    if (this.rowsNetNegative()) {
+      blockers.push(
+        'Le total des lignes est négatif — les remises/acomptes dépassent le montant facturé',
+      );
     }
     return blockers;
   });
@@ -523,6 +551,19 @@ export class ManualInvoiceDraftStore {
     this.rows.update((rows) => [...rows, emptyRow(this.columns())]);
   }
 
+  // "+ Remise / acompte": a row whose amounts are forced negative (see
+  // ManualRowDraft.deduction), prefilled with an editable "Remise" label —
+  // the artisan renames it to "Acompte versé le …" when that's what it is.
+  addDeductionRow(): void {
+    const columns = this.columns();
+    const row = emptyRow(columns);
+    const descriptionColumnId = columns.find((column) => column.role === 'DESCRIPTION')?.id;
+    if (descriptionColumnId) {
+      row.cells[descriptionColumnId] = 'Remise';
+    }
+    this.rows.update((rows) => [...rows, { ...row, deduction: true }]);
+  }
+
   removeRow(rowId: string): void {
     this.rows.update((rows) => (rows.length > 1 ? rows.filter((row) => row.id !== rowId) : rows));
   }
@@ -595,7 +636,7 @@ export class ManualInvoiceDraftStore {
               return [column.id, formatManualQuantity(raw)];
             }
             if (column.role === 'UNIT_PRICE' || column.role === 'LINE_TOTAL') {
-              return [column.id, formatManualPrice(raw)];
+              return [column.id, formatManualPrice(raw, { forceNegative: row.deduction })];
             }
             return [column.id, formatManualText(raw)];
           }),
@@ -682,6 +723,9 @@ export class ManualInvoiceDraftStore {
         ? table.rows.map((row) => ({
             id: row.id,
             heightPx: row.heightPx ?? 44,
+            // A negative row coming back from a persisted devis is a
+            // remise/acompte — keep the auto-negative behavior on edit.
+            deduction: row.lineTotalExclVatCents < 0 || undefined,
             cells: Object.fromEntries(
               columns.map((column, index) => [
                 column.id,

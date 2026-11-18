@@ -419,7 +419,10 @@
                       <div class="flex items-center gap-1">
                         <input
                           type="text"
-                          class="w-full min-w-0 rounded border-none bg-secondary-subtle/40 px-1 text-right font-mono text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle"
+                          class="w-full min-w-0 rounded border-none bg-secondary-subtle/40 px-1 text-right font-mono text-sm outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle"
+                          [class.text-danger]="isNegativeCell(row.cells[column.id])"
+                          [class.text-ink]="!isNegativeCell(row.cells[column.id])"
+                          [placeholder]="row.deduction ? '-0,00 €' : ''"
                           [value]="row.cells[column.id]"
                           (input)="onCellInput(row.id, column.id, $event)"
                           (blur)="onPriceCellBlur(row, column)"
@@ -437,9 +440,15 @@
                     } @else {
                       <input
                         type="text"
-                        class="w-full rounded border-none bg-secondary-subtle/40 px-1 text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle"
+                        class="w-full rounded border-none bg-secondary-subtle/40 px-1 text-sm outline-none transition-colors hover:bg-secondary-subtle focus:bg-secondary-subtle"
                         [class.text-right]="
                           column.role === 'QUANTITY' || column.role === 'UNIT_PRICE'
+                        "
+                        [class.text-danger]="
+                          column.role === 'UNIT_PRICE' && isNegativeCell(row.cells[column.id])
+                        "
+                        [class.text-ink]="
+                          column.role !== 'UNIT_PRICE' || !isNegativeCell(row.cells[column.id])
                         "
                         [value]="row.cells[column.id]"
                         (input)="onCellInput(row.id, column.id, $event)"
@@ -472,6 +481,17 @@
             variant="secondary"
             tone="subtle"
             type="button"
+            appTourAnchor="manual-add-deduction"
+            (click)="store.addDeductionRow()"
+          >
+            + Remise / acompte
+          </app-big-button>
+        </div>
+        <div class="max-w-xs flex-1">
+          <app-big-button
+            variant="secondary"
+            tone="subtle"
+            type="button"
             appTourAnchor="manual-format"
             (click)="store.format()"
           >
@@ -479,6 +499,9 @@
           </app-big-button>
         </div>
       </div>
+      <app-field-hint
+        text="Remise ou acompte déjà versé : « + Remise / acompte » ajoute une ligne déduite du total (tapez simplement 150, il devient -150,00 €). Sur n'importe quelle ligne, un montant précédé de « - » est aussi déduit."
+      />
     </section>
 
     <!-- 2026-08-25 fix: these two used to sit right after the customer

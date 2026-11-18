@@ -21,8 +21,23 @@ describe('parseManualDecimalCell', () => {
     expect(parseManualDecimalCell('')).toBeNull();
   });
 
-  it('rejects a negative value', () => {
-    expect(parseManualDecimalCell('-5')).toBeNull();
+  it('accepts a negative value — a remise/acompte line on the manual canvas', () => {
+    expect(parseManualDecimalCell('-5')?.toString()).toBe('-5');
+    expect(parseManualDecimalCell('-150,00 €')?.toString()).toBe('-150');
+  });
+
+  it('accepts a typographic minus sign and a space after the sign', () => {
+    expect(parseManualDecimalCell('−150')?.toString()).toBe('-150');
+    expect(parseManualDecimalCell('- 150,50')?.toString()).toBe('-150.5');
+  });
+
+  it('rejects a sign anywhere but the front', () => {
+    expect(parseManualDecimalCell('150-')).toBeNull();
+    expect(parseManualDecimalCell('--150')).toBeNull();
+  });
+
+  it('applies the upper bound to the magnitude of a negative value', () => {
+    expect(parseManualDecimalCell('-2000000')).toBeNull();
   });
 
   it('accepts a trailing € sign — formatManualPrice/format() add one to every UNIT_PRICE/LINE_TOTAL cell', () => {

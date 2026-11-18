@@ -94,7 +94,13 @@ async function bootstrap() {
     // and fetches PDF/CSV downloads through HttpClient (see the frontend's
     // FileDownloadService) — without this it can't read the server's own
     // filename and falls back to a generic one.
-    exposedHeaders: ['Content-Disposition'],
+    // x-request-id: lets the frontend's client-error reports point at the
+    // server's own log of a failed call (see client-error-report.interceptor).
+    exposedHeaders: ['Content-Disposition', 'x-request-id'],
+    // Every iOS API call is cross-origin and now carries X-App-Platform/
+    // X-App-Version (+ X-XSRF-TOKEN on writes), i.e. needs a preflight —
+    // cache it (WebKit caps this at 600s) instead of doubling every request.
+    maxAge: 600,
   });
 
   await app.listen(config.get<number>('PORT', 3000));

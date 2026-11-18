@@ -509,7 +509,13 @@ export class InvoiceDraftStore {
         serviceLine.name.trim().length > 0 &&
         this.resolvedServiceAmountCents(serviceLine) > 0,
     );
-    return hasCustomerName && (hasUsableLine || hasUsableServiceLine);
+    // Mirror of the backend's ManualModeFieldsConsistency: without a product
+    // line, every service line must be VISIBLE — a REDISTRIBUTED one would
+    // have nowhere to fold into and the preview would 400.
+    const redistributedWithoutLines =
+      this.lines().length === 0 &&
+      this.serviceLines().some((serviceLine) => serviceLine.visibility === 'REDISTRIBUTED');
+    return hasCustomerName && (hasUsableLine || hasUsableServiceLine) && !redistributedWithoutLines;
   });
 
   constructor() {

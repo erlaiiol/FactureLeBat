@@ -243,6 +243,34 @@ describe('CreateInvoiceDto — Phase 9.5 entryMode consistency', () => {
     expect(errors).not.toHaveLength(0);
   });
 
+  it('accepts entryMode GUIDED with no product lines but only VISIBLE service lines', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'GUIDED',
+      lines: [],
+      serviceLines: [{ name: 'Main-d’œuvre', amountCents: 10000, visibility: 'VISIBLE' }],
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects entryMode GUIDED with no product lines and a REDISTRIBUTED service line', async () => {
+    const errors = await validateDto({
+      customerName: 'M. Dupont',
+      entryMode: 'GUIDED',
+      lines: [],
+      serviceLines: [
+        { name: 'Main-d’œuvre', amountCents: 10000, visibility: 'VISIBLE' },
+        {
+          name: 'Savoir-faire',
+          amountCents: 5000,
+          visibility: 'REDISTRIBUTED',
+          redistributionStrategy: 'EQUAL',
+        },
+      ],
+    });
+    expect(errors.some((error) => error.property === 'entryMode')).toBe(true);
+  });
+
   it('rejects entryMode GUIDED that also carries a manualTable', async () => {
     const errors = await validateDto(basePayload({ entryMode: 'GUIDED', manualTable }));
     expect(errors).not.toHaveLength(0);

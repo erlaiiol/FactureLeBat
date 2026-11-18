@@ -33,6 +33,11 @@ describe('computeManualRowTotalCents', () => {
     expect(cents).toBe(1000_00);
   });
 
+  it('returns a negative total for a remise/acompte row', () => {
+    const cents = computeManualRowTotalCents(COLUMNS, ['Remise', '', '', '-150,25 €']);
+    expect(cents).toBe(-15025);
+  });
+
   it('treats a blank LINE_TOTAL cell as zero rather than throwing', () => {
     const cents = computeManualRowTotalCents(COLUMNS, ['Parquet', '10', '45.00', '']);
     expect(cents).toBe(0);

@@ -21,8 +21,10 @@ import { CompanyService } from '../../../core/services/company.service';
 import { InvoiceService } from '../../../core/services/invoice.service';
 import { InvoiceShareService } from '../../../core/services/invoice-share.service';
 import { PaywallService } from '../../../core/services/paywall.service';
+import { previewValidationMessage } from './preview-validation-message.util';
 import { ToastService } from '../../../core/services/toast.service';
 import { TrialOfferService } from '../../../core/services/trial-offer.service';
+import { isNetworkError } from '../../../core/utils/is-network-error.util';
 import { BigButtonComponent } from '../../../shared/components/big-button.component';
 import { IconCheckComponent } from '../../../shared/components/icon-check.component';
 import { IconEyeComponent } from '../../../shared/components/icon-eye.component';
@@ -264,9 +266,9 @@ export class InvoiceCreatePreviewStepPage {
           this.loading.set(false);
           this.previewData.set(data);
         },
-        error: (error: HttpErrorResponse) => {
+        error: (error: HttpErrorResponse | TimeoutError) => {
           this.loading.set(false);
-          if (error.status === 402) {
+          if (error instanceof HttpErrorResponse && error.status === 402) {
             // The priced preview/invoice creation is blocked (free trial
             // used up — premiumGateInterceptor already showed the paywall
             // modal), but a "enregistrer dans mon catalogue"/"enregistrer
@@ -284,7 +286,24 @@ export class InvoiceCreatePreviewStepPage {
               });
             return;
           }
-          this.loadError.set("Impossible de calculer l'aperçu pour le moment.");
+          // 401 is already handled by authRefreshInterceptor (silent
+          // refresh, or /connexion + toast) — no extra message here.
+          if (error instanceof HttpErrorResponse && error.status === 401) {
+            return;
+          }
+          // 400: the draft itself is invalid (a field too long, an
+          // inconsistent line…) — "Réessayer" would just fail again, so send
+          // the artisan straight back to the lines step with the reason.
+          if (error instanceof HttpErrorResponse && error.status === 400) {
+            this.toastService.error(previewValidationMessage(error));
+            void this.router.navigate(['/factures/nouvelle/rapide/lignes']);
+            return;
+          }
+          this.loadError.set(
+            isNetworkError(error)
+              ? 'Connexion au serveur impossible — vérifiez votre réseau puis réessayez.'
+              : "Impossible de calculer l'aperçu pour le moment.",
+          );
         },
       });
   }

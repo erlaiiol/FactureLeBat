@@ -1,9 +1,21 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { Observable, catchError, finalize, of, shareReplay, tap, throwError } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  finalize,
+  map,
+  of,
+  shareReplay,
+  switchMap,
+  tap,
+  throwError,
+} from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { DemoProfile, LoginRequest, PublicUser, RegisterRequest } from '../models/auth.model';
 import { isNetworkError } from '../utils/is-network-error.util';
+import { isSessionEpochOutdated, markSessionEpochCurrent } from './session-epoch';
+import { ToastService } from './toast.service';
 
 // Auth session state, providedIn: 'root' — same "shared, constructed-once"
 // pattern as ThemeService/TourService/InvoiceDraftStore. Tokens themselves
@@ -16,6 +28,7 @@ import { isNetworkError } from '../utils/is-network-error.util';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly toast = inject(ToastService);
   private readonly baseUrl = `${environment.apiBaseUrl}/auth`;
 
   readonly currentUser = signal<PublicUser | null>(null);
@@ -37,13 +50,13 @@ export class AuthService {
   register(payload: RegisterRequest): Observable<PublicUser> {
     return this.http
       .post<PublicUser>(`${this.baseUrl}/register`, payload, { withCredentials: true })
-      .pipe(tap((user) => this.currentUser.set(user)));
+      .pipe(tap((user) => this.signedIn(user)));
   }
 
   login(payload: LoginRequest): Observable<PublicUser> {
     return this.http
       .post<PublicUser>(`${this.baseUrl}/login`, payload, { withCredentials: true })
-      .pipe(tap((user) => this.currentUser.set(user)));
+      .pipe(tap((user) => this.signedIn(user)));
   }
 
   // Always safe to call, DEMO_MODE or not — resolves to [] rather than
@@ -56,7 +69,7 @@ export class AuthService {
   demoLogin(key: string): Observable<PublicUser> {
     return this.http
       .post<PublicUser>(`${this.baseUrl}/demo-login`, { key }, { withCredentials: true })
-      .pipe(tap((user) => this.currentUser.set(user)));
+      .pipe(tap((user) => this.signedIn(user)));
   }
 
   logout(): Observable<void> {
@@ -93,7 +106,18 @@ export class AuthService {
       this.meRequest = this.http
         .get<PublicUser>(`${this.baseUrl}/me`, { withCredentials: true })
         .pipe(
-          tap((user) => this.currentUser.set(user)),
+          // Boot-time "this update needs a fresh login" check — see
+          // session-epoch.ts. Only an actually logged-in user is affected;
+          // the epoch is marked current once we know no older session is
+          // left on this device (logged in now, logged out, or just forced
+          // out), so this can never loop.
+          switchMap((user) =>
+            isSessionEpochOutdated() ? this.forceReloginAfterUpdate() : of(user),
+          ),
+          tap((user) => {
+            this.currentUser.set(user);
+            markSessionEpochCurrent();
+          }),
           catchError((error: unknown) => {
             this.currentUser.set(null);
             if (isNetworkError(error)) {
@@ -104,12 +128,60 @@ export class AuthService {
               this.meRequest = null;
               return throwError(() => error);
             }
+            // Not logged in (401) — no older session to force out either.
+            markSessionEpochCurrent();
             return of(null);
           }),
           shareReplay(1),
         );
     }
     return this.meRequest;
+  }
+
+  // Server-side logout (revokes the refresh token, clears the cookies — the
+  // endpoint is @Public, so it works even with an expired access token),
+  // then resolves to "not logged in" so authGuard routes to /connexion.
+  // A network failure is rethrown (→ OfflinePage, epoch left outdated so the
+  // next launch tries again); any other logout failure still lands the
+  // artisan on /connexion — a fresh login there replaces the old cookies.
+  private forceReloginAfterUpdate(): Observable<null> {
+    return this.http.post<void>(`${this.baseUrl}/logout`, {}, { withCredentials: true }).pipe(
+      catchError((error: unknown) => (isNetworkError(error) ? throwError(() => error) : of(null))),
+      map(() => null),
+      tap(() => this.toast.info("L'application a été mise à jour : merci de vous reconnecter.")),
+    );
+  }
+
+  // Unlike ensureLoaded (memoized, boot-time only), always hits the server —
+  // SessionKeepAliveService calls this when the native app comes back to the
+  // foreground and periodically while it stays there, so a session that died
+  // in the background (refresh token expired/revoked, password changed on
+  // another device) is caught right away instead of on the artisan's next
+  // tap, mid-task. A 401 here goes through authRefreshInterceptor exactly
+  // like any other call: silent refresh first, /connexion only if that fails.
+  revalidate(): Observable<PublicUser> {
+    return this.http
+      .get<PublicUser>(`${this.baseUrl}/me`, { withCredentials: true })
+      .pipe(tap((user) => this.currentUser.set(user)));
+  }
+
+  // Every fresh sign-in (password, register, demo, Google, Apple) — a
+  // session created by *this* build is by definition on the current epoch,
+  // so the next cold start must not force it out (see session-epoch.ts).
+  // Not used by refreshSession/revalidate: those continue an existing
+  // session, whose epoch is exactly what's in question.
+  private signedIn(user: PublicUser): void {
+    this.currentUser.set(user);
+    markSessionEpochCurrent();
+  }
+
+  // Local-only "you are logged out now" — for when the server already
+  // considers the session dead (a failed refresh), so there's nothing to
+  // POST /auth/logout to. Without it, guestGuard saw the stale currentUser
+  // and bounced the artisan from /connexion straight back into the app.
+  clearSession(): void {
+    this.currentUser.set(null);
+    this.meRequest = null;
   }
 
   refreshSession(): Observable<PublicUser> {
@@ -187,7 +259,7 @@ export class AuthService {
         { idToken },
         { withCredentials: true },
       )
-      .pipe(tap((user) => this.currentUser.set(user)));
+      .pipe(tap((user) => this.signedIn(user)));
   }
 
   // Browser-redirect counterpart to appleTokenLogin below, mirroring
@@ -218,6 +290,6 @@ export class AuthService {
         { identityToken, authorizationCode, platform },
         { withCredentials: true },
       )
-      .pipe(tap((user) => this.currentUser.set(user)));
+      .pipe(tap((user) => this.signedIn(user)));
   }
 }

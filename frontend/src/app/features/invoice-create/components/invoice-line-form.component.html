@@ -14,6 +14,7 @@
     <span class="text-sm font-medium text-ink">Description</span>
     <input
       formControlName="description"
+      maxlength="300"
       type="text"
       [readonly]="isCatalogLinked()"
       placeholder="Ex : Parquet chêne massif posé"
@@ -82,6 +83,7 @@
       <span class="text-sm font-medium text-ink">Code produit</span>
       <input
         formControlName="productCode"
+        maxlength="50"
         type="text"
         placeholder="Ex : UC204850"
         class="rounded-lg border border-line px-4 py-3 text-lg"

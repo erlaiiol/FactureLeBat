@@ -123,11 +123,30 @@ describe('CreateManualTableDto — Phase 9.5 manual invoice mode', () => {
     expect(errors).toHaveLength(0);
   });
 
-  it('rejects a negative unit price cell', async () => {
+  it('accepts a negative remise/acompte row as long as the table nets out non-negative', async () => {
     const errors = await validateTable(
-      tablePayload({ rows: [{ cells: ['Parquet', '10', '-45.00', '450.00'] }] }),
+      tablePayload({
+        rows: [
+          { cells: ['Parquet', '10', '45.00', '450.00'] },
+          { cells: ['Remise fidélité', '1', '-50,00 €', '-50,00 €'] },
+          { cells: ['Acompte versé le 02/11', '', '', '−400'] },
+        ],
+      }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a table whose rows net out below zero — that would be an avoir, not a facture', async () => {
+    const errors = await validateTable(
+      tablePayload({
+        rows: [
+          { cells: ['Parquet', '10', '45.00', '450.00'] },
+          { cells: ['Acompte versé', '', '', '-500'] },
+        ],
+      }),
     );
     expect(errors).not.toHaveLength(0);
+    expect(errors[0].constraints).toHaveProperty('manualRowsTotalNonNegative');
   });
 
   it('accepts free text in a CUSTOM cell, including text that would look like markup', async () => {

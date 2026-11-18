@@ -4,6 +4,8 @@ import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
 import { authRefreshInterceptor } from './core/interceptors/auth-refresh.interceptor';
+import { clientErrorReportInterceptor } from './core/interceptors/client-error-report.interceptor';
+import { clientInfoInterceptor } from './core/interceptors/client-info.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
 import { premiumGateInterceptor } from './core/interceptors/premium-gate.interceptor';
 import { timeoutInterceptor } from './core/interceptors/timeout.interceptor';
@@ -24,8 +26,11 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(
       withFetch(),
       withInterceptors([
+        // Outside timeoutInterceptor so a client-side timeout is reported too.
+        clientErrorReportInterceptor,
         timeoutInterceptor,
         credentialsInterceptor,
+        clientInfoInterceptor,
         xsrfInterceptor,
         authRefreshInterceptor,
         premiumGateInterceptor,

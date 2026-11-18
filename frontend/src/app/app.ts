@@ -25,10 +25,12 @@ import { filter, map } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { BillingService } from './core/services/billing.service';
 import { CompanyService } from './core/services/company.service';
+import { ClientLogService } from './core/services/client-log.service';
 import { DeepLinkService } from './core/services/deep-link.service';
 import { FileDownloadService } from './core/services/file-download.service';
 import { PlatformService } from './core/services/platform.service';
 import { PushRegistrationService } from './core/services/push-registration.service';
+import { SessionKeepAliveService } from './core/services/session-keepalive.service';
 import { ThemeService } from './core/services/theme.service';
 import { ToastService } from './core/services/toast.service';
 import { CompanyEssentialsModalComponent } from './shared/components/company-essentials-modal.component';
@@ -135,6 +137,8 @@ export class App {
   private readonly pushRegistrationService = inject(PushRegistrationService);
   private readonly deepLinkService = inject(DeepLinkService);
   private readonly fileDownloadService = inject(FileDownloadService);
+  private readonly sessionKeepAliveService = inject(SessionKeepAliveService);
+  private readonly clientLogService = inject(ClientLogService);
   // Side-effect-only: registers modalMorph's app-wide click-origin listener
   // (docs/front/front-1-global-shell-and-overlays.md) — never read directly
   // here, ModalMorphComponent injects the same singleton.
@@ -227,6 +231,11 @@ export class App {
     this.deepLinkService.listen();
     // Native shells only — see FileDownloadService's own comment.
     this.fileDownloadService.interceptApiLinks();
+    // Session re-check on app resume + every 10 min in the foreground (the
+    // cold-start check is the guards' own GET /auth/me) — see the service.
+    this.sessionKeepAliveService.start();
+    // Ships any failure reports queued while offline / before an app kill.
+    this.clientLogService.start();
 
     // `pageSlideTransition` (docs/design-system.md): captured on every
     // NavigationStart, consumed by the very next NavigationEnd below —
