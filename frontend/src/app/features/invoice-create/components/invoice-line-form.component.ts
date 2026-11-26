@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   effect,
   inject,
@@ -67,6 +68,15 @@ export type InvoiceLineFormGroup = FormGroup<{
   templateUrl: './invoice-line-form.component.html',
 })
 export class InvoiceLineFormComponent {
+  // OnPush, yet the parent page patches this group asynchronously (an
+  // immediate catalog save landing — see InvoiceCreateLinesStepPage.
+  // syncToCatalog) with no input or DOM event to trigger a re-render.
+  private readonly cdr = inject(ChangeDetectorRef);
+  private readonly refreshOnGroupChanges = effect((onCleanup) => {
+    const subscription = this.group().valueChanges.subscribe(() => this.cdr.markForCheck());
+    onCleanup(() => subscription.unsubscribe());
+  });
+
   // Phase 10: only reads the customer's freehand address to localize a
   // supplier search — the store is already a singleton shared by the whole
   // "nouvelle facture" flow, so injecting it here is simpler than threading
@@ -115,15 +125,23 @@ export class InvoiceLineFormComponent {
     return this.group().controls.catalogProductId.value != null;
   }
 
+  // Mode rapide saves to the catalog immediately (see
+  // InvoiceCreateLinesStepPage.syncToCatalog): once on, a linked line is
+  // already in the catalog and every later "Valider" updates it — so its
+  // name stays editable (see isNameLocked).
+  protected isNameLocked(): boolean {
+    return this.isCatalogLinked() && !this.group().controls.saveAsNewProduct.value;
+  }
+
   protected saveToCatalogLabel(): string {
     const willSave = this.group().controls.saveAsNewProduct.value;
     if (this.isCatalogLinked()) {
       return willSave
-        ? 'Se mettra à jour dans votre catalogue'
+        ? 'Enregistré dans votre catalogue'
         : 'Cliquer pour mettre à jour dans le catalogue';
     }
     return willSave
-      ? "S'enregistrera dans votre catalogue"
+      ? "S'enregistrera au catalogue en validant la ligne"
       : 'Cliquer pour enregistrer dans le catalogue';
   }
 

@@ -16,13 +16,13 @@
       formControlName="description"
       maxlength="300"
       type="text"
-      [readonly]="isCatalogLinked()"
+      [readonly]="isNameLocked()"
       placeholder="Ex : Parquet chêne massif posé"
       class="rounded-lg border border-line px-4 py-3 text-lg"
-      [class.bg-bg]="isCatalogLinked()"
-      [class.text-ink-soft]="isCatalogLinked()"
+      [class.bg-bg]="isNameLocked()"
+      [class.text-ink-soft]="isNameLocked()"
     />
-    @if (isCatalogLinked()) {
+    @if (isNameLocked()) {
       <app-field-hint
         text="Ce produit vient de votre catalogue — renommez-le depuis « Mes produits » si besoin."
       />

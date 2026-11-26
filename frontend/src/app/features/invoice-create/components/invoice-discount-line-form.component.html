@@ -31,13 +31,13 @@
       formControlName="name"
       maxlength="200"
       type="text"
-      [readonly]="isCatalogLinked()"
+      [readonly]="isNameLocked()"
       placeholder="Ex : Remise fidélité"
       class="rounded-lg border border-line px-4 py-3 text-lg"
-      [class.bg-bg]="isCatalogLinked()"
-      [class.text-ink-soft]="isCatalogLinked()"
+      [class.bg-bg]="isNameLocked()"
+      [class.text-ink-soft]="isNameLocked()"
     />
-    @if (isCatalogLinked()) {
+    @if (isNameLocked()) {
       <app-field-hint
         text="Cette remise vient de votre catalogue — renommez-la depuis « Mes remises » si besoin."
       />

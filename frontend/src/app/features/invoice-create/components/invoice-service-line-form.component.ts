@@ -1,5 +1,13 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  effect,
+  inject,
+  input,
+  output,
+} from '@angular/core';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { RedistributionStrategy, ServiceLineVisibility } from '../../../core/models/invoice.model';
 import { ActivityCategory } from '../../../core/models/report.model';
@@ -46,6 +54,15 @@ export type InvoiceServiceLineFormGroup = FormGroup<{
   templateUrl: './invoice-service-line-form.component.html',
 })
 export class InvoiceServiceLineFormComponent {
+  // OnPush, yet the parent page patches this group asynchronously (an
+  // immediate catalog save landing — see InvoiceCreateLinesStepPage.
+  // syncToCatalog) with no input or DOM event to trigger a re-render.
+  private readonly cdr = inject(ChangeDetectorRef);
+  private readonly refreshOnGroupChanges = effect((onCleanup) => {
+    const subscription = this.group().valueChanges.subscribe(() => this.cdr.markForCheck());
+    onCleanup(() => subscription.unsubscribe());
+  });
+
   private readonly draftStore = inject(InvoiceDraftStore);
 
   readonly group = input.required<InvoiceServiceLineFormGroup>();
@@ -110,15 +127,23 @@ export class InvoiceServiceLineFormComponent {
     return this.group().controls.catalogServiceId.value != null;
   }
 
+  // Mode rapide saves to the catalog immediately (see
+  // InvoiceCreateLinesStepPage.syncToCatalog): once on, a linked line is
+  // already in the catalog and every later "Valider" updates it — so its
+  // name stays editable (see isNameLocked).
+  protected isNameLocked(): boolean {
+    return this.isCatalogLinked() && !this.group().controls.saveAsNewService.value;
+  }
+
   protected saveToCatalogLabel(): string {
     const willSave = this.group().controls.saveAsNewService.value;
     if (this.isCatalogLinked()) {
       return willSave
-        ? 'Se mettra à jour dans votre catalogue'
+        ? 'Enregistré dans votre catalogue'
         : 'Cliquer pour mettre à jour dans le catalogue';
     }
     return willSave
-      ? "S'enregistrera dans votre catalogue"
+      ? "S'enregistrera au catalogue en validant la ligne"
       : 'Cliquer pour enregistrer dans le catalogue';
   }
 

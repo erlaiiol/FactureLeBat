@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { Subscription, switchMap, TimeoutError } from 'rxjs';
 import { CompanyProfile } from '../../../core/models/company.model';
 import { getMissingCompanyEssentials } from '../../../core/models/company-essentials.util';
@@ -94,7 +94,6 @@ function shuffledHintOrder(): HintKey[] {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DatePipe,
-    RouterLink,
     BigButtonComponent,
     IconCheckComponent,
     IconEyeComponent,
@@ -173,6 +172,15 @@ export class InvoiceCreatePreviewStepPage {
     const profile = this.companyProfile();
     return profile ? getMissingCompanyEssentials(profile) : [];
   });
+
+  // The banner's "Compléter mon profil": fills name/SIRET/address in the
+  // shared modal, in place — navigating to "Mon entreprise" would leave the
+  // draft mid-flow on a first invoice.
+  protected completeProfile(): void {
+    this.companyEssentialsGate.open((profile) => {
+      this.companyProfile.set(profile);
+    });
+  }
   // Same document-mirror-only concern as companyProfile above — the
   // top-right logo (see PdfService.buildHeader) shown here purely so this
   // HTML mirror stays a faithful preview of the real PDF.

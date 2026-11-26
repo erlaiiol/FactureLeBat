@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Observable, filter } from 'rxjs';
 import { Router } from '@angular/router';
 import {
   RedistributionStrategy,
@@ -439,11 +440,12 @@ export class InvoiceCreateLinesStepPage {
     productCode: string | null;
     productId?: string | null;
     catalogProductId?: string | null;
+    saveAsNewProduct?: boolean;
     showUnitDetail?: boolean;
     showBillingDetail?: boolean;
     activityCategory?: ActivityCategory | null;
   }): InvoiceLineFormGroup {
-    return this.fb.nonNullable.group({
+    const group: InvoiceLineFormGroup = this.fb.nonNullable.group({
       // Phase 34: a stable identity for this line, independent of its
       // FormArray position — see InvoiceLineDraft.clientId.
       clientId: this.fb.nonNullable.control(initial?.clientId ?? crypto.randomUUID()),
@@ -480,7 +482,7 @@ export class InvoiceCreateLinesStepPage {
       // UI-only: whether to save this line as a new catalog Product on
       // submit — never sent as-is to the invoice-creation request (see
       // submit() below), mirrors the customer step's saveAsNewCustomer.
-      saveAsNewProduct: this.fb.nonNullable.control(false),
+      saveAsNewProduct: this.fb.nonNullable.control(initial?.saveAsNewProduct ?? false),
       // Phase 13.5, UI-only: see InvoiceLineDraft.catalogProductId.
       catalogProductId: this.fb.control<string | null>(initial?.catalogProductId ?? null),
       // Phase 15: not rendered by this step's own template — set from the
@@ -493,6 +495,10 @@ export class InvoiceCreateLinesStepPage {
       // template — see InvoiceLineDraft.activityCategory.
       activityCategory: this.fb.control<ActivityCategory | null>(initial?.activityCategory ?? null),
     });
+    this.saveToCatalogWhenToggledOn(group, group.controls.saveAsNewProduct, () =>
+      this.syncProductToCatalog(group),
+    );
+    return group;
   }
 
   // Phase 13.5 gallery redesign: the "+ Ligne ponctuelle" flyout entry — a
@@ -639,6 +645,7 @@ export class InvoiceCreateLinesStepPage {
     pricingMode?: ServicePricingMode;
     percentageBasisPoints?: number | null;
     catalogServiceId?: string | null;
+    saveAsNewService?: boolean;
     activityCategory?: ActivityCategory | null;
   }): InvoiceServiceLineFormGroup {
     const group = this.fb.nonNullable.group({
@@ -672,7 +679,7 @@ export class InvoiceCreateLinesStepPage {
       // UI-only: whether to save/update this line's catalog Service on
       // submit — never sent as-is to the invoice-creation request, mirrors
       // the product line's saveAsNewProduct.
-      saveAsNewService: this.fb.nonNullable.control(false),
+      saveAsNewService: this.fb.nonNullable.control(initial?.saveAsNewService ?? false),
       // Phase 17: UI-only carry-through — see InvoiceServiceLineDraft.activityCategory.
       activityCategory: this.fb.control<ActivityCategory | null>(initial?.activityCategory ?? null),
     });
@@ -681,6 +688,9 @@ export class InvoiceCreateLinesStepPage {
     group.controls.pricingMode.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.syncServiceLinePricingValidators(group));
+    this.saveToCatalogWhenToggledOn(group, group.controls.saveAsNewService, () =>
+      this.syncServiceToCatalog(group),
+    );
     return group;
   }
 
@@ -834,16 +844,20 @@ export class InvoiceCreateLinesStepPage {
   }
 
   private createDiscountLineGroup(initial?: {
+    clientId?: string;
     discountId: string | null;
     name: string;
     discountType?: DiscountType;
     fixedAmountEuros: number;
     percentageBasisPoints?: number | null;
     catalogDiscountId?: string | null;
+    saveAsNewDiscount?: boolean;
     targetLineClientId?: string | null;
     targetServiceLineClientId?: string | null;
   }): InvoiceDiscountLineFormGroup {
     const group = this.fb.nonNullable.group({
+      // Same stable-identity role as createLineGroup's clientId.
+      clientId: this.fb.nonNullable.control(initial?.clientId ?? crypto.randomUUID()),
       discountId: this.fb.control<string | null>(initial?.discountId ?? null),
       name: this.fb.nonNullable.control(initial?.name ?? '', [
         Validators.required,
@@ -860,7 +874,7 @@ export class InvoiceCreateLinesStepPage {
       // UI-only: whether to save/update this line's catalog Discount on
       // submit — never sent as-is to the invoice-creation request, mirrors
       // the service line's saveAsNewService.
-      saveAsNewDiscount: this.fb.nonNullable.control(false),
+      saveAsNewDiscount: this.fb.nonNullable.control(initial?.saveAsNewDiscount ?? false),
       // Phase 34, UI-only: see InvoiceDiscountLineDraft.targetLineClientId/
       // targetServiceLineClientId.
       targetLineClientId: this.fb.control<string | null>(initial?.targetLineClientId ?? null),
@@ -872,6 +886,9 @@ export class InvoiceCreateLinesStepPage {
     group.controls.discountType.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.syncDiscountLinePricingValidators(group));
+    this.saveToCatalogWhenToggledOn(group, group.controls.saveAsNewDiscount, () =>
+      this.syncDiscountToCatalog(group),
+    );
     return group;
   }
 
@@ -940,6 +957,7 @@ export class InvoiceCreateLinesStepPage {
       group.markAllAsTouched();
       return;
     }
+    this.syncDiscountToCatalog(group);
     this.morphCard(
       this.morphId(group),
       () => {
@@ -1004,6 +1022,115 @@ export class InvoiceCreateLinesStepPage {
     this.discountPanelOpen.set(false);
   }
 
+  // Mode rapide's immediate catalog saves (see
+  // InvoiceDraftStore.saveProductToCatalog): tapping "Enregistrer dans le
+  // catalogue" on a line that's already complete saves it right away; on an
+  // incomplete one, the line's own "Valider" does (collapse* above), and
+  // every later "Valider" pushes the line's edits to that catalog entry.
+  // Deliberately not tied to this page's lifetime: an artisan who swipes
+  // away mid-request still gets the save — the store links the new id to
+  // the draft line itself (by clientId) in case this form is already gone.
+  private saveToCatalogWhenToggledOn(
+    group: object,
+    toggle: FormControl<boolean>,
+    sync: () => void,
+  ): void {
+    toggle.valueChanges
+      .pipe(
+        filter((on) => on),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => sync());
+  }
+
+  // Groups with a save in flight → whether another sync was requested
+  // meanwhile (re-run once it lands, so a create is never doubled).
+  private readonly catalogSavesInFlight = new WeakMap<object, boolean>();
+
+  private runCatalogSave(
+    group: object,
+    save$: Observable<string | null>,
+    onSaved: (id: string) => void,
+    rerun: () => void,
+  ): void {
+    if (this.catalogSavesInFlight.has(group)) {
+      this.catalogSavesInFlight.set(group, true);
+      return;
+    }
+    this.catalogSavesInFlight.set(group, false);
+    save$.subscribe((id) => {
+      const rerunRequested = this.catalogSavesInFlight.get(group);
+      this.catalogSavesInFlight.delete(group);
+      if (id) {
+        onSaved(id);
+      }
+      if (rerunRequested) {
+        rerun();
+      }
+    });
+  }
+
+  private syncProductToCatalog(group: InvoiceLineFormGroup): void {
+    const c = group.controls;
+    const complete =
+      c.description.valid &&
+      c.unitPriceEuros.valid &&
+      c.productCode.valid &&
+      c.packagingQuantity.valid;
+    if (!c.saveAsNewProduct.value || !complete) {
+      return;
+    }
+    this.runCatalogSave(
+      group,
+      this.draftStore.saveProductToCatalog(group.getRawValue()),
+      (id) => {
+        if (!c.catalogProductId.value) {
+          group.patchValue({ catalogProductId: id, productId: c.productId.value ?? id });
+        }
+        this.draftStore.linkLineToCatalog(c.clientId.value, id);
+      },
+      () => this.syncProductToCatalog(group),
+    );
+  }
+
+  private syncServiceToCatalog(group: InvoiceServiceLineFormGroup): void {
+    const c = group.controls;
+    const complete = c.name.valid && c.amountEuros.valid && c.percentageBasisPoints.valid;
+    if (!c.saveAsNewService.value || !complete) {
+      return;
+    }
+    this.runCatalogSave(
+      group,
+      this.draftStore.saveServiceToCatalog(group.getRawValue()),
+      (id) => {
+        if (!c.catalogServiceId.value) {
+          group.patchValue({ catalogServiceId: id, serviceId: c.serviceId.value ?? id });
+        }
+        this.draftStore.linkServiceLineToCatalog(c.clientId.value, id);
+      },
+      () => this.syncServiceToCatalog(group),
+    );
+  }
+
+  private syncDiscountToCatalog(group: InvoiceDiscountLineFormGroup): void {
+    const c = group.controls;
+    const complete = c.name.valid && c.fixedAmountEuros.valid && c.percentageBasisPoints.valid;
+    if (!c.saveAsNewDiscount.value || !complete) {
+      return;
+    }
+    this.runCatalogSave(
+      group,
+      this.draftStore.saveDiscountToCatalog(group.getRawValue()),
+      (id) => {
+        if (!c.catalogDiscountId.value) {
+          group.patchValue({ catalogDiscountId: id, discountId: c.discountId.value ?? id });
+        }
+        this.draftStore.linkDiscountLineToCatalog(c.clientId.value, id);
+      },
+      () => this.syncDiscountToCatalog(group),
+    );
+  }
+
   // cardMorph (design-system.md): a real FLIP transition between a card's
   // full-form and compact-gallery states, in both directions ("Valider"
   // collapses, clicking a compact card re-expands it). Distorting a card
@@ -1037,6 +1164,7 @@ export class InvoiceCreateLinesStepPage {
       group.markAllAsTouched();
       return;
     }
+    this.syncProductToCatalog(group);
     this.morphCard(
       this.morphId(group),
       () => {
@@ -1080,6 +1208,7 @@ export class InvoiceCreateLinesStepPage {
       group.markAllAsTouched();
       return;
     }
+    this.syncServiceToCatalog(group);
     this.morphCard(
       this.morphId(group),
       () => {
