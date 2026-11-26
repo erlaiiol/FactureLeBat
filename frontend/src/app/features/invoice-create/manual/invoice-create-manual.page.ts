@@ -10,7 +10,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subscription, TimeoutError } from 'rxjs';
 import { getMissingCompanyEssentials } from '../../../core/models/company-essentials.util';
@@ -61,7 +61,6 @@ import { ManualResizeHandleDirective } from './manual-resize-handle.directive';
   selector: 'app-invoice-create-manual-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    RouterLink,
     BigButtonComponent,
     FieldHintComponent,
     IconCheckComponent,
@@ -341,6 +340,15 @@ export class InvoiceCreateManualPage {
     const profile = this.store.company();
     return profile ? getMissingCompanyEssentials(profile) : [];
   });
+
+  // The banner's "Compléter mon profil": fills name/SIRET/address in the
+  // shared modal, in place — navigating to "Mon entreprise" would leave the
+  // draft mid-flow on a first invoice.
+  protected completeProfile(): void {
+    this.companyEssentialsGate.open((profile) => {
+      this.store.company.set(profile);
+    });
+  }
 
   // Same generic href-reading guard as InvoiceCreatePreviewStepPage's own
   // guardDownloadClick — see its comment for why.

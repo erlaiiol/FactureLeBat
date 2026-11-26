@@ -26,6 +26,8 @@ import { InvoiceService } from '../../core/services/invoice.service';
 import { OnboardingService } from '../../core/services/onboarding.service';
 import { ProductService } from '../../core/services/product.service';
 import { ServiceCatalogService } from '../../core/services/service-catalog.service';
+import { ToastService } from '../../core/services/toast.service';
+import { catalogLimitMessage } from '../../shared/utils/plan-error.util';
 import {
   computeLineTotalPreviewCents,
   computePercentageServiceAmountCents,
@@ -130,6 +132,11 @@ export interface InvoiceServiceLineDraft {
 // REDISTRIBUTED service line does) and minus activityCategory (a discount
 // isn't a URSSAF-categorized sale).
 export interface InvoiceDiscountLineDraft {
+  // Stable identity independent of array position — same role as
+  // InvoiceLineDraft.clientId. Lets an immediate catalog save that lands
+  // after the lines step was left still link the right remise (see
+  // linkDiscountLineToCatalog), so it's never created twice.
+  clientId: string;
   discountId: string | null;
   name: string;
   discountType: DiscountType;
@@ -225,6 +232,7 @@ const EMPTY_SERVICE_LINE_DEFAULTS = {
 // hydrated draft" role as EMPTY_SERVICE_LINE_DEFAULTS, so a draft persisted
 // before this phase (no discountLines at all) still hydrates cleanly.
 const EMPTY_DISCOUNT_LINE_DEFAULTS: InvoiceDiscountLineDraft = {
+  clientId: '',
   discountId: null,
   name: '',
   discountType: 'FIXED',
@@ -267,6 +275,11 @@ export class InvoiceDraftStore {
   private readonly productService = inject(ProductService);
   private readonly serviceCatalogService = inject(ServiceCatalogService);
   private readonly discountService = inject(DiscountService);
+  private readonly toastService = inject(ToastService);
+  // Last payload actually written per catalog entity id (immediate saves
+  // below + persistFreeEntities) — lets the end-of-invoice pass skip an
+  // update that would only resend what the artisan already saved mid-flow.
+  private readonly lastSavedPayloads = new Map<string, string>();
   private readonly destroyRef = inject(DestroyRef);
 
   readonly company = signal<CompanyProfile | null>(null);
@@ -831,6 +844,7 @@ export class InvoiceDraftStore {
             )
           : -1;
         return {
+          clientId: crypto.randomUUID(),
           discountId: null,
           name: discountLine.name,
           discountType: 'FIXED' as DiscountType,
@@ -1073,92 +1087,54 @@ export class InvoiceDraftStore {
   // warranted. Product/service catalog CRUD has no premium gate on the
   // backend, consistent with that rule.
   persistFreeEntities(): Observable<boolean> {
-    const productSaves = this.lines()
-      .map((line, index) => ({ line, index }))
-      .filter(({ line }) => line.saveAsNewProduct)
-      .map(({ line, index }) => {
-        const payload = {
-          name: line.description,
-          unit: line.unit,
-          priceCents: Math.round(line.unitPriceEuros * 100),
-          code: line.productCode || undefined,
-          packagingQuantity: line.packagingQuantity ?? undefined,
-        };
-        const save$ = line.catalogProductId
-          ? this.productService.update(line.catalogProductId, payload)
-          : this.productService.create(payload);
-        return save$.pipe(
-          map((product) => ({ index, id: product.id })),
-          catchError(() => of(null)),
-        );
-      });
+    // Each save$ is null when there's nothing new to write — see
+    // lastSavedPayloads: a line already saved mid-flow (mode rapide's
+    // immediate saves) isn't sent again unless it changed since.
+    const productSaves = this.lines().flatMap((line, index) => {
+      const save$ = line.saveAsNewProduct ? this.saveProduct$(line) : null;
+      return save$
+        ? [
+            save$.pipe(
+              map((product) => ({ index, id: product.id })),
+              catchError(() => of(null)),
+            ),
+          ]
+        : [];
+    });
 
-    const serviceSaves = this.serviceLines()
-      .map((serviceLine, index) => ({ serviceLine, index }))
-      .filter(({ serviceLine }) => serviceLine.saveAsNewService)
-      .map(({ serviceLine, index }) => {
-        const payload = {
-          name: serviceLine.name,
-          description: serviceLine.description || undefined,
-          pricingMode: serviceLine.pricingMode,
-          priceCents:
-            serviceLine.pricingMode === 'FIXED'
-              ? Math.round(serviceLine.amountEuros * 100)
-              : undefined,
-          percentageBasisPoints:
-            serviceLine.pricingMode === 'PERCENTAGE'
-              ? (serviceLine.percentageBasisPoints ?? undefined)
-              : undefined,
-          defaultVisibility: serviceLine.visibility,
-        };
-        const save$ = serviceLine.catalogServiceId
-          ? this.serviceCatalogService.update(serviceLine.catalogServiceId, payload)
-          : this.serviceCatalogService.create(payload);
-        return save$.pipe(
-          map((service) => ({ index, id: service.id })),
-          catchError(() => of(null)),
-        );
-      });
+    const serviceSaves = this.serviceLines().flatMap((serviceLine, index) => {
+      const save$ = serviceLine.saveAsNewService ? this.saveService$(serviceLine) : null;
+      return save$
+        ? [
+            save$.pipe(
+              map((service) => ({ index, id: service.id })),
+              catchError(() => of(null)),
+            ),
+          ]
+        : [];
+    });
 
-    const discountSaves = this.discountLines()
-      .map((discountLine, index) => ({ discountLine, index }))
-      .filter(({ discountLine }) => discountLine.saveAsNewDiscount)
-      .map(({ discountLine, index }) => {
-        const payload = {
-          name: discountLine.name,
-          discountType: discountLine.discountType,
-          fixedAmountCents:
-            discountLine.discountType === 'FIXED'
-              ? Math.round(discountLine.fixedAmountEuros * 100)
-              : undefined,
-          percentageBasisPoints:
-            discountLine.discountType === 'PERCENTAGE'
-              ? (discountLine.percentageBasisPoints ?? undefined)
-              : undefined,
-        };
-        const save$ = discountLine.catalogDiscountId
-          ? this.discountService.update(discountLine.catalogDiscountId, payload)
-          : this.discountService.create(payload);
-        return save$.pipe(
-          map((discount) => ({ index, id: discount.id })),
-          catchError(() => of(null)),
-        );
-      });
+    const discountSaves = this.discountLines().flatMap((discountLine, index) => {
+      const save$ = discountLine.saveAsNewDiscount ? this.saveDiscount$(discountLine) : null;
+      return save$
+        ? [
+            save$.pipe(
+              map((discount) => ({ index, id: discount.id })),
+              catchError(() => of(null)),
+            ),
+          ]
+        : [];
+    });
 
     const customer = this.customer();
-    const savingNewCustomer = customer.saveAsNewCustomer && !customer.customerId;
-    const customerSave$ = savingNewCustomer
-      ? this.customerService
-          .create({
-            name: customer.customerName,
-            address: customer.customerAddress || undefined,
-            email: customer.customerEmail || undefined,
-            phone: customer.customerPhone || undefined,
-          })
-          .pipe(
-            map((newCustomer) => newCustomer.id),
-            catchError(() => of(null)),
-          )
+    const newCustomerSave$ =
+      customer.saveAsNewCustomer && !customer.customerId ? this.saveCustomer$(customer) : null;
+    const savingNewCustomer = newCustomerSave$ !== null;
+    const customerSave$ = newCustomerSave$
+      ? newCustomerSave$.pipe(
+          map((newCustomer) => newCustomer.id),
+          catchError(() => of(null)),
+        )
       : of(null);
 
     const hadAnyToSave =
@@ -1212,6 +1188,177 @@ export class InvoiceDraftStore {
     );
   }
 
+  // Mode rapide: "Enregistrer dans mon catalogue"/"Enregistrer ce client"
+  // write to the artisan's database the moment they're asked for (line
+  // "Valider", the toggle on an already-complete line, the customer step's
+  // "Suivant") instead of only when the invoice is finally created — an
+  // artisan who leaves mid-invoice still finds them next time. Emits the
+  // saved entity's id, or null when it couldn't be saved: a short toast
+  // says why (plan's catalog cap reached, or a transient failure — then
+  // persistFreeEntities retries at invoice creation, since the line keeps
+  // its saveAsNew* flag). Never errors, so callers just subscribe.
+  saveProductToCatalog(line: ProductSaveSource): Observable<string | null> {
+    return this.immediateSave(this.saveProduct$(line), line.catalogProductId, line.description);
+  }
+
+  saveServiceToCatalog(serviceLine: ServiceSaveSource): Observable<string | null> {
+    return this.immediateSave(
+      this.saveService$(serviceLine),
+      serviceLine.catalogServiceId,
+      serviceLine.name,
+    );
+  }
+
+  saveDiscountToCatalog(discountLine: DiscountSaveSource): Observable<string | null> {
+    return this.immediateSave(
+      this.saveDiscount$(discountLine),
+      discountLine.catalogDiscountId,
+      discountLine.name,
+    );
+  }
+
+  // Creates, or — once this draft already created it (customerId set while
+  // saveAsNewCustomer is still on) — updates the customer.
+  saveCustomerNow(customer: InvoiceCustomerDraft): Observable<string | null> {
+    return this.immediateSave(
+      this.saveCustomer$(customer),
+      customer.customerId,
+      customer.customerName,
+    );
+  }
+
+  // Ties a draft line to the catalog entry an immediate save just created —
+  // also done here (not only on the lines step's form) so it sticks even if
+  // that page was left while the request was in flight.
+  linkLineToCatalog(clientId: string, productId: string): void {
+    this.lines.update((lines) =>
+      lines.map((line) =>
+        line.clientId === clientId && !line.catalogProductId
+          ? { ...line, catalogProductId: productId, productId: line.productId ?? productId }
+          : line,
+      ),
+    );
+  }
+
+  linkServiceLineToCatalog(clientId: string, serviceId: string): void {
+    this.serviceLines.update((serviceLines) =>
+      serviceLines.map((serviceLine) =>
+        serviceLine.clientId === clientId && !serviceLine.catalogServiceId
+          ? {
+              ...serviceLine,
+              catalogServiceId: serviceId,
+              serviceId: serviceLine.serviceId ?? serviceId,
+            }
+          : serviceLine,
+      ),
+    );
+  }
+
+  linkDiscountLineToCatalog(clientId: string, discountId: string): void {
+    this.discountLines.update((discountLines) =>
+      discountLines.map((discountLine) =>
+        discountLine.clientId === clientId && !discountLine.catalogDiscountId
+          ? {
+              ...discountLine,
+              catalogDiscountId: discountId,
+              discountId: discountLine.discountId ?? discountId,
+            }
+          : discountLine,
+      ),
+    );
+  }
+
+  private immediateSave(
+    save$: Observable<{ id: string }> | null,
+    existingId: string | null,
+    label: string,
+  ): Observable<string | null> {
+    if (!save$) {
+      return of(existingId);
+    }
+    return save$.pipe(
+      map((saved) => {
+        if (!existingId) {
+          this.toastService.success(`« ${label.trim()} » enregistré pour vos prochaines factures.`);
+        }
+        return saved.id;
+      }),
+      catchError((error: unknown) => {
+        this.toastService.show(
+          catalogLimitMessage(error) ??
+            `« ${label.trim()} » n'a pas pu être enregistré pour l'instant — nouvel essai à la création de la facture.`,
+          'danger',
+          'bottom',
+        );
+        return of(null);
+      }),
+    );
+  }
+
+  private hasUnsavedChanges(id: string | null, payload: object): boolean {
+    return !id || this.lastSavedPayloads.get(id) !== JSON.stringify(payload);
+  }
+
+  // Each returns null when there's nothing new to write (already saved with
+  // this exact payload) — see lastSavedPayloads.
+  private saveProduct$(line: ProductSaveSource): Observable<{ id: string }> | null {
+    const payload = productPayload(line);
+    if (!this.hasUnsavedChanges(line.catalogProductId, payload)) {
+      return null;
+    }
+    const save$ = line.catalogProductId
+      ? this.productService.update(line.catalogProductId, payload)
+      : this.productService.create(payload);
+    return this.rememberSaved(save$, payload);
+  }
+
+  private saveService$(serviceLine: ServiceSaveSource): Observable<{ id: string }> | null {
+    const payload = servicePayload(serviceLine);
+    if (!this.hasUnsavedChanges(serviceLine.catalogServiceId, payload)) {
+      return null;
+    }
+    const save$ = serviceLine.catalogServiceId
+      ? this.serviceCatalogService.update(serviceLine.catalogServiceId, payload)
+      : this.serviceCatalogService.create(payload);
+    return this.rememberSaved(save$, payload);
+  }
+
+  private saveDiscount$(discountLine: DiscountSaveSource): Observable<{ id: string }> | null {
+    const payload = discountPayload(discountLine);
+    if (!this.hasUnsavedChanges(discountLine.catalogDiscountId, payload)) {
+      return null;
+    }
+    const save$ = discountLine.catalogDiscountId
+      ? this.discountService.update(discountLine.catalogDiscountId, payload)
+      : this.discountService.create(payload);
+    return this.rememberSaved(save$, payload);
+  }
+
+  private saveCustomer$(customer: InvoiceCustomerDraft): Observable<{ id: string }> | null {
+    const payload = {
+      name: customer.customerName,
+      address: customer.customerAddress || undefined,
+      email: customer.customerEmail || undefined,
+      phone: customer.customerPhone || undefined,
+    };
+    if (!this.hasUnsavedChanges(customer.customerId, payload)) {
+      return null;
+    }
+    const save$ = customer.customerId
+      ? this.customerService.update(customer.customerId, payload)
+      : this.customerService.create(payload);
+    return this.rememberSaved(save$, payload);
+  }
+
+  private rememberSaved<T extends { id: string }>(save$: Observable<T>, payload: object) {
+    return save$.pipe(
+      map((saved) => {
+        this.lastSavedPayloads.set(saved.id, JSON.stringify(payload));
+        return saved;
+      }),
+    );
+  }
+
   private hydrateFromStorage(): void {
     try {
       const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
@@ -1251,6 +1398,8 @@ export class InvoiceDraftStore {
           parsed.discountLines.map((discountLine) => ({
             ...EMPTY_DISCOUNT_LINE_DEFAULTS,
             ...discountLine,
+            // Backfills a draft persisted before discount lines had one.
+            clientId: discountLine.clientId || crypto.randomUUID(),
           })),
         );
       }
@@ -1311,4 +1460,68 @@ export class InvoiceDraftStore {
       // Nothing to do if storage isn't available in the first place.
     }
   }
+}
+
+type ProductSaveSource = Pick<
+  InvoiceLineDraft,
+  | 'description'
+  | 'unit'
+  | 'unitPriceEuros'
+  | 'productCode'
+  | 'packagingQuantity'
+  | 'catalogProductId'
+>;
+type ServiceSaveSource = Pick<
+  InvoiceServiceLineDraft,
+  | 'name'
+  | 'description'
+  | 'pricingMode'
+  | 'amountEuros'
+  | 'percentageBasisPoints'
+  | 'visibility'
+  | 'catalogServiceId'
+>;
+type DiscountSaveSource = Pick<
+  InvoiceDiscountLineDraft,
+  'name' | 'discountType' | 'fixedAmountEuros' | 'percentageBasisPoints' | 'catalogDiscountId'
+>;
+
+function productPayload(line: ProductSaveSource) {
+  return {
+    name: line.description,
+    unit: line.unit,
+    priceCents: Math.round(line.unitPriceEuros * 100),
+    code: line.productCode || undefined,
+    packagingQuantity: line.packagingQuantity ?? undefined,
+  };
+}
+
+function servicePayload(serviceLine: ServiceSaveSource) {
+  return {
+    name: serviceLine.name,
+    description: serviceLine.description || undefined,
+    pricingMode: serviceLine.pricingMode,
+    priceCents:
+      serviceLine.pricingMode === 'FIXED' ? Math.round(serviceLine.amountEuros * 100) : undefined,
+    percentageBasisPoints:
+      serviceLine.pricingMode === 'PERCENTAGE'
+        ? (serviceLine.percentageBasisPoints ?? undefined)
+        : undefined,
+    defaultVisibility: serviceLine.visibility,
+  };
+}
+
+function discountPayload(discountLine: DiscountSaveSource) {
+  return {
+    name: discountLine.name,
+    discountType: discountLine.discountType,
+    fixedAmountCents:
+      discountLine.discountType === 'FIXED'
+        ? Math.round(discountLine.fixedAmountEuros * 100)
+        : undefined,
+    percentageBasisPoints:
+      discountLine.discountType === 'PERCENTAGE'
+        ? (discountLine.percentageBasisPoints ?? undefined)
+        : undefined,
+  };
 }

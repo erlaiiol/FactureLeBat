@@ -38,6 +38,16 @@ export class CompanyEssentialsGateService {
     return false;
   }
 
+  // Opened on demand from a "Compléter mon profil" link (preview step,
+  // manual mode) rather than from a refused action: the artisan fills the
+  // essentials in place instead of navigating to "Mon entreprise" and
+  // losing sight of the draft. `onSaved` lets the caller refresh its own
+  // local profile snapshot (same staleness concern as pendingResume).
+  open(onSaved: (profile: CompanyProfile) => void): void {
+    this.pendingResume = onSaved;
+    this.visible.set(true);
+  }
+
   dismiss(): void {
     this.visible.set(false);
     this.pendingResume = null;

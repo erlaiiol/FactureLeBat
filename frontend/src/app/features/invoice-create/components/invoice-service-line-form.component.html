@@ -31,11 +31,11 @@
       formControlName="name"
       [maxlength]="nameMaxLength"
       type="text"
-      [readonly]="isCatalogLinked()"
+      [readonly]="isNameLocked()"
       placeholder="Ex : Main-d’œuvre"
       class="rounded-lg border border-line px-4 py-3 text-lg"
-      [class.bg-bg]="isCatalogLinked()"
-      [class.text-ink-soft]="isCatalogLinked()"
+      [class.bg-bg]="isNameLocked()"
+      [class.text-ink-soft]="isNameLocked()"
     />
     @if (nameLength() >= nameCounterThreshold) {
       <span
@@ -47,7 +47,7 @@
         {{ nameLength() }} / {{ nameMaxLength }}
       </span>
     }
-    @if (isCatalogLinked()) {
+    @if (isNameLocked()) {
       <app-field-hint
         text="Cette prestation vient de votre catalogue — renommez-la depuis « Mes prestations » si besoin."
       />

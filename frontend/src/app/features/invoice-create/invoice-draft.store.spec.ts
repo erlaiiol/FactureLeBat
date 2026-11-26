@@ -334,6 +334,8 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]); // 45000 cents
       store.setDiscountLines([
         {
+          clientId: 'discount-line-1',
+
           discountId: null,
           catalogDiscountId: null,
           saveAsNewDiscount: false,
@@ -359,6 +361,8 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]); // 10 x 45€ = 45000 cents
       store.setDiscountLines([
         {
+          clientId: 'discount-line-2',
+
           discountId: 'discount-1',
           catalogDiscountId: 'discount-1',
           saveAsNewDiscount: false,
@@ -383,6 +387,8 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]); // 45000 cents
       store.setDiscountLines([
         {
+          clientId: 'discount-line-3',
+
           discountId: null,
           catalogDiscountId: null,
           saveAsNewDiscount: false,
@@ -426,6 +432,8 @@ describe('InvoiceDraftStore', () => {
       ]);
       store.setDiscountLines([
         {
+          clientId: 'discount-line-4',
+
           discountId: null,
           catalogDiscountId: null,
           saveAsNewDiscount: false,
@@ -468,6 +476,8 @@ describe('InvoiceDraftStore', () => {
       ]);
       store.setDiscountLines([
         {
+          clientId: 'discount-line-5',
+
           discountId: null,
           catalogDiscountId: null,
           saveAsNewDiscount: false,
@@ -493,6 +503,8 @@ describe('InvoiceDraftStore', () => {
       store.setLines([lineFixture]); // 45000 cents
       store.setDiscountLines([
         {
+          clientId: 'discount-line-6',
+
           discountId: null,
           catalogDiscountId: null,
           saveAsNewDiscount: false,
@@ -757,6 +769,57 @@ describe('InvoiceDraftStore', () => {
         percentageBasisPoints: 4000,
         amountOverrideEuros: null,
       });
+    });
+  });
+
+  describe('immediate catalog saves — discount lines', () => {
+    const discountDraft = {
+      clientId: 'remise-a',
+      discountId: null,
+      catalogDiscountId: null,
+      saveAsNewDiscount: true,
+      name: 'Remise chantier',
+      discountType: 'FIXED' as const,
+      fixedAmountEuros: 50,
+      percentageBasisPoints: null,
+      targetLineClientId: null,
+      targetServiceLineClientId: null,
+    };
+
+    it('links a save that lands after the lines step was left, so invoice creation never re-creates it', () => {
+      const store = createStore();
+      store.setDiscountLines([discountDraft]);
+
+      let savedId: string | null = null;
+      store.saveDiscountToCatalog(discountDraft).subscribe((id) => (savedId = id));
+      httpMock
+        .expectOne({ method: 'POST', url: `${environment.apiBaseUrl}/discounts` })
+        .flush({ id: 'catalog-remise-1', name: 'Remise chantier' });
+      expect(savedId).toBe('catalog-remise-1');
+
+      // The lines step's form is gone: only the store links it, by clientId.
+      store.linkDiscountLineToCatalog('remise-a', 'catalog-remise-1');
+      expect(store.discountLines()[0].catalogDiscountId).toBe('catalog-remise-1');
+      expect(store.discountLines()[0].discountId).toBe('catalog-remise-1');
+
+      let hadAnyToSave: boolean | null = null;
+      store.persistFreeEntities().subscribe((result) => (hadAnyToSave = result));
+      httpMock.expectNone(`${environment.apiBaseUrl}/discounts`);
+      expect(hadAnyToSave).toBe(false);
+    });
+
+    it('backfills a stable clientId on a remise restored from an older draft', () => {
+      const { clientId: _dropped, ...legacy } = discountDraft;
+      localStorage.setItem(
+        'facturele.invoiceDraft.v1',
+        JSON.stringify({ discountLines: [legacy, legacy] }),
+      );
+      const store = createStore();
+
+      const [first, second] = store.discountLines();
+      expect(first.clientId).toMatch(/.+/);
+      expect(second.clientId).toMatch(/.+/);
+      expect(first.clientId).not.toBe(second.clientId);
     });
   });
 });

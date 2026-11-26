@@ -77,14 +77,14 @@
       <input
         type="email"
         placeholder="Email"
-        class="rounded -mx-1 border-b border-transparent bg-secondary-subtle/40 px-1 text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:border-primary focus:bg-secondary-subtle"
+        class="min-w-0 flex-1 rounded -mx-1 border-b border-transparent bg-secondary-subtle/40 px-1 text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:border-primary focus:bg-secondary-subtle"
         [value]="draftStore.customer().customerEmail"
         (input)="updateCustomer({ customerEmail: $any($event.target).value })"
       />
       <input
         type="text"
         placeholder="Téléphone"
-        class="rounded -mx-1 border-b border-transparent bg-secondary-subtle/40 px-1 text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:border-primary focus:bg-secondary-subtle"
+        class="min-w-0 flex-1 rounded -mx-1 border-b border-transparent bg-secondary-subtle/40 px-1 text-sm text-ink outline-none transition-colors hover:bg-secondary-subtle focus:border-primary focus:bg-secondary-subtle"
         [value]="draftStore.customer().customerPhone"
         (input)="updateCustomer({ customerPhone: $any($event.target).value })"
       />

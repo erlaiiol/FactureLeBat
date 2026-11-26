@@ -34,6 +34,8 @@ import { SessionKeepAliveService } from './core/services/session-keepalive.servi
 import { ThemeService } from './core/services/theme.service';
 import { ToastService } from './core/services/toast.service';
 import { CompanyEssentialsModalComponent } from './shared/components/company-essentials-modal.component';
+import { EdgeSwipeIndicatorComponent } from './shared/components/edge-swipe-indicator.component';
+import { EdgeSwipeNavigationService } from './core/services/edge-swipe-navigation.service';
 import { MobileAppBannerComponent } from './shared/components/mobile-app-banner.component';
 import { FooterComponent } from './shared/components/footer.component';
 import { PaywallModalComponent } from './shared/components/paywall-modal.component';
@@ -118,6 +120,7 @@ const ENTER_TO_DISMISS_INPUT_TYPES = new Set([
     TourOptInModalComponent,
     PaywallModalComponent,
     CompanyEssentialsModalComponent,
+    EdgeSwipeIndicatorComponent,
     TrialOfferModalComponent,
     ToastContainerComponent,
     TourAnchorDirective,
@@ -225,7 +228,12 @@ export class App {
     { initialValue: false },
   );
 
+  private readonly edgeSwipeNavigation = inject(EdgeSwipeNavigationService);
+
   constructor() {
+    // Native shells: swipe in from the left/right screen edge for history
+    // back/forward — see EdgeSwipeNavigationService.
+    this.edgeSwipeNavigation.init();
     // Registered once, regardless of auth state — a referral link can be
     // tapped whether or not the artisan is currently logged in.
     this.deepLinkService.listen();
@@ -435,7 +443,10 @@ export class App {
     if (!this.platformService.isNativeApp()) {
       return 'anim-page-in';
     }
-    return this.lastNavigationTrigger === 'popstate'
+    // popstate alone can't tell a history forward (right-edge swipe) from a
+    // back — EdgeSwipeNavigationService tracks the actual direction.
+    return this.lastNavigationTrigger === 'popstate' &&
+      this.edgeSwipeNavigation.lastDirection() === 'back'
       ? 'anim-page-slide-back'
       : 'anim-page-slide-forward';
   }

@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { filter } from 'rxjs';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CustomerProfile } from '../../../core/models/customer.model';
@@ -92,6 +93,46 @@ export class InvoiceCreateCustomerStepPage {
       const value = this.customerForm.getRawValue();
       this.draftStore.setCustomer({ ...value, customerId: this.selectedCustomerId() });
     });
+    // Ticking "Enregistrer ce client" on an already-filled form saves it
+    // right away — see saveCustomerNow.
+    this.customerForm.controls.saveAsNewCustomer.valueChanges
+      .pipe(
+        filter((on) => on),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.saveCustomerNow());
+  }
+
+  // Mode rapide: a customer the artisan asked to keep goes into their
+  // database now, not only once the invoice is created (see
+  // InvoiceDraftStore.saveCustomerNow) — so leaving mid-invoice doesn't lose
+  // it. Once created, it stays this draft's customer and later "Suivant"s
+  // push edits to it. Not tied to this page's lifetime: "Suivant" navigates
+  // away immediately, the save lands in the store either way.
+  private savingCustomer = false;
+
+  private saveCustomerNow(): void {
+    const value = this.customerForm.getRawValue();
+    if (!value.saveAsNewCustomer || this.customerForm.invalid || this.savingCustomer) {
+      return;
+    }
+    // A customer picked from the grid is never rewritten from here.
+    const existingId = this.selectedCustomerId();
+    if (existingId && !this.draftStore.customer().saveAsNewCustomer) {
+      return;
+    }
+    this.savingCustomer = true;
+    this.draftStore.saveCustomerNow({ ...value, customerId: existingId }).subscribe((id) => {
+      this.savingCustomer = false;
+      if (!id || existingId) {
+        return;
+      }
+      this.selectedCustomerId.set(id);
+      const current = this.draftStore.customer();
+      if (!current.customerId && current.customerName === value.customerName) {
+        this.draftStore.setCustomer({ ...current, customerId: id });
+      }
+    });
   }
 
   protected onSearch(value: string): void {
@@ -167,6 +208,7 @@ export class InvoiceCreateCustomerStepPage {
       ...this.customerForm.getRawValue(),
       customerId: this.selectedCustomerId(),
     });
+    this.saveCustomerNow();
     this.router.navigate(['/factures/nouvelle/rapide/lignes']);
   }
 }

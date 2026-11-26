@@ -86,8 +86,11 @@
         <app-field-hint text="L'adresse à facturer, affichée sur la facture." />
       </label>
 
-      <div class="flex gap-3">
-        <label class="flex flex-1 flex-col gap-1">
+      <!-- Stacked on phones: two text-lg inputs keep their intrinsic ~20ch
+           width as flex items, which pushed "Téléphone" past the right edge
+           of an iPhone 15 Plus (430px). Side by side only from sm: up. -->
+      <div class="flex flex-col gap-4 sm:flex-row sm:gap-3">
+        <label class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-sm font-medium text-ink">Email</span>
           <input
             formControlName="customerEmail"
@@ -96,7 +99,7 @@
           />
           <app-field-hint text="Facultatif." />
         </label>
-        <label class="flex flex-1 flex-col gap-1">
+        <label class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-sm font-medium text-ink">Téléphone</span>
           <input
             formControlName="customerPhone"
@@ -144,6 +147,10 @@
           </span>
         </label>
         <app-field-hint text="Vous pourrez le retrouver directement sur vos prochaines factures." />
+      } @else if (customerForm.controls.saveAsNewCustomer.value) {
+        <p class="text-sm font-medium text-success">
+          ✓ Client enregistré — vos modifications ici le mettront à jour.
+        </p>
       }
 
       <app-big-button type="submit">Suivant : lignes &amp; prestations</app-big-button>
